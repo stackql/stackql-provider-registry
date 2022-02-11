@@ -3,6 +3,7 @@ package edcrypto
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"crypto/ed25519"
 	"encoding/base64"
@@ -112,7 +113,11 @@ func ReadSignatureFile(outBytes []byte, filePath string, format string) error {
 }
 
 func SignFile(pkFilePath string, pkFileFormat string, filePathToSign string) ([]byte, error) {
-	return signFile(pkFilePath, pkFileFormat, filePathToSign)
+	return signFile(pkFilePath, pkFileFormat, filePathToSign, false)
+}
+
+func SignFileWithTimestamp(pkFilePath string, pkFileFormat string, filePathToSign string) ([]byte, error) {
+	return signFile(pkFilePath, pkFileFormat, filePathToSign, true)
 }
 
 func SignFileAndWriteSignatureFile(pkFilePath string, pkFileFormat string, filePathToSign string, signatureFilePath string) ([]byte, error) {
@@ -120,7 +125,7 @@ func SignFileAndWriteSignatureFile(pkFilePath string, pkFileFormat string, fileP
 }
 
 func signFileAndWriteSignatureFile(pkFilePath string, pkFileFormat string, filePathToSign string, signatureFilePath string) ([]byte, error) {
-	b, err := signFile(pkFilePath, pkFileFormat, filePathToSign)
+	b, err := signFile(pkFilePath, pkFileFormat, filePathToSign, false)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +133,7 @@ func signFileAndWriteSignatureFile(pkFilePath string, pkFileFormat string, fileP
 	return b, err
 }
 
-func signFile(pkFilePath string, pkFileFormat string, filePathToSign string) ([]byte, error) {
+func signFile(pkFilePath string, pkFileFormat string, filePathToSign string, includeTimestamp bool) ([]byte, error) {
 	var pkBytes ed25519.PrivateKey
 	var err error
 	switch pkFileFormat {
@@ -145,14 +150,27 @@ func signFile(pkFilePath string, pkFileFormat string, filePathToSign string) ([]
 	if err != nil {
 		return nil, fmt.Errorf("error reding file to sign: %s", err.Error())
 	}
-	return ed25519.Sign(pkBytes, msg), nil
+	var nowBytes []byte
+	if includeTimestamp {
+		now := time.Now()
+		nowBytes, err = now.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		msg = append(msg, nowBytes...)
+	}
+	return append(nowBytes, ed25519.Sign(pkBytes, msg)...), nil
 }
 
 func VerifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, error) {
-	return verifyFile(publicKeyFilePath, publicKeyFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat)
+	return verifyFile(publicKeyFilePath, publicKeyFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat, nil, nil)
 }
 
-func verifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, error) {
+func VerifyFileWithTimestamp(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, error) {
+	return verifyFile(publicKeyFilePath, publicKeyFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat, nil, nil)
+}
+
+func verifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, minTime *time.Time, maxTime *time.Time) (bool, error) {
 	var publicKeyBytes ed25519.PublicKey
 	var err error
 	var retVal bool
@@ -170,10 +188,25 @@ func verifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathTo
 	if err != nil {
 		return false, fmt.Errorf("error reding file to sign: %s", err.Error())
 	}
-	sig, err := retrieveSignatureFromFile(signatureFilePath, signatureFileFormat)
+	b, err := retrieveSignatureFromFile(signatureFilePath, signatureFileFormat)
 	if err != nil {
 		return false, fmt.Errorf("error reding file to sign: %s", err.Error())
 	}
-	retVal = ed25519.Verify(publicKeyBytes, msg, sig)
-	return retVal, nil
+	if len(b) == ed25519.SignatureSize {
+		sig := b
+		retVal = ed25519.Verify(publicKeyBytes, msg, sig)
+		return retVal, nil
+	}
+	if len(b) > ed25519.SignatureSize {
+		tmstpBytes := b[:len(b)-ed25519.SignatureSize]
+		t := time.Time{}
+		err = t.UnmarshalBinary(tmstpBytes)
+		if err != nil {
+			return false, err
+		}
+		sig := b[len(b)-ed25519.SignatureSize : len(b)-1]
+		retVal = ed25519.Verify(publicKeyBytes, append(msg, tmstpBytes...), sig)
+		return retVal, nil
+	}
+	return false, fmt.Errorf("signature file of size %d not permitted", len(b))
 }
