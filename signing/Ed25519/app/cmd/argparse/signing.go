@@ -80,7 +80,7 @@ var verifyCmd = &cobra.Command{
 				signatureFileFormat = "base64"
 			}
 
-			res, err := edcrypto.VerifyFile(runtimeCtx.PublicKeyPath, runtimeCtx.PublicKeyFormat, filePathToVerify, signatureFilePath, signatureFileFormat)
+			res, _, err := edcrypto.VerifyFile(runtimeCtx.PublicKeyPath, runtimeCtx.PublicKeyFormat, filePathToVerify, signatureFilePath, signatureFileFormat)
 			printErrorAndExitOneIfError(err)
 			printErrorAndExitOneIfError(err)
 			if !res {

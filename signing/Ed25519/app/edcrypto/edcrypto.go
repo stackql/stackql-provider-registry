@@ -162,15 +162,15 @@ func signFile(pkFilePath string, pkFileFormat string, filePathToSign string, inc
 	return append(nowBytes, ed25519.Sign(pkBytes, msg)...), nil
 }
 
-func VerifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, error) {
+func VerifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, *ObjectSignature, error) {
 	return verifyFile(publicKeyFilePath, publicKeyFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat, nil, nil)
 }
 
-func VerifyFileWithTimestamp(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, error) {
+func VerifyFileWithTimestamp(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, *ObjectSignature, error) {
 	return verifyFile(publicKeyFilePath, publicKeyFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat, nil, nil)
 }
 
-func verifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, minTime *time.Time, maxTime *time.Time) (bool, error) {
+func verifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, minTime *time.Time, maxTime *time.Time) (bool, *ObjectSignature, error) {
 	var publicKeyBytes ed25519.PublicKey
 	var err error
 	switch publicKeyFileFormat {
@@ -178,24 +178,24 @@ func verifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathTo
 		publicKeyBytes, err = retrievePemFile(publicKeyFilePath)
 	}
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 	if len(publicKeyBytes) != ed25519.PublicKeySize {
-		return false, fmt.Errorf("private key '%s' is not the correct size (%d != %d)", publicKeyFilePath, len(publicKeyBytes), ed25519.PublicKeySize)
+		return false, nil, fmt.Errorf("private key '%s' is not the correct size (%d != %d)", publicKeyFilePath, len(publicKeyBytes), ed25519.PublicKeySize)
 	}
 	msg, err := os.ReadFile(filePathToVerify)
 	if err != nil {
-		return false, fmt.Errorf("error reading file to sign: %s", err.Error())
+		return false, nil, fmt.Errorf("error reading file to sign: %s", err.Error())
 	}
 	b, err := retrieveSignatureFromFile(signatureFilePath, signatureFileFormat)
 	if err != nil {
-		return false, fmt.Errorf("error reading signature file: %s", err.Error())
+		return false, nil, fmt.Errorf("error reading signature file: %s", err.Error())
 	}
 	obSig, err := extractSignature(b)
 	if err != nil {
-		return false, fmt.Errorf("error with signature: %s", err.Error())
+		return false, nil, fmt.Errorf("error with signature: %s", err.Error())
 	}
-	return ed25519.Verify(publicKeyBytes, append(msg, obSig.GetTimestampBytes()...), obSig.GetSignature()), nil
+	return ed25519.Verify(publicKeyBytes, append(msg, obSig.GetTimestampBytes()...), obSig.GetSignature()), obSig, nil
 }
 
 type ObjectSignature struct {

@@ -39,7 +39,7 @@ func TestEdCrypToE2E(t *testing.T) {
 
 	assert.NilError(t, err)
 
-	verified, err := VerifyFile(pubKeyPath, "pem", fileToSign, sigFilePath, "base64")
+	verified, _, err := VerifyFile(pubKeyPath, "pem", fileToSign, sigFilePath, "base64")
 
 	assert.NilError(t, err)
 
@@ -75,10 +75,12 @@ func TestTimestampedEdCrypToE2E(t *testing.T) {
 
 	assert.NilError(t, err)
 
-	verified, err := VerifyFile(pubKeyPath, "pem", fileToSign, sigFilePath, "base64")
+	verified, obs, err := VerifyFile(pubKeyPath, "pem", fileToSign, sigFilePath, "base64")
 
 	assert.NilError(t, err)
 
 	assert.Equal(t, verified, true)
+
+	assert.Equal(t, obs.HasTimestamp(), true)
 
 }
