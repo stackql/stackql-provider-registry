@@ -42,7 +42,13 @@ var signCmd = &cobra.Command{
 				os.Exit(1)
 			}
 
-			b, err := edcrypto.SignFile(runtimeCtx.PrivateKeyPath, runtimeCtx.PrivateKeyFormat, args[0])
+			var b []byte
+			var err error
+			if runtimeCtx.SignatureTime == "" {
+				b, err = edcrypto.SignFile(runtimeCtx.PrivateKeyPath, runtimeCtx.PrivateKeyFormat, args[0])
+			} else {
+				b, err = edcrypto.SignFileWithTimestamp(runtimeCtx.PrivateKeyPath, runtimeCtx.PrivateKeyFormat, args[0], runtimeCtx.SignatureTime)
+			}
 			printErrorAndExitOneIfError(err)
 			printErrorAndExitOneIfNil(b, "no signature created")
 			// fmt.Printf("\nhex encoded signature = '%s'\n", hex.EncodeToString(b))
@@ -113,7 +119,7 @@ var certVerifyCmd = &cobra.Command{
 				signatureFileFormat = "base64"
 			}
 
-			res, _, err := edcrypto.VerifyFile(runtimeCtx.PublicKeyPath, runtimeCtx.PublicKeyFormat, filePathToVerify, signatureFilePath, signatureFileFormat)
+			res, _, err := edcrypto.VerifyFileFromCertificate(runtimeCtx.CertificatePath, runtimeCtx.CertificateFormat, filePathToVerify, signatureFilePath, signatureFileFormat)
 			printErrorAndExitOneIfError(err)
 			printErrorAndExitOneIfError(err)
 			if !res {

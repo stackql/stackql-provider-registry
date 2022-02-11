@@ -32,6 +32,7 @@ type runtimeContext struct {
 	PublicKeyFormat   string
 	CertificateFormat string
 	OutFileFormat     string
+	SignatureTime     string
 }
 
 var (
@@ -78,9 +79,11 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.PublicKeyFormat, "publickeyformat", "pem", "format for public key")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.CertificateFormat, "certificateformat", "pem", "format for certificate")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.OutFileFormat, "outfileformat", "", "format for outfile")
+	rootCmd.PersistentFlags().StringVar(&runtimeCtx.SignatureTime, "signaturetime", "", "timestamp to include in signature")
 
 	rootCmd.AddCommand(signCmd)
 	rootCmd.AddCommand(verifyCmd)
+	rootCmd.AddCommand(certVerifyCmd)
 	rootCmd.AddCommand(createKeysCmd)
 
 }

@@ -150,11 +150,11 @@ func ReadSignatureFile(outBytes []byte, filePath string, format string) error {
 }
 
 func SignFile(pkFilePath string, pkFileFormat string, filePathToSign string) ([]byte, error) {
-	return signFile(pkFilePath, pkFileFormat, filePathToSign, false)
+	return signFile(pkFilePath, pkFileFormat, filePathToSign, "")
 }
 
-func SignFileWithTimestamp(pkFilePath string, pkFileFormat string, filePathToSign string) ([]byte, error) {
-	return signFile(pkFilePath, pkFileFormat, filePathToSign, true)
+func SignFileWithTimestamp(pkFilePath string, pkFileFormat string, filePathToSign string, tmstp string) ([]byte, error) {
+	return signFile(pkFilePath, pkFileFormat, filePathToSign, tmstp)
 }
 
 func SignFileAndWriteSignatureFile(pkFilePath string, pkFileFormat string, filePathToSign string, signatureFilePath string) ([]byte, error) {
@@ -162,7 +162,7 @@ func SignFileAndWriteSignatureFile(pkFilePath string, pkFileFormat string, fileP
 }
 
 func signFileAndWriteSignatureFile(pkFilePath string, pkFileFormat string, filePathToSign string, signatureFilePath string) ([]byte, error) {
-	b, err := signFile(pkFilePath, pkFileFormat, filePathToSign, false)
+	b, err := signFile(pkFilePath, pkFileFormat, filePathToSign, "")
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func signFileAndWriteSignatureFile(pkFilePath string, pkFileFormat string, fileP
 	return b, err
 }
 
-func signFile(pkFilePath string, pkFileFormat string, filePathToSign string, includeTimestamp bool) ([]byte, error) {
+func signFile(pkFilePath string, pkFileFormat string, filePathToSign string, timestampToInclude string) ([]byte, error) {
 	var pkBytes ed25519.PrivateKey
 	var err error
 	switch pkFileFormat {
@@ -188,9 +188,17 @@ func signFile(pkFilePath string, pkFileFormat string, filePathToSign string, inc
 		return nil, fmt.Errorf("error reding file to sign: %s", err.Error())
 	}
 	var nowBytes []byte
-	if includeTimestamp {
-		now := time.Now()
-		nowBytes, err = now.MarshalBinary()
+	if timestampToInclude != "" {
+		var tmstp time.Time
+		if timestampToInclude == "now" {
+			tmstp = time.Now()
+		} else {
+			tmstp, err = time.Parse("Jan 2 15:04:05 2006", timestampToInclude)
+			if err != nil {
+				return nil, err
+			}
+		}
+		nowBytes, err = tmstp.MarshalBinary()
 		if err != nil {
 			return nil, err
 		}

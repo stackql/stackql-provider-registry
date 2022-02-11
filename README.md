@@ -20,11 +20,36 @@ go build -o ed25519tool ./signing/Ed25519/app/cmd/main
 
 Then:
 
-```
+```bash
+CREDENTIALS_DIR="${HOME}/stackql/stackql-provider-registry/signing/Ed25519/setup/scratchpad"
+TESTING_INPUT_DIR="${HOME}/stackql/stackql-provider-registry/signing/Ed25519/test"
+TESTING_OUTPUT_DIR="${CREDENTIALS_DIR}"
+
+PRIVATE_KEY_FILE="sample-ed25519-private-key.pem"
+
+PUBLIC_KEY_FILE="sample-ed25519-public-key.pem"
+
+CERT_FILE="sample-ed25519-cert.pem"
+
+
+
 ./ed25519tool createkeys ${HOME}/stackql/stackql-provider-registry/signing/Ed25519/setup/ed25519-golib-private-key.pem ${HOME}/stackql/stackql-provider-registry/signing/Ed25519/setup/ed25519-golib-public-key.pem
 
-./ed25519tool sign --privatekeypath=${HOME}/stackql/stackql-provider-registry/signing/Ed25519/setup/ed25519-golib-private-key.pem ${HOME}/stackql/stackql-provider-registry/signing/Ed25519/test/sample-infile.txt -o ${HOME}/stackql/stackql-provider-registry/signing/Ed25519/test/sample-infile.txt.sig
 
-./ed25519tool verify --publickeypath=${HOME}/stackql/stackql-provider-registry/signing/Ed25519/setup/ed25519-golib-public-key.pem ${HOME}/stackql/stackql-provider-registry/signing/Ed25519/test/sample-infile.txt ${HOME}/stackql/stackql-provider-registry/signing/Ed25519/test/sample-infile.txt.sig
+./ed25519tool sign --privatekeypath=${CREDENTIALS_DIR}/${PRIVATE_KEY_FILE} --signaturetime="Jan 2 15:04:05 2006" ${TESTING_INPUT_DIR}/sample-infile.txt -o ${TESTING_OUTPUT_DIR}/old-timestamp-sample-infile.txt.sig
+
+./ed25519tool sign --privatekeypath=${CREDENTIALS_DIR}/${PRIVATE_KEY_FILE} --signaturetime="Jan 2 15:04:05 2023" ${TESTING_INPUT_DIR}/sample-infile.txt -o ${TESTING_OUTPUT_DIR}/acceptable-timestamp-sample-infile.txt.sig
+
+## will succeed
+./ed25519tool verify --publickeypath=${CREDENTIALS_DIR}/${PUBLIC_KEY_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/old-timestamp-sample-infile.txt.sig
+
+## should and will fail with timestamp message
+./ed25519tool certverify --certificatepath=${CREDENTIALS_DIR}/${CERT_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/old-timestamp-sample-infile.txt.sig
+
+## will succeed
+./ed25519tool verify --publickeypath=${CREDENTIALS_DIR}/${PUBLIC_KEY_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/acceptable-timestamp-sample-infile.txt.sig
+
+## will succeed
+./ed25519tool certverify --certificatepath=${CREDENTIALS_DIR}/${CERT_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/acceptable-timestamp-sample-infile.txt.sig
 
 ```
