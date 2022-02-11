@@ -45,6 +45,10 @@ echo
 openssl req -in ${SCRIPT_DIR}/${CSR_FILE_NAME} -text -noout
 
 echo
+echo "########################################################" 
+echo "########################################################" 
+echo "########################################################" 
+echo
 
 openssl x509 -req -days 700 -in ${SCRIPT_DIR}/${CSR_FILE_NAME} -signkey ${SCRIPT_DIR}/${PRIVATE_KEY_FILE_NAME} -out ${SCRIPT_DIR}/${SELF_SIGNED_CERT_FILE_NAME}
 

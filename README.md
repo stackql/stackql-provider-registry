@@ -11,3 +11,15 @@ A repository of `provider` interface documents supporting [stackql](https://stac
 ## Signing and verification
 
 See [docs/signing-and-verification.md](/docs/signing-and-verification.md).
+
+To build the signing and verification tool:
+
+```
+go build -o ed25519tool ./signing/Ed25519/app/cmd/main
+```
+
+Assuming you have created an Ed25519 private key in `${HOME}/stackql/stackql-provider-registry/signing/Ed25519/setup/ed25519-private-key.pem`, which can be done as per [signing/Ed25519/setup/generate.sh](/signing/Ed25519/setup/generate.sh):
+
+```
+./ed25519tool sign --privatekeypath=${HOME}/stackql/stackql-provider-registry/signing/Ed25519/setup/ed25519-private-key.pem ./README.md 
+```
