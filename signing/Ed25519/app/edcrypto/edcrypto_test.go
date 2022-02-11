@@ -11,9 +11,9 @@ import (
 	. "github.com/stackql/stackql-provider-registry/signing/Ed25519/app/edcrypto"
 )
 
-func TestEdCrypToE2E(t *testing.T) {
+func TestEdCrypToE2EPublicKeyOnly(t *testing.T) {
 
-	testName := "TestEdCrypToE2E"
+	testName := "TestEdCrypToE2EPublicKeyOnly"
 
 	tmpDir, err := fileutil.GetFilePathFromRepositoryRoot("signing/Ed25519/test/tmp")
 
@@ -48,9 +48,9 @@ func TestEdCrypToE2E(t *testing.T) {
 
 }
 
-func TestTimestampedEdCrypToE2E(t *testing.T) {
+func TestTimestampedEdCrypToE2EPublicKeyOnly(t *testing.T) {
 
-	testName := "TestTimestampedEdCrypToE2E"
+	testName := "TestTimestampedEdCrypToE2EPublicKeyOnly"
 
 	tmpDir, err := fileutil.GetFilePathFromRepositoryRoot("signing/Ed25519/test/tmp")
 
@@ -110,6 +110,29 @@ func TestTimestampedEdCryptoCert(t *testing.T) {
 
 }
 
+func TestTimestampedEdCryptoCertAcceptable(t *testing.T) {
+
+	credsDir, err := fileutil.GetFilePathFromRepositoryRoot("signing/Ed25519/test")
+
+	assert.NilError(t, err)
+
+	fileToSign, err := fileutil.GetFilePathFromRepositoryRoot("signing/Ed25519/test/sample-infile.txt")
+
+	assert.NilError(t, err)
+
+	certPath := fmt.Sprintf("%s/%s", credsDir, "sample-ed25519-cert.pem")
+	sigFilePath := fmt.Sprintf("%s/%s", credsDir, "acceptable-timestamp-sample-infile.txt.sig")
+
+	verified, obs, err := VerifyFileFromCertificate(certPath, "pem", fileToSign, sigFilePath, "base64")
+
+	assert.NilError(t, err)
+
+	assert.Equal(t, verified, true)
+
+	assert.Equal(t, obs.HasTimestamp(), true)
+
+}
+
 func TestTimestampedEdCryptoCertTooOld(t *testing.T) {
 
 	credsDir, err := fileutil.GetFilePathFromRepositoryRoot("signing/Ed25519/test")
@@ -121,14 +144,14 @@ func TestTimestampedEdCryptoCertTooOld(t *testing.T) {
 	assert.NilError(t, err)
 
 	certPath := fmt.Sprintf("%s/%s", credsDir, "sample-ed25519-cert.pem")
-	sigFilePath := fmt.Sprintf("%s/%s", credsDir, "sample-ed25519-signed-with-timestamp.sig")
+	sigFilePath := fmt.Sprintf("%s/%s", credsDir, "old-timestamp-sample-infile.txt.sig")
 
 	verified, obs, err := VerifyFileFromCertificate(certPath, "pem", fileToSign, sigFilePath, "base64")
 
-	assert.NilError(t, err)
+	assert.Assert(t, err != nil)
 
-	assert.Equal(t, verified, true)
+	assert.Equal(t, verified, false)
 
-	assert.Equal(t, obs.HasTimestamp(), true)
+	assert.Assert(t, obs == nil)
 
 }
