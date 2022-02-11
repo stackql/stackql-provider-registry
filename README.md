@@ -40,6 +40,8 @@ CERT_FILE="sample-ed25519-cert.pem"
 
 ./ed25519tool sign --privatekeypath=${CREDENTIALS_DIR}/${PRIVATE_KEY_FILE} --signaturetime="Jan 2 15:04:05 2023" ${TESTING_INPUT_DIR}/sample-infile.txt -o ${TESTING_OUTPUT_DIR}/acceptable-timestamp-sample-infile.txt.sig
 
+./ed25519tool sign --privatekeypath=${CREDENTIALS_DIR}/${PRIVATE_KEY_FILE} --signaturetime="Jan 2 15:04:05 2033" ${TESTING_INPUT_DIR}/sample-infile.txt -o ${TESTING_OUTPUT_DIR}/future-timestamp-sample-infile.txt.sig
+
 ## will succeed
 ./ed25519tool verify --publickeypath=${CREDENTIALS_DIR}/${PUBLIC_KEY_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/old-timestamp-sample-infile.txt.sig
 
@@ -51,5 +53,12 @@ CERT_FILE="sample-ed25519-cert.pem"
 
 ## will succeed
 ./ed25519tool certverify --certificatepath=${CREDENTIALS_DIR}/${CERT_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/acceptable-timestamp-sample-infile.txt.sig
+
+
+## will succeed
+./ed25519tool verify --publickeypath=${CREDENTIALS_DIR}/${PUBLIC_KEY_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/future-timestamp-sample-infile.txt.sig
+
+## should and will fail with timestamp message
+./ed25519tool certverify --certificatepath=${CREDENTIALS_DIR}/${CERT_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/future-timestamp-sample-infile.txt.sig
 
 ```

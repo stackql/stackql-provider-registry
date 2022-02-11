@@ -92,7 +92,7 @@ var verifyCmd = &cobra.Command{
 			if !res {
 				printErrorAndExitOne(fmt.Sprintf("signature verification failed for file =  '%s' and signature file = '%s'", filePathToVerify, signatureFilePath))
 			}
-			fmt.Printf("signature verification succeeded for file =  '%s' and signature file = '%s'", filePathToVerify, signatureFilePath)
+			fmt.Printf("\nsignature verification succeeded for file =  '%s' and signature file = '%s'\n", filePathToVerify, signatureFilePath)
 		}
 		executeCommand(runtimeCtx, cb)
 	},
@@ -125,7 +125,7 @@ var certVerifyCmd = &cobra.Command{
 			if !res {
 				printErrorAndExitOne(fmt.Sprintf("signature verification failed for file =  '%s' and signature file = '%s'", filePathToVerify, signatureFilePath))
 			}
-			fmt.Printf("signature verification succeeded for file =  '%s' and signature file = '%s'", filePathToVerify, signatureFilePath)
+			fmt.Printf("\nsignature verification succeeded for file =  '%s' and signature file = '%s'\n", filePathToVerify, signatureFilePath)
 		}
 		executeCommand(runtimeCtx, cb)
 	},
