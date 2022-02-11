@@ -18,7 +18,7 @@ To build the signing and verification tool:
 go build -o ed25519tool ./signing/Ed25519/app/cmd/main
 ```
 
-Assuming you have created an Ed25519 private key in `${HOME}/stackql/stackql-provider-registry/signing/Ed25519/setup/ed25519-private-key.pem`, which can be done as per [signing/Ed25519/setup/generate.sh](/signing/Ed25519/setup/generate.sh):
+Then:
 
 ```
 ./ed25519tool createkeys ${HOME}/stackql/stackql-provider-registry/signing/Ed25519/setup/ed25519-golib-private-key.pem ${HOME}/stackql/stackql-provider-registry/signing/Ed25519/setup/ed25519-golib-public-key.pem
