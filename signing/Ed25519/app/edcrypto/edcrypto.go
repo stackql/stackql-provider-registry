@@ -173,7 +173,6 @@ func VerifyFileWithTimestamp(publicKeyFilePath string, publicKeyFileFormat strin
 func verifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, minTime *time.Time, maxTime *time.Time) (bool, error) {
 	var publicKeyBytes ed25519.PublicKey
 	var err error
-	var retVal bool
 	switch publicKeyFileFormat {
 	case "pem":
 		publicKeyBytes, err = retrievePemFile(publicKeyFilePath)
@@ -186,27 +185,72 @@ func verifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathTo
 	}
 	msg, err := os.ReadFile(filePathToVerify)
 	if err != nil {
-		return false, fmt.Errorf("error reding file to sign: %s", err.Error())
+		return false, fmt.Errorf("error reading file to sign: %s", err.Error())
 	}
 	b, err := retrieveSignatureFromFile(signatureFilePath, signatureFileFormat)
 	if err != nil {
-		return false, fmt.Errorf("error reding file to sign: %s", err.Error())
+		return false, fmt.Errorf("error reading signature file: %s", err.Error())
+	}
+	obSig, err := extractSignature(b)
+	if err != nil {
+		return false, fmt.Errorf("error with signature: %s", err.Error())
+	}
+	return ed25519.Verify(publicKeyBytes, append(msg, obSig.GetTimestampBytes()...), obSig.GetSignature()), nil
+}
+
+type ObjectSignature struct {
+	tmstpBytes []byte
+	sigBytes   []byte
+	tmstp      *time.Time
+}
+
+func (obs *ObjectSignature) HasTimestamp() bool {
+	return obs.tmstp != nil
+}
+
+func (obs *ObjectSignature) GetTimestamp() *time.Time {
+	return obs.tmstp
+}
+
+func (obs *ObjectSignature) GetTimestampBytes() []byte {
+	return obs.tmstpBytes
+}
+
+func (obs *ObjectSignature) GetSignature() []byte {
+	return obs.sigBytes
+}
+
+func newObjectSignature(tmstpBytes, sigBytes []byte) (*ObjectSignature, error) {
+	rv := &ObjectSignature{
+		tmstpBytes: make([]byte, len(tmstpBytes)),
+		tmstp:      nil,
+		sigBytes:   make([]byte, ed25519.SignatureSize),
+	}
+	if len(tmstpBytes) > 0 {
+		copy(rv.tmstpBytes, tmstpBytes)
+		t := &time.Time{}
+		err := t.UnmarshalBinary(rv.tmstpBytes)
+		if err != nil {
+			return nil, err
+		}
+		rv.tmstp = t
+	}
+	copy(rv.sigBytes, sigBytes)
+	return rv, nil
+}
+
+func extractSignature(b []byte) (*ObjectSignature, error) {
+	if len(b) > ed25519.SignatureSize {
+		return newObjectSignature(
+			b[:len(b)-ed25519.SignatureSize],
+			b[len(b)-ed25519.SignatureSize:],
+		)
 	}
 	if len(b) == ed25519.SignatureSize {
-		sig := b
-		retVal = ed25519.Verify(publicKeyBytes, msg, sig)
-		return retVal, nil
+		return newObjectSignature(
+			nil,
+			b,
+		)
 	}
-	if len(b) > ed25519.SignatureSize {
-		tmstpBytes := b[:len(b)-ed25519.SignatureSize]
-		t := time.Time{}
-		err = t.UnmarshalBinary(tmstpBytes)
-		if err != nil {
-			return false, err
-		}
-		sig := b[len(b)-ed25519.SignatureSize : len(b)-1]
-		retVal = ed25519.Verify(publicKeyBytes, append(msg, tmstpBytes...), sig)
-		return retVal, nil
-	}
-	return false, fmt.Errorf("signature file of size %d not permitted", len(b))
+	return nil, fmt.Errorf("cannot process signature of size = %d", len(b))
 }
