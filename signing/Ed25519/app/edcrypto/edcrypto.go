@@ -243,7 +243,11 @@ func extractPublicKeyFromCertificate(cert *x509.Certificate) (ed25519.PublicKey,
 	return rv, nil
 }
 
-func verifyFileFromCertificate(certificateFilePath string, certificateFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, minTime *time.Time, maxTime *time.Time) (bool, *ObjectSignature, error) {
+func VerifyFileFromCertificate(certificateFilePath string, certificateFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, *ObjectSignature, error) {
+	return verifyFileFromCertificate(certificateFilePath, certificateFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat)
+}
+
+func verifyFileFromCertificate(certificateFilePath string, certificateFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, *ObjectSignature, error) {
 	var publicKeyBytes ed25519.PublicKey
 	var cert *x509.Certificate
 	var err error
@@ -279,7 +283,7 @@ func verifyFileFromCertificate(certificateFilePath string, certificateFileFormat
 	if err != nil {
 		return false, nil, fmt.Errorf("error with signature: %s", err.Error())
 	}
-	if !obSig.HasTimestamp() || cert.NotBefore.Before(*obSig.GetTimestamp()) || cert.NotAfter.After(*obSig.GetTimestamp()) {
+	if !obSig.HasTimestamp() || !cert.NotBefore.Before(*obSig.GetTimestamp()) || !cert.NotAfter.After(*obSig.GetTimestamp()) {
 		return false, nil, fmt.Errorf("error with signed timestamp: %v, not in cert timestamp range (%v, %v)", obSig.GetTimestamp(), cert.NotBefore, cert.NotAfter)
 	}
 	return ed25519.Verify(publicKeyBytes, append(msg, obSig.GetTimestampBytes()...), obSig.GetSignature()), obSig, nil

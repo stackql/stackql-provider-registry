@@ -177,7 +177,7 @@ func generateTLSArtifacts(cc CertificateConfig) error {
 
 	privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
 	if err != nil {
-		return fmt.Errorf("Unable to marshal private key: %v", err)
+		return fmt.Errorf("unable to marshal private key: %v", err)
 	}
 	privOut := createPemBytes(privBytes, "PRIVATE KEY")
 	err = os.WriteFile(cc.PrivateKeyOutFile, privOut, 0600)

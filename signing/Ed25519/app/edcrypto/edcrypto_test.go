@@ -86,3 +86,26 @@ func TestTimestampedEdCrypToE2E(t *testing.T) {
 	assert.Equal(t, obs.HasTimestamp(), true)
 
 }
+
+func TestTimestampedEdCryptoCertE2E(t *testing.T) {
+
+	credsDir, err := fileutil.GetFilePathFromRepositoryRoot("signing/Ed25519/test")
+
+	assert.NilError(t, err)
+
+	fileToSign, err := fileutil.GetFilePathFromRepositoryRoot("signing/Ed25519/test/sample-infile.txt")
+
+	assert.NilError(t, err)
+
+	certPath := fmt.Sprintf("%s/%s", credsDir, "sample-ed25519-cert.pem")
+	sigFilePath := fmt.Sprintf("%s/%s", credsDir, "sample-ed25519-signed-with-timestamp.sig")
+
+	verified, obs, err := VerifyFileFromCertificate(certPath, "pem", fileToSign, sigFilePath, "base64")
+
+	assert.NilError(t, err)
+
+	assert.Equal(t, verified, true)
+
+	assert.Equal(t, obs.HasTimestamp(), true)
+
+}
