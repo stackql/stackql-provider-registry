@@ -119,7 +119,7 @@ var certVerifyCmd = &cobra.Command{
 				signatureFileFormat = "base64"
 			}
 
-			res, _, err := edcrypto.VerifyFileFromCertificate(runtimeCtx.CertificatePath, runtimeCtx.CertificateFormat, filePathToVerify, signatureFilePath, signatureFileFormat)
+			res, _, err := edcrypto.VerifyFileFromCertificate(runtimeCtx.CertificatePath, runtimeCtx.CertificateFormat, filePathToVerify, signatureFilePath, signatureFileFormat, runtimeCtx.Strict)
 			printErrorAndExitOneIfError(err)
 			printErrorAndExitOneIfError(err)
 			if !res {

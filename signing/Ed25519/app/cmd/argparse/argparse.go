@@ -30,6 +30,7 @@ type runtimeContext struct {
 	OutFilePath       string
 	PrivateKeyFormat  string
 	PublicKeyFormat   string
+	Strict            bool
 	CertificateFormat string
 	OutFileFormat     string
 	SignatureTime     string
@@ -75,6 +76,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.PublicKeyPath, "publickeypath", "", "file path for public key")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.CertificatePath, "certificatepath", "", "file path for certificate")
 	rootCmd.PersistentFlags().StringVarP(&runtimeCtx.OutFilePath, "outfile", "o", "", "file path for outfile")
+	rootCmd.PersistentFlags().BoolVarP(&runtimeCtx.Strict, "strict", "", false, "strict mode")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.PrivateKeyFormat, "privatekeyformat", "pem", "format for private key")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.PublicKeyFormat, "publickeyformat", "pem", "format for public key")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.CertificateFormat, "certificateformat", "pem", "format for certificate")

@@ -55,6 +55,9 @@ CERT_FILE="sample-ed25519-cert.pem"
 ./ed25519tool certverify --certificatepath=${CREDENTIALS_DIR}/${CERT_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/acceptable-timestamp-sample-infile.txt.sig
 
 
+## will fail due to self-signed certificate in strict mode
+./ed25519tool certverify --certificatepath=${CREDENTIALS_DIR}/${CERT_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt --strict=true ${TESTING_OUTPUT_DIR}/acceptable-timestamp-sample-infile.txt.sig
+
 ## will succeed
 ./ed25519tool verify --publickeypath=${CREDENTIALS_DIR}/${PUBLIC_KEY_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/future-timestamp-sample-infile.txt.sig
 

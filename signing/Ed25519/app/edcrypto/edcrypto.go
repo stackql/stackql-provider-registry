@@ -251,11 +251,11 @@ func extractPublicKeyFromCertificate(cert *x509.Certificate) (ed25519.PublicKey,
 	return rv, nil
 }
 
-func VerifyFileFromCertificate(certificateFilePath string, certificateFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, *ObjectSignature, error) {
-	return verifyFileFromCertificate(certificateFilePath, certificateFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat)
+func VerifyFileFromCertificate(certificateFilePath string, certificateFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (bool, *ObjectSignature, error) {
+	return verifyFileFromCertificate(certificateFilePath, certificateFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat, strictMode)
 }
 
-func verifyFileFromCertificate(certificateFilePath string, certificateFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, *ObjectSignature, error) {
+func verifyFileFromCertificate(certificateFilePath string, certificateFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (bool, *ObjectSignature, error) {
 	var publicKeyBytes ed25519.PublicKey
 	var cert *x509.Certificate
 	var err error
@@ -268,6 +268,12 @@ func verifyFileFromCertificate(certificateFilePath string, certificateFileFormat
 		cert, err = x509.ParseCertificate(b)
 		if err != nil {
 			return false, nil, err
+		}
+		if strictMode {
+			_, err = cert.Verify(x509.VerifyOptions{})
+			if err != nil {
+				return false, nil, fmt.Errorf("ceritificate verify error: %s", err.Error())
+			}
 		}
 		publicKeyBytes, err = extractPublicKeyFromCertificate(cert)
 		if err != nil {
