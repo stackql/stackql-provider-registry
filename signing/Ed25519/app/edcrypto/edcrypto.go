@@ -23,11 +23,12 @@ func retrievePemFile(filePath string) ([]byte, error) {
 
 func SignFile(pkFilePath string, pkFileFormat string, filePathToSign string) ([]byte, error) {
 	var b []byte
-	pkBytes := make(ed25519.PrivateKey, ed25519.PrivateKeySize)
+	var pkBytes ed25519.PrivateKey
 	var err error
 	switch pkFileFormat {
 	case "pem":
 		b, err = retrievePemFile(pkFilePath)
+		pkBytes = make(ed25519.PrivateKey, base64.StdEncoding.EncodedLen(len(b)))
 		base64.StdEncoding.Encode(pkBytes, b)
 	}
 	if err != nil {
