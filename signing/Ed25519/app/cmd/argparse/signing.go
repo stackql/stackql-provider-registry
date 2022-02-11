@@ -92,6 +92,39 @@ var verifyCmd = &cobra.Command{
 	},
 }
 
+var certVerifyCmd = &cobra.Command{
+	Use:   "certverify",
+	Short: "Simple Ed25519 certverify",
+	Long: `Simple Ed25519 certverify
+	  
+	`,
+	Run: func(cmd *cobra.Command, args []string) {
+
+		cb := func() {
+			if len(args) < 2 || args[0] == "" || args[1] == "" {
+				cmd.Help()
+				os.Exit(1)
+			}
+
+			filePathToVerify := args[0]
+			signatureFilePath := args[1]
+			signatureFileFormat := runtimeCtx.OutFileFormat
+			if signatureFileFormat == "" {
+				signatureFileFormat = "base64"
+			}
+
+			res, _, err := edcrypto.VerifyFile(runtimeCtx.PublicKeyPath, runtimeCtx.PublicKeyFormat, filePathToVerify, signatureFilePath, signatureFileFormat)
+			printErrorAndExitOneIfError(err)
+			printErrorAndExitOneIfError(err)
+			if !res {
+				printErrorAndExitOne(fmt.Sprintf("signature verification failed for file =  '%s' and signature file = '%s'", filePathToVerify, signatureFilePath))
+			}
+			fmt.Printf("signature verification succeeded for file =  '%s' and signature file = '%s'", filePathToVerify, signatureFilePath)
+		}
+		executeCommand(runtimeCtx, cb)
+	},
+}
+
 var createKeysCmd = &cobra.Command{
 	Use:   "createkeys",
 	Short: "Create Ed25519 key pair",

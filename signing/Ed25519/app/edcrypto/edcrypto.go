@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"crypto/ed25519"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
@@ -194,6 +195,56 @@ func verifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathTo
 	obSig, err := extractSignature(b)
 	if err != nil {
 		return false, nil, fmt.Errorf("error with signature: %s", err.Error())
+	}
+	return ed25519.Verify(publicKeyBytes, append(msg, obSig.GetTimestampBytes()...), obSig.GetSignature()), obSig, nil
+}
+
+func extractPublicKeyFromCertificate(cert *x509.Certificate) (ed25519.PublicKey, error) {
+	rv, ok := cert.PublicKey.(ed25519.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("cannot extract public key from certificate")
+	}
+	return rv, nil
+}
+
+func verifyFileFromCertificate(certificateFilePath string, certificateFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, minTime *time.Time, maxTime *time.Time) (bool, *ObjectSignature, error) {
+	var publicKeyBytes ed25519.PublicKey
+	var cert *x509.Certificate
+	var err error
+	switch certificateFileFormat {
+	case "pem":
+		b, err := retrievePemFile(certificateFilePath)
+		if err != nil {
+			return false, nil, err
+		}
+		cert, err = x509.ParseCertificate(b)
+		if err != nil {
+			return false, nil, err
+		}
+		publicKeyBytes, err = extractPublicKeyFromCertificate(cert)
+		if err != nil {
+			return false, nil, err
+		}
+	default:
+		return false, nil, fmt.Errorf("certificate format '%s' not supported", certificateFileFormat)
+	}
+	if len(publicKeyBytes) != ed25519.PublicKeySize {
+		return false, nil, fmt.Errorf("private key '%s' is not the correct size (%d != %d)", certificateFilePath, len(publicKeyBytes), ed25519.PublicKeySize)
+	}
+	msg, err := os.ReadFile(filePathToVerify)
+	if err != nil {
+		return false, nil, fmt.Errorf("error reading file to sign: %s", err.Error())
+	}
+	b, err := retrieveSignatureFromFile(signatureFilePath, signatureFileFormat)
+	if err != nil {
+		return false, nil, fmt.Errorf("error reading signature file: %s", err.Error())
+	}
+	obSig, err := extractSignature(b)
+	if err != nil {
+		return false, nil, fmt.Errorf("error with signature: %s", err.Error())
+	}
+	if !obSig.HasTimestamp() || cert.NotBefore.Before(*obSig.GetTimestamp()) || cert.NotAfter.After(*obSig.GetTimestamp()) {
+		return false, nil, fmt.Errorf("error with signed timestamp: %v, not in cert timestamp range (%v, %v)", obSig.GetTimestamp(), cert.NotBefore, cert.NotAfter)
 	}
 	return ed25519.Verify(publicKeyBytes, append(msg, obSig.GetTimestampBytes()...), obSig.GetSignature()), obSig, nil
 }
