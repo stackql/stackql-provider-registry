@@ -3,6 +3,7 @@ package edcrypto
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"time"
 
 	"crypto/ed25519"
@@ -11,6 +12,24 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 )
+
+const (
+	privateKeyRexStr string = `PRIVATE\ KEY`
+	publicKeyRexStr  string = `PUBLIC\ KEY`
+)
+
+var (
+	privateKeyRegex *regexp.Regexp = regexp.MustCompile(privateKeyRexStr)
+	publicKeyRegex  *regexp.Regexp = regexp.MustCompile(publicKeyRexStr)
+)
+
+func isPrivateKeyType(typeStr string) bool {
+	return privateKeyRegex.MatchString(typeStr)
+}
+
+func isPublicKeyType(typeStr string) bool {
+	return publicKeyRegex.MatchString(typeStr)
+}
 
 func retrievePemFile(filePath string) ([]byte, error) {
 	b, err := os.ReadFile(filePath)
@@ -21,7 +40,25 @@ func retrievePemFile(filePath string) ([]byte, error) {
 	if blk == nil || blk.Bytes == nil || len(blk.Bytes) == 0 {
 		return nil, fmt.Errorf("could not decode bytes from pem file '%s'", filePath)
 	}
-	return blk.Bytes, nil
+	var key interface{}
+	if isPrivateKeyType(blk.Type) {
+		key, err = x509.ParsePKCS8PrivateKey(blk.Bytes)
+	} else if isPublicKeyType(blk.Type) {
+		key, err = x509.ParsePKIXPublicKey(blk.Bytes)
+	} else {
+		return blk.Bytes, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	switch key := key.(type) {
+	case ed25519.PrivateKey:
+		return key, nil
+	case ed25519.PublicKey:
+		return key, nil
+	default:
+		return nil, fmt.Errorf("key type '%T' not supported yet", key)
+	}
 }
 
 func RetrieveAndDecodeHexFile(filePath string) ([]byte, error) {
@@ -86,22 +123,21 @@ func createPemBytes(objectBytes []byte, objectType string) []byte {
 	return pem.EncodeToMemory(pb)
 }
 
-func CreateKeys(privateKeyFilePath, publicKeyFilePath string, format string) error {
+func CreateKeys(privateKeyFilePath, publicKeyFilePath, certFilePath string, format string) error {
 	if format != "pem" {
 		return fmt.Errorf("key format '%s' not suported", format)
 	}
-	pubKey, prKey, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		return err
-	}
-	priv := createPemBytes(prKey, "PRIVATE KEY")
-	pub := createPemBytes(pubKey, "PUBLIC KEY")
-	err = os.WriteFile(privateKeyFilePath, priv, 0666)
-	if err != nil {
-		return err
-	}
-	err = os.WriteFile(publicKeyFilePath, pub, 0666)
-	return err
+	return generateTLSArtifacts(
+		CertificateConfig{
+			Host:              "example.com",
+			IsCa:              true,
+			IseEd25519Key:     true,
+			ValidFor:          time.Duration(2 * 365 * 24 * time.Hour),
+			PrivateKeyOutFile: privateKeyFilePath,
+			CertOutFile:       certFilePath,
+			PublicKeyOutFile:  publicKeyFilePath,
+		},
+	)
 }
 
 func ReadSignatureFile(outBytes []byte, filePath string, format string) error {

@@ -130,25 +130,26 @@ var createKeysCmd = &cobra.Command{
 	Short: "Create Ed25519 key pair",
 	Long: `Create Ed25519 key pair 
 	  Usage:
-		   createkeys privatekeyfilepath publickeyfilepath
+		   createkeys privatekeyfilepath publickeyfilepath certfilepath
 	  
 	`,
 	Run: func(cmd *cobra.Command, args []string) {
 
 		cb := func() {
-			if len(args) < 2 || args[0] == "" || args[1] == "" {
+			if len(args) < 3 || args[0] == "" || args[1] == "" || args[2] == "" {
 				cmd.Help()
 				os.Exit(1)
 			}
 
 			privateKeyFilePath := args[0]
 			publicKeyFilePath := args[1]
+			certFilePath := args[1]
 			keyFileFormat := runtimeCtx.OutFileFormat
 			if keyFileFormat == "" {
 				keyFileFormat = "pem"
 			}
 
-			err := edcrypto.CreateKeys(privateKeyFilePath, publicKeyFilePath, keyFileFormat)
+			err := edcrypto.CreateKeys(privateKeyFilePath, publicKeyFilePath, certFilePath, keyFileFormat)
 			printErrorAndExitOneIfError(err)
 		}
 		executeCommand(runtimeCtx, cb)
