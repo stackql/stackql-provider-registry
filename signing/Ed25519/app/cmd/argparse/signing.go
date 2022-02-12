@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/pprof"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -157,12 +158,14 @@ var createKeysCmd = &cobra.Command{
 			if keyFileFormat == "" {
 				keyFileFormat = "pem"
 			}
+			org := strings.Split(runtimeCtx.Organization, runtimeCtx.Delimiter)
+			emails := strings.Split(runtimeCtx.EmailAddresses, runtimeCtx.Delimiter)
 
 			cfg := edcrypto.CertificateConfig{
-				Host:   "example.com",
+				Host:   runtimeCtx.Host,
 				Format: keyFileFormat,
 				Name: pkix.Name{
-					Organization: []string{"stackql.io"},
+					Organization: org,
 				},
 				IsCa:              true,
 				IsEd25519Key:      true,
@@ -171,6 +174,7 @@ var createKeysCmd = &cobra.Command{
 				CertOutFile:       certFilePath,
 				CsrOutFile:        csrFilePath,
 				PublicKeyOutFile:  publicKeyFilePath,
+				EmailAddresses:    emails,
 			}
 
 			err := edcrypto.CreateKeys(cfg)

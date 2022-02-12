@@ -65,7 +65,7 @@ type CertificateConfig struct {
 	EcdsaCurve        string
 	Format            string
 	Host              string
-	EmailAddresses    string
+	EmailAddresses    []string
 	IsCa              bool
 	IsEd25519Key      bool
 	RsaBits           int
@@ -123,8 +123,7 @@ func getCertTemplate(cc CertificateConfig, keyUsage x509.KeyUsage) (*x509.Certif
 			template.DNSNames = append(template.DNSNames, h)
 		}
 	}
-	emails := strings.Split(cc.EmailAddresses, ",")
-	template.EmailAddresses = append(template.EmailAddresses, emails...)
+	template.EmailAddresses = cc.EmailAddresses
 	for _, s := range cc.URIs {
 		u, err := url.Parse(s)
 		if err != nil {
@@ -169,8 +168,7 @@ func getCsrTemplate(cc CertificateConfig, sigAlg x509.SignatureAlgorithm) (*x509
 			template.DNSNames = append(template.DNSNames, h)
 		}
 	}
-	emails := strings.Split(cc.EmailAddresses, ",")
-	template.EmailAddresses = append(template.EmailAddresses, emails...)
+	template.EmailAddresses = cc.EmailAddresses
 	for _, s := range cc.URIs {
 		u, err := url.Parse(s)
 		if err != nil {
