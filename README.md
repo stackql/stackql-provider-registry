@@ -31,9 +31,11 @@ PUBLIC_KEY_FILE="sample-ed25519-public-key.pem"
 
 CERT_FILE="sample-ed25519-cert.pem"
 
+CSR_FILE="sample-ed25519.csr"
 
 
-./ed25519tool createkeys ${HOME}/stackql/stackql-provider-registry/signing/Ed25519/setup/ed25519-golib-private-key.pem ${HOME}/stackql/stackql-provider-registry/signing/Ed25519/setup/ed25519-golib-public-key.pem
+
+./ed25519tool createkeys ${CREDENTIALS_DIR}/${PRIVATE_KEY_FILE} ${CREDENTIALS_DIR}/${PUBLIC_KEY_FILE} ${CREDENTIALS_DIR}/${CERT_FILE} ${CREDENTIALS_DIR}/${CSR_FILE}
 
 
 ./ed25519tool sign --privatekeypath=${CREDENTIALS_DIR}/${PRIVATE_KEY_FILE} --signaturetime="Jan 2 15:04:05 2006" ${TESTING_INPUT_DIR}/sample-infile.txt -o ${TESTING_OUTPUT_DIR}/old-timestamp-sample-infile.txt.sig

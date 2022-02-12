@@ -35,6 +35,7 @@ type runtimeContext struct {
 	OutFileFormat     string
 	Organization      string
 	Host              string
+	CommonName        string
 	FirstName         string
 	LastName          string
 	URIs              string
@@ -90,12 +91,13 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.OutFileFormat, "outfileformat", "", "format for outfile")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.SignatureTime, "signaturetime", "", "timestamp to include in signature")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.Delimiter, "delimiter", ",", "delimiter for list fields")
-	rootCmd.PersistentFlags().StringVar(&runtimeCtx.EmailAddresses, "certificate.emails", ",", "delimited list of emails")
-	rootCmd.PersistentFlags().StringVar(&runtimeCtx.URIs, "certificate.urls", ",", "delimited list of urls")
-	rootCmd.PersistentFlags().StringVar(&runtimeCtx.Organization, "certificate.organizations", ",", "delimited list of org strings")
+	rootCmd.PersistentFlags().StringVar(&runtimeCtx.EmailAddresses, "certificate.emails", "javen@stackql.io", "delimited list of emails")
+	rootCmd.PersistentFlags().StringVar(&runtimeCtx.URIs, "certificate.urls", "https://stackql.io", "delimited list of urls")
+	rootCmd.PersistentFlags().StringVar(&runtimeCtx.Organization, "certificate.organization", "StackQL Studios", "delimited list of org strings")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.FirstName, "certificate.firstname", ",", "first name")
-	rootCmd.PersistentFlags().StringVar(&runtimeCtx.LastName, "certificate.lastname", ",", "last name")
-	rootCmd.PersistentFlags().StringVar(&runtimeCtx.Host, "certificate.host", ",", "host")
+	rootCmd.PersistentFlags().StringVar(&runtimeCtx.LastName, "certificate.lastname", "", "last name")
+	rootCmd.PersistentFlags().StringVar(&runtimeCtx.Host, "certificate.host", "stackql.io", "host")
+	rootCmd.PersistentFlags().StringVar(&runtimeCtx.CommonName, "certificate.commonname", "Jeffrey Aven", "common name")
 
 	rootCmd.AddCommand(signCmd)
 	rootCmd.AddCommand(verifyCmd)

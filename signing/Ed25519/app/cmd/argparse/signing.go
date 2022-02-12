@@ -158,14 +158,20 @@ var createKeysCmd = &cobra.Command{
 			if keyFileFormat == "" {
 				keyFileFormat = "pem"
 			}
-			org := strings.Split(runtimeCtx.Organization, runtimeCtx.Delimiter)
-			emails := strings.Split(runtimeCtx.EmailAddresses, runtimeCtx.Delimiter)
+			var org, emails []string
+			if len(runtimeCtx.Organization) > 0 {
+				org = strings.Split(runtimeCtx.Organization, runtimeCtx.Delimiter)
+			}
+			if len(runtimeCtx.EmailAddresses) > 0 {
+				emails = strings.Split(runtimeCtx.EmailAddresses, runtimeCtx.Delimiter)
+			}
 
 			cfg := edcrypto.CertificateConfig{
-				Host:   runtimeCtx.Host,
+				Hosts:  strings.Split(runtimeCtx.Host, runtimeCtx.Delimiter),
 				Format: keyFileFormat,
 				Name: pkix.Name{
 					Organization: org,
+					CommonName:   runtimeCtx.CommonName,
 				},
 				IsCa:              true,
 				IsEd25519Key:      true,

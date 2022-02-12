@@ -32,7 +32,7 @@ func TestEdCrypToE2EPublicKeyOnly(t *testing.T) {
 	sigFilePath := fmt.Sprintf("%s/%s.sig", tmpDir, testName)
 
 	cfg := CertificateConfig{
-		Host:   "example.com",
+		Hosts:  []string{"example.com"},
 		Format: "pem",
 		Name: pkix.Name{
 			Organization: []string{"stackql.io"},
@@ -85,7 +85,7 @@ func TestTimestampedEdCrypToE2EPublicKeyOnly(t *testing.T) {
 	sigFilePath := fmt.Sprintf("%s/%s.sig", tmpDir, testName)
 
 	cfg := CertificateConfig{
-		Host:   "example.com",
+		Hosts:  []string{"example.com"},
 		Format: "pem",
 		Name: pkix.Name{
 			Organization: []string{"stackql.io"},

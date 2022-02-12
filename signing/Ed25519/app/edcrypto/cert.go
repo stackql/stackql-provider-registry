@@ -20,7 +20,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -64,7 +63,7 @@ func sigAlg(priv interface{}) (x509.SignatureAlgorithm, error) {
 type CertificateConfig struct {
 	EcdsaCurve        string
 	Format            string
-	Host              string
+	Hosts             []string
 	EmailAddresses    []string
 	IsCa              bool
 	IsEd25519Key      bool
@@ -115,7 +114,7 @@ func getCertTemplate(cc CertificateConfig, keyUsage x509.KeyUsage) (*x509.Certif
 		BasicConstraintsValid: true,
 	}
 
-	hosts := strings.Split(cc.Host, ",")
+	hosts := cc.Hosts
 	for _, h := range hosts {
 		if ip := net.ParseIP(h); ip != nil {
 			template.IPAddresses = append(template.IPAddresses, ip)
@@ -160,7 +159,7 @@ func getCsrTemplate(cc CertificateConfig, sigAlg x509.SignatureAlgorithm) (*x509
 		Subject:            cc.Name,
 	}
 
-	hosts := strings.Split(cc.Host, ",")
+	hosts := cc.Hosts
 	for _, h := range hosts {
 		if ip := net.ParseIP(h); ip != nil {
 			template.IPAddresses = append(template.IPAddresses, ip)
@@ -181,7 +180,7 @@ func getCsrTemplate(cc CertificateConfig, sigAlg x509.SignatureAlgorithm) (*x509
 
 func generateTLSArtifacts(cc CertificateConfig) error {
 
-	if len(cc.Host) == 0 {
+	if len(cc.Hosts) == 0 {
 		return fmt.Errorf("missing required Host parameter")
 	}
 
