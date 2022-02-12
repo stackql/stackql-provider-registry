@@ -8,6 +8,7 @@ import (
 
 	"crypto/ed25519"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
@@ -123,18 +124,22 @@ func createPemBytes(objectBytes []byte, objectType string) []byte {
 	return pem.EncodeToMemory(pb)
 }
 
-func CreateKeys(privateKeyFilePath, publicKeyFilePath, certFilePath string, format string) error {
+func CreateKeys(privateKeyFilePath, publicKeyFilePath, certFilePath, csrFilePath string, format string) error {
 	if format != "pem" {
 		return fmt.Errorf("key format '%s' not suported", format)
 	}
 	return generateTLSArtifacts(
 		CertificateConfig{
-			Host:              "example.com",
+			Host: "example.com",
+			Name: pkix.Name{
+				Organization: []string{"stackql.io"},
+			},
 			IsCa:              true,
 			IseEd25519Key:     true,
 			ValidFor:          time.Duration(2 * 365 * 24 * time.Hour),
 			PrivateKeyOutFile: privateKeyFilePath,
 			CertOutFile:       certFilePath,
+			CsrOutFile:        csrFilePath,
 			PublicKeyOutFile:  publicKeyFilePath,
 		},
 	)

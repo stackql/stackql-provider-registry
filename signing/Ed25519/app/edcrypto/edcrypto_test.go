@@ -26,9 +26,10 @@ func TestEdCrypToE2EPublicKeyOnly(t *testing.T) {
 	privKeyPath := fmt.Sprintf("%s/%s-private-key.pem", tmpDir, testName)
 	pubKeyPath := fmt.Sprintf("%s/%s-public-key.pem", tmpDir, testName)
 	certPath := fmt.Sprintf("%s/%s-cert.pem", tmpDir, testName)
+	csrPath := fmt.Sprintf("%s/%s.csr", tmpDir, testName)
 	sigFilePath := fmt.Sprintf("%s/%s.sig", tmpDir, testName)
 
-	err = CreateKeys(privKeyPath, pubKeyPath, certPath, "pem")
+	err = CreateKeys(privKeyPath, pubKeyPath, certPath, csrPath, "pem")
 
 	assert.NilError(t, err)
 
@@ -63,9 +64,10 @@ func TestTimestampedEdCrypToE2EPublicKeyOnly(t *testing.T) {
 	privKeyPath := fmt.Sprintf("%s/%s-private-key.pem", tmpDir, testName)
 	pubKeyPath := fmt.Sprintf("%s/%s-public-key.pem", tmpDir, testName)
 	certPath := fmt.Sprintf("%s/%s-cert.pem", tmpDir, testName)
+	csrPath := fmt.Sprintf("%s/%s.csr", tmpDir, testName)
 	sigFilePath := fmt.Sprintf("%s/%s.sig", tmpDir, testName)
 
-	err = CreateKeys(privKeyPath, pubKeyPath, certPath, "pem")
+	err = CreateKeys(privKeyPath, pubKeyPath, certPath, csrPath, "pem")
 
 	assert.NilError(t, err)
 

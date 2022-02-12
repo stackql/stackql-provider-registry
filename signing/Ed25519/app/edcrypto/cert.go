@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -46,23 +47,42 @@ func publicKey(priv interface{}) interface{} {
 	}
 }
 
+func sigAlg(priv interface{}) (x509.SignatureAlgorithm, error) {
+	var retVal x509.SignatureAlgorithm
+	switch k := priv.(type) {
+	case *rsa.PrivateKey:
+		return x509.SHA512WithRSA, nil
+	case *ecdsa.PrivateKey:
+		return x509.ECDSAWithSHA512, nil
+	case ed25519.PrivateKey:
+		return x509.PureEd25519, nil
+	default:
+		return retVal, fmt.Errorf("private key type '%T' not supported", k)
+	}
+}
+
 type CertificateConfig struct {
 	EcdsaCurve        string
 	Host              string
+	EmailAddresses    string
 	IsCa              bool
 	IseEd25519Key     bool
 	RsaBits           int
 	ValidFor          time.Duration
 	ValidFrom         string
 	CertOutFile       string
+	CsrOutFile        string
+	URIs              []string
 	PrivateKeyOutFile string
 	PublicKeyOutFile  string
+	Name              pkix.Name
 }
 
 func GenerateTLSArtifacts(cc CertificateConfig) error {
 	return generateTLSArtifacts(cc)
 }
 
+// Serves as a *x509.Certificate "template" generator for https://pkg.go.dev/crypto/x509#CreateCertificate
 func getCertTemplate(cc CertificateConfig, keyUsage x509.KeyUsage) (*x509.Certificate, error) {
 	var notBefore time.Time
 	var err error
@@ -85,11 +105,9 @@ func getCertTemplate(cc CertificateConfig, keyUsage x509.KeyUsage) (*x509.Certif
 
 	template := &x509.Certificate{
 		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			Organization: []string{"Acme Co"},
-		},
-		NotBefore: notBefore,
-		NotAfter:  notAfter,
+		Subject:      cc.Name,
+		NotBefore:    notBefore,
+		NotAfter:     notAfter,
 
 		KeyUsage:              keyUsage,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
@@ -104,10 +122,60 @@ func getCertTemplate(cc CertificateConfig, keyUsage x509.KeyUsage) (*x509.Certif
 			template.DNSNames = append(template.DNSNames, h)
 		}
 	}
+	emails := strings.Split(cc.EmailAddresses, ",")
+	template.EmailAddresses = append(template.EmailAddresses, emails...)
+	for _, s := range cc.URIs {
+		u, err := url.Parse(s)
+		if err != nil {
+			return nil, err
+		}
+		template.URIs = append(template.URIs, u)
+	}
 
 	if cc.IsCa {
 		template.IsCA = true
 		template.KeyUsage |= x509.KeyUsageCertSign
+	}
+	return template, nil
+}
+
+// Serves as a *x509.CertificateRequest "template" generator for https://pkg.go.dev/crypto/x509#CreateCertificateRequest
+// The following template members are used:
+// - SignatureAlgorithm
+// - Subject
+// - DNSNames
+// - EmailAddresses
+// - IPAddresses
+// - URIs
+// - ExtraExtensions
+// - Attributes (deprecated)
+func getCsrTemplate(cc CertificateConfig, sigAlg x509.SignatureAlgorithm) (*x509.CertificateRequest, error) {
+	var err error
+	if err != nil {
+		return nil, err
+	}
+
+	template := &x509.CertificateRequest{
+		SignatureAlgorithm: sigAlg,
+		Subject:            cc.Name,
+	}
+
+	hosts := strings.Split(cc.Host, ",")
+	for _, h := range hosts {
+		if ip := net.ParseIP(h); ip != nil {
+			template.IPAddresses = append(template.IPAddresses, ip)
+		} else {
+			template.DNSNames = append(template.DNSNames, h)
+		}
+	}
+	emails := strings.Split(cc.EmailAddresses, ",")
+	template.EmailAddresses = append(template.EmailAddresses, emails...)
+	for _, s := range cc.URIs {
+		u, err := url.Parse(s)
+		if err != nil {
+			return nil, err
+		}
+		template.URIs = append(template.URIs, u)
 	}
 	return template, nil
 }
@@ -158,35 +226,61 @@ func generateTLSArtifacts(cc CertificateConfig) error {
 		keyUsage |= x509.KeyUsageKeyEncipherment
 	}
 
+	// Private Key preparation
+	privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		return fmt.Errorf("unable to marshal private key: %v", err)
+	}
+	privOut := createPemBytes(privBytes, "PRIVATE KEY")
+
+	// Public Key preparation
 	pubKey := publicKey(priv)
 	pkb, err := x509.MarshalPKIXPublicKey(pubKey)
 	if err != nil {
 		return err
 	}
 	pub := createPemBytes(pkb, "PUBLIC KEY")
-	err = os.WriteFile(cc.PublicKeyOutFile, pub, 0666)
+
+	// Self-signed Certificate preparation
+	template, err := getCertTemplate(cc, keyUsage)
 	if err != nil {
 		return err
 	}
-
-	template, err := getCertTemplate(cc, keyUsage)
-
 	derBytes, err := x509.CreateCertificate(rand.Reader, template, template, pubKey, priv)
 	if err != nil {
 		return err
 	}
 	certOut := createPemBytes(derBytes, "CERTIFICATE")
+
+	// CSR preparation
+	sAlg, err := sigAlg(priv)
+	if err != nil {
+		return err
+	}
+	csrTemplate, err := getCsrTemplate(cc, sAlg)
+	if err != nil {
+		return err
+	}
+	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, csrTemplate, priv)
+	if err != nil {
+		return err
+	}
+	csrOut := createPemBytes(csrBytes, "CERTIFICATE REQUEST")
+
+	// Write files
+	err = os.WriteFile(cc.PrivateKeyOutFile, privOut, 0600)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(cc.PublicKeyOutFile, pub, 0666)
+	if err != nil {
+		return err
+	}
 	err = os.WriteFile(cc.CertOutFile, certOut, 0666)
 	if err != nil {
 		return err
 	}
-
-	privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
-	if err != nil {
-		return fmt.Errorf("unable to marshal private key: %v", err)
-	}
-	privOut := createPemBytes(privBytes, "PRIVATE KEY")
-	err = os.WriteFile(cc.PrivateKeyOutFile, privOut, 0600)
+	err = os.WriteFile(cc.CsrOutFile, csrOut, 0666)
 	if err != nil {
 		return err
 	}
