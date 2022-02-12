@@ -296,8 +296,8 @@ func verifyFileFromCertificateBytes(vc VerifyContext) (bool, *ObjectSignature, e
 	var publicKeyBytes ed25519.PublicKey
 	var cert *x509.Certificate
 	var err error
-	var sigBytes []byte
-	sigBytes, err = retrieveSignatureFromBytes(vc.SignatureBytes, vc.SignatureEncoding)
+	var decodedSigBytes []byte
+	decodedSigBytes, err = retrieveSignatureFromBytes(vc.SignatureBytes, vc.SignatureEncoding)
 	if err != nil {
 		return false, nil, err
 	}
@@ -330,7 +330,7 @@ func verifyFileFromCertificateBytes(vc VerifyContext) (bool, *ObjectSignature, e
 	if len(publicKeyBytes) != ed25519.PublicKeySize {
 		return false, nil, fmt.Errorf("public key is not the correct size (%d != %d)", len(publicKeyBytes), ed25519.PublicKeySize)
 	}
-	obSig, err := extractSignature(sigBytes)
+	obSig, err := extractSignature(decodedSigBytes)
 	if err != nil {
 		return false, nil, fmt.Errorf("error with signature: %s", err.Error())
 	}
