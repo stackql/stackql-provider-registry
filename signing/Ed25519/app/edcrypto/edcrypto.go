@@ -36,9 +36,14 @@ func retrievePemFile(filePath string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return retrievePemBytes(b)
+}
+
+func retrievePemBytes(b []byte) ([]byte, error) {
+	var err error
 	blk, _ := pem.Decode(b)
 	if blk == nil || blk.Bytes == nil || len(blk.Bytes) == 0 {
-		return nil, fmt.Errorf("could not decode bytes from pem file '%s'", filePath)
+		return nil, fmt.Errorf("could not decode bytes")
 	}
 	var key interface{}
 	if isPrivateKeyType(blk.Type) {
@@ -62,7 +67,11 @@ func retrievePemFile(filePath string) ([]byte, error) {
 }
 
 func RetrieveAndDecodeHexFile(filePath string) ([]byte, error) {
-	return retrieveAndDecodeHexFile(filePath)
+	b, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+	return retrieveAndDecodeHexBytes(b)
 }
 
 func RetrieveSignatureFromFile(filePath string, format string) ([]byte, error) {
@@ -70,29 +79,30 @@ func RetrieveSignatureFromFile(filePath string, format string) ([]byte, error) {
 }
 
 func retrieveSignatureFromFile(filePath string, format string) ([]byte, error) {
+	b, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+	return retrieveSignatureFromBytes(b, format)
+}
+
+func retrieveSignatureFromBytes(b []byte, format string) ([]byte, error) {
 	switch format {
 	case "base64":
-		return retrieveAndDecodeBase64File(filePath)
+		return retrieveAndDecodeBase64Bytes(b)
 	case "hex":
-		return retrieveAndDecodeHexFile(filePath)
+		return retrieveAndDecodeHexBytes(b)
 	default:
 		return nil, fmt.Errorf("signature format '%s' not supported", format)
 	}
 }
 
-func retrieveAndDecodeHexFile(filePath string) ([]byte, error) {
-	b, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, err
-	}
+func retrieveAndDecodeHexBytes(b []byte) ([]byte, error) {
 	return hex.DecodeString(string(b))
 }
 
-func retrieveAndDecodeBase64File(filePath string) ([]byte, error) {
-	b, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, err
-	}
+func retrieveAndDecodeBase64Bytes(b []byte) ([]byte, error) {
+
 	return base64.StdEncoding.DecodeString(string(b))
 }
 
@@ -245,13 +255,51 @@ func VerifyFileFromCertificate(certificateFilePath string, certificateFileFormat
 	return verifyFileFromCertificate(certificateFilePath, certificateFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat, strictMode)
 }
 
+type VerifyContext struct {
+	CertificateBytes, SignatureBytes, VerifyBytes []byte
+	CertificateFormat                             string
+	SignatureEncoding                             string
+	StrictMode                                    bool
+	VerifyOptions                                 x509.VerifyOptions
+}
+
+func NewVerifyContext(certificateBytes, signatureBytes, verifyBytes []byte, certificateFormat string, sigEncoding string, strictMode bool, verifyOptions x509.VerifyOptions) VerifyContext {
+	return VerifyContext{
+		CertificateBytes:  certificateBytes,
+		SignatureBytes:    signatureBytes,
+		VerifyBytes:       verifyBytes,
+		CertificateFormat: certificateFormat,
+		SignatureEncoding: sigEncoding,
+		StrictMode:        strictMode,
+		VerifyOptions:     verifyOptions,
+	}
+}
+
 func verifyFileFromCertificate(certificateFilePath string, certificateFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (bool, *ObjectSignature, error) {
+	cb, err := os.ReadFile(certificateFilePath)
+	if err != nil {
+		return false, nil, err
+	}
+	sb, err := os.ReadFile(signatureFilePath)
+	if err != nil {
+		return false, nil, err
+	}
+	vb, err := os.ReadFile(filePathToVerify)
+	if err != nil {
+		return false, nil, err
+	}
+	vc := NewVerifyContext(cb, sb, vb, certificateFileFormat, signatureFileFormat, strictMode, x509.VerifyOptions{})
+	return verifyFileFromCertificateBytes(vc)
+}
+
+func verifyFileFromCertificateBytes(vc VerifyContext) (bool, *ObjectSignature, error) {
 	var publicKeyBytes ed25519.PublicKey
 	var cert *x509.Certificate
 	var err error
-	switch certificateFileFormat {
+	var sigBytes []byte
+	switch vc.CertificateFormat {
 	case "pem":
-		b, err := retrievePemFile(certificateFilePath)
+		b, err := retrievePemBytes(vc.CertificateBytes)
 		if err != nil {
 			return false, nil, err
 		}
@@ -259,10 +307,14 @@ func verifyFileFromCertificate(certificateFilePath string, certificateFileFormat
 		if err != nil {
 			return false, nil, err
 		}
-		if strictMode {
-			_, err = cert.Verify(x509.VerifyOptions{})
+		sigBytes, err = retrieveSignatureFromBytes(vc.SignatureBytes, vc.SignatureEncoding)
+		if vc.StrictMode {
+			chains, err := cert.Verify(x509.VerifyOptions{})
 			if err != nil {
-				return false, nil, fmt.Errorf("ceritificate verify error: %s", err.Error())
+				return false, nil, fmt.Errorf("certificate verify error: %s", err.Error())
+			}
+			if len(chains) == 0 {
+				return false, nil, fmt.Errorf("chain of trust could not be established")
 			}
 		}
 		publicKeyBytes, err = extractPublicKeyFromCertificate(cert)
@@ -270,27 +322,19 @@ func verifyFileFromCertificate(certificateFilePath string, certificateFileFormat
 			return false, nil, err
 		}
 	default:
-		return false, nil, fmt.Errorf("certificate format '%s' not supported", certificateFileFormat)
+		return false, nil, fmt.Errorf("certificate format '%s' not supported", vc.CertificateFormat)
 	}
 	if len(publicKeyBytes) != ed25519.PublicKeySize {
-		return false, nil, fmt.Errorf("private key '%s' is not the correct size (%d != %d)", certificateFilePath, len(publicKeyBytes), ed25519.PublicKeySize)
+		return false, nil, fmt.Errorf("public key is not the correct size (%d != %d)", len(publicKeyBytes), ed25519.PublicKeySize)
 	}
-	msg, err := os.ReadFile(filePathToVerify)
-	if err != nil {
-		return false, nil, fmt.Errorf("error reading file to sign: %s", err.Error())
-	}
-	b, err := retrieveSignatureFromFile(signatureFilePath, signatureFileFormat)
-	if err != nil {
-		return false, nil, fmt.Errorf("error reading signature file: %s", err.Error())
-	}
-	obSig, err := extractSignature(b)
+	obSig, err := extractSignature(sigBytes)
 	if err != nil {
 		return false, nil, fmt.Errorf("error with signature: %s", err.Error())
 	}
 	if !obSig.HasTimestamp() || !cert.NotBefore.Before(*obSig.GetTimestamp()) || !cert.NotAfter.After(*obSig.GetTimestamp()) {
 		return false, nil, fmt.Errorf("error with signed timestamp: %v, not in cert timestamp range (%v, %v)", obSig.GetTimestamp(), cert.NotBefore, cert.NotAfter)
 	}
-	return ed25519.Verify(publicKeyBytes, append(msg, obSig.GetTimestampBytes()...), obSig.GetSignature()), obSig, nil
+	return ed25519.Verify(publicKeyBytes, append(vc.VerifyBytes, obSig.GetTimestampBytes()...), obSig.GetSignature()), obSig, nil
 }
 
 type ObjectSignature struct {
