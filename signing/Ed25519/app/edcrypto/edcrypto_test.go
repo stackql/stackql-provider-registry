@@ -1,8 +1,10 @@
 package edcrypto_test
 
 import (
+	"crypto/x509/pkix"
 	"fmt"
 	"testing"
+	"time"
 
 	"gotest.tools/assert"
 
@@ -29,7 +31,22 @@ func TestEdCrypToE2EPublicKeyOnly(t *testing.T) {
 	csrPath := fmt.Sprintf("%s/%s.csr", tmpDir, testName)
 	sigFilePath := fmt.Sprintf("%s/%s.sig", tmpDir, testName)
 
-	err = CreateKeys(privKeyPath, pubKeyPath, certPath, csrPath, "pem")
+	cfg := CertificateConfig{
+		Host:   "example.com",
+		Format: "pem",
+		Name: pkix.Name{
+			Organization: []string{"stackql.io"},
+		},
+		IsCa:              true,
+		IsEd25519Key:      true,
+		ValidFor:          time.Duration(2 * 365 * 24 * time.Hour),
+		PrivateKeyOutFile: privKeyPath,
+		CertOutFile:       certPath,
+		CsrOutFile:        csrPath,
+		PublicKeyOutFile:  pubKeyPath,
+	}
+
+	err = CreateKeys(cfg)
 
 	assert.NilError(t, err)
 
@@ -67,7 +84,22 @@ func TestTimestampedEdCrypToE2EPublicKeyOnly(t *testing.T) {
 	csrPath := fmt.Sprintf("%s/%s.csr", tmpDir, testName)
 	sigFilePath := fmt.Sprintf("%s/%s.sig", tmpDir, testName)
 
-	err = CreateKeys(privKeyPath, pubKeyPath, certPath, csrPath, "pem")
+	cfg := CertificateConfig{
+		Host:   "example.com",
+		Format: "pem",
+		Name: pkix.Name{
+			Organization: []string{"stackql.io"},
+		},
+		IsCa:              true,
+		IsEd25519Key:      true,
+		ValidFor:          time.Duration(2 * 365 * 24 * time.Hour),
+		PrivateKeyOutFile: privKeyPath,
+		CertOutFile:       certPath,
+		CsrOutFile:        csrPath,
+		PublicKeyOutFile:  pubKeyPath,
+	}
+
+	err = CreateKeys(cfg)
 
 	assert.NilError(t, err)
 

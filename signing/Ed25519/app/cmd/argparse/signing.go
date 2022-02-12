@@ -1,10 +1,12 @@
 package argparse
 
 import (
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"fmt"
 	"os"
 	"runtime/pprof"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -156,7 +158,22 @@ var createKeysCmd = &cobra.Command{
 				keyFileFormat = "pem"
 			}
 
-			err := edcrypto.CreateKeys(privateKeyFilePath, publicKeyFilePath, certFilePath, csrFilePath, keyFileFormat)
+			cfg := edcrypto.CertificateConfig{
+				Host:   "example.com",
+				Format: keyFileFormat,
+				Name: pkix.Name{
+					Organization: []string{"stackql.io"},
+				},
+				IsCa:              true,
+				IsEd25519Key:      true,
+				ValidFor:          time.Duration(2 * 365 * 24 * time.Hour),
+				PrivateKeyOutFile: privateKeyFilePath,
+				CertOutFile:       certFilePath,
+				CsrOutFile:        csrFilePath,
+				PublicKeyOutFile:  publicKeyFilePath,
+			}
+
+			err := edcrypto.CreateKeys(cfg)
 			printErrorAndExitOneIfError(err)
 		}
 		executeCommand(runtimeCtx, cb)

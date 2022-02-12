@@ -63,10 +63,11 @@ func sigAlg(priv interface{}) (x509.SignatureAlgorithm, error) {
 
 type CertificateConfig struct {
 	EcdsaCurve        string
+	Format            string
 	Host              string
 	EmailAddresses    string
 	IsCa              bool
-	IseEd25519Key     bool
+	IsEd25519Key      bool
 	RsaBits           int
 	ValidFor          time.Duration
 	ValidFrom         string
@@ -190,7 +191,7 @@ func generateTLSArtifacts(cc CertificateConfig) error {
 	var err error
 	switch cc.EcdsaCurve {
 	case "":
-		if cc.IseEd25519Key {
+		if cc.IsEd25519Key {
 			_, priv, err = ed25519.GenerateKey(rand.Reader)
 			if err != nil {
 				return err
