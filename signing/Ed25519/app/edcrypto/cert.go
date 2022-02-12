@@ -63,6 +63,55 @@ func GenerateTLSArtifacts(cc CertificateConfig) error {
 	return generateTLSArtifacts(cc)
 }
 
+func getCertTemplate(cc CertificateConfig, keyUsage x509.KeyUsage) (*x509.Certificate, error) {
+	var notBefore time.Time
+	var err error
+	if len(cc.ValidFrom) == 0 {
+		notBefore = time.Now()
+	} else {
+		notBefore, err = time.Parse("Jan 2 15:04:05 2006", cc.ValidFrom)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	notAfter := notBefore.Add(cc.ValidFor)
+
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		return nil, err
+	}
+
+	template := &x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			Organization: []string{"Acme Co"},
+		},
+		NotBefore: notBefore,
+		NotAfter:  notAfter,
+
+		KeyUsage:              keyUsage,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	hosts := strings.Split(cc.Host, ",")
+	for _, h := range hosts {
+		if ip := net.ParseIP(h); ip != nil {
+			template.IPAddresses = append(template.IPAddresses, ip)
+		} else {
+			template.DNSNames = append(template.DNSNames, h)
+		}
+	}
+
+	if cc.IsCa {
+		template.IsCA = true
+		template.KeyUsage |= x509.KeyUsageCertSign
+	}
+	return template, nil
+}
+
 func generateTLSArtifacts(cc CertificateConfig) error {
 
 	if len(cc.Host) == 0 {
@@ -109,51 +158,6 @@ func generateTLSArtifacts(cc CertificateConfig) error {
 		keyUsage |= x509.KeyUsageKeyEncipherment
 	}
 
-	var notBefore time.Time
-	if len(cc.ValidFrom) == 0 {
-		notBefore = time.Now()
-	} else {
-		notBefore, err = time.Parse("Jan 2 15:04:05 2006", cc.ValidFrom)
-		if err != nil {
-			return err
-		}
-	}
-
-	notAfter := notBefore.Add(cc.ValidFor)
-
-	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
-	if err != nil {
-		return err
-	}
-
-	template := x509.Certificate{
-		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			Organization: []string{"Acme Co"},
-		},
-		NotBefore: notBefore,
-		NotAfter:  notAfter,
-
-		KeyUsage:              keyUsage,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-	}
-
-	hosts := strings.Split(cc.Host, ",")
-	for _, h := range hosts {
-		if ip := net.ParseIP(h); ip != nil {
-			template.IPAddresses = append(template.IPAddresses, ip)
-		} else {
-			template.DNSNames = append(template.DNSNames, h)
-		}
-	}
-
-	if cc.IsCa {
-		template.IsCA = true
-		template.KeyUsage |= x509.KeyUsageCertSign
-	}
-
 	pubKey := publicKey(priv)
 	pkb, err := x509.MarshalPKIXPublicKey(pubKey)
 	if err != nil {
@@ -165,7 +169,9 @@ func generateTLSArtifacts(cc CertificateConfig) error {
 		return err
 	}
 
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, pubKey, priv)
+	template, err := getCertTemplate(cc, keyUsage)
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, template, template, pubKey, priv)
 	if err != nil {
 		return err
 	}
