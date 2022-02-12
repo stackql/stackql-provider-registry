@@ -297,6 +297,7 @@ func verifyFileFromCertificateBytes(vc VerifyContext) (bool, *ObjectSignature, e
 	var cert *x509.Certificate
 	var err error
 	var sigBytes []byte
+	sigBytes, err = retrieveSignatureFromBytes(vc.SignatureBytes, vc.SignatureEncoding)
 	switch vc.CertificateFormat {
 	case "pem":
 		b, err := retrievePemBytes(vc.CertificateBytes)
@@ -307,7 +308,6 @@ func verifyFileFromCertificateBytes(vc VerifyContext) (bool, *ObjectSignature, e
 		if err != nil {
 			return false, nil, err
 		}
-		sigBytes, err = retrieveSignatureFromBytes(vc.SignatureBytes, vc.SignatureEncoding)
 		if vc.StrictMode {
 			chains, err := cert.Verify(x509.VerifyOptions{})
 			if err != nil {
