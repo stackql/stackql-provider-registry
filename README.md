@@ -40,7 +40,7 @@ CSR_FILE="sample-ed25519.csr"
 
 ./ed25519tool sign --privatekeypath=${CREDENTIALS_DIR}/${PRIVATE_KEY_FILE} --signaturetime="Jan 2 15:04:05 2006" ${TESTING_INPUT_DIR}/sample-infile.txt -o ${TESTING_OUTPUT_DIR}/old-timestamp-sample-infile.txt.sig
 
-./ed25519tool sign --privatekeypath=${CREDENTIALS_DIR}/${PRIVATE_KEY_FILE} --signaturetime="Jan 2 15:04:05 2023" ${TESTING_INPUT_DIR}/sample-infile.txt -o ${TESTING_OUTPUT_DIR}/acceptable-timestamp-sample-infile.txt.sig
+./ed25519tool sign --privatekeypath=${CREDENTIALS_DIR}/${PRIVATE_KEY_FILE} --signaturetime="Jan 2 15:04:05 2023" ${TESTING_INPUT_DIR}/sample-infile.txt -o ${TESTING_OUTPUT_DIR}/acceptable-timestamp-sample-infile.txt.embedded.sig
 
 ./ed25519tool sign --privatekeypath=${CREDENTIALS_DIR}/${PRIVATE_KEY_FILE} --signaturetime="Jan 2 15:04:05 2033" ${TESTING_INPUT_DIR}/sample-infile.txt -o ${TESTING_OUTPUT_DIR}/future-timestamp-sample-infile.txt.sig
 

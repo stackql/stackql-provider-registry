@@ -205,6 +205,32 @@ func TestTimestampedEdCryptoCertAcceptableButCertVerifyFail(t *testing.T) {
 
 }
 
+func TestTimestampedEdCryptoCertAcceptableAndCertVerifyFromEmbeddedSuccessful(t *testing.T) {
+
+	credsDir, err := fileutil.GetFilePathFromRepositoryRoot("signing/Ed25519/test")
+
+	assert.NilError(t, err)
+
+	fileToSign, err := fileutil.GetFilePathFromRepositoryRoot("signing/Ed25519/test/sample-infile.txt")
+
+	assert.NilError(t, err)
+
+	certPath := fmt.Sprintf("%s/%s", credsDir, "embedded-cert.pem")
+	sigFilePath := fmt.Sprintf("%s/%s", credsDir, "acceptable-timestamp-sample-infile.txt.embedded.sig")
+
+	vr, err := NewVerifier()
+	assert.NilError(t, err)
+
+	verified, obs, err := vr.VerifyFileFromCertificate(certPath, "pem", fileToSign, sigFilePath, "base64", true)
+
+	assert.NilError(t, err)
+
+	assert.Equal(t, verified, true)
+
+	assert.Assert(t, obs != nil)
+
+}
+
 func TestTimestampedEdCryptoCertTooOld(t *testing.T) {
 
 	credsDir, err := fileutil.GetFilePathFromRepositoryRoot("signing/Ed25519/test")
