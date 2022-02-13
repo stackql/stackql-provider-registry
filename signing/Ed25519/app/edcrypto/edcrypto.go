@@ -207,15 +207,27 @@ func signFile(pkFilePath string, pkFileFormat string, filePathToSign string, tim
 	return append(nowBytes, ed25519.Sign(pkBytes, msg)...), nil
 }
 
-func VerifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, *ObjectSignature, error) {
-	return verifyFile(publicKeyFilePath, publicKeyFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat, nil, nil)
+type Verifier struct {
+	cc CertChecker
 }
 
-func VerifyFileWithTimestamp(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, *ObjectSignature, error) {
-	return verifyFile(publicKeyFilePath, publicKeyFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat, nil, nil)
+func NewVerifier() (*Verifier, error) {
+	cc, err := getCertChecker()
+	if err != nil {
+		return nil, err
+	}
+	return &Verifier{cc: cc}, nil
 }
 
-func verifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, minTime *time.Time, maxTime *time.Time) (bool, *ObjectSignature, error) {
+func (v *Verifier) VerifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, *ObjectSignature, error) {
+	return v.verifyFile(publicKeyFilePath, publicKeyFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat, nil, nil)
+}
+
+func (v *Verifier) VerifyFileWithTimestamp(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, *ObjectSignature, error) {
+	return v.verifyFile(publicKeyFilePath, publicKeyFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat, nil, nil)
+}
+
+func (v *Verifier) verifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, minTime *time.Time, maxTime *time.Time) (bool, *ObjectSignature, error) {
 	var publicKeyBytes ed25519.PublicKey
 	var err error
 	switch publicKeyFileFormat {
@@ -251,8 +263,8 @@ func extractPublicKeyFromCertificate(cert *x509.Certificate) (ed25519.PublicKey,
 	return rv, nil
 }
 
-func VerifyFileFromCertificate(certificateFilePath string, certificateFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (bool, *ObjectSignature, error) {
-	return verifyFileFromCertificate(certificateFilePath, certificateFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat, strictMode)
+func (v *Verifier) VerifyFileFromCertificate(certificateFilePath string, certificateFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (bool, *ObjectSignature, error) {
+	return v.verifyFileFromCertificate(certificateFilePath, certificateFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat, strictMode)
 }
 
 type VerifyContext struct {
@@ -275,7 +287,7 @@ func NewVerifyContext(certificateBytes, signatureBytes, verifyBytes []byte, cert
 	}
 }
 
-func verifyFileFromCertificate(certificateFilePath string, certificateFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (bool, *ObjectSignature, error) {
+func (v *Verifier) verifyFileFromCertificate(certificateFilePath string, certificateFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (bool, *ObjectSignature, error) {
 	cb, err := os.ReadFile(certificateFilePath)
 	if err != nil {
 		return false, nil, err
@@ -289,10 +301,10 @@ func verifyFileFromCertificate(certificateFilePath string, certificateFileFormat
 		return false, nil, err
 	}
 	vc := NewVerifyContext(cb, sb, vb, certificateFileFormat, signatureFileFormat, strictMode, x509.VerifyOptions{})
-	return verifyFileFromCertificateBytes(vc)
+	return v.verifyFileFromCertificateBytes(vc)
 }
 
-func verifyFileFromCertificateBytes(vc VerifyContext) (bool, *ObjectSignature, error) {
+func (v *Verifier) verifyFileFromCertificateBytes(vc VerifyContext) (bool, *ObjectSignature, error) {
 	var publicKeyBytes ed25519.PublicKey
 	var cert *x509.Certificate
 	var err error
@@ -312,7 +324,7 @@ func verifyFileFromCertificateBytes(vc VerifyContext) (bool, *ObjectSignature, e
 			return false, nil, err
 		}
 		if vc.StrictMode {
-			chains, err := cert.Verify(x509.VerifyOptions{})
+			chains, err := v.cc.Verify(cert)
 			if err != nil {
 				return false, nil, fmt.Errorf("certificate verify error: %s", err.Error())
 			}

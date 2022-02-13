@@ -89,7 +89,10 @@ var verifyCmd = &cobra.Command{
 				signatureFileFormat = "base64"
 			}
 
-			res, _, err := edcrypto.VerifyFile(runtimeCtx.PublicKeyPath, runtimeCtx.PublicKeyFormat, filePathToVerify, signatureFilePath, signatureFileFormat)
+			vr, err := edcrypto.NewVerifier()
+			printErrorAndExitOneIfError(err)
+
+			res, _, err := vr.VerifyFile(runtimeCtx.PublicKeyPath, runtimeCtx.PublicKeyFormat, filePathToVerify, signatureFilePath, signatureFileFormat)
 			printErrorAndExitOneIfError(err)
 			printErrorAndExitOneIfError(err)
 			if !res {
@@ -122,7 +125,10 @@ var certVerifyCmd = &cobra.Command{
 				signatureFileFormat = "base64"
 			}
 
-			res, _, err := edcrypto.VerifyFileFromCertificate(runtimeCtx.CertificatePath, runtimeCtx.CertificateFormat, filePathToVerify, signatureFilePath, signatureFileFormat, runtimeCtx.Strict)
+			vr, err := edcrypto.NewVerifier()
+			printErrorAndExitOneIfError(err)
+
+			res, _, err := vr.VerifyFileFromCertificate(runtimeCtx.CertificatePath, runtimeCtx.CertificateFormat, filePathToVerify, signatureFilePath, signatureFileFormat, runtimeCtx.Strict)
 			printErrorAndExitOneIfError(err)
 			printErrorAndExitOneIfError(err)
 			if !res {
