@@ -1,6 +1,7 @@
 package edcrypto
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -335,7 +336,7 @@ func extractPublicKeyFromCertificate(cert *x509.Certificate) (ed25519.PublicKey,
 	return rv, nil
 }
 
-func (v *Verifier) VerifyFileFromCertificate(filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (bool, *ObjectSignature, error) {
+func (v *Verifier) VerifyFileFromCertificate(filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (VerifierResponse, error) {
 	return v.verifyFileFromCertificate(filePathToVerify, signatureFilePath, signatureFileFormat, strictMode)
 }
 
@@ -359,25 +360,41 @@ func NewVerifyContext(verifyURL string, signatureFile, verifyFile io.ReadCloser,
 	}
 }
 
-func (v *Verifier) verifyFileFromCertificate(filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (bool, *ObjectSignature, error) {
+func (v *Verifier) verifyFileFromCertificate(filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (VerifierResponse, error) {
 	sb, err := os.Open(signatureFilePath)
 	if err != nil {
-		return false, nil, err
+		return NewVerifierResponse(false, nil, nil, nil), err
 	}
 	vb, err := os.Open(filePathToVerify)
 	if err != nil {
-		return false, nil, err
+		return NewVerifierResponse(false, nil, nil, nil), err
 	}
 	vc := NewVerifyContext(fmt.Sprintf("file://%s", filePathToVerify), sb, vb, signatureFileFormat, strictMode, x509.VerifyOptions{})
 	return v.verifyFileFromCertificateBytes(vc)
 }
 
-func (v *Verifier) VerifyFileFromCertificateBytes(vc VerifyContext) (bool, *ObjectSignature, error) {
+func (v *Verifier) VerifyFileFromCertificateBytes(vc VerifyContext) (VerifierResponse, error) {
 	return v.verifyFileFromCertificateBytes(vc)
 }
 
+type VerifierResponse struct {
+	IsVerified    bool
+	Sig           *ObjectSignature
+	VerifyFile    io.ReadCloser
+	SignatureFile io.ReadCloser
+}
+
+func NewVerifierResponse(isVerified bool, sig *ObjectSignature, verifyFile, sigFile io.ReadCloser) VerifierResponse {
+	return VerifierResponse{
+		IsVerified:    isVerified,
+		Sig:           sig,
+		VerifyFile:    verifyFile,
+		SignatureFile: sigFile,
+	}
+}
+
 // Might eventually do this in chunks, io.ReadCloser is appropriate interface to pass through
-func (v *Verifier) verifyFileFromCertificateBytes(vc VerifyContext) (bool, *ObjectSignature, error) {
+func (v *Verifier) verifyFileFromCertificateBytes(vc VerifyContext) (VerifierResponse, error) {
 	var publicKeyBytes ed25519.PublicKey
 	var cert *x509.Certificate
 	var err error
@@ -389,44 +406,51 @@ func (v *Verifier) verifyFileFromCertificateBytes(vc VerifyContext) (bool, *Obje
 	defer cleanup()
 	sb, err := io.ReadAll(vc.SignatureFile)
 	if err != nil {
-		return false, nil, err
+		return NewVerifierResponse(false, nil, nil, nil), err
 	}
+	sbc := make([]byte, len(sb))
+	copy(sbc, sb)
+	sigReader := io.NopCloser(bytes.NewReader(sbc))
 	vb, err := io.ReadAll(vc.VerifyFile)
 	if err != nil {
-		return false, nil, err
+		return NewVerifierResponse(false, nil, nil, nil), err
 	}
+	vbc := make([]byte, len(vb))
+	copy(vbc, sb)
+	verReader := io.NopCloser(bytes.NewReader(vbc))
 	decodedSigBytes, err = retrieveSignatureFromBytes(sb, vc.SignatureEncoding)
 	if err != nil {
-		return false, nil, err
+		return NewVerifierResponse(false, nil, nil, nil), err
 	}
 	obSig, err := extractSignature(decodedSigBytes)
 	if err != nil {
-		return false, nil, fmt.Errorf("error with signature: %s", err.Error())
+		return NewVerifierResponse(false, nil, nil, nil), fmt.Errorf("error with signature: %s", err.Error())
 	}
 	cert, err = v.inferCertificate(vc.VerifyURL, obSig)
 	if err != nil {
-		return false, nil, err
+		return NewVerifierResponse(false, nil, nil, nil), err
 	}
 	if vc.StrictMode {
 		chains, err := v.cc.Verify(cert)
 		if err != nil {
-			return false, nil, fmt.Errorf("certificate verify error: %s", err.Error())
+			return NewVerifierResponse(false, nil, nil, nil), fmt.Errorf("certificate verify error: %s", err.Error())
 		}
 		if len(chains) == 0 {
-			return false, nil, fmt.Errorf("chain of trust could not be established")
+			return NewVerifierResponse(false, nil, nil, nil), fmt.Errorf("chain of trust could not be established")
 		}
 	}
 	publicKeyBytes, err = extractPublicKeyFromCertificate(cert)
 	if err != nil {
-		return false, nil, err
+		return NewVerifierResponse(false, nil, nil, nil), err
 	}
 	if len(publicKeyBytes) != ed25519.PublicKeySize {
-		return false, nil, fmt.Errorf("public key is not the correct size (%d != %d)", len(publicKeyBytes), ed25519.PublicKeySize)
+		return NewVerifierResponse(false, nil, nil, nil), fmt.Errorf("public key is not the correct size (%d != %d)", len(publicKeyBytes), ed25519.PublicKeySize)
 	}
 	if !obSig.HasTimestamp() || !cert.NotBefore.Before(*obSig.GetTimestamp()) || !cert.NotAfter.After(*obSig.GetTimestamp()) {
-		return false, nil, fmt.Errorf("error with signed timestamp: %v, not in cert timestamp range (%v, %v)", obSig.GetTimestamp(), cert.NotBefore, cert.NotAfter)
+		return NewVerifierResponse(false, nil, nil, nil), fmt.Errorf("error with signed timestamp: %v, not in cert timestamp range (%v, %v)", obSig.GetTimestamp(), cert.NotBefore, cert.NotAfter)
 	}
-	return ed25519.Verify(publicKeyBytes, append(vb, obSig.GetTimestampBytes()...), obSig.GetSignature()), obSig, nil
+	isVerified := ed25519.Verify(publicKeyBytes, append(vb, obSig.GetTimestampBytes()...), obSig.GetSignature())
+	return NewVerifierResponse(isVerified, obSig, verReader, sigReader), nil
 }
 
 type ObjectSignature struct {

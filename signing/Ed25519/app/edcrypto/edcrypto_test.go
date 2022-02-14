@@ -143,13 +143,13 @@ func TestTimestampedEdCryptoCert(t *testing.T) {
 	vr, err := NewVerifier(NewVerifierConfig("", path.Join(credsDir, "sample"), ""))
 	assert.NilError(t, err)
 
-	verified, obs, err := vr.VerifyFileFromCertificate(fileToSign, sigFilePath, "base64", false)
+	verResponse, err := vr.VerifyFileFromCertificate(fileToSign, sigFilePath, "base64", false)
 
 	assert.NilError(t, err)
 
-	assert.Equal(t, verified, true)
+	assert.Equal(t, verResponse.IsVerified, true)
 
-	assert.Equal(t, obs.HasTimestamp(), true)
+	assert.Equal(t, verResponse.Sig.HasTimestamp(), true)
 
 }
 
@@ -168,13 +168,13 @@ func TestTimestampedEdCryptoCertAcceptable(t *testing.T) {
 	vr, err := NewVerifier(NewVerifierConfig("", path.Join(credsDir, "sample"), ".*"))
 	assert.NilError(t, err)
 
-	verified, obs, err := vr.VerifyFileFromCertificate(fileToSign, sigFilePath, "base64", false)
+	verResponse, err := vr.VerifyFileFromCertificate(fileToSign, sigFilePath, "base64", false)
 
 	assert.NilError(t, err)
 
-	assert.Equal(t, verified, true)
+	assert.Equal(t, verResponse.IsVerified, true)
 
-	assert.Equal(t, obs.HasTimestamp(), true)
+	assert.Equal(t, verResponse.Sig.HasTimestamp(), true)
 
 }
 
@@ -193,13 +193,13 @@ func TestTimestampedEdCryptoCertAcceptableButCertVerifyFail(t *testing.T) {
 	vr, err := NewVerifier(NewVerifierConfig("", path.Join(credsDir, "sample"), ""))
 	assert.NilError(t, err)
 
-	verified, obs, err := vr.VerifyFileFromCertificate(fileToSign, sigFilePath, "base64", true)
+	verResponse, err := vr.VerifyFileFromCertificate(fileToSign, sigFilePath, "base64", true)
 
 	assert.Assert(t, err != nil)
 
-	assert.Equal(t, verified, false)
+	assert.Equal(t, verResponse.IsVerified, false)
 
-	assert.Assert(t, obs == nil)
+	assert.Assert(t, verResponse.Sig == nil)
 
 }
 
@@ -218,13 +218,13 @@ func TestTimestampedEdCryptoCertAcceptableAndCertVerifyFromEmbeddedSuccessful(t 
 	vr, err := NewVerifier(NewVerifierConfig("", "", ""))
 	assert.NilError(t, err)
 
-	verified, obs, err := vr.VerifyFileFromCertificate(fileToSign, sigFilePath, "base64", true)
+	verResponse, err := vr.VerifyFileFromCertificate(fileToSign, sigFilePath, "base64", true)
 
 	assert.NilError(t, err)
 
-	assert.Equal(t, verified, true)
+	assert.Equal(t, verResponse.IsVerified, true)
 
-	assert.Assert(t, obs != nil)
+	assert.Assert(t, verResponse.Sig != nil)
 
 }
 
@@ -243,13 +243,13 @@ func TestTimestampedEdCryptoCertTooOld(t *testing.T) {
 	vr, err := NewVerifier(NewVerifierConfig("", "", ""))
 	assert.NilError(t, err)
 
-	verified, obs, err := vr.VerifyFileFromCertificate(fileToSign, sigFilePath, "base64", false)
+	verResponse, err := vr.VerifyFileFromCertificate(fileToSign, sigFilePath, "base64", false)
 
 	assert.Assert(t, err != nil)
 
-	assert.Equal(t, verified, false)
+	assert.Equal(t, verResponse.IsVerified, false)
 
-	assert.Assert(t, obs == nil)
+	assert.Assert(t, verResponse.Sig == nil)
 
 }
 
@@ -268,12 +268,12 @@ func TestTimestampedEdCryptoCertTooNew(t *testing.T) {
 	vr, err := NewVerifier(NewVerifierConfig("", "", ""))
 	assert.NilError(t, err)
 
-	verified, obs, err := vr.VerifyFileFromCertificate(fileToSign, sigFilePath, "base64", false)
+	verResponse, err := vr.VerifyFileFromCertificate(fileToSign, sigFilePath, "base64", false)
 
 	assert.Assert(t, err != nil)
 
-	assert.Equal(t, verified, false)
+	assert.Equal(t, verResponse.IsVerified, false)
 
-	assert.Assert(t, obs == nil)
+	assert.Assert(t, verResponse.Sig == nil)
 
 }
