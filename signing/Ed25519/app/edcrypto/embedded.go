@@ -38,19 +38,3 @@ func getAllEmbeddedSigningCertPaths() ([]string, error) {
 	}
 	return rv, nil
 }
-
-func getAllEmbeddedCerts() ([]*x509.Certificate, error) {
-	var rv []*x509.Certificate
-	paths, err := getAllEmbeddedSigningCertPaths()
-	if err != nil {
-		return nil, err
-	}
-	for _, p := range paths {
-		c, err := getEmbbededCert(p)
-		if err != nil {
-			return nil, err
-		}
-		rv = append(rv, c...)
-	}
-	return rv, nil
-}

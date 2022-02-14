@@ -5,18 +5,6 @@ import (
 	"fmt"
 )
 
-func getVendorPool() (*x509.CertPool, error) {
-	rv := x509.NewCertPool()
-	certs, err := getAllEmbeddedCerts()
-	if err != nil {
-		return nil, err
-	}
-	for _, c := range certs {
-		rv.AddCert(c)
-	}
-	return rv, nil
-}
-
 type CertChecker interface {
 	Verify(*x509.Certificate) ([][]*x509.Certificate, error)
 }

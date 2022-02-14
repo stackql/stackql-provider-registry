@@ -285,3 +285,53 @@ func generateTLSArtifacts(cc CertificateConfig) error {
 
 	return nil
 }
+
+func getAllEmbeddedCerts() ([]*x509.Certificate, error) {
+	var rv []*x509.Certificate
+	paths, err := getAllEmbeddedSigningCertPaths()
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range paths {
+		c, err := getEmbbededCert(p)
+		if err != nil {
+			return nil, err
+		}
+		rv = append(rv, c...)
+	}
+	return rv, nil
+}
+
+func getAllLocalCerts() ([]*x509.Certificate, error) {
+	var rv []*x509.Certificate
+	paths, err := getAllEmbeddedSigningCertPaths()
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range paths {
+		c, err := getEmbbededCert(p)
+		if err != nil {
+			return nil, err
+		}
+		rv = append(rv, c...)
+	}
+	return rv, nil
+}
+
+func getAllLocalSigningCertPaths(localSigningCertRootPath string) ([]string, error) {
+	var rv []string
+	paths, err := os.ReadDir(localSigningCertRootPath)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range paths {
+		if s.Type().IsRegular() {
+			rv = append(rv, fmt.Sprintf("%s/%s", localSigningCertRootPath, s.Name()))
+		}
+	}
+	return rv, nil
+}
+
+func getLocalCertBundle(localRootBundlePath string) ([]byte, error) {
+	return os.ReadFile(localRootBundlePath)
+}

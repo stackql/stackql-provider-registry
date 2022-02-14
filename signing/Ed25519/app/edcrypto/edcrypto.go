@@ -229,7 +229,21 @@ type Verifier struct {
 	signingCerts []*x509.Certificate
 }
 
-func NewVerifier() (*Verifier, error) {
+type VerifierConfig struct {
+	LocalCAFilePath   string
+	LocalCertDirPath  string
+	LocalCertRegexStr string
+}
+
+func NewVerifierConfig(localCafilePath, localCertDirPAth, localCertRegexStr string) VerifierConfig {
+	return VerifierConfig{
+		LocalCAFilePath:   localCafilePath,
+		LocalCertDirPath:  localCertDirPAth,
+		LocalCertRegexStr: localCertRegexStr,
+	}
+}
+
+func NewVerifier(vc VerifierConfig) (*Verifier, error) {
 	cc, err := getCertChecker()
 	if err != nil {
 		return nil, err

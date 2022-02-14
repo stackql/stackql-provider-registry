@@ -68,6 +68,10 @@ var signCmd = &cobra.Command{
 	},
 }
 
+func getVerifierConfigFromRuntimeCfg() edcrypto.VerifierConfig {
+	return edcrypto.NewVerifierConfig(runtimeCtx.LocalCABundlePath, runtimeCtx.LocalCertsPath, runtimeCtx.LocalCertsRegex)
+}
+
 var verifyCmd = &cobra.Command{
 	Use:   "verify",
 	Short: "Simple Ed25519 verify",
@@ -89,7 +93,7 @@ var verifyCmd = &cobra.Command{
 				signatureFileFormat = "base64"
 			}
 
-			vr, err := edcrypto.NewVerifier()
+			vr, err := edcrypto.NewVerifier(getVerifierConfigFromRuntimeCfg())
 			printErrorAndExitOneIfError(err)
 
 			res, _, err := vr.VerifyFile(runtimeCtx.PublicKeyPath, runtimeCtx.PublicKeyFormat, filePathToVerify, signatureFilePath, signatureFileFormat)
@@ -125,7 +129,7 @@ var certVerifyCmd = &cobra.Command{
 				signatureFileFormat = "base64"
 			}
 
-			vr, err := edcrypto.NewVerifier()
+			vr, err := edcrypto.NewVerifier(getVerifierConfigFromRuntimeCfg())
 			printErrorAndExitOneIfError(err)
 
 			res, _, err := vr.VerifyFileFromCertificate(runtimeCtx.CertificatePath, runtimeCtx.CertificateFormat, filePathToVerify, signatureFilePath, signatureFileFormat, runtimeCtx.Strict)

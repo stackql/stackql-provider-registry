@@ -42,6 +42,9 @@ type runtimeContext struct {
 	EmailAddresses    string
 	Delimiter         string
 	SignatureTime     string
+	LocalCertsPath    string
+	LocalCABundlePath string
+	LocalCertsRegex   string
 }
 
 var (
@@ -98,6 +101,9 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.LastName, "certificate.lastname", "", "last name")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.Host, "certificate.host", "stackql.io", "host")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.CommonName, "certificate.commonname", "Jeffrey Aven", "common name")
+	rootCmd.PersistentFlags().StringVar(&runtimeCtx.LocalCertsPath, "localcerts.path", "", "path to directory containing **only** pem certificates used to sign registry files.  Empty string means local certs will be ignored altogether.")
+	rootCmd.PersistentFlags().StringVar(&runtimeCtx.LocalCABundlePath, "localcerts.bundle", "", "path to file containing **only** pem certificate bundle to be used as CA.  Empty string denotes no change.")
+	rootCmd.PersistentFlags().StringVar(&runtimeCtx.LocalCertsRegex, "localcerts.regex", ".*", "regex to match when local certs should be used.  Only applies when localcerts.path nonempty.")
 
 	rootCmd.AddCommand(signCmd)
 	rootCmd.AddCommand(verifyCmd)
