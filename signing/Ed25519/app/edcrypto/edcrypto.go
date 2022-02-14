@@ -66,6 +66,23 @@ func retrievePemBytes(b []byte) ([]byte, error) {
 	}
 }
 
+func retrieveCertBundleFromPem(b []byte) ([]*x509.Certificate, error) {
+	var derBytes []byte
+	blk, rest := pem.Decode(b)
+	if blk == nil || blk.Bytes == nil || len(blk.Bytes) == 0 {
+		return nil, fmt.Errorf("could not decode bytes")
+	}
+	derBytes = append(derBytes, blk.Bytes...)
+	for {
+		if len(rest) == 0 {
+			break
+		}
+		blk, rest = pem.Decode(rest)
+		derBytes = append(derBytes, blk.Bytes...)
+	}
+	return x509.ParseCertificates(derBytes)
+}
+
 func RetrieveAndDecodeHexFile(filePath string) ([]byte, error) {
 	b, err := os.ReadFile(filePath)
 	if err != nil {
@@ -208,7 +225,8 @@ func signFile(pkFilePath string, pkFileFormat string, filePathToSign string, tim
 }
 
 type Verifier struct {
-	cc CertChecker
+	cc           CertChecker
+	signingCerts []*x509.Certificate
 }
 
 func NewVerifier() (*Verifier, error) {
@@ -216,7 +234,12 @@ func NewVerifier() (*Verifier, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Verifier{cc: cc}, nil
+	var scs []*x509.Certificate
+	scs, err = getAllEmbeddedCerts()
+	if err != nil {
+		return nil, err
+	}
+	return &Verifier{cc: cc, signingCerts: scs}, nil
 }
 
 func (v *Verifier) VerifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, *ObjectSignature, error) {
@@ -225,6 +248,12 @@ func (v *Verifier) VerifyFile(publicKeyFilePath string, publicKeyFileFormat stri
 
 func (v *Verifier) VerifyFileWithTimestamp(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, *ObjectSignature, error) {
 	return v.verifyFile(publicKeyFilePath, publicKeyFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat, nil, nil)
+}
+
+func (v *Verifier) inferCertificate(artifactToVerify string) {
+	// t := time.Now()
+	//
+
 }
 
 func (v *Verifier) verifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, minTime *time.Time, maxTime *time.Time) (bool, *ObjectSignature, error) {
