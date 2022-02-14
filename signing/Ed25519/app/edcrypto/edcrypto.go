@@ -334,8 +334,8 @@ func extractPublicKeyFromCertificate(cert *x509.Certificate) (ed25519.PublicKey,
 	return rv, nil
 }
 
-func (v *Verifier) VerifyFileFromCertificate(certificateFilePath string, certificateFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (bool, *ObjectSignature, error) {
-	return v.verifyFileFromCertificate(certificateFilePath, filePathToVerify, signatureFilePath, signatureFileFormat, strictMode)
+func (v *Verifier) VerifyFileFromCertificate(filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (bool, *ObjectSignature, error) {
+	return v.verifyFileFromCertificate(filePathToVerify, signatureFilePath, signatureFileFormat, strictMode)
 }
 
 type VerifyContext struct {
@@ -358,7 +358,7 @@ func NewVerifyContext(verifyURL string, signatureBytes, verifyBytes []byte, sigE
 	}
 }
 
-func (v *Verifier) verifyFileFromCertificate(certificateFilePath string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (bool, *ObjectSignature, error) {
+func (v *Verifier) verifyFileFromCertificate(filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (bool, *ObjectSignature, error) {
 	sb, err := os.ReadFile(signatureFilePath)
 	if err != nil {
 		return false, nil, err

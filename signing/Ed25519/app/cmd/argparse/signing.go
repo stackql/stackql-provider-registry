@@ -132,7 +132,7 @@ var certVerifyCmd = &cobra.Command{
 			vr, err := edcrypto.NewVerifier(getVerifierConfigFromRuntimeCfg())
 			printErrorAndExitOneIfError(err)
 
-			res, _, err := vr.VerifyFileFromCertificate(runtimeCtx.CertificatePath, runtimeCtx.CertificateFormat, filePathToVerify, signatureFilePath, signatureFileFormat, runtimeCtx.Strict)
+			res, _, err := vr.VerifyFileFromCertificate(filePathToVerify, signatureFilePath, signatureFileFormat, runtimeCtx.Strict)
 			printErrorAndExitOneIfError(err)
 			printErrorAndExitOneIfError(err)
 			if !res {
