@@ -416,7 +416,7 @@ func (v *Verifier) verifyFileFromCertificateBytes(vc VerifyContext) (VerifierRes
 		return NewVerifierResponse(false, nil, nil, nil), err
 	}
 	vbc := make([]byte, len(vb))
-	copy(vbc, sb)
+	copy(vbc, vb)
 	verReader := io.NopCloser(bytes.NewReader(vbc))
 	decodedSigBytes, err = retrieveSignatureFromBytes(sb, vc.SignatureEncoding)
 	if err != nil {
