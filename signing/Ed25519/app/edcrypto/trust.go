@@ -9,8 +9,8 @@ type CertChecker interface {
 	Verify(*x509.Certificate) ([][]*x509.Certificate, error)
 }
 
-func getCertChecker() (CertChecker, error) {
-	return newCompositeCertChecker()
+func getCertChecker(localCafilePath string) (CertChecker, error) {
+	return newCompositeCertChecker(localCafilePath)
 }
 
 type CompositeCertChecker struct {
@@ -32,14 +32,24 @@ func (cc *CompositeCertChecker) Verify(ct *x509.Certificate) ([][]*x509.Certific
 	return ct.Verify(x509.VerifyOptions{})
 }
 
-func newCompositeCertChecker() (*CompositeCertChecker, error) {
+func newCompositeCertChecker(localCafilePath string) (*CompositeCertChecker, error) {
 	// if goo
 	b, err := getEmbbededCertBundle()
 	if err != nil {
 		return nil, err
 	}
+	var lb []byte
+	if localCafilePath != "" {
+		lb, err = getLocalCertBundle(localCafilePath)
+		if err != nil {
+			return nil, err
+		}
+	}
 	sp, err := x509.SystemCertPool()
 	if err == nil && sp != nil && sp.AppendCertsFromPEM(b) {
+		if lb != nil {
+			sp.AppendCertsFromPEM(lb)
+		}
 		return &CompositeCertChecker{
 			certPool:    sp,
 			isComposite: true,

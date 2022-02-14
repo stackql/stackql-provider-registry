@@ -244,7 +244,7 @@ func NewVerifierConfig(localCafilePath, localCertDirPAth, localCertRegexStr stri
 }
 
 func NewVerifier(vc VerifierConfig) (*Verifier, error) {
-	cc, err := getCertChecker()
+	cc, err := getCertChecker(vc.LocalCAFilePath)
 	if err != nil {
 		return nil, err
 	}
