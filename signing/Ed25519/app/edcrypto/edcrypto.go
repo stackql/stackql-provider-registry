@@ -2,6 +2,7 @@ package edcrypto
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"time"
@@ -339,19 +340,19 @@ func (v *Verifier) VerifyFileFromCertificate(filePathToVerify string, signatureF
 }
 
 type VerifyContext struct {
-	VerifyURL                                     string
-	CertificateBytes, SignatureBytes, VerifyBytes []byte
-	CertificateFormat                             string
-	SignatureEncoding                             string
-	StrictMode                                    bool
-	VerifyOptions                                 x509.VerifyOptions
+	VerifyURL                 string
+	SignatureFile, VerifyFile io.ReadCloser
+	CertificateFormat         string
+	SignatureEncoding         string
+	StrictMode                bool
+	VerifyOptions             x509.VerifyOptions
 }
 
-func NewVerifyContext(verifyURL string, signatureBytes, verifyBytes []byte, sigEncoding string, strictMode bool, verifyOptions x509.VerifyOptions) VerifyContext {
+func NewVerifyContext(verifyURL string, signatureFile, verifyFile io.ReadCloser, sigEncoding string, strictMode bool, verifyOptions x509.VerifyOptions) VerifyContext {
 	return VerifyContext{
 		VerifyURL:         verifyURL,
-		SignatureBytes:    signatureBytes,
-		VerifyBytes:       verifyBytes,
+		SignatureFile:     signatureFile,
+		VerifyFile:        verifyFile,
 		SignatureEncoding: sigEncoding,
 		StrictMode:        strictMode,
 		VerifyOptions:     verifyOptions,
@@ -359,11 +360,11 @@ func NewVerifyContext(verifyURL string, signatureBytes, verifyBytes []byte, sigE
 }
 
 func (v *Verifier) verifyFileFromCertificate(filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (bool, *ObjectSignature, error) {
-	sb, err := os.ReadFile(signatureFilePath)
+	sb, err := os.Open(signatureFilePath)
 	if err != nil {
 		return false, nil, err
 	}
-	vb, err := os.ReadFile(filePathToVerify)
+	vb, err := os.Open(filePathToVerify)
 	if err != nil {
 		return false, nil, err
 	}
@@ -371,12 +372,30 @@ func (v *Verifier) verifyFileFromCertificate(filePathToVerify string, signatureF
 	return v.verifyFileFromCertificateBytes(vc)
 }
 
+func (v *Verifier) VerifyFileFromCertificateBytes(vc VerifyContext) (bool, *ObjectSignature, error) {
+	return v.verifyFileFromCertificateBytes(vc)
+}
+
+// Might eventually do this in chunks, io.ReadCloser is appropriate interface to pass through
 func (v *Verifier) verifyFileFromCertificateBytes(vc VerifyContext) (bool, *ObjectSignature, error) {
 	var publicKeyBytes ed25519.PublicKey
 	var cert *x509.Certificate
 	var err error
 	var decodedSigBytes []byte
-	decodedSigBytes, err = retrieveSignatureFromBytes(vc.SignatureBytes, vc.SignatureEncoding)
+	cleanup := func() {
+		vc.SignatureFile.Close()
+		vc.VerifyFile.Close()
+	}
+	defer cleanup()
+	sb, err := io.ReadAll(vc.SignatureFile)
+	if err != nil {
+		return false, nil, err
+	}
+	vb, err := io.ReadAll(vc.VerifyFile)
+	if err != nil {
+		return false, nil, err
+	}
+	decodedSigBytes, err = retrieveSignatureFromBytes(sb, vc.SignatureEncoding)
 	if err != nil {
 		return false, nil, err
 	}
@@ -407,7 +426,7 @@ func (v *Verifier) verifyFileFromCertificateBytes(vc VerifyContext) (bool, *Obje
 	if !obSig.HasTimestamp() || !cert.NotBefore.Before(*obSig.GetTimestamp()) || !cert.NotAfter.After(*obSig.GetTimestamp()) {
 		return false, nil, fmt.Errorf("error with signed timestamp: %v, not in cert timestamp range (%v, %v)", obSig.GetTimestamp(), cert.NotBefore, cert.NotAfter)
 	}
-	return ed25519.Verify(publicKeyBytes, append(vc.VerifyBytes, obSig.GetTimestampBytes()...), obSig.GetSignature()), obSig, nil
+	return ed25519.Verify(publicKeyBytes, append(vb, obSig.GetTimestampBytes()...), obSig.GetSignature()), obSig, nil
 }
 
 type ObjectSignature struct {
