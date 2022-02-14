@@ -26,11 +26,11 @@ func TestEdCrypToE2EPublicKeyOnly(t *testing.T) {
 
 	assert.NilError(t, err)
 
-	privKeyPath := fmt.Sprintf("%s/%s-private-key.pem", tmpDir, testName)
-	pubKeyPath := fmt.Sprintf("%s/%s-public-key.pem", tmpDir, testName)
-	certPath := fmt.Sprintf("%s/%s-cert.pem", tmpDir, testName)
-	csrPath := fmt.Sprintf("%s/%s.csr", tmpDir, testName)
-	sigFilePath := fmt.Sprintf("%s/%s.sig", tmpDir, testName)
+	privKeyPath := fmt.Sprintf("%s-private-key.pem", path.Join(tmpDir, testName))
+	pubKeyPath := fmt.Sprintf("%s-public-key.pem", path.Join(tmpDir, testName))
+	certPath := fmt.Sprintf("%s-cert.pem", path.Join(tmpDir, testName))
+	csrPath := fmt.Sprintf("%s.csr", path.Join(tmpDir, testName))
+	sigFilePath := fmt.Sprintf("%s.sig", path.Join(tmpDir, testName))
 
 	cfg := CertificateConfig{
 		Hosts:  []string{"example.com"},
@@ -138,8 +138,8 @@ func TestTimestampedEdCryptoCert(t *testing.T) {
 
 	assert.NilError(t, err)
 
-	certPath := fmt.Sprintf("%s/%s", path.Join(credsDir, "sample"), "sample-ed25519-cert.pem")
-	sigFilePath := fmt.Sprintf("%s/%s", credsDir, "sample-ed25519-signed-with-timestamp.sig")
+	certPath := path.Join(credsDir, "sample", "sample-ed25519-cert.pem")
+	sigFilePath := path.Join(credsDir, "sample-ed25519-signed-with-timestamp.sig")
 
 	vr, err := NewVerifier(NewVerifierConfig("", path.Join(credsDir, "sample"), ""))
 	assert.NilError(t, err)
@@ -164,8 +164,8 @@ func TestTimestampedEdCryptoCertAcceptable(t *testing.T) {
 
 	assert.NilError(t, err)
 
-	certPath := fmt.Sprintf("%s/%s", path.Join(credsDir, "sample"), "sample-ed25519-cert.pem")
-	sigFilePath := fmt.Sprintf("%s/%s", credsDir, "acceptable-timestamp-sample-infile.txt.sig")
+	certPath := path.Join(credsDir, "sample", "sample-ed25519-cert.pem")
+	sigFilePath := path.Join(credsDir, "acceptable-timestamp-sample-infile.txt.sig")
 
 	vr, err := NewVerifier(NewVerifierConfig("", path.Join(credsDir, "sample"), ".*"))
 	assert.NilError(t, err)
@@ -190,8 +190,8 @@ func TestTimestampedEdCryptoCertAcceptableButCertVerifyFail(t *testing.T) {
 
 	assert.NilError(t, err)
 
-	certPath := fmt.Sprintf("%s/%s", path.Join(credsDir, "sample"), "sample-ed25519-cert.pem")
-	sigFilePath := fmt.Sprintf("%s/%s", credsDir, "acceptable-timestamp-sample-infile.txt.sig")
+	certPath := path.Join(credsDir, "sample", "sample-ed25519-cert.pem")
+	sigFilePath := path.Join(credsDir, "acceptable-timestamp-sample-infile.txt.sig")
 
 	vr, err := NewVerifier(NewVerifierConfig("", path.Join(credsDir, "sample"), ""))
 	assert.NilError(t, err)
@@ -216,8 +216,8 @@ func TestTimestampedEdCryptoCertAcceptableAndCertVerifyFromEmbeddedSuccessful(t 
 
 	assert.NilError(t, err)
 
-	certPath := fmt.Sprintf("%s/%s", credsDir, "embedded-cert.pem")
-	sigFilePath := fmt.Sprintf("%s/%s", credsDir, "acceptable-timestamp-sample-infile.txt.embedded.sig")
+	certPath := path.Join(credsDir, "embedded-cert.pem")
+	sigFilePath := path.Join(credsDir, "acceptable-timestamp-sample-infile.txt.embedded.sig")
 
 	vr, err := NewVerifier(NewVerifierConfig("", "", ""))
 	assert.NilError(t, err)
@@ -242,8 +242,8 @@ func TestTimestampedEdCryptoCertTooOld(t *testing.T) {
 
 	assert.NilError(t, err)
 
-	certPath := fmt.Sprintf("%s/%s", credsDir, "sample-ed25519-cert.pem")
-	sigFilePath := fmt.Sprintf("%s/%s", credsDir, "old-timestamp-sample-infile.txt.sig")
+	certPath := path.Join(credsDir, "sample-ed25519-cert.pem")
+	sigFilePath := path.Join(credsDir, "old-timestamp-sample-infile.txt.sig")
 
 	vr, err := NewVerifier(NewVerifierConfig("", "", ""))
 	assert.NilError(t, err)
@@ -268,8 +268,8 @@ func TestTimestampedEdCryptoCertTooNew(t *testing.T) {
 
 	assert.NilError(t, err)
 
-	certPath := fmt.Sprintf("%s/%s", credsDir, "sample-ed25519-cert.pem")
-	sigFilePath := fmt.Sprintf("%s/%s", credsDir, "future-timestamp-sample-infile.txt.sig")
+	certPath := path.Join(credsDir, "sample-ed25519-cert.pem")
+	sigFilePath := path.Join(credsDir, "future-timestamp-sample-infile.txt.sig")
 
 	vr, err := NewVerifier(NewVerifierConfig("", "", ""))
 	assert.NilError(t, err)
