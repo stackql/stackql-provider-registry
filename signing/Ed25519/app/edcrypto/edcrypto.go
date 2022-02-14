@@ -225,8 +225,11 @@ func signFile(pkFilePath string, pkFileFormat string, filePathToSign string, tim
 }
 
 type Verifier struct {
-	cc           CertChecker
-	signingCerts []*x509.Certificate
+	cc                CertChecker
+	signingCerts      []*x509.Certificate
+	localSigningCerts []*x509.Certificate
+	vc                VerifierConfig
+	localCertsRegex   *regexp.Regexp
 }
 
 type VerifierConfig struct {
@@ -253,7 +256,19 @@ func NewVerifier(vc VerifierConfig) (*Verifier, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Verifier{cc: cc, signingCerts: scs}, nil
+	var localCerts []*x509.Certificate
+	var localCertsRegex *regexp.Regexp
+	if vc.LocalCertDirPath != "" {
+		localCerts, err = getAllLocalCerts(vc.LocalCertDirPath)
+		if err != nil {
+			return nil, err
+		}
+		localCertsRegex, err = regexp.Compile(vc.LocalCertRegexStr)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &Verifier{cc: cc, signingCerts: scs, localSigningCerts: localCerts, localCertsRegex: localCertsRegex, vc: vc}, nil
 }
 
 func (v *Verifier) VerifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string) (bool, *ObjectSignature, error) {
@@ -264,10 +279,23 @@ func (v *Verifier) VerifyFileWithTimestamp(publicKeyFilePath string, publicKeyFi
 	return v.verifyFile(publicKeyFilePath, publicKeyFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat, nil, nil)
 }
 
-func (v *Verifier) inferCertificate(artifactToVerify string) {
-	// t := time.Now()
-	//
+func (v *Verifier) inferCertificate(artifactURL string, signature *ObjectSignature) (*x509.Certificate, error) {
+	if signature.tmstp == nil {
+		return nil, fmt.Errorf("timestamp missing from signature; cannot infer matching certificate")
+	}
+	if v.vc.LocalCertDirPath != "" && v.localCertsRegex != nil && v.localCertsRegex.MatchString(artifactURL) {
+		return findFirstMatchingCert(v.localSigningCerts, *signature.tmstp)
+	}
+	return findFirstMatchingCert(v.signingCerts, *signature.tmstp)
+}
 
+func findFirstMatchingCert(cs []*x509.Certificate, t time.Time) (*x509.Certificate, error) {
+	for _, c := range cs {
+		if (c.NotBefore.Before(t) || c.NotBefore.Equal(t)) && (c.NotAfter.After(t) || c.NotAfter.Equal(t)) {
+			return c, nil
+		}
+	}
+	return nil, fmt.Errorf("cannot find cert covering time = %s", t.String())
 }
 
 func (v *Verifier) verifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, minTime *time.Time, maxTime *time.Time) (bool, *ObjectSignature, error) {
@@ -307,10 +335,11 @@ func extractPublicKeyFromCertificate(cert *x509.Certificate) (ed25519.PublicKey,
 }
 
 func (v *Verifier) VerifyFileFromCertificate(certificateFilePath string, certificateFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (bool, *ObjectSignature, error) {
-	return v.verifyFileFromCertificate(certificateFilePath, certificateFileFormat, filePathToVerify, signatureFilePath, signatureFileFormat, strictMode)
+	return v.verifyFileFromCertificate(certificateFilePath, filePathToVerify, signatureFilePath, signatureFileFormat, strictMode)
 }
 
 type VerifyContext struct {
+	VerifyURL                                     string
 	CertificateBytes, SignatureBytes, VerifyBytes []byte
 	CertificateFormat                             string
 	SignatureEncoding                             string
@@ -318,23 +347,18 @@ type VerifyContext struct {
 	VerifyOptions                                 x509.VerifyOptions
 }
 
-func NewVerifyContext(certificateBytes, signatureBytes, verifyBytes []byte, certificateFormat string, sigEncoding string, strictMode bool, verifyOptions x509.VerifyOptions) VerifyContext {
+func NewVerifyContext(verifyURL string, signatureBytes, verifyBytes []byte, sigEncoding string, strictMode bool, verifyOptions x509.VerifyOptions) VerifyContext {
 	return VerifyContext{
-		CertificateBytes:  certificateBytes,
+		VerifyURL:         verifyURL,
 		SignatureBytes:    signatureBytes,
 		VerifyBytes:       verifyBytes,
-		CertificateFormat: certificateFormat,
 		SignatureEncoding: sigEncoding,
 		StrictMode:        strictMode,
 		VerifyOptions:     verifyOptions,
 	}
 }
 
-func (v *Verifier) verifyFileFromCertificate(certificateFilePath string, certificateFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (bool, *ObjectSignature, error) {
-	cb, err := os.ReadFile(certificateFilePath)
-	if err != nil {
-		return false, nil, err
-	}
+func (v *Verifier) verifyFileFromCertificate(certificateFilePath string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, strictMode bool) (bool, *ObjectSignature, error) {
 	sb, err := os.ReadFile(signatureFilePath)
 	if err != nil {
 		return false, nil, err
@@ -343,7 +367,7 @@ func (v *Verifier) verifyFileFromCertificate(certificateFilePath string, certifi
 	if err != nil {
 		return false, nil, err
 	}
-	vc := NewVerifyContext(cb, sb, vb, certificateFileFormat, signatureFileFormat, strictMode, x509.VerifyOptions{})
+	vc := NewVerifyContext(filePathToVerify, sb, vb, signatureFileFormat, strictMode, x509.VerifyOptions{})
 	return v.verifyFileFromCertificateBytes(vc)
 }
 
@@ -356,38 +380,29 @@ func (v *Verifier) verifyFileFromCertificateBytes(vc VerifyContext) (bool, *Obje
 	if err != nil {
 		return false, nil, err
 	}
-	switch vc.CertificateFormat {
-	case "pem":
-		b, err := retrievePemBytes(vc.CertificateBytes)
-		if err != nil {
-			return false, nil, err
-		}
-		cert, err = x509.ParseCertificate(b)
-		if err != nil {
-			return false, nil, err
-		}
-		if vc.StrictMode {
-			chains, err := v.cc.Verify(cert)
-			if err != nil {
-				return false, nil, fmt.Errorf("certificate verify error: %s", err.Error())
-			}
-			if len(chains) == 0 {
-				return false, nil, fmt.Errorf("chain of trust could not be established")
-			}
-		}
-		publicKeyBytes, err = extractPublicKeyFromCertificate(cert)
-		if err != nil {
-			return false, nil, err
-		}
-	default:
-		return false, nil, fmt.Errorf("certificate format '%s' not supported", vc.CertificateFormat)
-	}
-	if len(publicKeyBytes) != ed25519.PublicKeySize {
-		return false, nil, fmt.Errorf("public key is not the correct size (%d != %d)", len(publicKeyBytes), ed25519.PublicKeySize)
-	}
 	obSig, err := extractSignature(decodedSigBytes)
 	if err != nil {
 		return false, nil, fmt.Errorf("error with signature: %s", err.Error())
+	}
+	cert, err = v.inferCertificate(vc.VerifyURL, obSig)
+	if err != nil {
+		return false, nil, err
+	}
+	if vc.StrictMode {
+		chains, err := v.cc.Verify(cert)
+		if err != nil {
+			return false, nil, fmt.Errorf("certificate verify error: %s", err.Error())
+		}
+		if len(chains) == 0 {
+			return false, nil, fmt.Errorf("chain of trust could not be established")
+		}
+	}
+	publicKeyBytes, err = extractPublicKeyFromCertificate(cert)
+	if err != nil {
+		return false, nil, err
+	}
+	if len(publicKeyBytes) != ed25519.PublicKeySize {
+		return false, nil, fmt.Errorf("public key is not the correct size (%d != %d)", len(publicKeyBytes), ed25519.PublicKeySize)
 	}
 	if !obSig.HasTimestamp() || !cert.NotBefore.Before(*obSig.GetTimestamp()) || !cert.NotAfter.After(*obSig.GetTimestamp()) {
 		return false, nil, fmt.Errorf("error with signed timestamp: %v, not in cert timestamp range (%v, %v)", obSig.GetTimestamp(), cert.NotBefore, cert.NotAfter)

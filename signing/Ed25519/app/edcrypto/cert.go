@@ -302,20 +302,28 @@ func getAllEmbeddedCerts() ([]*x509.Certificate, error) {
 	return rv, nil
 }
 
-func getAllLocalCerts() ([]*x509.Certificate, error) {
+func getAllLocalCerts(localCertsPath string) ([]*x509.Certificate, error) {
 	var rv []*x509.Certificate
-	paths, err := getAllEmbeddedSigningCertPaths()
+	paths, err := getAllLocalSigningCertPaths(localCertsPath)
 	if err != nil {
 		return nil, err
 	}
 	for _, p := range paths {
-		c, err := getEmbbededCert(p)
+		c, err := getLocalCert(p)
 		if err != nil {
 			return nil, err
 		}
 		rv = append(rv, c...)
 	}
 	return rv, nil
+}
+
+func getLocalCert(certPath string) ([]*x509.Certificate, error) {
+	b, err := os.ReadFile(certPath)
+	if err != nil {
+		return nil, err
+	}
+	return retrieveCertBundleFromPem(b)
 }
 
 func getAllLocalSigningCertPaths(localSigningCertRootPath string) ([]string, error) {

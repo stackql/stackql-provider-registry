@@ -3,6 +3,7 @@ package edcrypto_test
 import (
 	"crypto/x509/pkix"
 	"fmt"
+	"path"
 	"testing"
 	"time"
 
@@ -137,10 +138,10 @@ func TestTimestampedEdCryptoCert(t *testing.T) {
 
 	assert.NilError(t, err)
 
-	certPath := fmt.Sprintf("%s/%s", credsDir, "sample-ed25519-cert.pem")
+	certPath := fmt.Sprintf("%s/%s", path.Join(credsDir, "sample"), "sample-ed25519-cert.pem")
 	sigFilePath := fmt.Sprintf("%s/%s", credsDir, "sample-ed25519-signed-with-timestamp.sig")
 
-	vr, err := NewVerifier(NewVerifierConfig("", "", ""))
+	vr, err := NewVerifier(NewVerifierConfig("", path.Join(credsDir, "sample"), ""))
 	assert.NilError(t, err)
 
 	verified, obs, err := vr.VerifyFileFromCertificate(certPath, "pem", fileToSign, sigFilePath, "base64", false)
@@ -163,10 +164,10 @@ func TestTimestampedEdCryptoCertAcceptable(t *testing.T) {
 
 	assert.NilError(t, err)
 
-	certPath := fmt.Sprintf("%s/%s", credsDir, "sample-ed25519-cert.pem")
+	certPath := fmt.Sprintf("%s/%s", path.Join(credsDir, "sample"), "sample-ed25519-cert.pem")
 	sigFilePath := fmt.Sprintf("%s/%s", credsDir, "acceptable-timestamp-sample-infile.txt.sig")
 
-	vr, err := NewVerifier(NewVerifierConfig("", "", ""))
+	vr, err := NewVerifier(NewVerifierConfig("", path.Join(credsDir, "sample"), ".*"))
 	assert.NilError(t, err)
 
 	verified, obs, err := vr.VerifyFileFromCertificate(certPath, "pem", fileToSign, sigFilePath, "base64", false)
@@ -189,10 +190,10 @@ func TestTimestampedEdCryptoCertAcceptableButCertVerifyFail(t *testing.T) {
 
 	assert.NilError(t, err)
 
-	certPath := fmt.Sprintf("%s/%s", credsDir, "sample-ed25519-cert.pem")
+	certPath := fmt.Sprintf("%s/%s", path.Join(credsDir, "sample"), "sample-ed25519-cert.pem")
 	sigFilePath := fmt.Sprintf("%s/%s", credsDir, "acceptable-timestamp-sample-infile.txt.sig")
 
-	vr, err := NewVerifier(NewVerifierConfig("", "", ""))
+	vr, err := NewVerifier(NewVerifierConfig("", path.Join(credsDir, "sample"), ""))
 	assert.NilError(t, err)
 
 	verified, obs, err := vr.VerifyFileFromCertificate(certPath, "pem", fileToSign, sigFilePath, "base64", true)
