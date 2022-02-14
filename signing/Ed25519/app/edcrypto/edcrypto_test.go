@@ -228,6 +228,36 @@ func TestTimestampedEdCryptoCertAcceptableAndCertVerifyFromEmbeddedSuccessful(t 
 
 }
 
+// providers/src/okta/v1/provider.yaml
+func TestTimestampedEdCryptoCertAcceptableAndCertVerifyFromEmbeddedSuccessfulProviderDoc(t *testing.T) {
+
+	// credsDir, err := fileutil.GetFilePathFromRepositoryRoot("signing/Ed25519/test")
+
+	// assert.NilError(t, err)
+
+	fileToSign, err := fileutil.GetFilePathFromRepositoryRoot("providers/src/okta/v1/provider.yaml")
+
+	assert.NilError(t, err)
+
+	sigFilePath, err := fileutil.GetFilePathFromRepositoryRoot("providers/src/okta/v1/provider.yaml.sig")
+
+	assert.NilError(t, err)
+
+	// sigFilePath := path.Join(credsDir, "acceptable-timestamp-sample-infile.txt.embedded.sig")
+
+	vr, err := NewVerifier(NewVerifierConfig("", "", ""))
+	assert.NilError(t, err)
+
+	verResponse, err := vr.VerifyFileFromCertificate(fileToSign, sigFilePath, "base64", true)
+
+	assert.NilError(t, err)
+
+	assert.Equal(t, verResponse.IsVerified, true)
+
+	assert.Assert(t, verResponse.Sig != nil)
+
+}
+
 func TestTimestampedEdCryptoCertTooOld(t *testing.T) {
 
 	credsDir, err := fileutil.GetFilePathFromRepositoryRoot("signing/Ed25519/test")

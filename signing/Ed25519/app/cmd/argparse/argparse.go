@@ -92,7 +92,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.PublicKeyFormat, "publickeyformat", "pem", "format for public key")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.CertificateFormat, "certificateformat", "pem", "format for certificate")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.OutFileFormat, "outfileformat", "", "format for outfile")
-	rootCmd.PersistentFlags().StringVar(&runtimeCtx.SignatureTime, "signaturetime", "", "timestamp to include in signature")
+	rootCmd.PersistentFlags().StringVar(&runtimeCtx.SignatureTime, "signaturetime", "now", "timestamp to include in signature")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.Delimiter, "delimiter", ",", "delimiter for list fields")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.EmailAddresses, "certificate.emails", "javen@stackql.io", "delimited list of emails")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.URIs, "certificate.urls", "https://stackql.io", "delimited list of urls")
