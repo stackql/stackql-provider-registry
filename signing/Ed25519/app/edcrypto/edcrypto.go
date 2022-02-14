@@ -367,7 +367,7 @@ func (v *Verifier) verifyFileFromCertificate(filePathToVerify string, signatureF
 	if err != nil {
 		return false, nil, err
 	}
-	vc := NewVerifyContext(filePathToVerify, sb, vb, signatureFileFormat, strictMode, x509.VerifyOptions{})
+	vc := NewVerifyContext(fmt.Sprintf("file://%s", filePathToVerify), sb, vb, signatureFileFormat, strictMode, x509.VerifyOptions{})
 	return v.verifyFileFromCertificateBytes(vc)
 }
 
