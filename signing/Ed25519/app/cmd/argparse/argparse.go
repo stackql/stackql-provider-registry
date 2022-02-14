@@ -24,6 +24,7 @@ var SemVersion string = fmt.Sprintf("%s.%s.%s", BuildMajorVersion, BuildMinorVer
 type runtimeContext struct {
 	CPUProfile        string
 	LogLevelStr       string
+	PrivateKeyEnvVar  string
 	PrivateKeyPath    string
 	PublicKeyPath     string
 	CertificatePath   string
@@ -83,7 +84,8 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.CPUProfile, "cpuprofile", "", "cpuprofile file, none if empty")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.LogLevelStr, "loglevel", "warn", "loglevel")
-	rootCmd.PersistentFlags().StringVar(&runtimeCtx.PrivateKeyPath, "privatekeypath", "", "file path for private key")
+	rootCmd.PersistentFlags().StringVar(&runtimeCtx.PrivateKeyEnvVar, "privatekeyenvvar", "", "env var containing pem format private key")
+	rootCmd.PersistentFlags().StringVar(&runtimeCtx.PrivateKeyPath, "privatekeypath", "", "file path for pem format private key")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.PublicKeyPath, "publickeypath", "", "file path for public key")
 	rootCmd.PersistentFlags().StringVar(&runtimeCtx.CertificatePath, "certificatepath", "", "file path for certificate")
 	rootCmd.PersistentFlags().StringVarP(&runtimeCtx.OutFilePath, "outfile", "o", "", "file path for outfile")

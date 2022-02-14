@@ -47,10 +47,18 @@ var signCmd = &cobra.Command{
 
 			var b []byte
 			var err error
-			if runtimeCtx.SignatureTime == "" {
-				b, err = edcrypto.SignFile(runtimeCtx.PrivateKeyPath, runtimeCtx.PrivateKeyFormat, args[0])
+			if runtimeCtx.PrivateKeyEnvVar != "" {
+				if runtimeCtx.SignatureTime == "" {
+					b, err = edcrypto.SignFileUsingEnvVar(runtimeCtx.PrivateKeyEnvVar, runtimeCtx.PrivateKeyFormat, args[0])
+				} else {
+					b, err = edcrypto.SignFileWithTimestampUsingEnvVar(runtimeCtx.PrivateKeyEnvVar, runtimeCtx.PrivateKeyFormat, args[0], runtimeCtx.SignatureTime)
+				}
 			} else {
-				b, err = edcrypto.SignFileWithTimestamp(runtimeCtx.PrivateKeyPath, runtimeCtx.PrivateKeyFormat, args[0], runtimeCtx.SignatureTime)
+				if runtimeCtx.SignatureTime == "" {
+					b, err = edcrypto.SignFile(runtimeCtx.PrivateKeyPath, runtimeCtx.PrivateKeyFormat, args[0])
+				} else {
+					b, err = edcrypto.SignFileWithTimestamp(runtimeCtx.PrivateKeyPath, runtimeCtx.PrivateKeyFormat, args[0], runtimeCtx.SignatureTime)
+				}
 			}
 			printErrorAndExitOneIfError(err)
 			printErrorAndExitOneIfNil(b, "no signature created")
