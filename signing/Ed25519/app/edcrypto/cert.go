@@ -288,35 +288,19 @@ func generateTLSArtifacts(cc CertificateConfig) error {
 }
 
 func getAllEmbeddedCerts() ([]*x509.Certificate, error) {
-	var rv []*x509.Certificate
-	paths, err := getAllEmbeddedSigningCertPaths()
+	c, err := getEmbbededCert(signingBundlePath)
 	if err != nil {
 		return nil, err
 	}
-	for _, p := range paths {
-		c, err := getEmbbededCert(p)
-		if err != nil {
-			return nil, err
-		}
-		rv = append(rv, c...)
-	}
-	return rv, nil
+	return c, nil
 }
 
 func getAllLocalCerts(localCertsPath string) ([]*x509.Certificate, error) {
-	var rv []*x509.Certificate
-	paths, err := getAllLocalSigningCertPaths(localCertsPath)
+	c, err := getLocalCert(localCertsPath)
 	if err != nil {
 		return nil, err
 	}
-	for _, p := range paths {
-		c, err := getLocalCert(p)
-		if err != nil {
-			return nil, err
-		}
-		rv = append(rv, c...)
-	}
-	return rv, nil
+	return c, nil
 }
 
 func getLocalCert(certPath string) ([]*x509.Certificate, error) {

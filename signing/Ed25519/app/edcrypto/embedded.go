@@ -7,7 +7,8 @@ import (
 )
 
 const (
-	rootBundlePath string = "embeddedcerts/stackql-root-cert-bundle.pem"
+	rootBundlePath    string = "embeddedcerts/stackql-root-cert-bundle.pem"
+	signingBundlePath string = "embeddedcerts/signingcerts/stackql-signing-bundle.pem"
 )
 
 //go:embed embeddedcerts/* embeddedcerts/signingcerts/*

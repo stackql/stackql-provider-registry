@@ -205,7 +205,7 @@ func TestTimestampedEdCryptoCert(t *testing.T) {
 
 	sigFilePath := path.Join(credsDir, "sample-ed25519-signed-with-timestamp.sig")
 
-	vr, err := NewVerifier(NewVerifierConfig("", path.Join(credsDir, "sample"), ""))
+	vr, err := NewVerifier(NewVerifierConfig("", path.Join(credsDir, "sample", "sample-signing-bundle.pem"), ""))
 	assert.NilError(t, err)
 
 	verResponse, err := vr.VerifyFileFromCertificate(fileToSign, sigFilePath, "base64", false)
@@ -230,7 +230,7 @@ func TestTimestampedEdCryptoCertAcceptable(t *testing.T) {
 
 	sigFilePath := path.Join(credsDir, "acceptable-timestamp-sample-infile.txt.sig")
 
-	vr, err := NewVerifier(NewVerifierConfig("", path.Join(credsDir, "sample"), ".*"))
+	vr, err := NewVerifier(NewVerifierConfig("", path.Join(credsDir, "sample", "sample-signing-bundle.pem"), ".*"))
 	assert.NilError(t, err)
 
 	verResponse, err := vr.VerifyFileFromCertificate(fileToSign, sigFilePath, "base64", false)
@@ -255,7 +255,7 @@ func TestTimestampedEdCryptoCertAcceptableButCertVerifyFail(t *testing.T) {
 
 	sigFilePath := path.Join(credsDir, "acceptable-timestamp-sample-infile.txt.sig")
 
-	vr, err := NewVerifier(NewVerifierConfig("", path.Join(credsDir, "sample"), ""))
+	vr, err := NewVerifier(NewVerifierConfig("", path.Join(credsDir, "sample", "sample-signing-bundle.pem"), ""))
 	assert.NilError(t, err)
 
 	verResponse, err := vr.VerifyFileFromCertificate(fileToSign, sigFilePath, "base64", true)
