@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path"
 	"time"
 )
 
@@ -334,7 +335,7 @@ func getAllLocalSigningCertPaths(localSigningCertRootPath string) ([]string, err
 	}
 	for _, s := range paths {
 		if s.Type().IsRegular() {
-			rv = append(rv, fmt.Sprintf("%s/%s", localSigningCertRootPath, s.Name()))
+			rv = append(rv, path.Join(localSigningCertRootPath, s.Name()))
 		}
 	}
 	return rv, nil

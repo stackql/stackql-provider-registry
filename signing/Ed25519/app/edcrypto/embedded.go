@@ -3,7 +3,7 @@ package edcrypto
 import (
 	"crypto/x509"
 	"embed"
-	"fmt"
+	"path"
 )
 
 const (
@@ -33,7 +33,7 @@ func getAllEmbeddedSigningCertPaths() ([]string, error) {
 	}
 	for _, s := range paths {
 		if s.Type().IsRegular() {
-			rv = append(rv, fmt.Sprintf("embeddedcerts/signingcerts/%s", s.Name()))
+			rv = append(rv, path.Join("embeddedcerts/signingcerts", s.Name()))
 		}
 	}
 	return rv, nil
