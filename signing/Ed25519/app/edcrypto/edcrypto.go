@@ -169,19 +169,31 @@ func ReadSignatureFile(outBytes []byte, filePath string, format string) error {
 }
 
 func SignFile(pkFilePath string, pkFileFormat string, filePathToSign string) ([]byte, error) {
-	return signFile(pkFilePath, pkFileFormat, filePathToSign, "")
+	return signFileUsingPkFile(pkFilePath, pkFileFormat, filePathToSign, "")
 }
 
 func SignFileWithTimestamp(pkFilePath string, pkFileFormat string, filePathToSign string, tmstp string) ([]byte, error) {
-	return signFile(pkFilePath, pkFileFormat, filePathToSign, tmstp)
+	return signFileUsingPkFile(pkFilePath, pkFileFormat, filePathToSign, tmstp)
 }
 
 func SignFileAndWriteSignatureFile(pkFilePath string, pkFileFormat string, filePathToSign string, signatureFilePath string) ([]byte, error) {
-	return signFileAndWriteSignatureFile(pkFilePath, pkFileFormat, filePathToSign, signatureFilePath)
+	return signFileAndWriteSignatureFileUsingFile(pkFilePath, pkFileFormat, filePathToSign, signatureFilePath)
 }
 
-func signFileAndWriteSignatureFile(pkFilePath string, pkFileFormat string, filePathToSign string, signatureFilePath string) ([]byte, error) {
-	b, err := signFile(pkFilePath, pkFileFormat, filePathToSign, "")
+func SignFileUsingEnvVar(pkEnvVar string, pkFileFormat string, filePathToSign string) ([]byte, error) {
+	return signFileUsingPkEnvVar(pkEnvVar, pkFileFormat, filePathToSign, "")
+}
+
+func SignFileWithTimestampUsingEnvVar(pkEnvVar string, pkFileFormat string, filePathToSign string, tmstp string) ([]byte, error) {
+	return signFileUsingPkEnvVar(pkEnvVar, pkFileFormat, filePathToSign, tmstp)
+}
+
+func SignFileAndWriteSignatureFileUsingEnvVar(pkEnvVar string, pkFileFormat string, filePathToSign string, signatureFilePath string) ([]byte, error) {
+	return signFileAndWriteSignatureFileUsingEnvVar(pkEnvVar, pkFileFormat, filePathToSign, signatureFilePath)
+}
+
+func signFileAndWriteSignatureFileUsingFile(pkFile string, pkFileFormat string, filePathToSign string, signatureFilePath string) ([]byte, error) {
+	b, err := signFileUsingPkFile(pkFile, pkFileFormat, filePathToSign, "")
 	if err != nil {
 		return nil, err
 	}
@@ -189,18 +201,53 @@ func signFileAndWriteSignatureFile(pkFilePath string, pkFileFormat string, fileP
 	return b, err
 }
 
-func signFile(pkFilePath string, pkFileFormat string, filePathToSign string, timestampToInclude string) ([]byte, error) {
+func signFileAndWriteSignatureFileUsingEnvVar(pkEnvVar string, pkFileFormat string, filePathToSign string, signatureFilePath string) ([]byte, error) {
+	b, err := signFileUsingPkEnvVar(pkEnvVar, pkFileFormat, filePathToSign, "")
+	if err != nil {
+		return nil, err
+	}
+	err = os.WriteFile(signatureFilePath, b, 0666)
+	return b, err
+}
+
+func signFileUsingPkEnvVar(pkEnvVar string, pkFileFormat string, filePathToSign string, timestampToInclude string) ([]byte, error) {
 	var pkBytes ed25519.PrivateKey
 	var err error
+	pk, ok := os.LookupEnv(pkEnvVar)
+	if !ok {
+		return nil, fmt.Errorf("env var '%s' not present as required", pkEnvVar)
+	}
 	switch pkFileFormat {
 	case "pem":
-		pkBytes, err = retrievePemFile(pkFilePath)
+		pkBytes, err = retrievePemBytes([]byte(pk))
 	}
 	if err != nil {
 		return nil, err
 	}
+	return signFile(pkBytes, pkFileFormat, filePathToSign, timestampToInclude)
+}
+
+func signFileUsingPkFile(pkFilePath string, pkFileFormat string, filePathToSign string, timestampToInclude string) ([]byte, error) {
+	var pkBytes ed25519.PrivateKey
+	var err error
+	pk, err := os.ReadFile(pkFilePath)
+	if err != nil {
+		return nil, err
+	}
+	switch pkFileFormat {
+	case "pem":
+		pkBytes, err = retrievePemBytes([]byte(pk))
+	}
+	if err != nil {
+		return nil, err
+	}
+	return signFile(pkBytes, pkFileFormat, filePathToSign, timestampToInclude)
+}
+
+func signFile(pkBytes []byte, pkFileFormat string, filePathToSign string, timestampToInclude string) ([]byte, error) {
+	var err error
 	if len(pkBytes) != ed25519.PrivateKeySize {
-		return nil, fmt.Errorf("private key '%s' is not the correct size (%d != %d)", pkFilePath, len(pkBytes), ed25519.PrivateKeySize)
+		return nil, fmt.Errorf("private key is not the correct size (%d != %d)", len(pkBytes), ed25519.PrivateKeySize)
 	}
 	msg, err := os.ReadFile(filePathToSign)
 	if err != nil {
