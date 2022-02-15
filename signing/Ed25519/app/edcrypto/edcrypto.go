@@ -13,6 +13,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -121,7 +123,6 @@ func retrieveAndDecodeHexBytes(b []byte) ([]byte, error) {
 }
 
 func retrieveAndDecodeBase64Bytes(b []byte) ([]byte, error) {
-
 	return base64.StdEncoding.DecodeString(string(b))
 }
 
@@ -496,7 +497,10 @@ func (v *Verifier) verifyFileFromCertificateBytes(vc VerifyContext) (VerifierRes
 	if !obSig.HasTimestamp() || !cert.NotBefore.Before(*obSig.GetTimestamp()) || !cert.NotAfter.After(*obSig.GetTimestamp()) {
 		return NewVerifierResponse(false, nil, nil, nil), fmt.Errorf("error with signed timestamp: %v, not in cert timestamp range (%v, %v)", obSig.GetTimestamp(), cert.NotBefore, cert.NotAfter)
 	}
-	isVerified := ed25519.Verify(publicKeyBytes, append(vb, obSig.GetTimestampBytes()...), obSig.GetSignature())
+	testSubstrate := append(vb, obSig.GetTimestampBytes()...)
+	sigBytesCheck := obSig.GetSignature()
+	log.Errorf("calling verify with len(testSubstrate) = %d and len(sigBytesCheck) = %d\n", len(testSubstrate), len(sigBytesCheck))
+	isVerified := ed25519.Verify(publicKeyBytes, testSubstrate, sigBytesCheck)
 	return NewVerifierResponse(isVerified, obSig, verReader, sigReader), nil
 }
 
