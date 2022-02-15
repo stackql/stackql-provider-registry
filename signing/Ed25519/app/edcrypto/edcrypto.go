@@ -463,10 +463,10 @@ func (v *Verifier) verifyFileFromCertificateBytes(vc VerifyContext) (VerifierRes
 	if err != nil {
 		return NewVerifierResponse(false, nil, nil, nil), err
 	}
-	log.Errorf("at birth; len(vb) = %d\n", len(vb))
+	log.Debugf("at birth; len(vb) = %d\n", len(vb))
 	vbc := make([]byte, len(vb))
 	copy(vbc, vb)
-	log.Errorf("after copy; len(vb) = %d\n", len(vb))
+	log.Debugf("after copy; len(vb) = %d\n", len(vb))
 	verReader := io.NopCloser(bytes.NewReader(vbc))
 	decodedSigBytes, err = retrieveSignatureFromBytes(sb, vc.SignatureEncoding)
 	if err != nil {
@@ -501,8 +501,8 @@ func (v *Verifier) verifyFileFromCertificateBytes(vc VerifyContext) (VerifierRes
 	}
 	testSubstrate := append(vb, obSig.GetTimestampBytes()...)
 	sigBytesCheck := obSig.GetSignature()
-	log.Errorf("\nhex encoded vb: %s\n\n", hex.EncodeToString(vb))
-	log.Errorf("calling verify with len(vb) = %d, len(testSubstrate) = %d and len(sigBytesCheck) = %d\n", len(vb), len(testSubstrate), len(sigBytesCheck))
+	log.Debugf("\nhex encoded vb: %s\n\n", hex.EncodeToString(vb))
+	log.Debugf("calling verify with len(vb) = %d, len(testSubstrate) = %d and len(sigBytesCheck) = %d\n", len(vb), len(testSubstrate), len(sigBytesCheck))
 	isVerified := ed25519.Verify(publicKeyBytes, testSubstrate, sigBytesCheck)
 	return NewVerifierResponse(isVerified, obSig, verReader, sigReader), nil
 }
