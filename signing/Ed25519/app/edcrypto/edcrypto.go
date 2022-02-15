@@ -463,8 +463,10 @@ func (v *Verifier) verifyFileFromCertificateBytes(vc VerifyContext) (VerifierRes
 	if err != nil {
 		return NewVerifierResponse(false, nil, nil, nil), err
 	}
+	log.Errorf("at birth; len(vb) = %d\n", len(vb))
 	vbc := make([]byte, len(vb))
 	copy(vbc, vb)
+	log.Errorf("after copy; len(vb) = %d\n", len(vb))
 	verReader := io.NopCloser(bytes.NewReader(vbc))
 	decodedSigBytes, err = retrieveSignatureFromBytes(sb, vc.SignatureEncoding)
 	if err != nil {
