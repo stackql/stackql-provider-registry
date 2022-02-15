@@ -56,11 +56,14 @@ func newCompositeCertChecker(localCafilePath string) (*CompositeCertChecker, err
 		}, nil
 	}
 	vp := x509.NewCertPool()
-	if vp.AppendCertsFromPEM(lb) {
+	if vp.AppendCertsFromPEM(b) {
+		if lb != nil {
+			sp.AppendCertsFromPEM(lb)
+		}
 		return &CompositeCertChecker{
 			certPool:    vp,
 			isComposite: false,
 		}, nil
 	}
-	return nil, fmt.Errorf("cannot initialise cert pool")
+	return nil, fmt.Errorf("cannot initialise cert pool where len(b) = %d and len(lb) = %d", len(b), len(lb))
 }
