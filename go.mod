@@ -6,7 +6,7 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.3.0
 	github.com/spf13/viper v1.10.1
-	github.com/stackql/go-openapistackql v0.0.3
+	github.com/stackql/go-openapistackql v0.0.4-alpha15
 	gotest.tools v2.2.0+incompatible
 )
 
