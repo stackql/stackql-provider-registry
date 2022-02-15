@@ -501,6 +501,7 @@ func (v *Verifier) verifyFileFromCertificateBytes(vc VerifyContext) (VerifierRes
 	}
 	testSubstrate := append(vb, obSig.GetTimestampBytes()...)
 	sigBytesCheck := obSig.GetSignature()
+	log.Errorf("\nhex encoded vb: %s\n\n", hex.EncodeToString(vb))
 	log.Errorf("calling verify with len(vb) = %d, len(testSubstrate) = %d and len(sigBytesCheck) = %d\n", len(vb), len(testSubstrate), len(sigBytesCheck))
 	isVerified := ed25519.Verify(publicKeyBytes, testSubstrate, sigBytesCheck)
 	return NewVerifierResponse(isVerified, obSig, verReader, sigReader), nil
