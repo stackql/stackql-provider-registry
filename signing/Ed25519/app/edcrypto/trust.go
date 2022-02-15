@@ -56,7 +56,7 @@ func newCompositeCertChecker(localCafilePath string) (*CompositeCertChecker, err
 		}, nil
 	}
 	vp := x509.NewCertPool()
-	if vp.AppendCertsFromPEM(b) {
+	if vp.AppendCertsFromPEM(lb) {
 		return &CompositeCertChecker{
 			certPool:    vp,
 			isComposite: false,
