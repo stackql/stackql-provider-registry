@@ -283,16 +283,16 @@ type Verifier struct {
 }
 
 type VerifierConfig struct {
-	LocalCAFilePath   string
-	LocalCertDirPath  string
-	LocalCertRegexStr string
+	LocalCAFilePath      string `json:"CAFile" yaml:"CAFile"`
+	LocalSigningCertPath string `json:"signingCertFile" yaml:"signingCertFile"`
+	LocalCertRegexStr    string `json:"certRegex" yaml:"certRegex"`
 }
 
-func NewVerifierConfig(localCafilePath, localCertDirPAth, localCertRegexStr string) VerifierConfig {
+func NewVerifierConfig(localCafilePath, localSigningCertPath, localCertRegexStr string) VerifierConfig {
 	return VerifierConfig{
-		LocalCAFilePath:   localCafilePath,
-		LocalCertDirPath:  localCertDirPAth,
-		LocalCertRegexStr: localCertRegexStr,
+		LocalCAFilePath:      localCafilePath,
+		LocalSigningCertPath: localSigningCertPath,
+		LocalCertRegexStr:    localCertRegexStr,
 	}
 }
 
@@ -308,8 +308,8 @@ func NewVerifier(vc VerifierConfig) (*Verifier, error) {
 	}
 	var localCerts []*x509.Certificate
 	var localCertsRegex *regexp.Regexp
-	if vc.LocalCertDirPath != "" {
-		localCerts, err = getAllLocalCerts(vc.LocalCertDirPath)
+	if vc.LocalSigningCertPath != "" {
+		localCerts, err = getAllLocalCerts(vc.LocalSigningCertPath)
 		if err != nil {
 			return nil, err
 		}
@@ -333,7 +333,7 @@ func (v *Verifier) inferCertificate(artifactURL string, signature *ObjectSignatu
 	if signature.tmstp == nil {
 		return nil, fmt.Errorf("timestamp missing from signature; cannot infer matching certificate")
 	}
-	if v.vc.LocalCertDirPath != "" && v.localCertsRegex != nil && v.localCertsRegex.MatchString(artifactURL) {
+	if v.vc.LocalSigningCertPath != "" && v.localCertsRegex != nil && v.localCertsRegex.MatchString(artifactURL) {
 		return findFirstMatchingCert(v.localSigningCerts, *signature.tmstp)
 	}
 	return findFirstMatchingCert(v.signingCerts, *signature.tmstp)
