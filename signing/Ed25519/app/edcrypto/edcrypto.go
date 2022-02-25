@@ -282,12 +282,6 @@ type Verifier struct {
 	localCertsRegex   *regexp.Regexp
 }
 
-type VerifierConfig struct {
-	LocalCAFilePath      string `json:"CAFile" yaml:"CAFile"`
-	LocalSigningCertPath string `json:"signingCertFile" yaml:"signingCertFile"`
-	LocalCertRegexStr    string `json:"certRegex" yaml:"certRegex"`
-}
-
 func NewVerifierConfig(localCafilePath, localSigningCertPath, localCertRegexStr string) VerifierConfig {
 	return VerifierConfig{
 		LocalCAFilePath:      localCafilePath,
@@ -477,6 +471,9 @@ func NewVerifierResponse(isVerified bool, sig *ObjectSignature, verifyFile, sigF
 
 // Might eventually do this in chunks, io.ReadCloser is appropriate interface to pass through
 func (v *Verifier) verifyFileFromCertificateBytes(vc VerifyContext) (VerifierResponse, error) {
+	if v.vc.IsNopVerify() {
+		return NewVerifierResponse(true, nil, vc.VerifyFile, vc.SignatureFile), nil
+	}
 	var err error
 	var decodedSigBytes []byte
 	cleanup := func() {
