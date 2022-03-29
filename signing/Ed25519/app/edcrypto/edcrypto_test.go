@@ -294,7 +294,6 @@ func TestTimestampedEdCryptoCertAcceptableAndCertVerifyFromEmbeddedSuccessful(t 
 
 }
 
-// providers/src/okta/v1/provider.yaml
 func TestTimestampedEdCryptoCertAcceptableAndCertVerifyFromEmbeddedSuccessfulProviderDoc(t *testing.T) {
 
 	// credsDir, err := fileutil.GetFilePathFromRepositoryRoot("signing/Ed25519/test")
