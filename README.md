@@ -28,4 +28,14 @@ See [docs/command-line-tool.md](/docs/command-line-tool.md).
 - **Initial Naive Implementation** with laggy distribution through GitHub / [Statically](https://statically.io/) as per [this walkthrough](https://blog.mergify.com/how-to-serve-static-files-from-github/).
 - **Strategic Implementation** to follow, possibly using an authentication-enabled CDN such as [Bunny](https://bunny.net/solutions/software-distribution).  At this time, we will not commit to a specific product or set of client requirements.  We shall consult with community and industry before adding features over and above the naive.
 
+## Provide archiving and compression
 
+Simple tar gzip, eg:
+
+```
+cd providers/src/googleapis.com
+
+tar -czf v1.tgz v1
+```
+
+To decompress, simply `tar -xzf v1.tgz`.
