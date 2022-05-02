@@ -10,6 +10,7 @@ import (
 
 	"gotest.tools/assert"
 
+	"github.com/stackql/stackql-provider-registry/registry/pkg/nomenclature"
 	"github.com/stackql/stackql-provider-registry/signing/pkg/fileutil"
 
 	. "github.com/stackql/stackql-provider-registry/signing/Ed25519/app/edcrypto"
@@ -293,18 +294,17 @@ func TestTimestampedEdCryptoCertAcceptableAndCertVerifyFromEmbeddedSuccessful(t 
 
 }
 
-// providers/src/okta/v1/provider.yaml
 func TestTimestampedEdCryptoCertAcceptableAndCertVerifyFromEmbeddedSuccessfulProviderDoc(t *testing.T) {
 
 	// credsDir, err := fileutil.GetFilePathFromRepositoryRoot("signing/Ed25519/test")
 
 	// assert.NilError(t, err)
 
-	fileToSign, err := fileutil.GetFilePathFromRepositoryRoot("providers/src/okta/v1/provider.yaml")
+	fileToSign, err := fileutil.GetFilePathFromRepositoryRoot(fmt.Sprintf("providers/src/okta/%s/provider.yaml", nomenclature.FallbackProviderVersionTag))
 
 	assert.NilError(t, err)
 
-	sigFilePath, err := fileutil.GetFilePathFromRepositoryRoot("providers/src/okta/v1/provider.yaml.sig")
+	sigFilePath, err := fileutil.GetFilePathFromRepositoryRoot(fmt.Sprintf("providers/src/okta/%s/provider.yaml.sig", nomenclature.FallbackProviderVersionTag))
 
 	assert.NilError(t, err)
 

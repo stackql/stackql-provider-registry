@@ -19,12 +19,12 @@ func TestProviderTagExtractDefaulted(t *testing.T) {
 }
 
 func TestProviderTagExtractTagged(t *testing.T) {
-	d, err := ExtractProviderDesignation("myprovider:v1")
+	d, err := ExtractProviderDesignation("myprovider:" + FallbackProviderVersionTag)
 
 	assert.NilError(t, err)
 
 	assert.Equal(t, d.Name, "myprovider")
-	assert.Equal(t, d.Tag, "v1")
+	assert.Equal(t, d.Tag, FallbackProviderVersionTag)
 	assert.Equal(t, d.Sha, "")
 }
 
