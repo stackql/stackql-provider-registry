@@ -9,8 +9,14 @@ Please see [.github/CONTRIBUTING.md](/.github/CONTRIBUTING.md).
 
 ## Current Providers
 
-- Google.
-- Okta.
+Please see [our distribution root](/providers/dist) for an up-to-date list.
+
+Some notable inclusions:
+
+- github
+- google
+- netlify
+- okta
 
 ## Signing and verification
 
@@ -38,4 +44,4 @@ cd providers/src/googleapis.com
 tar -czf v0.1.1.tgz v0.1.1
 ```
 
-To decompress, simply `tar -xzf v0.1.0.tgz`.
+To decompress, simply `tar -xzf v0.1.1.tgz`.
