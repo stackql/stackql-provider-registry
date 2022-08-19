@@ -41,7 +41,7 @@ Simple tar gzip, eg:
 ```
 cd providers/src/googleapis.com
 
-tar -czf v0.1.1.tgz v0.1.1
+tar -czf v0.1.0.tgz v0.1.0
 ```
 
 To decompress, simply `tar -xzf v0.1.1.tgz`.
