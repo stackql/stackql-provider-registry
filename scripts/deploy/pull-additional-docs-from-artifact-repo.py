@@ -58,7 +58,7 @@ for provider in updated_providers:
     print(local_objects_with_path)
 
     print("getting list of objects in the %s bucket..." % (repo_bucket_name))
-    objects = []
+    s3_objects = []
     for obj in s3_client.list_objects_v2(
         Bucket=repo_bucket_name,
         Prefix=os.getenv('REG_PROVIDER_PATH')
@@ -66,9 +66,17 @@ for provider in updated_providers:
         # StartAfter='string'
         )['Contents']:
         if obj['Key'] != "%s/" % (os.getenv('REG_PROVIDER_PATH')):
-            objects.append(obj['Key'])
+            s3_objects.append(obj['Key'])
 
-    print(objects)    
+    print(s3_objects)    
+
+local_objects_set = set(local_objects_with_path)
+s3_objects_set = set(s3_objects)
+
+req_files = s3_objects_set.difference(local_objects_set)
+
+print(list(req_files))
+    
 
     # if provider in updated_providers:
     #     if target_branch == "main":
