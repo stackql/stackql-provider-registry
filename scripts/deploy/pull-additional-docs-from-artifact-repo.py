@@ -55,6 +55,7 @@ for provider in updated_providers:
     for obj in local_objects:
         local_objects_with_path.append("%s/%s/%s" % (os.getenv('REG_PROVIDER_PATH'), provider, obj))
     
+    print("local objects:")
     print(local_objects_with_path)
 
     print("getting list of objects in the %s bucket..." % (repo_bucket_name))
@@ -68,23 +69,16 @@ for provider in updated_providers:
         if obj['Key'] != "%s/" % (os.getenv('REG_PROVIDER_PATH')):
             s3_objects.append(obj['Key'])
 
+    print("remote objects:")
     print(s3_objects)    
 
 local_objects_set = set(local_objects_with_path)
 s3_objects_set = set(s3_objects)
 
-req_files = s3_objects_set.difference(local_objects_set)
+req_files = list(s3_objects_set.difference(local_objects_set))
 
-print(list(req_files))
-    
+if target_branch == 'main':
+    # filter out files that have -dev in the name
+    req_files = [x for x in req_files if '-dev' not in x]
 
-    # if provider in updated_providers:
-    #     if target_branch == "main":
-    #         # get delta versions
-    #         print("getting delta versions for %s..." % (provider))
-    # else:
-    #     if target_branch == "main":
-    #         # get REG_MAX_VERSIONS for provider
-    #         print("getting %s latest versions for %s..." % (max_versions, provider))
-    #     else:
-    #         print("getting latest version for %s..." % (provider))
+print("additional files needed to pull: %s" %(str(req_files)))
