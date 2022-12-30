@@ -77,8 +77,11 @@ if target_branch == 'main':
 print("additional files needed to pull: %s" %(str(req_files)))
 
 for req_file in req_files:
-    print("pulling %s from artifact repo to [%s/%s/%s]" % (req_file, os.getcwd(), os.getenv('REG_WEBSITE_DIR'), req_file))
-    s3_client.download_file(repo_bucket_name, req_file, "%s/%s/%s" % (os.getcwd(), os.getenv('REG_WEBSITE_DIR'), req_file))
+    print("pulling %s from artifact repo to [%s/%s]" % (req_file, os.getenv('REG_WEBSITE_DIR'), req_file))
+    provider_dir = req_file.split('/')[-2]
+    print("creating dest dir for %s (if it doesn't exist)..." % (provider_dir))
+    os.makedirs("%s/%s/%s" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH'), provider_dir), exist_ok=True)
+    s3_client.download_file(repo_bucket_name, req_file, "%s/%s" % (os.getenv('REG_WEBSITE_DIR'), req_file))
 
 #
 # generate providers.yaml file
