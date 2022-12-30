@@ -77,8 +77,8 @@ if target_branch == 'main':
 print("additional files needed to pull: %s" %(str(req_files)))
 
 for req_file in req_files:
-    print("pulling %s from artifact repo..." % (req_file))
-    s3_client.download_file(repo_bucket_name, req_file, "/home/runner/work/stackql-provider-registry/stackql-provider-registry/%s/%s" % (os.getenv('REG_WEBSITE_DIR'), req_file))
+    print("pulling %s from artifact repo to [%s/%s/%s]" % (req_file, os.getcwd(), os.getenv('REG_WEBSITE_DIR'), req_file))
+    s3_client.download_file(repo_bucket_name, req_file, "%s/%s/%s" % (os.getcwd(), os.getenv('REG_WEBSITE_DIR'), req_file))
 
 #
 # generate providers.yaml file
