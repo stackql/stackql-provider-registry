@@ -1,5 +1,5 @@
 <!-- language: lang-none -->
-[![GitHub Actions](https://github.com/stackql/stackql-provider-registry-devel/actions/workflows/main.yml/badge.svg?branch=main)](https://github.com/stackql/stackql-provider-registry-devel/actions/workflows/main.yml)
+[![GitHub Actions](https://github.com/stackql/stackql-provider-registry/actions/workflows/main.yml/badge.svg?branch=main)](https://github.com/stackql/stackql-provider-registry/actions/workflows/main.yml)
 ![License](https://img.shields.io/github/license/stackql/stackql)
 
 # StackQL Provider Registry
