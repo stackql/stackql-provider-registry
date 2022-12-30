@@ -41,8 +41,6 @@ max_age_months = os.getenv('REG_MAX_AGE_MONTHS')
 print("getting PROVIDERS env var...")
 providers = json.loads(os.getenv('PROVIDERS'))
 
-all_providers = os.listdir("providers/src")
-
 # get list of updated providers in this build (names only)
 updated_providers = []
 print("getting updated providers...")
@@ -50,7 +48,7 @@ for provider in providers:
     updated_providers.append(provider['provider'])
 
 # pull additional docs from artifact repo needed for deployment
-for provider in all_providers:
+for provider in updated_providers:
     local_objects = os.listdir("%s/%s/%s" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH'), provider))
     
     local_objects_with_path = []
