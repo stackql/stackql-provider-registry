@@ -6,24 +6,13 @@ from dateutil.relativedelta import *
 print("getting REG_ARTIFACT_REPO_BUCKET env var...")
 repo_bucket_name = os.getenv('REG_ARTIFACT_REPO_BUCKET')
 
-## TODO incomplete
+## TODO: generate providers.yaml file
 
 #
 # S3 setup and functions
 #
 
 s3_client = boto3.client('s3')
-
-def list_versions(provider):
-    print("here")
-
-def download_file(file_name, bucket, object_name):
-    print("pushing %s to s3://%s..." % (file_name, bucket))
-    try:
-        s3_client.upload_file(file_name, bucket, object_name)
-    except ClientError as e:
-        print(e)
-        sys.exit(1)
 
 #
 # main routine
