@@ -87,7 +87,39 @@ for req_file in req_files:
 # generate providers.yaml file
 #
 
+providers_obj = {}
+providers_obj['providers'] = {}
+
 print("generating providers.yaml file...")
+for provider_dir in os.listdir("%s/%s" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH'))):
+    print(dir)
+    providers_obj['providers'][provider_dir] = {}
+    providers_obj['providers'][provider_dir]['versions'] = []
+    # list object in provider dir
+    for obj in os.listdir("%s/%s/%s" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH'), provider_dir)):
+        providers_obj['providers'][provider_dir]['versions'].append(obj)
+
+print(providers_obj)
+
 # providers_yaml = open("%s/%s/providers.yaml" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH')), "w")
 
-
+# {
+#   "providers": {
+#     "aws": {
+#       "versions": [
+#         "v0.1.0",
+#         "v0.1.1",
+#         "v0.1.2",
+#         "v0.1.3"
+#       ]
+#     },
+#     "azure": {
+#       "versions": [
+#         "v0.1.0",
+#         "v0.1.1",
+#         "v0.2.0",
+#         "v0.3.0"
+#       ]
+#     }
+#   }
+# }
