@@ -61,7 +61,7 @@ for provider in updated_providers:
     objects = []
     for obj in s3_client.list_objects_v2(
         Bucket=repo_bucket_name,
-        Prefix="%s/%s" % (os.getenv('REG_PROVIDER_PATH'), provider)
+        Prefix=os.getenv('REG_PROVIDER_PATH')
         # Delimiter='string',
         # StartAfter='string'
         )['Contents']:
