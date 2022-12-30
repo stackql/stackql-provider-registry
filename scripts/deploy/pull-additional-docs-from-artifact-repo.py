@@ -78,7 +78,7 @@ print("additional files needed to pull: %s" %(str(req_files)))
 
 for req_file in req_files:
     print("pulling %s from artifact repo..." % (req_file))
-    s3_client.download_file(repo_bucket_name, req_file, "%s/%s" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH')))
+    s3_client.download_file(repo_bucket_name, req_file, "/home/runner/work/stackql-provider-registry/stackql-provider-registry/%s" % (req_file))
 
 #
 # generate providers.yaml file
