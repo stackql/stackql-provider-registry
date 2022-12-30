@@ -52,8 +52,10 @@ for provider in providers:
 # pull additional docs from artifact repo needed for deployment
 for provider in all_providers:
     local_objects = os.listdir("%s/%s/%s" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH'), provider))
-
-    print(local_objects)
+    local_objects_with_path = []
+    for obj in local_objects:
+        local_objects_with_path.append("%s/%s/%s" % (os.getenv('REG_PROVIDER_PATH'), provider, obj))
+    print(local_objects_with_path)
 
     print("getting list of objects in the %s bucket..." % (repo_bucket_name))
     objects = []
