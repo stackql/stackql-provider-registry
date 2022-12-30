@@ -1,0 +1,175 @@
+name: Build and Deploy Registry Providers
+
+on:
+  push:
+    branches: 
+    - main
+    - dev  
+  pull_request:
+    branches: 
+    - main
+    - dev
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    name: build-and-deploy
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_DEFAULT_REGION: us-west-1
+      REG_MAX_VERSIONS: 3
+      REG_MAX_AGE_MONTHS: 6   
+      REG_WEBSITE_DIR: _deno_website
+      REG_PROVIDER_PATH: providers/dist
+      REG_ARTIFACT_REPO_BUCKET: stackql-registry-artifacts
+      REG_DENO_DEPLOY_ASSET_REPO: deno-deploy-registry
+
+    steps:
+      - uses: actions/checkout@v3
+        name: "[SETUP] checkout repo"
+        with:
+          fetch-depth: 0
+
+      - name: "[SETUP] setup job"
+        run: |
+          echo "REG_COMMIT_DATETIME=$(date -d @`git show -s --format=%ct` +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+          echo "REG_COMMIT_YEAR=$(date -d @`git show -s --format=%ct` +'%y')" >> $GITHUB_ENV
+          echo "REG_COMMIT_MONTH=$(date -d @`git show -s --format=%ct` +'%m')" >> $GITHUB_ENV
+          cd scripts/setup-js; npm i
+          node setup-job.js
+
+      - name: "[SETUP] print env vars"
+        run: |
+          node scripts/setup-js/print-env-vars.js
+
+      - name: "[SETUP] get version"
+        run: |
+          node scripts/setup-js/get-version.js
+
+      - name: "[SETUP] find changed files"
+        run: |
+          cd $GITHUB_WORKSPACE; git diff --name-status --diff-filter=ACMRT $REG_BASE_SHA $REG_COMMIT_SHA > diff.txt
+
+      - name: "[SETUP] get updated providers"
+        run: |
+          pip install -r scripts/setup/requirements.txt
+          python scripts/setup/get-updated-providers.py
+
+      - name: '[PACKAGE] set up golang'
+        if: env.NUM_PROVIDERS > 0
+        uses: actions/setup-go@v3
+        with:
+          go-version: ^1.19
+          check-latest: true
+          cache: true
+        id: go
+
+      - name: "[PACKAGE] build sign tool"
+        if: env.NUM_PROVIDERS > 0
+        run: |
+          go build -o ed25519tool ./signing/Ed25519/app/cmd/main
+
+      - name: "[PACKAGE] prepare dist and test dirs"
+        if: env.NUM_PROVIDERS > 0
+        run: |
+          while IFS= read -r provider
+          do
+            echo "creating dist dir for ${provider}..."
+            mkdir -p "${REG_WEBSITE_DIR}/${REG_PROVIDER_PATH}/${provider}"
+            mkdir -p "provider-tests/src/${provider}"
+          done < providers.txt
+
+      - name: "[PACKAGE] update versions"
+        if: env.NUM_PROVIDERS > 0
+        run: |
+          python scripts/package/update-versions.py
+
+      - name: "[PACKAGE] sign provider docs"
+        if: env.NUM_PROVIDERS > 0
+        env:
+          SIGNING_VERSION: v1
+          SIGNING_CERT: ${{ secrets.V1_SIGNING_CERT }}
+          SIGNING_PRIV_KEY: '${{ secrets.V1_SIGNING_PRIV_KEY }}'
+          SIGNING_PUB_KEY: ${{ secrets.V1_SIGNING_PUB_KEY }}
+        run: |
+          python scripts/package/sign-provider-docs.py
+
+      - name: "[PACKAGE] package provider docs"
+        if: env.NUM_PROVIDERS > 0
+        run: |
+          python scripts/package/package-provider-docs.py
+
+      - name: "[TESTS] simulate REGISTRY PULL"
+        if: env.NUM_PROVIDERS > 0
+        run: |
+          python scripts/tests/simulate-REGISTRY-PULL.py
+
+      - name: "[TESTS] test provider(s)"
+        if: env.NUM_PROVIDERS > 0
+        run: |
+          echo "cloning test repo"
+          git clone https://github.com/stackql/stackql-provider-tests.git
+          while IFS= read -r provider
+          do
+            echo "testing ${provider}..."
+            providersdir="$(pwd)/provider-tests"
+            cd stackql-provider-tests
+            sh test-provider.sh $provider true $providersdir
+          done < providers.txt
+
+      #
+      # run the following steps only on pushes to protected branches (merge commits)
+      #
+
+      - name: "[PUBLISH] configure aws credentials" 
+        uses: aws-actions/configure-aws-credentials@v1
+        # if: env.NUM_PROVIDERS > 0 && env.REG_EVENT == 'push'
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_DEFAULT_REGION }}
+
+      - name: "[PUBLISH] publish provider docs to artifact repo"
+        # if: env.NUM_PROVIDERS > 0 && env.REG_EVENT == 'push'
+        run: |
+            python scripts/publish/publish-provider-docs-to-artifact-repo.py
+
+      - name: "[DEPLOY] setup SSH"
+        uses: MrSquaare/ssh-setup-action@v2
+        # if: env.NUM_PROVIDERS > 0 && env.REG_EVENT == 'push'
+        with:
+          host: github.com
+          private-key: ${{ secrets.SSH_PRIVATE_KEY }}          
+
+      - name: "[DEPLOY] pull deno deploy assets"
+        # if: env.NUM_PROVIDERS > 0 && env.REG_EVENT == 'push'
+        run: |
+          git clone git@github.com:stackql/${REG_DENO_DEPLOY_ASSET_REPO}.git
+          cp ${REG_DENO_DEPLOY_ASSET_REPO}/website/index.ts $REG_WEBSITE_DIR
+
+      - name: "[DEPLOY] pull additional docs from artifact repo"
+        # if: env.NUM_PROVIDERS > 0 && env.REG_EVENT == 'push'
+        run: |
+          python scripts/deploy/pull-additional-docs-from-artifact-repo.py
+
+      - name: "[DEPLOY] install deno"
+        # if: env.NUM_PROVIDERS > 0 && env.REG_EVENT == 'push'
+        uses: denoland/setup-deno@main
+        with:
+          deno-version: 1.18.2
+
+      - name: "[DEPLOY] clean deploy dir"
+        # if: env.NUM_PROVIDERS > 0 && env.REG_EVENT == 'push'
+        run: |
+          python scripts/deploy/clean-deploy-dir.py
+          tree .
+
+      # - name: "[DEPLOY] deploy to deno deploy"
+      #   # if: env.NUM_PROVIDERS > 0 && env.REG_EVENT == 'push'
+      #   uses: denoland/deployctl@v1
+      #   with:
+      #     project: stackql-registry-test
+      #     entrypoint: index.ts
