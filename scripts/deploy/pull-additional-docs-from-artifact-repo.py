@@ -30,13 +30,17 @@ max_age_months = os.getenv('REG_MAX_AGE_MONTHS')
 print("getting PROVIDERS env var...")
 providers = json.loads(os.getenv('PROVIDERS'))
 
+#
 # get list of updated providers in this build (names only)
+#
 updated_providers = []
 print("getting updated providers...")
 for provider in providers:
     updated_providers.append(provider['provider'])
 
+#
 # pull additional docs from artifact repo needed for deployment
+#
 for provider in updated_providers:
     local_objects = os.listdir("%s/%s/%s" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH'), provider))
     
@@ -71,3 +75,8 @@ if target_branch == 'main':
     req_files = [x for x in req_files if '-dev' not in x]
 
 print("additional files needed to pull: %s" %(str(req_files)))
+
+for req_file in req_files:
+    print("pulling %s from artifact repo..." % (req_file))
+    s3_client.download_file(repo_bucket_name, req_file, "%s/%s" % (os.getenv('REG_WEBSITE_DIR'), req_file))
+
