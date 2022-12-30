@@ -65,7 +65,8 @@ for provider in updated_providers:
         # Delimiter='string',
         # StartAfter='string'
         )['Contents']:
-        objects.append(obj['Key'])
+        if obj['Key'] != os.getenv('REG_PROVIDER_PATH'):
+            objects.append(obj['Key'])
 
     print(objects)    
 
