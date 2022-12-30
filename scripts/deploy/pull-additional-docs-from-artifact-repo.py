@@ -78,5 +78,13 @@ print("additional files needed to pull: %s" %(str(req_files)))
 
 for req_file in req_files:
     print("pulling %s from artifact repo..." % (req_file))
-    s3_client.download_file(repo_bucket_name, req_file, "%s/%s" % (os.getenv('REG_WEBSITE_DIR'), req_file))
+    s3_client.download_file(repo_bucket_name, req_file, "%s/%s" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH')))
+
+#
+# generate providers.yaml file
+#
+
+print("generating providers.yaml file...")
+# providers_yaml = open("%s/%s/providers.yaml" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH')), "w")
+
 
