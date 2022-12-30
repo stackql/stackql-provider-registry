@@ -47,7 +47,7 @@ func retrievePemBytes(b []byte) ([]byte, error) {
 	var err error
 	blk, _ := pem.Decode(b)
 	if blk == nil || blk.Bytes == nil || len(blk.Bytes) == 0 {
-		return nil, fmt.Errorf("could not decode bytes")
+		return nil, fmt.Errorf("ERROR could not decode bytes (retrievePemBytes)")
 	}
 	var key interface{}
 	if isPrivateKeyType(blk.Type) {
@@ -66,7 +66,7 @@ func retrievePemBytes(b []byte) ([]byte, error) {
 	case ed25519.PublicKey:
 		return key, nil
 	default:
-		return nil, fmt.Errorf("key type '%T' not supported yet", key)
+		return nil, fmt.Errorf("ERROR key type '%T' not supported yet", key)
 	}
 }
 
@@ -74,7 +74,7 @@ func retrieveCertBundleFromPem(b []byte) ([]*x509.Certificate, error) {
 	var derBytes []byte
 	blk, rest := pem.Decode(b)
 	if blk == nil || blk.Bytes == nil || len(blk.Bytes) == 0 {
-		return nil, fmt.Errorf("could not decode bytes")
+		return nil, fmt.Errorf("ERROR could not decode bytes (retrieveCertBundleFromPem)")
 	}
 	derBytes = append(derBytes, blk.Bytes...)
 	for {
@@ -114,7 +114,7 @@ func retrieveSignatureFromBytes(b []byte, format string) ([]byte, error) {
 	case "hex":
 		return retrieveAndDecodeHexBytes(b)
 	default:
-		return nil, fmt.Errorf("signature format '%s' not supported", format)
+		return nil, fmt.Errorf("ERROR signature format '%s' not supported", format)
 	}
 }
 
@@ -155,7 +155,7 @@ func createPemBytes(objectBytes []byte, objectType string) []byte {
 
 func CreateKeys(cc CertificateConfig) error {
 	if cc.Format != "pem" {
-		return fmt.Errorf("key format '%s' not suported", cc.Format)
+		return fmt.Errorf("ERROR key format '%s' not suported", cc.Format)
 	}
 	return generateTLSArtifacts(cc)
 }
@@ -214,9 +214,10 @@ func signFileAndWriteSignatureFileUsingEnvVar(pkEnvVar string, pkFileFormat stri
 func signFileUsingPkEnvVar(pkEnvVar string, pkFileFormat string, filePathToSign string, timestampToInclude string) ([]byte, error) {
 	var pkBytes ed25519.PrivateKey
 	var err error
+	fmt.Printf("using private key env var: %s", pkEnvVar)
 	pk, ok := os.LookupEnv(pkEnvVar)
 	if !ok {
-		return nil, fmt.Errorf("env var '%s' not present as required", pkEnvVar)
+		return nil, fmt.Errorf("ERROR env var '%s' not present as required", pkEnvVar)
 	}
 	switch pkFileFormat {
 	case "pem":
@@ -248,11 +249,11 @@ func signFileUsingPkFile(pkFilePath string, pkFileFormat string, filePathToSign 
 func signFile(pkBytes []byte, pkFileFormat string, filePathToSign string, timestampToInclude string) ([]byte, error) {
 	var err error
 	if len(pkBytes) != ed25519.PrivateKeySize {
-		return nil, fmt.Errorf("private key is not the correct size (%d != %d)", len(pkBytes), ed25519.PrivateKeySize)
+		return nil, fmt.Errorf("ERROR private key is not the correct size (%d != %d)", len(pkBytes), ed25519.PrivateKeySize)
 	}
 	msg, err := os.ReadFile(filePathToSign)
 	if err != nil {
-		return nil, fmt.Errorf("error reding file to sign: %s", err.Error())
+		return nil, fmt.Errorf("ERROR cant read file to sign: %s", err.Error())
 	}
 	var nowBytes []byte
 	if timestampToInclude != "" {
@@ -325,7 +326,7 @@ func (v *Verifier) VerifyFileWithTimestamp(publicKeyFilePath string, publicKeyFi
 
 func (v *Verifier) inferCertificate(vc VerifyContext, vb []byte, signature *ObjectSignature) (bool, *x509.Certificate, error) {
 	if signature.tmstp == nil {
-		return false, nil, fmt.Errorf("timestamp missing from signature; cannot infer matching certificate")
+		return false, nil, fmt.Errorf("ERROR timestamp missing from signature; cannot infer matching certificate")
 	}
 	if v.vc.LocalSigningCertPath != "" && v.localCertsRegex != nil && v.localCertsRegex.MatchString(vc.VerifyURL) {
 		return v.findFirstMatchingCert(vc, vb, v.localSigningCerts, signature)
@@ -338,10 +339,10 @@ func (v *Verifier) findFirstMatchingCert(vc VerifyContext, vb []byte, cs []*x509
 		if vc.StrictMode {
 			chains, err := v.cc.Verify(cert)
 			if err != nil {
-				return false, nil, fmt.Errorf("certificate verify error: %s", err.Error())
+				return false, nil, fmt.Errorf("ERROR certificate verify error: %s", err.Error())
 			}
 			if len(chains) == 0 {
-				return false, nil, fmt.Errorf("chain of trust could not be established")
+				return false, nil, fmt.Errorf("ERROR chain of trust could not be established")
 			}
 		}
 		publicKeyBytes, err := extractPublicKeyFromCertificate(cert)
@@ -349,10 +350,10 @@ func (v *Verifier) findFirstMatchingCert(vc VerifyContext, vb []byte, cs []*x509
 			return false, nil, err
 		}
 		if len(publicKeyBytes) != ed25519.PublicKeySize {
-			return false, nil, fmt.Errorf("public key is not the correct size (%d != %d)", len(publicKeyBytes), ed25519.PublicKeySize)
+			return false, nil, fmt.Errorf("ERROR public key is not the correct size (%d != %d)", len(publicKeyBytes), ed25519.PublicKeySize)
 		}
 		if !signature.HasTimestamp() || !cert.NotBefore.Before(*signature.GetTimestamp()) || !cert.NotAfter.After(*signature.GetTimestamp()) {
-			return false, nil, fmt.Errorf("error with signed timestamp: %v, not in cert timestamp range (%v, %v)", signature.GetTimestamp(), cert.NotBefore, cert.NotAfter)
+			return false, nil, fmt.Errorf("ERROR problems with signed timestamp: %v, not in cert timestamp range (%v, %v)", signature.GetTimestamp(), cert.NotBefore, cert.NotAfter)
 		}
 		testSubstrate := append(vb, signature.GetTimestampBytes()...)
 		sigBytesCheck := signature.GetSignature()
@@ -364,7 +365,7 @@ func (v *Verifier) findFirstMatchingCert(vc VerifyContext, vb []byte, cs []*x509
 			return true, rv, nil
 		}
 	}
-	return false, nil, fmt.Errorf("cannot locate appropriate certificate")
+	return false, nil, fmt.Errorf("ERROR cannot locate appropriate certificate")
 }
 
 func findFirstMatchingCert(cs []*x509.Certificate, t time.Time) (*x509.Certificate, error) {
@@ -373,7 +374,7 @@ func findFirstMatchingCert(cs []*x509.Certificate, t time.Time) (*x509.Certifica
 			return c, nil
 		}
 	}
-	return nil, fmt.Errorf("cannot find cert covering time = %s", t.String())
+	return nil, fmt.Errorf("ERROR cannot find cert covering time = %s", t.String())
 }
 
 func (v *Verifier) verifyFile(publicKeyFilePath string, publicKeyFileFormat string, filePathToVerify string, signatureFilePath string, signatureFileFormat string, minTime *time.Time, maxTime *time.Time) (bool, *ObjectSignature, error) {
@@ -387,19 +388,19 @@ func (v *Verifier) verifyFile(publicKeyFilePath string, publicKeyFileFormat stri
 		return false, nil, err
 	}
 	if len(publicKeyBytes) != ed25519.PublicKeySize {
-		return false, nil, fmt.Errorf("private key '%s' is not the correct size (%d != %d)", publicKeyFilePath, len(publicKeyBytes), ed25519.PublicKeySize)
+		return false, nil, fmt.Errorf("ERROR private key '%s' is not the correct size (%d != %d)", publicKeyFilePath, len(publicKeyBytes), ed25519.PublicKeySize)
 	}
 	msg, err := os.ReadFile(filePathToVerify)
 	if err != nil {
-		return false, nil, fmt.Errorf("error reading file to sign: %s", err.Error())
+		return false, nil, fmt.Errorf("ERROR cant read file to sign: %s", err.Error())
 	}
 	b, err := retrieveSignatureFromFile(signatureFilePath, signatureFileFormat)
 	if err != nil {
-		return false, nil, fmt.Errorf("error reading signature file: %s", err.Error())
+		return false, nil, fmt.Errorf("ERROR cant read signature file: %s", err.Error())
 	}
 	obSig, err := extractSignature(b)
 	if err != nil {
-		return false, nil, fmt.Errorf("error with signature: %s", err.Error())
+		return false, nil, fmt.Errorf("ERROR problems with signature: %s", err.Error())
 	}
 	return ed25519.Verify(publicKeyBytes, append(msg, obSig.GetTimestampBytes()...), obSig.GetSignature()), obSig, nil
 }
@@ -407,7 +408,7 @@ func (v *Verifier) verifyFile(publicKeyFilePath string, publicKeyFileFormat stri
 func extractPublicKeyFromCertificate(cert *x509.Certificate) (ed25519.PublicKey, error) {
 	rv, ok := cert.PublicKey.(ed25519.PublicKey)
 	if !ok {
-		return nil, fmt.Errorf("cannot extract public key from certificate")
+		return nil, fmt.Errorf("ERROR cannot extract public key from certificate")
 	}
 	return rv, nil
 }
@@ -503,7 +504,7 @@ func (v *Verifier) verifyFileFromCertificateBytes(vc VerifyContext) (VerifierRes
 	}
 	obSig, err := extractSignature(decodedSigBytes)
 	if err != nil {
-		return NewVerifierResponse(false, nil, nil, nil), fmt.Errorf("error with signature: %s", err.Error())
+		return NewVerifierResponse(false, nil, nil, nil), fmt.Errorf("ERROR problems with signature: %s", err.Error())
 	}
 	isVerified, _, err := v.inferCertificate(vc, vb, obSig)
 	if err != nil {
@@ -566,5 +567,5 @@ func extractSignature(b []byte) (*ObjectSignature, error) {
 			b,
 		)
 	}
-	return nil, fmt.Errorf("cannot process signature of size = %d", len(b))
+	return nil, fmt.Errorf("ERROR cannot process signature of size = %d", len(b))
 }
