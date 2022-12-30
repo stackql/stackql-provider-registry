@@ -1,4 +1,4 @@
-import sys, json, os, boto3, botocore
+import sys, json, os, boto3, botocore, yaml
 from botocore.exceptions import ClientError
 from datetime import datetime, timedelta
 from dateutil.relativedelta import *
@@ -6,24 +6,13 @@ from dateutil.relativedelta import *
 print("getting REG_ARTIFACT_REPO_BUCKET env var...")
 repo_bucket_name = os.getenv('REG_ARTIFACT_REPO_BUCKET')
 
-## TODO incomplete
+## TODO: generate providers.yaml file
 
 #
 # S3 setup and functions
 #
 
 s3_client = boto3.client('s3')
-
-def list_versions(provider):
-    print("here")
-
-def download_file(file_name, bucket, object_name):
-    print("pushing %s to s3://%s..." % (file_name, bucket))
-    try:
-        s3_client.upload_file(file_name, bucket, object_name)
-    except ClientError as e:
-        print(e)
-        sys.exit(1)
 
 #
 # main routine
@@ -41,39 +30,77 @@ max_age_months = os.getenv('REG_MAX_AGE_MONTHS')
 print("getting PROVIDERS env var...")
 providers = json.loads(os.getenv('PROVIDERS'))
 
-all_providers = os.listdir("providers/src")
-
+#
 # get list of updated providers in this build (names only)
+#
 updated_providers = []
 print("getting updated providers...")
 for provider in providers:
     updated_providers.append(provider['provider'])
 
+#
 # pull additional docs from artifact repo needed for deployment
-for provider in all_providers:
+#
+for provider in updated_providers:
     local_objects = os.listdir("%s/%s/%s" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH'), provider))
-
-    print(local_objects)
+    
+    local_objects_with_path = []
+    for obj in local_objects:
+        local_objects_with_path.append("%s/%s/%s" % (os.getenv('REG_PROVIDER_PATH'), provider, obj))
+    
+    print("local objects:")
+    print(local_objects_with_path)
 
     print("getting list of objects in the %s bucket..." % (repo_bucket_name))
-    objects = []
+    s3_objects = []
     for obj in s3_client.list_objects_v2(
         Bucket=repo_bucket_name,
-        Prefix="%s/%s" % (os.getenv('REG_PROVIDER_PATH'), provider)
+        Prefix=os.getenv('REG_PROVIDER_PATH')
         # Delimiter='string',
         # StartAfter='string'
         )['Contents']:
-        objects.append(obj['Key'])
+        if obj['Key'] != "%s/" % (os.getenv('REG_PROVIDER_PATH')):
+            s3_objects.append(obj['Key'])
 
-    print(objects)    
+    print("remote objects:")
+    print(s3_objects)    
 
-    # if provider in updated_providers:
-    #     if target_branch == "main":
-    #         # get delta versions
-    #         print("getting delta versions for %s..." % (provider))
-    # else:
-    #     if target_branch == "main":
-    #         # get REG_MAX_VERSIONS for provider
-    #         print("getting %s latest versions for %s..." % (max_versions, provider))
-    #     else:
-    #         print("getting latest version for %s..." % (provider))
+local_objects_set = set(local_objects_with_path)
+s3_objects_set = set(s3_objects)
+
+req_files = list(s3_objects_set.difference(local_objects_set))
+
+if target_branch == 'main':
+    # filter out files that have -dev in the name
+    req_files = [x for x in req_files if '-dev' not in x]
+
+print("additional files needed to pull: %s" %(str(req_files)))
+
+for req_file in req_files:
+    print("pulling %s from artifact repo to [%s/%s]" % (req_file, os.getenv('REG_WEBSITE_DIR'), req_file))
+    provider_dir = req_file.split('/')[-2]
+    print("creating dest dir for %s (if it doesn't exist)..." % (provider_dir))
+    os.makedirs("%s/%s/%s" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH'), provider_dir), exist_ok=True)
+    s3_client.download_file(repo_bucket_name, req_file, "%s/%s" % (os.getenv('REG_WEBSITE_DIR'), req_file))
+
+#
+# generate providers.yaml file
+#
+
+providers_obj = {}
+providers_obj['providers'] = {}
+
+print("generating providers.yaml file...")
+for provider_dir in os.listdir("%s/%s" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH'))):
+    providers_obj['providers'][provider_dir] = {}
+    providers_obj['providers'][provider_dir]['versions'] = []
+    # list object in provider dir
+    for obj in os.listdir("%s/%s/%s" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH'), provider_dir)):
+        providers_obj['providers'][provider_dir]['versions'].append(obj)
+
+print(providers_obj)
+
+# write providers.yaml file from providers_obj
+providers_yaml = open("%s/%s/providers.yaml" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH')), "w")
+yaml.dump(providers_obj, providers_yaml)
+providers_yaml.close()
