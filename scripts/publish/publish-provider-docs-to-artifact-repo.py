@@ -12,6 +12,9 @@ target_branch = os.getenv('REG_TARGET_BRAMCH')
 print("getting REG_SHA env var...")
 commit_sha = os.getenv('REG_SHA')
 
+print("getting REG_COMMIT_SHA env var...")
+long_commit_sha = os.getenv('REG_COMMIT_SHA')
+
 print("getting REG_COMMIT_DATETIME env var...")
 date_published = os.getenv('REG_COMMIT_DATETIME')
 
@@ -53,7 +56,7 @@ def upload_file(file_name, bucket, object_name, provider, target_branch):
                     },                    
                     {
                         'Key': 'commitSha',
-                        'Value': commit_sha
+                        'Value': long_commit_sha
                     },
                     {
                         'Key': 'datePublished',
