@@ -11,8 +11,8 @@ def tardirectory(srcdir, arcname, dir2tar):
 print("getting PROVIDERS env var...")
 providers = json.loads(os.getenv('PROVIDERS'))
 
-print("getting REG_TARGET_BRAMCH env var...")
-target_branch = os.getenv('REG_TARGET_BRAMCH')
+print("getting REG_TARGET_BRANCH env var...")
+target_branch = os.getenv('REG_TARGET_BRANCH')
 
 for provider in providers:
     provider_name = provider["provider"]

@@ -6,8 +6,8 @@ from boto3.dynamodb.conditions import Key, Attr
 # get env vars
 #
 
-print("getting REG_TARGET_BRAMCH env var...")
-target_branch = os.getenv('REG_TARGET_BRAMCH')
+print("getting REG_TARGET_BRANCH env var...")
+target_branch = os.getenv('REG_TARGET_BRANCH')
 
 print("getting REG_SHA env var...")
 commit_sha = os.getenv('REG_SHA')
