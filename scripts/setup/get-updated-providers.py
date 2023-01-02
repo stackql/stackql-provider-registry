@@ -37,6 +37,7 @@ with open('diff.txt', 'r') as f:
     num_providers = len(providers)
 
     print("%s providers updated" % (str(num_providers)))
+    print("providers updated : %s" % (providers))
 
     if num_providers > 0:
         print("setting environment variables...")
