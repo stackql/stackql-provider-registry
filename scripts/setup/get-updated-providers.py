@@ -25,7 +25,7 @@ with open('diff.txt', 'r') as f:
             if source_version != 'v00.00.00000':
                 print('ERROR: baseline version for providers must be v00.00.00000')
                 sys.exit(1)
-            all_provider_versions.append(json.dumps({ 'provider' : provider_name, 'source_version': source_version, 'target_version': target_version}))
+            all_provider_versions.append(json.dumps({ 'provider' : provider_name, 'provider_dir': provider_dir, 'source_version': source_version, 'target_version': target_version}))
             provider['provider'] = provider_name
             provider['provider_dir'] = provider_dir
             provider['source_version'] = source_version
