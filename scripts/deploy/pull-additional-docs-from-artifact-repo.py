@@ -8,7 +8,6 @@ repo_bucket_name = os.getenv('REG_ARTIFACT_REPO_BUCKET')
 
 ## TODO: 
 ## implement min, max and age rules
-## ordered versions in providers.yaml file
 
 #
 # S3 setup and functions
