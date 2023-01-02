@@ -43,7 +43,7 @@ async function run() {
     exec(`echo "REG_ACTION=${action}" >> $GITHUB_ENV`);
     exec(`echo "REG_PR_NO=${prNumber}" >> $GITHUB_ENV`);
     exec(`echo "REG_SOURCE_BRANCH=${sourceBranch}" >> $GITHUB_ENV`);
-    exec(`echo "REG_TARGET_BRAMCH=${targetBranch}" >> $GITHUB_ENV`);
+    exec(`echo "REG_TARGET_BRANCH=${targetBranch}" >> $GITHUB_ENV`);
   } catch (error) {
     core.setFailed(error.message);
     return;

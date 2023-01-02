@@ -68,4 +68,12 @@ with open('diff.txt', 'r') as f:
         # write all provider updates to file
         with open('updates.json', 'w') as f:
             f.write(json.dumps(updates))
+    
+    else:
+
+        # write empty provider/version json to the PROVIDERS env var
+        os.system("echo '%s' >> $GITHUB_ENV" % ("PROVIDERS=" + json.dumps(providers)))
+
+        # set NUM_PROVIDERS env var == 0
+        os.system("echo ""%s"" >> $GITHUB_ENV" % ("NUM_PROVIDERS=" + str(num_providers)))        
 
