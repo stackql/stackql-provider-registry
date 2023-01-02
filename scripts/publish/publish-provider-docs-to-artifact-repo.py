@@ -82,6 +82,7 @@ for obj in repo_bucket.objects.all():
 print("getting updated providers...")
 for provider in providers:
     provider_name = provider['provider']
+    provider_dir = provider['provider_dir']
     version = provider['target_version']
 
     print("processing %s (%s) version %s..." % (provider_name, target_branch, version))
@@ -91,9 +92,9 @@ for provider in providers:
     #
 
     if target_branch == 'main':
-        key = "%s/%s/%s.tgz" % (os.getenv('REG_PROVIDER_PATH'), provider_name, version)
+        key = "%s/%s/%s.tgz" % (os.getenv('REG_PROVIDER_PATH'), provider_dir, version)
     else:
-        key = "%s/%s/%s-%s.tgz" % (os.getenv('REG_PROVIDER_PATH'), provider_name, version, target_branch)
+        key = "%s/%s/%s-%s.tgz" % (os.getenv('REG_PROVIDER_PATH'), provider_dir, version, target_branch)
 
     if target_branch == 'main':
         print("checking if %s exists in %s..." % (key, repo_bucket_name))
@@ -103,4 +104,4 @@ for provider in providers:
     else:
         print("skipping existing check as target branch is %s" % (target_branch))
 
-    upload_file("%s/%s" % (os.getenv('REG_WEBSITE_DIR'), key), repo_bucket_name, key, provider_name, target_branch)    
+    upload_file("%s/%s" % (os.getenv('REG_WEBSITE_DIR'), key), repo_bucket_name, key, provider_dir, target_branch)    
