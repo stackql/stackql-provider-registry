@@ -106,15 +106,8 @@ for provider_dir in provider_dirs:
     providers_obj['providers'][provider]['versions'] = []
     # list object in provider dir
     objlist = os.listdir("%s/%s/%s" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH'), provider_dir))
-
-    print("objlist pre sort: %s" % (objlist))
-
     # sort by version number
-    #objlist.sort(key=lambda x: [int(y) for y in x.split('.')])
     objlist.sort()
-
-    print("objlist post sort: %s" % (objlist))
-
     for obj in objlist:
         providers_obj['providers'][provider]['versions'].append(obj.replace('.tgz', ''))
 
