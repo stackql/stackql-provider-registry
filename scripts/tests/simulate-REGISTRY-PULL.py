@@ -20,5 +20,6 @@ for provider in providers:
     print("extracting %s" % (archive))
   
     file = tarfile.open(archive)
-    file.extractall("provider-tests/src/%s/%s" % (provider_dir, version))
+    # file.extractall("provider-tests/src/%s/%s" % (provider_dir, version))
+    file.extractall("provider-tests/src/%s" % (provider_dir))
     file.close()
