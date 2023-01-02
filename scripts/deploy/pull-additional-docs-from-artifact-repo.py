@@ -6,7 +6,7 @@ from dateutil.relativedelta import *
 print("getting REG_ARTIFACT_REPO_BUCKET env var...")
 repo_bucket_name = os.getenv('REG_ARTIFACT_REPO_BUCKET')
 
-## TODO: generate providers.yaml file
+## TODO: implement min, max and age rules
 
 #
 # S3 setup and functions
