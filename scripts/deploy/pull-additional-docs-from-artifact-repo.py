@@ -36,7 +36,7 @@ providers = json.loads(os.getenv('PROVIDERS'))
 updated_providers = []
 print("getting updated providers...")
 for provider in providers:
-    updated_providers.append(provider['provider'])
+    updated_providers.append(provider['provider_dir'])
 
 #
 # pull additional docs from artifact repo needed for deployment
@@ -92,11 +92,15 @@ providers_obj['providers'] = {}
 
 print("generating providers.yaml file...")
 for provider_dir in os.listdir("%s/%s" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH'))):
-    providers_obj['providers'][provider_dir] = {}
-    providers_obj['providers'][provider_dir]['versions'] = []
+    if provider_dir == 'googleapis.com':
+        provider = 'google'
+    else:
+        provider = provider_dir
+    providers_obj['providers'][provider] = {}
+    providers_obj['providers'][provider]['versions'] = []
     # list object in provider dir
     for obj in os.listdir("%s/%s/%s" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH'), provider_dir)):
-        providers_obj['providers'][provider_dir]['versions'].append(obj)
+        providers_obj['providers'][provider]['versions'].append(obj.replace('.tgz', ''))
 
 print(providers_obj)
 
