@@ -36,7 +36,7 @@ providers = json.loads(os.getenv('PROVIDERS'))
 updated_providers = []
 print("getting updated providers...")
 for provider in providers:
-    updated_providers.append(provider['provider'])
+    updated_providers.append(provider['provider_dir'])
 
 #
 # pull additional docs from artifact repo needed for deployment
