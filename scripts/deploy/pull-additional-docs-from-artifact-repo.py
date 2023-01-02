@@ -65,8 +65,8 @@ for obj in s3_client.list_objects_v2(
     if obj['Key'] != "%s/" % (os.getenv('REG_PROVIDER_PATH')):
         s3_objects.append(obj['Key'])
 
-    print("remote objects:")
-    print(s3_objects)    
+print("remote objects:")
+print(s3_objects)    
 
 local_objects_set = set(local_objects_with_path)
 s3_objects_set = set(s3_objects)
