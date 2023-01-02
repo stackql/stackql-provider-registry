@@ -7,8 +7,6 @@ def tardirectory(srcdir, arcname, dir2tar):
     if err:
         print("ERROR: %s" % (err))
         sys.exit(1)
-    else:
-        print("SUCCESS: %s" % (p.stdout.read().decode()))
 
 print("getting PROVIDERS env var...")
 providers = json.loads(os.getenv('PROVIDERS'))
