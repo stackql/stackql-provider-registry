@@ -25,13 +25,14 @@ providers = json.loads(os.getenv('PROVIDERS'))
 # Add the signature to each provider
 for provider in providers:
     provider_name = provider["provider"]
+    provider_dir = provider["provider_dir"]
     source_version = provider["source_version"]
     target_version = provider["target_version"]
     
-    src_root_dir = "providers/src/%s/%s" % (provider_name, source_version)
+    src_root_dir = "providers/src/%s/%s" % (provider_dir, source_version)
     src_services_dir = "%s/services" % (src_root_dir)
 
-    tgt_root_dir = "signed/providers/src/%s/%s" % (provider_name, target_version)    
+    tgt_root_dir = "signed/providers/src/%s/%s" % (provider_dir, target_version)    
     tgt_services_dir = "%s/services" % (tgt_root_dir)
     
     if not os.path.exists(tgt_services_dir):
