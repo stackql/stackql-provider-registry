@@ -11,7 +11,6 @@ with open('diff.txt', 'r') as f:
     updates = []
     all_provider_versions = []
     for line in lines:
-        print(line)
         fields = line.split('\t')
         action = fields[0]
         path = fields[1]
