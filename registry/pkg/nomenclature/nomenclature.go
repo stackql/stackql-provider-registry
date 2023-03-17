@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	FallbackProviderVersionTag string = "v0.1.0"
+	FallbackProviderVersionTag string = "v00.00.00000"
 )
 
 type ProviderDesignation struct {
