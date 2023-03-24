@@ -53,3 +53,12 @@ Once you have an OpenAPI specification, you can use the [openapi-doc-util](https
 ## Build and Deployment Workflow
 
 The provider registry is built and deployed using GitHub Actions.  Provider documents are validated and tested in workflow steps and then packaged and stored in the artifact repository.  The most recent packaged versions are published to the registry API (a [Deno Deploy](https://deno.com/deploy) application), where they are available from the `stackql` application using `REGISTRY LIST` or `REGISTRY PULL`.  See [docs/build-and-deployment.md](docs/build-and-deployment.md) for more information.  
+
+## Testing a Provider using the `dev` Registry
+
+Use the following steps to test a provider using the `dev` registry:  
+
+```bash
+export DEV_REG="{ \"url\": \"https://registry-dev.stackql.app/providers\" }"
+./stackql --registry="${DEV_REG}" shell
+```
