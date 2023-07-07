@@ -48,7 +48,7 @@ Please see [.github/CONTRIBUTING.md](/.github/CONTRIBUTING.md).
 
 StackQL providers are generated from provider OpenAPI or Swagger specifications (either supplied by the provider or constituted through other scripts - for example, [google-discovery-to-openapi](https://github.com/stackql/google-discovery-to-openapi) or [stackql-azure-openapi](https://github.com/stackql/stackql-azure-openapi)).  
 
-Once you have an OpenAPI specification, you can use the [openapi-doc-util](https://github.com/stackql/openapi-doc-util) utility project to generate a StackQL provider document.  
+Once you have an OpenAPI specification, you can use the [openapisaurus](https://github.com/stackql/openapisaurus) utility project to generate a StackQL provider document.  
 
 ## Build and Deployment Workflow
 
