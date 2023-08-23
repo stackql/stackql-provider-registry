@@ -8,7 +8,7 @@ info:
   description: Schedule queries or transfer external data from SaaS applications to Google BigQuery on a regular basis.
   version: v1
   x-discovery-doc-revision: '20230812'
-  x-generated-date: '2023-08-22'
+  x-generated-date: '2023-08-23'
 externalDocs:
   url: 'https://cloud.google.com/bigquery-transfer/'
 servers:
@@ -22,8 +22,8 @@ components:
         implicit:
           authorizationUrl: 'https://accounts.google.com/o/oauth2/auth'
           scopes: &ref_0
-            'https://www.googleapis.com/auth/cloud-platform.read-only': View your data across Google Cloud services and see the email address of your Google Account
             'https://www.googleapis.com/auth/cloud-platform': 'See, edit, configure, and delete your Google Cloud data and see the email address for your Google Account.'
+            'https://www.googleapis.com/auth/cloud-platform.read-only': View your data across Google Cloud services and see the email address of your Google Account
             'https://www.googleapis.com/auth/bigquery': View and manage your data in Google BigQuery and see the email address for your Google Account
     Oauth2c:
       type: oauth2
@@ -34,38 +34,26 @@ components:
           tokenUrl: 'https://accounts.google.com/o/oauth2/token'
           scopes: *ref_0
   schemas:
-    ListTransferConfigsResponse:
-      description: The returned list of pipelines in the project.
-      properties:
-        nextPageToken:
-          readOnly: true
-          description: 'Output only. The next-pagination token. For multiple-page list results, this token can be used as the `ListTransferConfigsRequest.page_token` to request the next page of list results.'
-          type: string
-        transferConfigs:
-          readOnly: true
-          items:
-            $ref: '#/components/schemas/TransferConfig'
-          type: array
-          description: Output only. The stored pipeline transfer configurations.
-      id: ListTransferConfigsResponse
-      type: object
-    StartManualTransferRunsRequest:
-      id: StartManualTransferRunsRequest
-      type: object
-      properties:
-        requestedRunTime:
-          type: string
-          format: google-datetime
-          description: A run_time timestamp for historical data files or reports that are scheduled to be transferred by the scheduled transfer run. requested_run_time must be a past time and cannot include future time values.
-        requestedTimeRange:
-          $ref: '#/components/schemas/TimeRange'
-          description: A time_range start and end timestamp for historical data files or reports that are scheduled to be transferred by the scheduled transfer run. requested_time_range must be a past time and cannot include future time values.
-      description: A request to start manual transfer runs.
     TransferConfig:
-      type: object
       description: 'Represents a data transfer configuration. A transfer configuration contains all metadata needed to perform a data transfer. For example, `destination_dataset_id` specifies where data should be stored. When a new transfer configuration is created, the specified `destination_dataset_id` is created when needed and shared with the appropriate data source service account.'
       properties:
+        disabled:
+          type: boolean
+          description: 'Is this config disabled. When set to true, no runs are scheduled for a given transfer.'
+        nextRunTime:
+          readOnly: true
+          format: google-datetime
+          description: Output only. Next time when data transfer will run.
+          type: string
+        schedule:
+          type: string
+          description: 'Data transfer schedule. If the data source does not support a custom schedule, this should be empty. If it is empty, the default value for the data source will be used. The specified times are in UTC. Examples of valid format: `1st,3rd monday of month 15:30`, `every wed,fri of jan,jun 13:15`, and `first sunday of quarter 00:00`. See more explanation about the format here: https://cloud.google.com/appengine/docs/flexible/python/scheduling-jobs-with-cron-yaml#the_schedule_format NOTE: The minimum interval time between recurring transfers depends on the data source; refer to the documentation for your data source.'
+        ownerInfo:
+          $ref: '#/components/schemas/UserInfo'
+          readOnly: true
+          description: 'Output only. Information about the user whose credentials are used to transfer data. Populated only for `transferConfigs.get` requests. In case the user information is not available, this field will not be populated.'
         state:
+          readOnly: true
           enum:
             - TRANSFER_STATE_UNSPECIFIED
             - PENDING
@@ -80,351 +68,135 @@ components:
             - Data transfer completed successfully (4).
             - Data transfer failed (5).
             - Data transfer is cancelled (6).
-          readOnly: true
-          type: string
           description: Output only. State of the most recently updated transfer run.
-        disabled:
-          description: 'Is this config disabled. When set to true, no runs are scheduled for a given transfer.'
-          type: boolean
-        ownerInfo:
-          description: 'Output only. Information about the user whose credentials are used to transfer data. Populated only for `transferConfigs.get` requests. In case the user information is not available, this field will not be populated.'
-          $ref: '#/components/schemas/UserInfo'
-          readOnly: true
-        dataRefreshWindowDays:
-          type: integer
-          format: int32
-          description: 'The number of days to look back to automatically refresh the data. For example, if `data_refresh_window_days = 10`, then every day BigQuery reingests data for [today-10, today-1], rather than ingesting data for just [today-1]. Only valid if the data source supports the feature. Set the value to 0 to use the default value.'
+          type: string
+        emailPreferences:
+          description: Email notifications will be sent according to these preferences to the email address of the user who owns this transfer config.
+          $ref: '#/components/schemas/EmailPreferences'
         encryptionConfiguration:
-          $ref: '#/components/schemas/EncryptionConfiguration'
           description: 'The encryption configuration part. Currently, it is only used for the optional KMS key name. The BigQuery service account of your project must be granted permissions to use the key. Read methods will return the key name applied in effect. Write methods will apply the key if it is present, or otherwise try to apply project default keys if it is absent.'
-        userId:
-          type: string
-          format: int64
-          description: Deprecated. Unique ID of the user on whose behalf transfer is done.
+          $ref: '#/components/schemas/EncryptionConfiguration'
         updateTime:
-          type: string
           format: google-datetime
           description: Output only. Data transfer modification time. Ignored by server on input.
           readOnly: true
-        displayName:
           type: string
-          description: User specified display name for the data transfer.
+        dataRefreshWindowDays:
+          format: int32
+          type: integer
+          description: 'The number of days to look back to automatically refresh the data. For example, if `data_refresh_window_days = 10`, then every day BigQuery reingests data for [today-10, today-1], rather than ingesting data for just [today-1]. Only valid if the data source supports the feature. Set the value to 0 to use the default value.'
+        dataSourceId:
+          description: 'Data source ID. This cannot be changed once data transfer is created. The full list of available data source IDs can be returned through an API call: https://cloud.google.com/bigquery-transfer/docs/reference/datatransfer/rest/v1/projects.locations.dataSources/list'
+          type: string
+        notificationPubsubTopic:
+          type: string
+          description: 'Pub/Sub topic where notifications will be sent after transfer runs associated with this transfer config finish. The format for specifying a pubsub topic is: `projects/{project}/topics/{topic}`'
         datasetRegion:
           readOnly: true
-          type: string
           description: Output only. Region in which BigQuery dataset is located.
-        scheduleOptions:
-          description: Options customizing the data transfer schedule.
-          $ref: '#/components/schemas/ScheduleOptions'
-        notificationPubsubTopic:
-          description: 'Pub/Sub topic where notifications will be sent after transfer runs associated with this transfer config finish. The format for specifying a pubsub topic is: `projects/{project}/topics/{topic}`'
           type: string
-        dataSourceId:
-          type: string
-          description: 'Data source ID. This cannot be changed once data transfer is created. The full list of available data source IDs can be returned through an API call: https://cloud.google.com/bigquery-transfer/docs/reference/datatransfer/rest/v1/projects.locations.dataSources/list'
-        name:
-          type: string
-          description: 'The resource name of the transfer config. Transfer config names have the form `projects/{project_id}/locations/{region}/transferConfigs/{config_id}`. Where `config_id` is usually a uuid, even though it is not guaranteed or required. The name is ignored when creating a transfer config.'
         destinationDatasetId:
           type: string
           description: The BigQuery target dataset id.
-        emailPreferences:
-          $ref: '#/components/schemas/EmailPreferences'
-          description: Email notifications will be sent according to these preferences to the email address of the user who owns this transfer config.
-        schedule:
-          description: 'Data transfer schedule. If the data source does not support a custom schedule, this should be empty. If it is empty, the default value for the data source will be used. The specified times are in UTC. Examples of valid format: `1st,3rd monday of month 15:30`, `every wed,fri of jan,jun 13:15`, and `first sunday of quarter 00:00`. See more explanation about the format here: https://cloud.google.com/appengine/docs/flexible/python/scheduling-jobs-with-cron-yaml#the_schedule_format NOTE: The minimum interval time between recurring transfers depends on the data source; refer to the documentation for your data source.'
+        name:
           type: string
+          description: 'The resource name of the transfer config. Transfer config names have the form `projects/{project_id}/locations/{region}/transferConfigs/{config_id}`. Where `config_id` is usually a uuid, even though it is not guaranteed or required. The name is ignored when creating a transfer config.'
         params:
-          type: object
-          description: 'Parameters specific to each data source. For more information see the bq tab in the ''Setting up a data transfer'' section for each data source. For example the parameters for Cloud Storage transfers are listed here: https://cloud.google.com/bigquery-transfer/docs/cloud-storage-transfer#bq'
           additionalProperties:
             type: any
             description: Properties of the object.
-        nextRunTime:
+          description: 'Parameters specific to each data source. For more information see the bq tab in the ''Setting up a data transfer'' section for each data source. For example the parameters for Cloud Storage transfers are listed here: https://cloud.google.com/bigquery-transfer/docs/cloud-storage-transfer#bq'
+          type: object
+        displayName:
+          description: User specified display name for the data transfer.
+          type: string
+        userId:
+          description: Deprecated. Unique ID of the user on whose behalf transfer is done.
+          format: int64
+          type: string
+        scheduleOptions:
+          $ref: '#/components/schemas/ScheduleOptions'
+          description: Options customizing the data transfer schedule.
+      type: object
+      id: TransferConfig
+    CheckValidCredsRequest:
+      properties: {}
+      id: CheckValidCredsRequest
+      description: 'A request to determine whether the user has valid credentials. This method is used to limit the number of OAuth popups in the user interface. The user id is inferred from the API call context. If the data source has the Google+ authorization type, this method returns false, as it cannot be determined whether the credentials are already valid merely based on the user id.'
+      type: object
+    ScheduleOptions:
+      id: ScheduleOptions
+      type: object
+      description: Options customizing the data transfer schedule.
+      properties:
+        endTime:
           type: string
           format: google-datetime
-          readOnly: true
-          description: Output only. Next time when data transfer will run.
-      id: TransferConfig
-    CheckValidCredsResponse:
-      properties:
-        hasValidCreds:
-          description: 'If set to `true`, the credentials exist and are valid.'
+          description: Defines time to stop scheduling transfer runs. A transfer run cannot be scheduled at or after the end time. The end time can be changed at any moment. The time when a data transfer can be trigerred manually is not limited by this option.
+        disableAutoScheduling:
           type: boolean
-      id: CheckValidCredsResponse
-      description: A response indicating whether the credentials exist and are valid.
-      type: object
+          description: 'If true, automatic scheduling of data transfer runs for this configuration will be disabled. The runs can be started on ad-hoc basis using StartManualTransferRuns API. When automatic scheduling is disabled, the TransferConfig.schedule field will be ignored.'
+        startTime:
+          type: string
+          format: google-datetime
+          description: Specifies time to start scheduling transfer runs. The first run will be scheduled at or after the start time according to a recurrence pattern defined in the schedule string. The start time can be changed at any moment. The time when a data transfer can be trigerred manually is not limited by this option.
     ScheduleTransferRunsResponse:
-      type: object
-      id: ScheduleTransferRunsResponse
-      description: A response to schedule transfer runs for a time range.
       properties:
         runs:
-          description: The transfer runs that were scheduled.
           type: array
           items:
             $ref: '#/components/schemas/TransferRun'
-    ListTransferLogsResponse:
-      description: The returned list transfer run messages.
-      id: ListTransferLogsResponse
+          description: The transfer runs that were scheduled.
+      description: A response to schedule transfer runs for a time range.
       type: object
+      id: ScheduleTransferRunsResponse
+    StartManualTransferRunsResponse:
+      id: StartManualTransferRunsResponse
+      description: A response to start manual transfer runs.
+      properties:
+        runs:
+          items:
+            $ref: '#/components/schemas/TransferRun'
+          description: The transfer runs that were created.
+          type: array
+      type: object
+    ListTransferRunsResponse:
       properties:
         nextPageToken:
           type: string
+          description: 'Output only. The next-pagination token. For multiple-page list results, this token can be used as the `ListTransferRunsRequest.page_token` to request the next page of list results.'
           readOnly: true
-          description: 'Output only. The next-pagination token. For multiple-page list results, this token can be used as the `GetTransferRunLogRequest.page_token` to request the next page of list results.'
-        transferMessages:
-          items:
-            $ref: '#/components/schemas/TransferMessage'
-          description: Output only. The stored pipeline transfer messages.
+        transferRuns:
           readOnly: true
-          type: array
-    EncryptionConfiguration:
-      properties:
-        kmsKeyName:
-          type: string
-          description: The name of the KMS key used for encrypting BigQuery data.
-      id: EncryptionConfiguration
-      type: object
-      description: Represents the encryption configuration for a transfer.
-    TransferMessage:
-      type: object
-      properties:
-        messageText:
-          description: Message text.
-          type: string
-        severity:
-          enum:
-            - MESSAGE_SEVERITY_UNSPECIFIED
-            - INFO
-            - WARNING
-            - ERROR
-          enumDescriptions:
-            - No severity specified.
-            - Informational message.
-            - Warning message.
-            - Error message.
-          description: Message severity.
-          type: string
-        messageTime:
-          type: string
-          format: google-datetime
-          description: Time when message was logged.
-      id: TransferMessage
-      description: Represents a user facing message for a particular data transfer run.
-    EmailPreferences:
-      type: object
-      description: Represents preferences for sending email notifications for transfer run events.
-      properties:
-        enableFailureEmail:
-          description: 'If true, email notifications will be sent on transfer run failures.'
-          type: boolean
-      id: EmailPreferences
-    Location:
-      type: object
-      id: Location
-      properties:
-        name:
-          description: 'Resource name for the location, which may vary between implementations. For example: `"projects/example-project/locations/us-east1"`'
-          type: string
-        metadata:
-          additionalProperties:
-            type: any
-            description: Properties of the object. Contains field @type with type URL.
-          description: Service-specific metadata. For example the available capacity at the given location.
-          type: object
-        labels:
-          type: object
-          additionalProperties:
-            type: string
-          description: 'Cross-service attributes for the location. For example {"cloud.googleapis.com/region": "us-east1"}'
-        locationId:
-          type: string
-          description: 'The canonical id for this location. For example: `"us-east1"`.'
-        displayName:
-          type: string
-          description: 'The friendly name for this location, typically a nearby city name. For example, "Tokyo".'
-      description: A resource that represents a Google Cloud location.
-    Status:
-      id: Status
-      description: 'The `Status` type defines a logical error model that is suitable for different programming environments, including REST APIs and RPC APIs. It is used by [gRPC](https://github.com/grpc). Each `Status` message contains three pieces of data: error code, error message, and error details. You can find out more about this error model and how to work with it in the [API Design Guide](https://cloud.google.com/apis/design/errors).'
-      properties:
-        message:
-          description: 'A developer-facing error message, which should be in English. Any user-facing error message should be localized and sent in the google.rpc.Status.details field, or localized by the client.'
-          type: string
-        code:
-          type: integer
-          format: int32
-          description: 'The status code, which should be an enum value of google.rpc.Code.'
-        details:
-          items:
-            type: object
-            additionalProperties:
-              description: Properties of the object. Contains field @type with type URL.
-              type: any
-          description: A list of messages that carry the error details. There is a common set of message types for APIs to use.
-          type: array
-      type: object
-    Empty:
-      type: object
-      description: 'A generic empty message that you can re-use to avoid defining duplicated empty messages in your APIs. A typical example is to use it as the request or the response type of an API method. For instance: service Foo { rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty); }'
-      id: Empty
-      properties: {}
-    DataSource:
-      id: DataSource
-      properties:
-        defaultSchedule:
-          description: 'Default data transfer schedule. Examples of valid schedules include: `1st,3rd monday of month 15:30`, `every wed,fri of jan,jun 13:15`, and `first sunday of quarter 00:00`.'
-          type: string
-        authorizationType:
-          description: Indicates the type of authorization.
-          type: string
-          enumDescriptions:
-            - Type unspecified.
-            - Use OAuth 2 authorization codes that can be exchanged for a refresh token on the backend.
-            - Return an authorization code for a given Google+ page that can then be exchanged for a refresh token on the backend.
-            - Use First Party OAuth.
-          enum:
-            - AUTHORIZATION_TYPE_UNSPECIFIED
-            - AUTHORIZATION_CODE
-            - GOOGLE_PLUS_AUTHORIZATION_CODE
-            - FIRST_PARTY_OAUTH
-        supportsCustomSchedule:
-          type: boolean
-          description: 'Specifies whether the data source supports a user defined schedule, or operates on the default schedule. When set to `true`, user can override default schedule.'
-        parameters:
-          items:
-            $ref: '#/components/schemas/DataSourceParameter'
-          description: Data source parameters.
-          type: array
-        helpUrl:
-          type: string
-          description: Url for the help document for this data source.
-        scopes:
-          description: 'Api auth scopes for which refresh token needs to be obtained. These are scopes needed by a data source to prepare data and ingest them into BigQuery, e.g., https://www.googleapis.com/auth/bigquery'
+          description: Output only. The stored pipeline transfer runs.
           type: array
           items:
-            type: string
-        dataSourceId:
-          description: Data source id.
-          type: string
-        name:
-          description: Output only. Data source resource name.
-          type: string
-          readOnly: true
-        defaultDataRefreshWindowDays:
-          format: int32
-          description: Default data refresh window on days. Only meaningful when `data_refresh_type` = `SLIDING_WINDOW`.
-          type: integer
-        manualRunsDisabled:
-          type: boolean
-          description: Disables backfilling and manual run scheduling for the data source.
-        clientId:
-          description: Data source client id which should be used to receive refresh token.
-          type: string
-        description:
-          type: string
-          description: User friendly data source description string.
-        updateDeadlineSeconds:
-          type: integer
-          format: int32
-          description: The number of seconds to wait for an update from the data source before the Data Transfer Service marks the transfer as FAILED.
-        transferType:
-          enum:
-            - TRANSFER_TYPE_UNSPECIFIED
-            - BATCH
-            - STREAMING
-          type: string
-          deprecated: true
-          description: Deprecated. This field has no effect.
-          enumDescriptions:
-            - Invalid or Unknown transfer type placeholder.
-            - Batch data transfer.
-            - Streaming data transfer. Streaming data source currently doesn't support multiple transfer configs per project.
-        supportsMultipleTransfers:
-          description: Deprecated. This field has no effect.
-          deprecated: true
-          type: boolean
-        minimumScheduleInterval:
-          type: string
-          format: google-duration
-          description: The minimum interval for scheduler to schedule runs.
-        displayName:
-          description: User friendly data source name.
-          type: string
-        dataRefreshType:
-          description: 'Specifies whether the data source supports automatic data refresh for the past few days, and how it''s supported. For some data sources, data might not be complete until a few days later, so it''s useful to refresh data automatically.'
-          type: string
-          enum:
-            - DATA_REFRESH_TYPE_UNSPECIFIED
-            - SLIDING_WINDOW
-            - CUSTOM_SLIDING_WINDOW
-          enumDescriptions:
-            - 'The data source won''t support data auto refresh, which is default value.'
-            - 'The data source supports data auto refresh, and runs will be scheduled for the past few days. Does not allow custom values to be set for each transfer config.'
-            - 'The data source supports data auto refresh, and runs will be scheduled for the past few days. Allows custom values to be set for each transfer config.'
-      description: Defines the properties and custom parameters for a data source.
+            $ref: '#/components/schemas/TransferRun'
       type: object
-    UserInfo:
-      properties:
-        email:
-          description: E-mail address of the user.
-          type: string
-      type: object
-      description: Information about a user.
-      id: UserInfo
+      id: ListTransferRunsResponse
+      description: The returned list of pipelines in the project.
     DataSourceParameter:
       properties:
-        validationRegex:
-          description: Regular expression which can be used for parameter validation.
-          type: string
-        deprecated:
-          description: 'If true, it should not be used in new transfers, and it should not be visible to users.'
-          type: boolean
-        validationDescription:
-          type: string
-          description: 'Description of the requirements for this field, in case the user input does not fulfill the regex pattern or min/max values.'
-        validationHelpUrl:
-          type: string
-          description: URL to a help document to further explain the naming requirements.
         recurse:
-          description: Deprecated. This field has no effect.
-          type: boolean
-        repeated:
           type: boolean
           description: Deprecated. This field has no effect.
-        description:
-          description: Parameter description.
-          type: string
-        maxValue:
-          type: number
-          description: For integer and double values specifies maximum allowed value.
-          format: double
-        immutable:
-          type: boolean
-          description: Cannot be changed after initial creation.
-        minValue:
-          type: number
-          format: double
-          description: For integer and double values specifies minimum allowed value.
-        required:
-          description: Is parameter required.
-          type: boolean
-        fields:
-          items:
-            $ref: '#/components/schemas/DataSourceParameter'
-          description: Deprecated. This field has no effect.
-          type: array
-        paramId:
-          type: string
-          description: Parameter identifier.
         allowedValues:
+          description: All possible values for the parameter.
           type: array
           items:
             type: string
-          description: All possible values for the parameter.
+        validationDescription:
+          description: 'Description of the requirements for this field, in case the user input does not fulfill the regex pattern or min/max values.'
+          type: string
+        fields:
+          description: Deprecated. This field has no effect.
+          type: array
+          items:
+            $ref: '#/components/schemas/DataSourceParameter'
+        immutable:
+          description: Cannot be changed after initial creation.
+          type: boolean
         type:
-          description: Parameter type.
           type: string
           enumDescriptions:
             - Type unspecified.
@@ -435,6 +207,7 @@ components:
             - Deprecated. This field has no effect.
             - Page ID for a Google+ Page.
             - List of strings parameter.
+          description: Parameter type.
           enum:
             - TYPE_UNSPECIFIED
             - STRING
@@ -444,142 +217,141 @@ components:
             - RECORD
             - PLUS_PAGE
             - LIST
-        displayName:
+        validationRegex:
+          description: Regular expression which can be used for parameter validation.
           type: string
+        paramId:
+          description: Parameter identifier.
+          type: string
+        required:
+          description: Is parameter required.
+          type: boolean
+        maxValue:
+          format: double
+          type: number
+          description: For integer and double values specifies maximum allowed value.
+        validationHelpUrl:
+          description: URL to a help document to further explain the naming requirements.
+          type: string
+        displayName:
           description: Parameter display name in the user interface.
+          type: string
+        deprecated:
+          description: 'If true, it should not be used in new transfers, and it should not be visible to users.'
+          type: boolean
+        description:
+          type: string
+          description: Parameter description.
+        repeated:
+          description: Deprecated. This field has no effect.
+          type: boolean
+        minValue:
+          description: For integer and double values specifies minimum allowed value.
+          format: double
+          type: number
       type: object
       description: A parameter used to define custom fields in a data source definition.
       id: DataSourceParameter
     ListDataSourcesResponse:
-      description: Returns list of supported data sources and their metadata.
-      id: ListDataSourcesResponse
-      type: object
       properties:
         nextPageToken:
+          description: 'Output only. The next-pagination token. For multiple-page list results, this token can be used as the `ListDataSourcesRequest.page_token` to request the next page of list results.'
           type: string
           readOnly: true
-          description: 'Output only. The next-pagination token. For multiple-page list results, this token can be used as the `ListDataSourcesRequest.page_token` to request the next page of list results.'
         dataSources:
+          description: List of supported data sources and their transfer settings.
           type: array
           items:
             $ref: '#/components/schemas/DataSource'
-          description: List of supported data sources and their transfer settings.
-    CheckValidCredsRequest:
-      properties: {}
       type: object
-      id: CheckValidCredsRequest
-      description: 'A request to determine whether the user has valid credentials. This method is used to limit the number of OAuth popups in the user interface. The user id is inferred from the API call context. If the data source has the Google+ authorization type, this method returns false, as it cannot be determined whether the credentials are already valid merely based on the user id.'
-    TimeRange:
+      id: ListDataSourcesResponse
+      description: Returns list of supported data sources and their metadata.
+    UserInfo:
       type: object
-      description: 'A specification for a time range, this will request transfer runs with run_time between start_time (inclusive) and end_time (exclusive).'
+      description: Information about a user.
       properties:
-        endTime:
-          format: google-datetime
-          description: 'End time of the range of transfer runs. For example, `"2017-05-30T00:00:00+00:00"`. The end_time must not be in the future. Creates transfer runs where run_time is in the range between start_time (inclusive) and end_time (exclusive).'
+        email:
           type: string
-        startTime:
-          format: google-datetime
-          description: 'Start time of the range of transfer runs. For example, `"2017-05-25T00:00:00+00:00"`. The start_time must be strictly less than the end_time. Creates transfer runs where run_time is in the range between start_time (inclusive) and end_time (exclusive).'
-          type: string
-      id: TimeRange
-    ScheduleOptions:
-      type: object
-      id: ScheduleOptions
+          description: E-mail address of the user.
+      id: UserInfo
+    ListTransferLogsResponse:
       properties:
-        startTime:
+        nextPageToken:
+          description: 'Output only. The next-pagination token. For multiple-page list results, this token can be used as the `GetTransferRunLogRequest.page_token` to request the next page of list results.'
+          type: string
+          readOnly: true
+        transferMessages:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferMessage'
+          description: Output only. The stored pipeline transfer messages.
+      id: ListTransferLogsResponse
+      description: The returned list transfer run messages.
+      type: object
+    Status:
+      description: 'The `Status` type defines a logical error model that is suitable for different programming environments, including REST APIs and RPC APIs. It is used by [gRPC](https://github.com/grpc). Each `Status` message contains three pieces of data: error code, error message, and error details. You can find out more about this error model and how to work with it in the [API Design Guide](https://cloud.google.com/apis/design/errors).'
+      id: Status
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+          description: 'The status code, which should be an enum value of google.rpc.Code.'
+        message:
+          description: 'A developer-facing error message, which should be in English. Any user-facing error message should be localized and sent in the google.rpc.Status.details field, or localized by the client.'
+          type: string
+        details:
+          description: A list of messages that carry the error details. There is a common set of message types for APIs to use.
+          items:
+            additionalProperties:
+              description: Properties of the object. Contains field @type with type URL.
+              type: any
+            type: object
+          type: array
+    TransferMessage:
+      id: TransferMessage
+      description: Represents a user facing message for a particular data transfer run.
+      properties:
+        severity:
+          description: Message severity.
+          type: string
+          enum:
+            - MESSAGE_SEVERITY_UNSPECIFIED
+            - INFO
+            - WARNING
+            - ERROR
+          enumDescriptions:
+            - No severity specified.
+            - Informational message.
+            - Warning message.
+            - Error message.
+        messageTime:
+          description: Time when message was logged.
           format: google-datetime
           type: string
-          description: Specifies time to start scheduling transfer runs. The first run will be scheduled at or after the start time according to a recurrence pattern defined in the schedule string. The start time can be changed at any moment. The time when a data transfer can be trigerred manually is not limited by this option.
-        disableAutoScheduling:
+        messageText:
+          description: Message text.
+          type: string
+      type: object
+    CheckValidCredsResponse:
+      properties:
+        hasValidCreds:
+          description: 'If set to `true`, the credentials exist and are valid.'
           type: boolean
-          description: 'If true, automatic scheduling of data transfer runs for this configuration will be disabled. The runs can be started on ad-hoc basis using StartManualTransferRuns API. When automatic scheduling is disabled, the TransferConfig.schedule field will be ignored.'
-        endTime:
-          description: Defines time to stop scheduling transfer runs. A transfer run cannot be scheduled at or after the end time. The end time can be changed at any moment. The time when a data transfer can be trigerred manually is not limited by this option.
-          type: string
-          format: google-datetime
-      description: Options customizing the data transfer schedule.
-    EnrollDataSourcesRequest:
-      description: A request to enroll a set of data sources so they are visible in the BigQuery UI's `Transfer` tab.
-      id: EnrollDataSourcesRequest
       type: object
-      properties:
-        dataSourceIds:
-          type: array
-          items:
-            type: string
-          description: Data sources that are enrolled. It is required to provide at least one data source id.
-    ScheduleTransferRunsRequest:
-      type: object
-      description: A request to schedule transfer runs for a time range.
-      properties:
-        endTime:
-          type: string
-          format: google-datetime
-          description: 'Required. End time of the range of transfer runs. For example, `"2017-05-30T00:00:00+00:00"`.'
-        startTime:
-          format: google-datetime
-          description: 'Required. Start time of the range of transfer runs. For example, `"2017-05-25T00:00:00+00:00"`.'
-          type: string
-      id: ScheduleTransferRunsRequest
-    ListLocationsResponse:
-      properties:
-        nextPageToken:
-          type: string
-          description: The standard List next-page token.
-        locations:
-          items:
-            $ref: '#/components/schemas/Location'
-          type: array
-          description: A list of locations that matches the specified filter in the request.
-      id: ListLocationsResponse
-      type: object
-      description: The response message for Locations.ListLocations.
-    ListTransferRunsResponse:
-      id: ListTransferRunsResponse
-      properties:
-        nextPageToken:
-          readOnly: true
-          type: string
-          description: 'Output only. The next-pagination token. For multiple-page list results, this token can be used as the `ListTransferRunsRequest.page_token` to request the next page of list results.'
-        transferRuns:
-          type: array
-          description: Output only. The stored pipeline transfer runs.
-          readOnly: true
-          items:
-            $ref: '#/components/schemas/TransferRun'
-      description: The returned list of pipelines in the project.
-      type: object
+      description: A response indicating whether the credentials exist and are valid.
+      id: CheckValidCredsResponse
     TransferRun:
       id: TransferRun
       type: object
       properties:
-        destinationDatasetId:
-          readOnly: true
-          description: Output only. The BigQuery target dataset id.
+        userId:
+          format: int64
           type: string
-        errorStatus:
-          description: Status of the transfer run.
-          $ref: '#/components/schemas/Status'
-        endTime:
-          type: string
-          readOnly: true
-          description: Output only. Time when transfer run ended. Parameter ignored by server for input requests.
-          format: google-datetime
-        updateTime:
-          format: google-datetime
-          readOnly: true
-          description: Output only. Last time the data transfer run state was updated.
-          type: string
-        scheduleTime:
-          description: Minimum time after which a transfer run can be started.
-          format: google-datetime
-          type: string
-        emailPreferences:
-          description: Output only. Email notifications will be sent according to these preferences to the email address of the user who owns the transfer config this run was derived from.
-          $ref: '#/components/schemas/EmailPreferences'
-          readOnly: true
+          description: Deprecated. Unique ID of the user on whose behalf transfer is done.
         state:
-          type: string
+          description: Data transfer run state. Ignored for input requests.
           enum:
             - TRANSFER_STATE_UNSPECIFIED
             - PENDING
@@ -587,6 +359,7 @@ components:
             - SUCCEEDED
             - FAILED
             - CANCELLED
+          type: string
           enumDescriptions:
             - State placeholder (0).
             - Data transfer is scheduled and is waiting to be picked up by data transfer backend (2).
@@ -594,58 +367,306 @@ components:
             - Data transfer completed successfully (4).
             - Data transfer failed (5).
             - Data transfer is cancelled (6).
-          description: Data transfer run state. Ignored for input requests.
-        runTime:
-          description: 'For batch transfer runs, specifies the date and time of the data should be ingested.'
+        destinationDatasetId:
+          readOnly: true
+          type: string
+          description: Output only. The BigQuery target dataset id.
+        notificationPubsubTopic:
+          description: 'Output only. Pub/Sub topic where a notification will be sent after this transfer run finishes. The format for specifying a pubsub topic is: `projects/{project}/topics/{topic}`'
+          readOnly: true
+          type: string
+        errorStatus:
+          description: Status of the transfer run.
+          $ref: '#/components/schemas/Status'
+        emailPreferences:
+          readOnly: true
+          $ref: '#/components/schemas/EmailPreferences'
+          description: Output only. Email notifications will be sent according to these preferences to the email address of the user who owns the transfer config this run was derived from.
+        schedule:
+          type: string
+          description: 'Output only. Describes the schedule of this transfer run if it was created as part of a regular schedule. For batch transfer runs that are scheduled manually, this is empty. NOTE: the system might choose to delay the schedule depending on the current load, so `schedule_time` doesn''t always match this.'
+          readOnly: true
+        updateTime:
           type: string
           format: google-datetime
+          readOnly: true
+          description: Output only. Last time the data transfer run state was updated.
+        scheduleTime:
+          description: Minimum time after which a transfer run can be started.
+          type: string
+          format: google-datetime
+        name:
+          description: 'The resource name of the transfer run. Transfer run names have the form `projects/{project_id}/locations/{location}/transferConfigs/{config_id}/runs/{run_id}`. The name is ignored when creating a transfer run.'
+          type: string
+        startTime:
+          readOnly: true
+          format: google-datetime
+          type: string
+          description: Output only. Time when transfer run was started. Parameter ignored by server for input requests.
+        runTime:
+          type: string
+          description: 'For batch transfer runs, specifies the date and time of the data should be ingested.'
+          format: google-datetime
         params:
+          type: object
+          description: 'Output only. Parameters specific to each data source. For more information see the bq tab in the ''Setting up a data transfer'' section for each data source. For example the parameters for Cloud Storage transfers are listed here: https://cloud.google.com/bigquery-transfer/docs/cloud-storage-transfer#bq'
           additionalProperties:
             description: Properties of the object.
             type: any
           readOnly: true
-          type: object
-          description: 'Output only. Parameters specific to each data source. For more information see the bq tab in the ''Setting up a data transfer'' section for each data source. For example the parameters for Cloud Storage transfers are listed here: https://cloud.google.com/bigquery-transfer/docs/cloud-storage-transfer#bq'
-        schedule:
-          readOnly: true
-          type: string
-          description: 'Output only. Describes the schedule of this transfer run if it was created as part of a regular schedule. For batch transfer runs that are scheduled manually, this is empty. NOTE: the system might choose to delay the schedule depending on the current load, so `schedule_time` doesn''t always match this.'
         dataSourceId:
           description: Output only. Data source id.
           type: string
           readOnly: true
-        userId:
+        endTime:
+          readOnly: true
+          description: Output only. Time when transfer run ended. Parameter ignored by server for input requests.
           type: string
-          description: Deprecated. Unique ID of the user on whose behalf transfer is done.
-          format: int64
-        startTime:
+          format: google-datetime
+      description: Represents a data transfer run.
+    EncryptionConfiguration:
+      properties:
+        kmsKeyName:
+          type: string
+          description: The name of the KMS key used for encrypting BigQuery data.
+      id: EncryptionConfiguration
+      type: object
+      description: Represents the encryption configuration for a transfer.
+    EmailPreferences:
+      type: object
+      description: Represents preferences for sending email notifications for transfer run events.
+      id: EmailPreferences
+      properties:
+        enableFailureEmail:
+          description: 'If true, email notifications will be sent on transfer run failures.'
+          type: boolean
+    TimeRange:
+      properties:
+        endTime:
+          description: 'End time of the range of transfer runs. For example, `"2017-05-30T00:00:00+00:00"`. The end_time must not be in the future. Creates transfer runs where run_time is in the range between start_time (inclusive) and end_time (exclusive).'
           format: google-datetime
           type: string
+        startTime:
+          description: 'Start time of the range of transfer runs. For example, `"2017-05-25T00:00:00+00:00"`. The start_time must be strictly less than the end_time. Creates transfer runs where run_time is in the range between start_time (inclusive) and end_time (exclusive).'
+          format: google-datetime
+          type: string
+      id: TimeRange
+      type: object
+      description: 'A specification for a time range, this will request transfer runs with run_time between start_time (inclusive) and end_time (exclusive).'
+    ListTransferConfigsResponse:
+      type: object
+      properties:
+        transferConfigs:
+          type: array
+          description: Output only. The stored pipeline transfer configurations.
           readOnly: true
-          description: Output only. Time when transfer run was started. Parameter ignored by server for input requests.
+          items:
+            $ref: '#/components/schemas/TransferConfig'
+        nextPageToken:
+          description: 'Output only. The next-pagination token. For multiple-page list results, this token can be used as the `ListTransferConfigsRequest.page_token` to request the next page of list results.'
+          readOnly: true
+          type: string
+      description: The returned list of pipelines in the project.
+      id: ListTransferConfigsResponse
+    ScheduleTransferRunsRequest:
+      type: object
+      description: A request to schedule transfer runs for a time range.
+      properties:
+        endTime:
+          description: 'Required. End time of the range of transfer runs. For example, `"2017-05-30T00:00:00+00:00"`.'
+          format: google-datetime
+          type: string
+        startTime:
+          type: string
+          format: google-datetime
+          description: 'Required. Start time of the range of transfer runs. For example, `"2017-05-25T00:00:00+00:00"`.'
+      id: ScheduleTransferRunsRequest
+    Empty:
+      type: object
+      properties: {}
+      id: Empty
+      description: 'A generic empty message that you can re-use to avoid defining duplicated empty messages in your APIs. A typical example is to use it as the request or the response type of an API method. For instance: service Foo { rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty); }'
+    DataSource:
+      id: DataSource
+      description: Defines the properties and custom parameters for a data source.
+      type: object
+      properties:
+        manualRunsDisabled:
+          description: Disables backfilling and manual run scheduling for the data source.
+          type: boolean
+        transferType:
+          description: Deprecated. This field has no effect.
+          enum:
+            - TRANSFER_TYPE_UNSPECIFIED
+            - BATCH
+            - STREAMING
+          enumDescriptions:
+            - Invalid or Unknown transfer type placeholder.
+            - Batch data transfer.
+            - Streaming data transfer. Streaming data source currently doesn't support multiple transfer configs per project.
+          type: string
+          deprecated: true
+        displayName:
+          type: string
+          description: User friendly data source name.
+        helpUrl:
+          type: string
+          description: Url for the help document for this data source.
+        clientId:
+          type: string
+          description: Data source client id which should be used to receive refresh token.
+        minimumScheduleInterval:
+          type: string
+          format: google-duration
+          description: The minimum interval for scheduler to schedule runs.
+        dataSourceId:
+          type: string
+          description: Data source id.
+        name:
+          description: Output only. Data source resource name.
+          readOnly: true
+          type: string
+        defaultSchedule:
+          description: 'Default data transfer schedule. Examples of valid schedules include: `1st,3rd monday of month 15:30`, `every wed,fri of jan,jun 13:15`, and `first sunday of quarter 00:00`.'
+          type: string
+        supportsCustomSchedule:
+          type: boolean
+          description: 'Specifies whether the data source supports a user defined schedule, or operates on the default schedule. When set to `true`, user can override default schedule.'
+        dataRefreshType:
+          description: 'Specifies whether the data source supports automatic data refresh for the past few days, and how it''s supported. For some data sources, data might not be complete until a few days later, so it''s useful to refresh data automatically.'
+          enum:
+            - DATA_REFRESH_TYPE_UNSPECIFIED
+            - SLIDING_WINDOW
+            - CUSTOM_SLIDING_WINDOW
+          type: string
+          enumDescriptions:
+            - 'The data source won''t support data auto refresh, which is default value.'
+            - 'The data source supports data auto refresh, and runs will be scheduled for the past few days. Does not allow custom values to be set for each transfer config.'
+            - 'The data source supports data auto refresh, and runs will be scheduled for the past few days. Allows custom values to be set for each transfer config.'
+        updateDeadlineSeconds:
+          description: The number of seconds to wait for an update from the data source before the Data Transfer Service marks the transfer as FAILED.
+          format: int32
+          type: integer
+        authorizationType:
+          enum:
+            - AUTHORIZATION_TYPE_UNSPECIFIED
+            - AUTHORIZATION_CODE
+            - GOOGLE_PLUS_AUTHORIZATION_CODE
+            - FIRST_PARTY_OAUTH
+          enumDescriptions:
+            - Type unspecified.
+            - Use OAuth 2 authorization codes that can be exchanged for a refresh token on the backend.
+            - Return an authorization code for a given Google+ page that can then be exchanged for a refresh token on the backend.
+            - Use First Party OAuth.
+          type: string
+          description: Indicates the type of authorization.
+        supportsMultipleTransfers:
+          description: Deprecated. This field has no effect.
+          deprecated: true
+          type: boolean
+        defaultDataRefreshWindowDays:
+          description: Default data refresh window on days. Only meaningful when `data_refresh_type` = `SLIDING_WINDOW`.
+          type: integer
+          format: int32
+        parameters:
+          items:
+            $ref: '#/components/schemas/DataSourceParameter'
+          description: Data source parameters.
+          type: array
+        description:
+          type: string
+          description: User friendly data source description string.
+        scopes:
+          items:
+            type: string
+          description: 'Api auth scopes for which refresh token needs to be obtained. These are scopes needed by a data source to prepare data and ingest them into BigQuery, e.g., https://www.googleapis.com/auth/bigquery'
+          type: array
+    Location:
+      description: A resource that represents a Google Cloud location.
+      properties:
+        metadata:
+          type: object
+          additionalProperties:
+            description: Properties of the object. Contains field @type with type URL.
+            type: any
+          description: Service-specific metadata. For example the available capacity at the given location.
+        locationId:
+          type: string
+          description: 'The canonical id for this location. For example: `"us-east1"`.'
+        displayName:
+          type: string
+          description: 'The friendly name for this location, typically a nearby city name. For example, "Tokyo".'
         name:
           type: string
-          description: 'The resource name of the transfer run. Transfer run names have the form `projects/{project_id}/locations/{location}/transferConfigs/{config_id}/runs/{run_id}`. The name is ignored when creating a transfer run.'
-        notificationPubsubTopic:
-          type: string
-          description: 'Output only. Pub/Sub topic where a notification will be sent after this transfer run finishes. The format for specifying a pubsub topic is: `projects/{project}/topics/{topic}`'
-          readOnly: true
-      description: Represents a data transfer run.
-    StartManualTransferRunsResponse:
+          description: 'Resource name for the location, which may vary between implementations. For example: `"projects/example-project/locations/us-east1"`'
+        labels:
+          additionalProperties:
+            type: string
+          type: object
+          description: 'Cross-service attributes for the location. For example {"cloud.googleapis.com/region": "us-east1"}'
+      id: Location
+      type: object
+    ListLocationsResponse:
       properties:
-        runs:
+        nextPageToken:
+          description: The standard List next-page token.
+          type: string
+        locations:
+          description: A list of locations that matches the specified filter in the request.
           type: array
           items:
-            $ref: '#/components/schemas/TransferRun'
-          description: The transfer runs that were created.
-      description: A response to start manual transfer runs.
-      id: StartManualTransferRunsResponse
+            $ref: '#/components/schemas/Location'
+      id: ListLocationsResponse
       type: object
+      description: The response message for Locations.ListLocations.
+    EnrollDataSourcesRequest:
+      properties:
+        dataSourceIds:
+          items:
+            type: string
+          type: array
+          description: Data sources that are enrolled. It is required to provide at least one data source id.
+      description: A request to enroll a set of data sources so they are visible in the BigQuery UI's `Transfer` tab.
+      type: object
+      id: EnrollDataSourcesRequest
+    StartManualTransferRunsRequest:
+      description: A request to start manual transfer runs.
+      properties:
+        requestedTimeRange:
+          description: A time_range start and end timestamp for historical data files or reports that are scheduled to be transferred by the scheduled transfer run. requested_time_range must be a past time and cannot include future time values.
+          $ref: '#/components/schemas/TimeRange'
+        requestedRunTime:
+          description: A run_time timestamp for historical data files or reports that are scheduled to be transferred by the scheduled transfer run. requested_run_time must be a past time and cannot include future time values.
+          type: string
+          format: google-datetime
+      type: object
+      id: StartManualTransferRunsRequest
   parameters:
-    uploadType:
-      description: 'Legacy upload protocol for media (e.g. "media", "multipart").'
+    fields:
+      description: Selector specifying which fields to include in a partial response.
       in: query
-      name: uploadType
+      name: fields
+      schema:
+        type: string
+    _.xgafv:
+      description: V1 error format.
+      in: query
+      name: _.xgafv
+      schema:
+        type: string
+        enum:
+          - '1'
+          - '2'
+    prettyPrint:
+      description: Returns response with indentations and line breaks.
+      in: query
+      name: prettyPrint
+      schema:
+        type: boolean
+    quotaUser:
+      description: 'Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.'
+      in: query
+      name: quotaUser
       schema:
         type: string
     alt:
@@ -658,43 +679,28 @@ components:
           - json
           - media
           - proto
-    access_token:
-      description: OAuth access token.
+    key:
+      description: 'API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.'
       in: query
-      name: access_token
+      name: key
       schema:
         type: string
-    prettyPrint:
-      description: Returns response with indentations and line breaks.
-      in: query
-      name: prettyPrint
-      schema:
-        type: boolean
-    _.xgafv:
-      description: V1 error format.
-      in: query
-      name: _.xgafv
-      schema:
-        type: string
-        enum:
-          - '1'
-          - '2'
     oauth_token:
       description: OAuth 2.0 token for the current user.
       in: query
       name: oauth_token
       schema:
         type: string
-    callback:
-      description: JSONP
+    uploadType:
+      description: 'Legacy upload protocol for media (e.g. "media", "multipart").'
       in: query
-      name: callback
+      name: uploadType
       schema:
         type: string
-    key:
-      description: 'API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.'
+    access_token:
+      description: OAuth access token.
       in: query
-      name: key
+      name: access_token
       schema:
         type: string
     upload_protocol:
@@ -703,30 +709,82 @@ components:
       name: upload_protocol
       schema:
         type: string
-    quotaUser:
-      description: 'Available to use for quota purposes for server-side applications. Can be any arbitrary string assigned to a user, but should not exceed 40 characters.'
+    callback:
+      description: JSONP
       in: query
-      name: quotaUser
-      schema:
-        type: string
-    fields:
-      description: Selector specifying which fields to include in a partial response.
-      in: query
-      name: fields
+      name: callback
       schema:
         type: string
   x-stackQL-resources:
+    data_sources:
+      id: google.bigquerydatatransfer.data_sources
+      name: data_sources
+      title: Data Sources
+      methods:
+        projects_data_sources_check_valid_creds:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1dataSources~1{dataSourcesId}:checkValidCreds/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        projects_data_sources_list:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1dataSources/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.dataSources
+        _projects_data_sources_list:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1dataSources/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        projects_data_sources_get:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1dataSources~1{dataSourcesId}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        projects_locations_data_sources_list:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataSources/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.dataSources
+        _projects_locations_data_sources_list:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataSources/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        projects_locations_data_sources_get:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataSources~1{dataSourcesId}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        projects_locations_data_sources_check_valid_creds:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataSources~1{dataSourcesId}:checkValidCreds/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/data_sources/methods/projects_data_sources_list'
+          - $ref: '#/components/x-stackQL-resources/data_sources/methods/projects_data_sources_get'
+          - $ref: '#/components/x-stackQL-resources/data_sources/methods/projects_locations_data_sources_list'
+          - $ref: '#/components/x-stackQL-resources/data_sources/methods/projects_locations_data_sources_get'
+        insert: []
+        update: []
+        delete: []
     transfer_configs:
       id: google.bigquerydatatransfer.transfer_configs
       name: transfer_configs
       title: Transfer Configs
       methods:
-        projects_transfer_configs_start_manual_runs:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1transferConfigs~1{transferConfigsId}:startManualRuns/post'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
         projects_transfer_configs_create:
           operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1transferConfigs/post'
@@ -752,21 +810,33 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        projects_transfer_configs_patch:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1transferConfigs~1{transferConfigsId}/patch'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
         projects_transfer_configs_get:
           operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1transferConfigs~1{transferConfigsId}/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        projects_transfer_configs_patch:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1transferConfigs~1{transferConfigsId}/patch'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        projects_transfer_configs_start_manual_runs:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1transferConfigs~1{transferConfigsId}:startManualRuns/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
         projects_transfer_configs_schedule_runs:
           operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1transferConfigs~1{transferConfigsId}:scheduleRuns/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        projects_locations_transfer_configs_schedule_runs:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1transferConfigs~1{transferConfigsId}:scheduleRuns/post'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -785,12 +855,6 @@ components:
         projects_locations_transfer_configs_patch:
           operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1transferConfigs~1{transferConfigsId}/patch'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        projects_locations_transfer_configs_schedule_runs:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1transferConfigs~1{transferConfigsId}:scheduleRuns/post'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -832,6 +896,44 @@ components:
         delete:
           - $ref: '#/components/x-stackQL-resources/transfer_configs/methods/projects_transfer_configs_delete'
           - $ref: '#/components/x-stackQL-resources/transfer_configs/methods/projects_locations_transfer_configs_delete'
+    transfer_logs:
+      id: google.bigquerydatatransfer.transfer_logs
+      name: transfer_logs
+      title: Transfer Logs
+      methods:
+        projects_transfer_configs_runs_transfer_logs_list:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1transferConfigs~1{transferConfigsId}~1runs~1{runsId}~1transferLogs/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.transferMessages
+        _projects_transfer_configs_runs_transfer_logs_list:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1transferConfigs~1{transferConfigsId}~1runs~1{runsId}~1transferLogs/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        projects_locations_transfer_configs_runs_transfer_logs_list:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1transferConfigs~1{transferConfigsId}~1runs~1{runsId}~1transferLogs/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.transferMessages
+        _projects_locations_transfer_configs_runs_transfer_logs_list:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1transferConfigs~1{transferConfigsId}~1runs~1{runsId}~1transferLogs/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/transfer_logs/methods/projects_transfer_configs_runs_transfer_logs_list'
+          - $ref: '#/components/x-stackQL-resources/transfer_logs/methods/projects_locations_transfer_configs_runs_transfer_logs_list'
+        insert: []
+        update: []
+        delete: []
     runs:
       id: google.bigquerydatatransfer.runs
       name: runs
@@ -898,116 +1000,14 @@ components:
         delete:
           - $ref: '#/components/x-stackQL-resources/runs/methods/projects_transfer_configs_runs_delete'
           - $ref: '#/components/x-stackQL-resources/runs/methods/projects_locations_transfer_configs_runs_delete'
-    transfer_logs:
-      id: google.bigquerydatatransfer.transfer_logs
-      name: transfer_logs
-      title: Transfer Logs
-      methods:
-        projects_transfer_configs_runs_transfer_logs_list:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1transferConfigs~1{transferConfigsId}~1runs~1{runsId}~1transferLogs/get'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-            objectKey: $.transferMessages
-        _projects_transfer_configs_runs_transfer_logs_list:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1transferConfigs~1{transferConfigsId}~1runs~1{runsId}~1transferLogs/get'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        projects_locations_transfer_configs_runs_transfer_logs_list:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1transferConfigs~1{transferConfigsId}~1runs~1{runsId}~1transferLogs/get'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-            objectKey: $.transferMessages
-        _projects_locations_transfer_configs_runs_transfer_logs_list:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1transferConfigs~1{transferConfigsId}~1runs~1{runsId}~1transferLogs/get'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
-        select:
-          - $ref: '#/components/x-stackQL-resources/transfer_logs/methods/projects_transfer_configs_runs_transfer_logs_list'
-          - $ref: '#/components/x-stackQL-resources/transfer_logs/methods/projects_locations_transfer_configs_runs_transfer_logs_list'
-        insert: []
-        update: []
-        delete: []
-    data_sources:
-      id: google.bigquerydatatransfer.data_sources
-      name: data_sources
-      title: Data Sources
-      methods:
-        projects_data_sources_get:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1dataSources~1{dataSourcesId}/get'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        projects_data_sources_list:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1dataSources/get'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-            objectKey: $.dataSources
-        _projects_data_sources_list:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1dataSources/get'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        projects_data_sources_check_valid_creds:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1dataSources~1{dataSourcesId}:checkValidCreds/post'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        projects_locations_data_sources_check_valid_creds:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataSources~1{dataSourcesId}:checkValidCreds/post'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        projects_locations_data_sources_get:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataSources~1{dataSourcesId}/get'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        projects_locations_data_sources_list:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataSources/get'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-            objectKey: $.dataSources
-        _projects_locations_data_sources_list:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataSources/get'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
-        select:
-          - $ref: '#/components/x-stackQL-resources/data_sources/methods/projects_data_sources_get'
-          - $ref: '#/components/x-stackQL-resources/data_sources/methods/projects_data_sources_list'
-          - $ref: '#/components/x-stackQL-resources/data_sources/methods/projects_locations_data_sources_get'
-          - $ref: '#/components/x-stackQL-resources/data_sources/methods/projects_locations_data_sources_list'
-        insert: []
-        update: []
-        delete: []
     locations:
       id: google.bigquerydatatransfer.locations
       name: locations
       title: Locations
       methods:
-        projects_locations_get:
+        projects_locations_enroll_data_sources:
           operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}/get'
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}:enrollDataSources/post'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1024,16 +1024,16 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        projects_locations_enroll_data_sources:
+        projects_locations_get:
           operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}:enrollDataSources/post'
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/locations/methods/projects_locations_get'
           - $ref: '#/components/x-stackQL-resources/locations/methods/projects_locations_list'
+          - $ref: '#/components/x-stackQL-resources/locations/methods/projects_locations_get'
         insert: []
         update: []
         delete: []
@@ -1054,27 +1054,27 @@ components:
         update: []
         delete: []
 paths:
-  '/v1/projects/{projectsId}/transferConfigs/{transferConfigsId}:startManualRuns':
+  '/v1/projects/{projectsId}/dataSources/{dataSourcesId}:checkValidCreds':
     parameters: &ref_1
-      - $ref: '#/components/parameters/uploadType'
-      - $ref: '#/components/parameters/alt'
-      - $ref: '#/components/parameters/access_token'
-      - $ref: '#/components/parameters/prettyPrint'
-      - $ref: '#/components/parameters/_.xgafv'
-      - $ref: '#/components/parameters/oauth_token'
-      - $ref: '#/components/parameters/callback'
-      - $ref: '#/components/parameters/key'
-      - $ref: '#/components/parameters/upload_protocol'
-      - $ref: '#/components/parameters/quotaUser'
       - $ref: '#/components/parameters/fields'
+      - $ref: '#/components/parameters/_.xgafv'
+      - $ref: '#/components/parameters/prettyPrint'
+      - $ref: '#/components/parameters/quotaUser'
+      - $ref: '#/components/parameters/alt'
+      - $ref: '#/components/parameters/key'
+      - $ref: '#/components/parameters/oauth_token'
+      - $ref: '#/components/parameters/uploadType'
+      - $ref: '#/components/parameters/access_token'
+      - $ref: '#/components/parameters/upload_protocol'
+      - $ref: '#/components/parameters/callback'
     post:
-      description: 'Start manual transfer runs to be executed now with schedule_time equal to current time. The transfer runs can be created for a time range where the run_time is between start_time (inclusive) and end_time (exclusive), or for a specific run_time.'
-      operationId: bigquerydatatransfer.projects.transferConfigs.startManualRuns
+      description: Returns true if valid credentials exist for the given data source and requesting user.
+      operationId: bigquerydatatransfer.projects.dataSources.checkValidCreds
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/StartManualTransferRunsRequest'
+              $ref: '#/components/schemas/CheckValidCredsRequest'
       security:
         - Oauth2:
             - 'https://www.googleapis.com/auth/bigquery'
@@ -1084,13 +1084,17 @@ paths:
             - 'https://www.googleapis.com/auth/cloud-platform'
           Oauth2c:
             - 'https://www.googleapis.com/auth/cloud-platform'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
       responses:
         '200':
           description: Successful response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StartManualTransferRunsResponse'
+                $ref: '#/components/schemas/CheckValidCredsResponse'
       parameters:
         - in: path
           name: projectsId
@@ -1098,13 +1102,95 @@ paths:
           schema:
             type: string
         - in: path
-          name: transferConfigsId
+          name: dataSourcesId
           required: true
           schema:
             type: string
-      x-stackQL-resource: transfer_configs
-      x-stackQL-method: projects_transfer_configs_start_manual_runs
+      x-stackQL-resource: data_sources
+      x-stackQL-method: projects_data_sources_check_valid_creds
       x-stackQL-verb: exec
+  '/v1/projects/{projectsId}/dataSources':
+    parameters: *ref_1
+    get:
+      description: Lists supported data sources and returns their settings.
+      operationId: bigquerydatatransfer.projects.dataSources.list
+      security:
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/bigquery'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/bigquery'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListDataSourcesResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+      x-stackQL-resource: data_sources
+      x-stackQL-method: projects_data_sources_list
+      x-stackQL-verb: select
+      x-stackQL-objectKey: $.dataSources
+  '/v1/projects/{projectsId}/dataSources/{dataSourcesId}':
+    parameters: *ref_1
+    get:
+      description: Retrieves a supported data source and returns its settings.
+      operationId: bigquerydatatransfer.projects.dataSources.get
+      security:
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/bigquery'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/bigquery'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSource'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: dataSourcesId
+          required: true
+          schema:
+            type: string
+      x-stackQL-resource: data_sources
+      x-stackQL-method: projects_data_sources_get
+      x-stackQL-verb: select
   '/v1/projects/{projectsId}/transferConfigs':
     parameters: *ref_1
     post:
@@ -1228,56 +1314,6 @@ paths:
       x-stackQL-resource: transfer_configs
       x-stackQL-method: projects_transfer_configs_delete
       x-stackQL-verb: delete
-    patch:
-      description: 'Updates a data transfer configuration. All fields must be set, even if they are not updated.'
-      operationId: bigquerydatatransfer.projects.transferConfigs.patch
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TransferConfig'
-      security:
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TransferConfig'
-      parameters:
-        - in: path
-          name: projectsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: transferConfigsId
-          required: true
-          schema:
-            type: string
-        - in: query
-          name: updateMask
-          schema:
-            type: string
-        - in: query
-          name: authorizationCode
-          schema:
-            type: string
-        - in: query
-          name: serviceAccountName
-          schema:
-            type: string
-        - in: query
-          name: versionInfo
-          schema:
-            type: string
-      x-stackQL-resource: transfer_configs
-      x-stackQL-method: projects_transfer_configs_patch
-      x-stackQL-verb: exec
     get:
       description: Returns information about a data transfer config.
       operationId: bigquerydatatransfer.projects.transferConfigs.get
@@ -1315,6 +1351,96 @@ paths:
       x-stackQL-resource: transfer_configs
       x-stackQL-method: projects_transfer_configs_get
       x-stackQL-verb: select
+    patch:
+      description: 'Updates a data transfer configuration. All fields must be set, even if they are not updated.'
+      operationId: bigquerydatatransfer.projects.transferConfigs.patch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferConfig'
+      security:
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferConfig'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: transferConfigsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: serviceAccountName
+          schema:
+            type: string
+        - in: query
+          name: authorizationCode
+          schema:
+            type: string
+        - in: query
+          name: versionInfo
+          schema:
+            type: string
+        - in: query
+          name: updateMask
+          schema:
+            type: string
+      x-stackQL-resource: transfer_configs
+      x-stackQL-method: projects_transfer_configs_patch
+      x-stackQL-verb: exec
+  '/v1/projects/{projectsId}/transferConfigs/{transferConfigsId}:startManualRuns':
+    parameters: *ref_1
+    post:
+      description: 'Start manual transfer runs to be executed now with schedule_time equal to current time. The transfer runs can be created for a time range where the run_time is between start_time (inclusive) and end_time (exclusive), or for a specific run_time.'
+      operationId: bigquerydatatransfer.projects.transferConfigs.startManualRuns
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartManualTransferRunsRequest'
+      security:
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/bigquery'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/bigquery'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartManualTransferRunsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: transferConfigsId
+          required: true
+          schema:
+            type: string
+      x-stackQL-resource: transfer_configs
+      x-stackQL-method: projects_transfer_configs_start_manual_runs
+      x-stackQL-verb: exec
   '/v1/projects/{projectsId}/transferConfigs/{transferConfigsId}:scheduleRuns':
     parameters: *ref_1
     post:
@@ -1355,6 +1481,63 @@ paths:
       x-stackQL-resource: transfer_configs
       x-stackQL-method: projects_transfer_configs_schedule_runs
       x-stackQL-verb: exec
+  '/v1/projects/{projectsId}/transferConfigs/{transferConfigsId}/runs/{runsId}/transferLogs':
+    parameters: *ref_1
+    get:
+      description: Returns log messages for the transfer run.
+      operationId: bigquerydatatransfer.projects.transferConfigs.runs.transferLogs.list
+      security:
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/bigquery'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/bigquery'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListTransferLogsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: transferConfigsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: runsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+        - in: query
+          name: messageTypes
+          schema:
+            type: string
+      x-stackQL-resource: transfer_logs
+      x-stackQL-method: projects_transfer_configs_runs_transfer_logs_list
+      x-stackQL-verb: select
+      x-stackQL-objectKey: $.transferMessages
   '/v1/projects/{projectsId}/transferConfigs/{transferConfigsId}/runs/{runsId}':
     parameters: *ref_1
     delete:
@@ -1474,30 +1657,70 @@ paths:
           schema:
             type: string
         - in: query
+          name: runAttempt
+          schema:
+            type: string
+        - in: query
           name: pageSize
           schema:
             type: integer
         - in: query
-          name: runAttempt
+          name: pageToken
           schema:
             type: string
         - in: query
           name: states
           schema:
             type: string
-        - in: query
-          name: pageToken
-          schema:
-            type: string
       x-stackQL-resource: runs
       x-stackQL-method: projects_transfer_configs_runs_list
       x-stackQL-verb: select
       x-stackQL-objectKey: $.transferRuns
-  '/v1/projects/{projectsId}/transferConfigs/{transferConfigsId}/runs/{runsId}/transferLogs':
+  '/v1/projects/{projectsId}/locations/{locationsId}:enrollDataSources':
+    parameters: *ref_1
+    post:
+      description: 'Enroll data sources in a user project. This allows users to create transfer configurations for these data sources. They will also appear in the ListDataSources RPC and as such, will appear in the [BigQuery UI](https://console.cloud.google.com/bigquery), and the documents can be found in the public guide for [BigQuery Web UI](https://cloud.google.com/bigquery/bigquery-web-ui) and [Data Transfer Service](https://cloud.google.com/bigquery/docs/working-with-transfers).'
+      operationId: bigquerydatatransfer.projects.locations.enrollDataSources
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnrollDataSourcesRequest'
+      security:
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/bigquery'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/bigquery'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Empty'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+      x-stackQL-resource: locations
+      x-stackQL-method: projects_locations_enroll_data_sources
+      x-stackQL-verb: exec
+  '/v1/projects/{projectsId}/locations':
     parameters: *ref_1
     get:
-      description: Returns log messages for the transfer run.
-      operationId: bigquerydatatransfer.projects.transferConfigs.runs.transferLogs.list
+      description: Lists information about the supported locations for this service.
+      operationId: bigquerydatatransfer.projects.locations.list
       security:
         - Oauth2:
             - 'https://www.googleapis.com/auth/bigquery'
@@ -1517,20 +1740,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ListTransferLogsResponse'
+                $ref: '#/components/schemas/ListLocationsResponse'
       parameters:
         - in: path
           name: projectsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: transferConfigsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: runsId
           required: true
           schema:
             type: string
@@ -1543,18 +1756,105 @@ paths:
           schema:
             type: integer
         - in: query
-          name: messageTypes
+          name: filter
           schema:
             type: string
-      x-stackQL-resource: transfer_logs
-      x-stackQL-method: projects_transfer_configs_runs_transfer_logs_list
+      x-stackQL-resource: locations
+      x-stackQL-method: projects_locations_list
       x-stackQL-verb: select
-      x-stackQL-objectKey: $.transferMessages
-  '/v1/projects/{projectsId}/dataSources/{dataSourcesId}':
+      x-stackQL-objectKey: $.locations
+  '/v1/projects/{projectsId}/locations/{locationsId}':
+    parameters: *ref_1
+    get:
+      description: Gets information about a location.
+      operationId: bigquerydatatransfer.projects.locations.get
+      security:
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/bigquery'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/bigquery'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Location'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+      x-stackQL-resource: locations
+      x-stackQL-method: projects_locations_get
+      x-stackQL-verb: select
+  '/v1/projects/{projectsId}/locations/{locationsId}/dataSources':
+    parameters: *ref_1
+    get:
+      description: Lists supported data sources and returns their settings.
+      operationId: bigquerydatatransfer.projects.locations.dataSources.list
+      security:
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/bigquery'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/bigquery'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListDataSourcesResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+      x-stackQL-resource: data_sources
+      x-stackQL-method: projects_locations_data_sources_list
+      x-stackQL-verb: select
+      x-stackQL-objectKey: $.dataSources
+  '/v1/projects/{projectsId}/locations/{locationsId}/dataSources/{dataSourcesId}':
     parameters: *ref_1
     get:
       description: Retrieves a supported data source and returns its settings.
-      operationId: bigquerydatatransfer.projects.dataSources.get
+      operationId: bigquerydatatransfer.projects.locations.dataSources.get
       security:
         - Oauth2:
             - 'https://www.googleapis.com/auth/bigquery'
@@ -1582,89 +1882,7 @@ paths:
           schema:
             type: string
         - in: path
-          name: dataSourcesId
-          required: true
-          schema:
-            type: string
-      x-stackQL-resource: data_sources
-      x-stackQL-method: projects_data_sources_get
-      x-stackQL-verb: select
-  '/v1/projects/{projectsId}/dataSources':
-    parameters: *ref_1
-    get:
-      description: Lists supported data sources and returns their settings.
-      operationId: bigquerydatatransfer.projects.dataSources.list
-      security:
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/bigquery'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/bigquery'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListDataSourcesResponse'
-      parameters:
-        - in: path
-          name: projectsId
-          required: true
-          schema:
-            type: string
-        - in: query
-          name: pageSize
-          schema:
-            type: integer
-        - in: query
-          name: pageToken
-          schema:
-            type: string
-      x-stackQL-resource: data_sources
-      x-stackQL-method: projects_data_sources_list
-      x-stackQL-verb: select
-      x-stackQL-objectKey: $.dataSources
-  '/v1/projects/{projectsId}/dataSources/{dataSourcesId}:checkValidCreds':
-    parameters: *ref_1
-    post:
-      description: Returns true if valid credentials exist for the given data source and requesting user.
-      operationId: bigquerydatatransfer.projects.dataSources.checkValidCreds
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CheckValidCredsRequest'
-      security:
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/bigquery'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/bigquery'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CheckValidCredsResponse'
-      parameters:
-        - in: path
-          name: projectsId
+          name: locationsId
           required: true
           schema:
             type: string
@@ -1674,8 +1892,8 @@ paths:
           schema:
             type: string
       x-stackQL-resource: data_sources
-      x-stackQL-method: projects_data_sources_check_valid_creds
-      x-stackQL-verb: exec
+      x-stackQL-method: projects_locations_data_sources_get
+      x-stackQL-verb: select
   '/v1/projects/{projectsId}/locations/{locationsId}/dataSources/{dataSourcesId}:checkValidCreds':
     parameters: *ref_1
     post:
@@ -1725,423 +1943,6 @@ paths:
       x-stackQL-resource: data_sources
       x-stackQL-method: projects_locations_data_sources_check_valid_creds
       x-stackQL-verb: exec
-  '/v1/projects/{projectsId}/locations/{locationsId}/dataSources/{dataSourcesId}':
-    parameters: *ref_1
-    get:
-      description: Retrieves a supported data source and returns its settings.
-      operationId: bigquerydatatransfer.projects.locations.dataSources.get
-      security:
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/bigquery'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/bigquery'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DataSource'
-      parameters:
-        - in: path
-          name: projectsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: locationsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: dataSourcesId
-          required: true
-          schema:
-            type: string
-      x-stackQL-resource: data_sources
-      x-stackQL-method: projects_locations_data_sources_get
-      x-stackQL-verb: select
-  '/v1/projects/{projectsId}/locations/{locationsId}/dataSources':
-    parameters: *ref_1
-    get:
-      description: Lists supported data sources and returns their settings.
-      operationId: bigquerydatatransfer.projects.locations.dataSources.list
-      security:
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/bigquery'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/bigquery'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListDataSourcesResponse'
-      parameters:
-        - in: path
-          name: projectsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: locationsId
-          required: true
-          schema:
-            type: string
-        - in: query
-          name: pageSize
-          schema:
-            type: integer
-        - in: query
-          name: pageToken
-          schema:
-            type: string
-      x-stackQL-resource: data_sources
-      x-stackQL-method: projects_locations_data_sources_list
-      x-stackQL-verb: select
-      x-stackQL-objectKey: $.dataSources
-  '/v1/projects/{projectsId}/locations/{locationsId}/transferConfigs/{transferConfigsId}':
-    parameters: *ref_1
-    delete:
-      description: 'Deletes a data transfer configuration, including any associated transfer runs and logs.'
-      operationId: bigquerydatatransfer.projects.locations.transferConfigs.delete
-      security:
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/bigquery'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/bigquery'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Empty'
-      parameters:
-        - in: path
-          name: projectsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: locationsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: transferConfigsId
-          required: true
-          schema:
-            type: string
-      x-stackQL-resource: transfer_configs
-      x-stackQL-method: projects_locations_transfer_configs_delete
-      x-stackQL-verb: delete
-    get:
-      description: Returns information about a data transfer config.
-      operationId: bigquerydatatransfer.projects.locations.transferConfigs.get
-      security:
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/bigquery'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/bigquery'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TransferConfig'
-      parameters:
-        - in: path
-          name: projectsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: locationsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: transferConfigsId
-          required: true
-          schema:
-            type: string
-      x-stackQL-resource: transfer_configs
-      x-stackQL-method: projects_locations_transfer_configs_get
-      x-stackQL-verb: select
-    patch:
-      description: 'Updates a data transfer configuration. All fields must be set, even if they are not updated.'
-      operationId: bigquerydatatransfer.projects.locations.transferConfigs.patch
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TransferConfig'
-      security:
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TransferConfig'
-      parameters:
-        - in: path
-          name: projectsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: locationsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: transferConfigsId
-          required: true
-          schema:
-            type: string
-        - in: query
-          name: updateMask
-          schema:
-            type: string
-        - in: query
-          name: serviceAccountName
-          schema:
-            type: string
-        - in: query
-          name: versionInfo
-          schema:
-            type: string
-        - in: query
-          name: authorizationCode
-          schema:
-            type: string
-      x-stackQL-resource: transfer_configs
-      x-stackQL-method: projects_locations_transfer_configs_patch
-      x-stackQL-verb: exec
-  '/v1/projects/{projectsId}/locations/{locationsId}/transferConfigs/{transferConfigsId}:scheduleRuns':
-    parameters: *ref_1
-    post:
-      description: 'Creates transfer runs for a time range [start_time, end_time]. For each date - or whatever granularity the data source supports - in the range, one transfer run is created. Note that runs are created per UTC time in the time range. DEPRECATED: use StartManualTransferRuns instead.'
-      operationId: bigquerydatatransfer.projects.locations.transferConfigs.scheduleRuns
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ScheduleTransferRunsRequest'
-      security:
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/bigquery'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/bigquery'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ScheduleTransferRunsResponse'
-      parameters:
-        - in: path
-          name: projectsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: locationsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: transferConfigsId
-          required: true
-          schema:
-            type: string
-      x-stackQL-resource: transfer_configs
-      x-stackQL-method: projects_locations_transfer_configs_schedule_runs
-      x-stackQL-verb: exec
-  '/v1/projects/{projectsId}/locations/{locationsId}/transferConfigs/{transferConfigsId}:startManualRuns':
-    parameters: *ref_1
-    post:
-      description: 'Start manual transfer runs to be executed now with schedule_time equal to current time. The transfer runs can be created for a time range where the run_time is between start_time (inclusive) and end_time (exclusive), or for a specific run_time.'
-      operationId: bigquerydatatransfer.projects.locations.transferConfigs.startManualRuns
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/StartManualTransferRunsRequest'
-      security:
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/bigquery'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/bigquery'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StartManualTransferRunsResponse'
-      parameters:
-        - in: path
-          name: projectsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: locationsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: transferConfigsId
-          required: true
-          schema:
-            type: string
-      x-stackQL-resource: transfer_configs
-      x-stackQL-method: projects_locations_transfer_configs_start_manual_runs
-      x-stackQL-verb: exec
-  '/v1/projects/{projectsId}/locations/{locationsId}/transferConfigs':
-    parameters: *ref_1
-    post:
-      description: Creates a new data transfer configuration.
-      operationId: bigquerydatatransfer.projects.locations.transferConfigs.create
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TransferConfig'
-      security:
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TransferConfig'
-      parameters:
-        - in: path
-          name: projectsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: locationsId
-          required: true
-          schema:
-            type: string
-        - in: query
-          name: serviceAccountName
-          schema:
-            type: string
-        - in: query
-          name: versionInfo
-          schema:
-            type: string
-        - in: query
-          name: authorizationCode
-          schema:
-            type: string
-      x-stackQL-resource: transfer_configs
-      x-stackQL-method: projects_locations_transfer_configs_create
-      x-stackQL-verb: insert
-    get:
-      description: Returns information about all transfer configs owned by a project in the specified location.
-      operationId: bigquerydatatransfer.projects.locations.transferConfigs.list
-      security:
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/bigquery'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/bigquery'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListTransferConfigsResponse'
-      parameters:
-        - in: path
-          name: projectsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: locationsId
-          required: true
-          schema:
-            type: string
-        - in: query
-          name: pageToken
-          schema:
-            type: string
-        - in: query
-          name: pageSize
-          schema:
-            type: integer
-        - in: query
-          name: dataSourceIds
-          schema:
-            type: string
-      x-stackQL-resource: transfer_configs
-      x-stackQL-method: projects_locations_transfer_configs_list
-      x-stackQL-verb: select
-      x-stackQL-objectKey: $.transferConfigs
   '/v1/projects/{projectsId}/locations/{locationsId}/transferConfigs/{transferConfigsId}/runs/{runsId}':
     parameters: *ref_1
     get:
@@ -2276,19 +2077,19 @@ paths:
           schema:
             type: string
         - in: query
-          name: pageToken
-          schema:
-            type: string
-        - in: query
           name: pageSize
           schema:
             type: integer
         - in: query
-          name: runAttempt
+          name: states
           schema:
             type: string
         - in: query
-          name: states
+          name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: runAttempt
           schema:
             type: string
       x-stackQL-resource: runs
@@ -2357,11 +2158,16 @@ paths:
       x-stackQL-method: projects_locations_transfer_configs_runs_transfer_logs_list
       x-stackQL-verb: select
       x-stackQL-objectKey: $.transferMessages
-  '/v1/projects/{projectsId}/locations/{locationsId}':
+  '/v1/projects/{projectsId}/locations/{locationsId}/transferConfigs/{transferConfigsId}:scheduleRuns':
     parameters: *ref_1
-    get:
-      description: Gets information about a location.
-      operationId: bigquerydatatransfer.projects.locations.get
+    post:
+      description: 'Creates transfer runs for a time range [start_time, end_time]. For each date - or whatever granularity the data source supports - in the range, one transfer run is created. Note that runs are created per UTC time in the time range. DEPRECATED: use StartManualTransferRuns instead.'
+      operationId: bigquerydatatransfer.projects.locations.transferConfigs.scheduleRuns
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleTransferRunsRequest'
       security:
         - Oauth2:
             - 'https://www.googleapis.com/auth/bigquery'
@@ -2371,17 +2177,13 @@ paths:
             - 'https://www.googleapis.com/auth/cloud-platform'
           Oauth2c:
             - 'https://www.googleapis.com/auth/cloud-platform'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
       responses:
         '200':
           description: Successful response
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Location'
+                $ref: '#/components/schemas/ScheduleTransferRunsResponse'
       parameters:
         - in: path
           name: projectsId
@@ -2393,66 +2195,19 @@ paths:
           required: true
           schema:
             type: string
-      x-stackQL-resource: locations
-      x-stackQL-method: projects_locations_get
-      x-stackQL-verb: select
-  '/v1/projects/{projectsId}/locations':
-    parameters: *ref_1
-    get:
-      description: Lists information about the supported locations for this service.
-      operationId: bigquerydatatransfer.projects.locations.list
-      security:
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/bigquery'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/bigquery'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform'
-        - Oauth2:
-            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
-          Oauth2c:
-            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListLocationsResponse'
-      parameters:
         - in: path
-          name: projectsId
+          name: transferConfigsId
           required: true
           schema:
             type: string
-        - in: query
-          name: pageSize
-          schema:
-            type: integer
-        - in: query
-          name: pageToken
-          schema:
-            type: string
-        - in: query
-          name: filter
-          schema:
-            type: string
-      x-stackQL-resource: locations
-      x-stackQL-method: projects_locations_list
-      x-stackQL-verb: select
-      x-stackQL-objectKey: $.locations
-  '/v1/projects/{projectsId}/locations/{locationsId}:enrollDataSources':
+      x-stackQL-resource: transfer_configs
+      x-stackQL-method: projects_locations_transfer_configs_schedule_runs
+      x-stackQL-verb: exec
+  '/v1/projects/{projectsId}/locations/{locationsId}/transferConfigs/{transferConfigsId}':
     parameters: *ref_1
-    post:
-      description: 'Enroll data sources in a user project. This allows users to create transfer configurations for these data sources. They will also appear in the ListDataSources RPC and as such, will appear in the [BigQuery UI](https://console.cloud.google.com/bigquery), and the documents can be found in the public guide for [BigQuery Web UI](https://cloud.google.com/bigquery/bigquery-web-ui) and [Data Transfer Service](https://cloud.google.com/bigquery/docs/working-with-transfers).'
-      operationId: bigquerydatatransfer.projects.locations.enrollDataSources
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/EnrollDataSourcesRequest'
+    delete:
+      description: 'Deletes a data transfer configuration, including any associated transfer runs and logs.'
+      operationId: bigquerydatatransfer.projects.locations.transferConfigs.delete
       security:
         - Oauth2:
             - 'https://www.googleapis.com/auth/bigquery'
@@ -2480,9 +2235,254 @@ paths:
           required: true
           schema:
             type: string
-      x-stackQL-resource: locations
-      x-stackQL-method: projects_locations_enroll_data_sources
+        - in: path
+          name: transferConfigsId
+          required: true
+          schema:
+            type: string
+      x-stackQL-resource: transfer_configs
+      x-stackQL-method: projects_locations_transfer_configs_delete
+      x-stackQL-verb: delete
+    get:
+      description: Returns information about a data transfer config.
+      operationId: bigquerydatatransfer.projects.locations.transferConfigs.get
+      security:
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/bigquery'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/bigquery'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferConfig'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: transferConfigsId
+          required: true
+          schema:
+            type: string
+      x-stackQL-resource: transfer_configs
+      x-stackQL-method: projects_locations_transfer_configs_get
+      x-stackQL-verb: select
+    patch:
+      description: 'Updates a data transfer configuration. All fields must be set, even if they are not updated.'
+      operationId: bigquerydatatransfer.projects.locations.transferConfigs.patch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferConfig'
+      security:
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferConfig'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: transferConfigsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: authorizationCode
+          schema:
+            type: string
+        - in: query
+          name: versionInfo
+          schema:
+            type: string
+        - in: query
+          name: updateMask
+          schema:
+            type: string
+        - in: query
+          name: serviceAccountName
+          schema:
+            type: string
+      x-stackQL-resource: transfer_configs
+      x-stackQL-method: projects_locations_transfer_configs_patch
       x-stackQL-verb: exec
+  '/v1/projects/{projectsId}/locations/{locationsId}/transferConfigs/{transferConfigsId}:startManualRuns':
+    parameters: *ref_1
+    post:
+      description: 'Start manual transfer runs to be executed now with schedule_time equal to current time. The transfer runs can be created for a time range where the run_time is between start_time (inclusive) and end_time (exclusive), or for a specific run_time.'
+      operationId: bigquerydatatransfer.projects.locations.transferConfigs.startManualRuns
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartManualTransferRunsRequest'
+      security:
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/bigquery'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/bigquery'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartManualTransferRunsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: transferConfigsId
+          required: true
+          schema:
+            type: string
+      x-stackQL-resource: transfer_configs
+      x-stackQL-method: projects_locations_transfer_configs_start_manual_runs
+      x-stackQL-verb: exec
+  '/v1/projects/{projectsId}/locations/{locationsId}/transferConfigs':
+    parameters: *ref_1
+    post:
+      description: Creates a new data transfer configuration.
+      operationId: bigquerydatatransfer.projects.locations.transferConfigs.create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferConfig'
+      security:
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferConfig'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: serviceAccountName
+          schema:
+            type: string
+        - in: query
+          name: versionInfo
+          schema:
+            type: string
+        - in: query
+          name: authorizationCode
+          schema:
+            type: string
+      x-stackQL-resource: transfer_configs
+      x-stackQL-method: projects_locations_transfer_configs_create
+      x-stackQL-verb: insert
+    get:
+      description: Returns information about all transfer configs owned by a project in the specified location.
+      operationId: bigquerydatatransfer.projects.locations.transferConfigs.list
+      security:
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/bigquery'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/bigquery'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform'
+        - Oauth2:
+            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
+          Oauth2c:
+            - 'https://www.googleapis.com/auth/cloud-platform.read-only'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListTransferConfigsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: dataSourceIds
+          schema:
+            type: string
+      x-stackQL-resource: transfer_configs
+      x-stackQL-method: projects_locations_transfer_configs_list
+      x-stackQL-verb: select
+      x-stackQL-objectKey: $.transferConfigs
   '/v1/projects/{projectsId}:enrollDataSources':
     parameters: *ref_1
     post:
