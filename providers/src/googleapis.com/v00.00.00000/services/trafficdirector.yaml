@@ -8,7 +8,7 @@ info:
   description: ''
   version: v2
   x-discovery-doc-revision: '20230801'
-  x-generated-date: '2023-08-22'
+  x-generated-date: '2023-08-23'
 externalDocs:
   url: 'https://cloud.google.com/traffic-director'
 servers:
@@ -32,378 +32,160 @@ components:
           tokenUrl: 'https://accounts.google.com/o/oauth2/token'
           scopes: *ref_0
   schemas:
-    DynamicListener:
-      type: object
-      id: DynamicListener
+    UpdateFailureState:
       properties:
-        errorState:
-          description: 'Set if the last update failed, cleared after the next successful update.'
-          $ref: '#/components/schemas/UpdateFailureState'
-        name:
+        details:
           type: string
-          description: 'The name or unique id of this listener, pulled from the DynamicListenerState config.'
-        warmingState:
-          description: 'The listener state for any warming listener by this name. These are listeners that are currently undergoing warming in preparation to service data plane traffic. Note that if attempting to recreate an Envoy configuration from a configuration dump, the warming listeners should generally be discarded.'
-          $ref: '#/components/schemas/DynamicListenerState'
-        activeState:
-          description: The listener state for any active listener by this name. These are listeners that are available to service data plane traffic.
-          $ref: '#/components/schemas/DynamicListenerState'
-        drainingState:
-          $ref: '#/components/schemas/DynamicListenerState'
-          description: 'The listener state for any draining listener by this name. These are listeners that are currently undergoing draining in preparation to stop servicing data plane traffic. Note that if attempting to recreate an Envoy configuration from a configuration dump, the draining listeners should generally be discarded.'
-      description: 'Describes a dynamically loaded listener via the LDS API. [#next-free-field: 6]'
-    SemanticVersion:
-      id: SemanticVersion
-      description: 'Envoy uses SemVer (https://semver.org/). Major/minor versions indicate expected behaviors and APIs, the patch version field is used only for security fixes and can be generally ignored.'
-      type: object
-      properties:
-        minorNumber:
-          type: integer
-          format: uint32
-        patch:
-          format: uint32
-          type: integer
-        majorNumber:
-          format: uint32
-          type: integer
-    Address:
-      properties:
-        pipe:
-          $ref: '#/components/schemas/Pipe'
-        socketAddress:
-          $ref: '#/components/schemas/SocketAddress'
-      id: Address
-      description: 'Addresses specify either a logical or physical address and port, which are used to tell Envoy where to bind/listen, connect to upstream and find management servers.'
-      type: object
-    StaticListener:
-      description: Describes a statically loaded listener.
-      properties:
-        lastUpdated:
-          description: The timestamp when the Listener was last successfully updated.
+          description: Details about the last failed update attempt.
+        lastUpdateAttempt:
+          description: Time of the latest failed update attempt.
+          type: string
           format: google-datetime
-          type: string
-        listener:
+        failedConfiguration:
           additionalProperties:
             type: any
             description: Properties of the object. Contains field @type with type URL.
+          description: What the component configuration would have been if the update had succeeded.
           type: object
-          description: The listener config.
-      id: StaticListener
+      id: UpdateFailureState
       type: object
-    PathSegment:
-      description: Specifies the segment in a path to retrieve value from Struct.
+    Node:
+      type: object
+      description: 'Identifies a specific Envoy instance. The node identifier is presented to the management server, which may use this identifier to distinguish per Envoy configuration for serving. [#next-free-field: 12]'
       properties:
-        key:
-          description: 'If specified, use the key to retrieve the value in a Struct.'
+        userAgentVersion:
+          description: 'Free-form string that identifies the version of the entity requesting config. E.g. "1.12.2" or "abcd1234", or "SpecialEnvoyBuild"'
           type: string
-      id: PathSegment
-      type: object
-    ClientStatusResponse:
-      properties:
-        config:
-          type: array
-          description: Client configs for the clients specified in the ClientStatusRequest.
+        extensions:
           items:
-            $ref: '#/components/schemas/ClientConfig'
-      id: ClientStatusResponse
-      type: object
-    ClientStatusRequest:
-      properties:
-        nodeMatchers:
+            $ref: '#/components/schemas/Extension'
+          type: array
+          description: List of extensions and their versions supported by the node.
+        userAgentBuildVersion:
+          description: Structured version of the entity requesting config.
+          $ref: '#/components/schemas/BuildVersion'
+        clientFeatures:
           type: array
           items:
-            $ref: '#/components/schemas/NodeMatcher'
-          description: Management server can use these match criteria to identify clients. The match follows OR semantics.
-      type: object
-      id: ClientStatusRequest
-      description: Request for client status of clients identified by a list of NodeMatchers.
-    DynamicRouteConfig:
-      id: DynamicRouteConfig
-      properties:
-        versionInfo:
-          description: 'This is the per-resource version information. This version is currently taken from the :ref:`version_info ` field at the time that the route configuration was loaded.'
+            type: string
+          description: 'Client feature support list. These are well known features described in the Envoy API repository for a given major version of an API. Client features use reverse DNS naming scheme, for example `com.acme.feature`. See :ref:`the list of features ` that xDS client may support.'
+        locality:
+          description: Locality specifying where the Envoy instance is running.
+          $ref: '#/components/schemas/Locality'
+        id:
           type: string
-        routeConfig:
-          description: The route config.
+          description: 'An opaque node identifier for the Envoy node. This also provides the local service node name. It should be set if any of the following features are used: :ref:`statsd `, :ref:`CDS `, and :ref:`HTTP tracing `, either in this message or via :option:`--service-node`.'
+        userAgentName:
+          type: string
+          description: Free-form string that identifies the entity requesting config. E.g. "envoy" or "grpc"
+        listeningAddresses:
+          type: array
+          description: 'Known listening ports on the node as a generic hint to the management server for filtering :ref:`listeners ` to be returned. For example, if there is a listener bound to port 80, the list can optionally contain the SocketAddress `(0.0.0.0,80)`. The field is optional and just a hint.'
+          items:
+            $ref: '#/components/schemas/Address'
+        cluster:
+          description: 'Defines the local service cluster name where Envoy is running. Though optional, it should be set if any of the following features are used: :ref:`statsd `, :ref:`health check cluster verification `, :ref:`runtime override directory `, :ref:`user agent addition `, :ref:`HTTP global rate limiting `, :ref:`CDS `, and :ref:`HTTP tracing `, either in this message or via :option:`--service-cluster`.'
+          type: string
+        metadata:
+          description: Opaque metadata extending the node identifier. Envoy will pass this directly to the management server.
           type: object
           additionalProperties:
             type: any
-            description: Properties of the object. Contains field @type with type URL.
-        lastUpdated:
-          format: google-datetime
-          description: The timestamp when the Route was last updated.
+            description: Properties of the object.
+        buildVersion:
+          description: This is motivated by informing a management server during canary which version of Envoy is being tested in a heterogeneous fleet. This will be set by Envoy in management server RPCs. This field is deprecated in favor of the user_agent_name and user_agent_version values.
+          deprecated: true
           type: string
-      type: object
-    NullMatch:
-      properties: {}
-      description: NullMatch is an empty message to specify a null value.
-      id: NullMatch
-      type: object
-    RegexMatcher:
-      properties:
-        regex:
-          description: The regex match string. The string must be supported by the configured engine.
-          type: string
-        googleRe2:
-          description: Google's RE2 regex engine.
-          $ref: '#/components/schemas/GoogleRE2'
-      description: A regex matcher designed for safety when used with untrusted input.
-      type: object
-      id: RegexMatcher
-    StructMatcher:
-      id: StructMatcher
-      description: 'StructMatcher provides a general interface to check if a given value is matched in google.protobuf.Struct. It uses `path` to retrieve the value from the struct and then check if it''s matched to the specified value. For example, for the following Struct: .. code-block:: yaml fields: a: struct_value: fields: b: struct_value: fields: c: string_value: pro t: list_value: values: - string_value: m - string_value: n The following MetadataMatcher is matched as the path [a, b, c] will retrieve a string value "pro" from the Metadata which is matched to the specified prefix match. .. code-block:: yaml path: - key: a - key: b - key: c value: string_match: prefix: pr The following StructMatcher is matched as the code will match one of the string values in the list at the path [a, t]. .. code-block:: yaml path: - key: a - key: t value: list_match: one_of: string_match: exact: m An example use of StructMatcher is to match metadata in envoy.v*.core.Node.'
-      type: object
-      properties:
-        value:
-          description: The StructMatcher is matched if the value retrieved by path is matched to this value.
-          $ref: '#/components/schemas/ValueMatcher'
-        path:
-          items:
-            $ref: '#/components/schemas/PathSegment'
-          type: array
-          description: The path to retrieve the Value from the Struct.
-    Locality:
-      description: Identifies location of where either Envoy runs or where upstream hosts run.
-      properties:
-        zone:
-          description: 'Defines the local service zone where Envoy is running. Though optional, it should be set if discovery service routing is used and the discovery service exposes :ref:`zone data `, either in this message or via :option:`--service-zone`. The meaning of zone is context dependent, e.g. `Availability Zone (AZ) `_ on AWS, `Zone `_ on GCP, etc.'
-          type: string
-        subZone:
-          type: string
-          description: 'When used for locality of upstream hosts, this field further splits zone into smaller chunks of sub-zones so they can be load balanced independently.'
-        region:
-          description: 'Region this :ref:`zone ` belongs to.'
-          type: string
-      type: object
-      id: Locality
-    ListenersConfigDump:
-      type: object
-      properties:
-        dynamicListeners:
-          type: array
-          description: 'State for any warming, active, or draining listeners.'
-          items:
-            $ref: '#/components/schemas/DynamicListener'
-        staticListeners:
-          items:
-            $ref: '#/components/schemas/StaticListener'
-          description: The statically loaded listener configs.
-          type: array
-        versionInfo:
-          type: string
-          description: 'This is the :ref:`version_info ` in the last processed LDS discovery response. If there are only static bootstrap listeners, this field will be "".'
-      id: ListenersConfigDump
-      description: Envoy's listener manager fills this message with all currently known listeners. Listener configuration information can be used to recreate an Envoy configuration by populating all listeners as static listeners or by returning them in a LDS response.
+      id: Node
     NodeMatcher:
-      type: object
       properties:
+        nodeId:
+          description: Specifies match criteria on the node id.
+          $ref: '#/components/schemas/StringMatcher'
         nodeMetadatas:
           items:
             $ref: '#/components/schemas/StructMatcher'
           description: Specifies match criteria on the node metadata.
           type: array
-        nodeId:
-          description: Specifies match criteria on the node id.
-          $ref: '#/components/schemas/StringMatcher'
-      description: Specifies the way to match a Node. The match follows AND semantics.
+      type: object
       id: NodeMatcher
-    StaticCluster:
-      description: Describes a statically loaded cluster.
-      id: StaticCluster
-      type: object
-      properties:
-        cluster:
-          additionalProperties:
-            type: any
-            description: Properties of the object. Contains field @type with type URL.
-          type: object
-          description: The cluster config.
-        lastUpdated:
-          format: google-datetime
-          type: string
-          description: The timestamp when the Cluster was last updated.
-    Extension:
-      description: 'Version and identification for an Envoy extension. [#next-free-field: 6]'
-      id: Extension
-      properties:
-        version:
-          $ref: '#/components/schemas/BuildVersion'
-          description: The version is a property of the extension and maintained independently of other extensions and the Envoy API. This field is not set when extension did not provide version information.
-        disabled:
-          type: boolean
-          description: Indicates that the extension is present but was disabled via dynamic configuration.
-        category:
-          type: string
-          description: 'Category of the extension. Extension category names use reverse DNS notation. For instance "envoy.filters.listener" for Envoy''s built-in listener filters or "com.acme.filters.http" for HTTP filters from acme.com vendor. [#comment:'
-        name:
-          description: 'This is the name of the Envoy filter as specified in the Envoy configuration, e.g. envoy.filters.http.router, com.acme.widget.'
-          type: string
-        typeDescriptor:
-          type: string
-          description: '[#not-implemented-hide:] Type descriptor of extension configuration proto. [#comment:'
-      type: object
-    RoutesConfigDump:
-      id: RoutesConfigDump
-      description: 'Envoy''s RDS implementation fills this message with all currently loaded routes, as described by their RouteConfiguration objects. Static routes that are either defined in the bootstrap configuration or defined inline while configuring listeners are separated from those configured dynamically via RDS. Route configuration information can be used to recreate an Envoy configuration by populating all routes as static routes or by returning them in RDS responses.'
-      type: object
-      properties:
-        staticRouteConfigs:
-          type: array
-          items:
-            $ref: '#/components/schemas/StaticRouteConfig'
-          description: The statically loaded route configs.
-        dynamicRouteConfigs:
-          description: The dynamically loaded route configs.
-          items:
-            $ref: '#/components/schemas/DynamicRouteConfig'
-          type: array
+      description: Specifies the way to match a Node. The match follows AND semantics.
     GoogleRE2:
-      description: 'Google''s `RE2 `_ regex engine. The regex string must adhere to the documented `syntax `_. The engine is designed to complete execution in linear time as well as limit the amount of memory used. Envoy supports program size checking via runtime. The runtime keys ``re2.max_program_size.error_level`` and ``re2.max_program_size.warn_level`` can be set to integers as the maximum program size or complexity that a compiled regex can have before an exception is thrown or a warning is logged, respectively. ``re2.max_program_size.error_level`` defaults to 100, and ``re2.max_program_size.warn_level`` has no default if unset (will not check/log a warning). Envoy emits two stats for tracking the program size of regexes: the histogram `re2.program_size`, which records the program size, and the counter `re2.exceeded_warn_level`, which is incremented each time the program size exceeds the warn level threshold.'
-      type: object
       id: GoogleRE2
       properties:
         maxProgramSize:
-          type: integer
-          deprecated: true
           description: 'This field controls the RE2 "program size" which is a rough estimate of how complex a compiled regex is to evaluate. A regex that has a program size greater than the configured value will fail to compile. In this case, the configured max program size can be increased or the regex can be simplified. If not specified, the default is 100. This field is deprecated; regexp validation should be performed on the management server instead of being done by each individual client.'
+          deprecated: true
+          type: integer
           format: uint32
-    ScopedRoutesConfigDump:
-      description: 'Envoy''s scoped RDS implementation fills this message with all currently loaded route configuration scopes (defined via ScopedRouteConfigurationsSet protos). This message lists both the scopes defined inline with the higher order object (i.e., the HttpConnectionManager) and the dynamically obtained scopes via the SRDS API.'
+      description: 'Google''s `RE2 `_ regex engine. The regex string must adhere to the documented `syntax `_. The engine is designed to complete execution in linear time as well as limit the amount of memory used. Envoy supports program size checking via runtime. The runtime keys ``re2.max_program_size.error_level`` and ``re2.max_program_size.warn_level`` can be set to integers as the maximum program size or complexity that a compiled regex can have before an exception is thrown or a warning is logged, respectively. ``re2.max_program_size.error_level`` defaults to 100, and ``re2.max_program_size.warn_level`` has no default if unset (will not check/log a warning). Envoy emits two stats for tracking the program size of regexes: the histogram `re2.program_size`, which records the program size, and the counter `re2.exceeded_warn_level`, which is incremented each time the program size exceeds the warn level threshold.'
       type: object
+    BuildVersion:
+      id: BuildVersion
       properties:
-        dynamicScopedRouteConfigs:
-          description: The dynamically loaded scoped route configs.
-          type: array
-          items:
-            $ref: '#/components/schemas/DynamicScopedRouteConfigs'
-        inlineScopedRouteConfigs:
-          description: The statically loaded scoped route configs.
-          items:
-            $ref: '#/components/schemas/InlineScopedRouteConfigs'
-          type: array
-      id: ScopedRoutesConfigDump
+        version:
+          $ref: '#/components/schemas/SemanticVersion'
+          description: SemVer version of extension.
+        metadata:
+          additionalProperties:
+            description: Properties of the object.
+            type: any
+          description: Free-form build information. Envoy defines several well known keys in the source/common/version/version.h file
+          type: object
+      type: object
+      description: 'BuildVersion combines SemVer version of extension with free-form build information (i.e. ''alpha'', ''private-build'') as a set of strings.'
     SocketAddress:
       type: object
-      id: SocketAddress
       properties:
+        resolverName:
+          type: string
+          description: 'The name of the custom resolver. This must have been registered with Envoy. If this is empty, a context dependent default applies. If the address is a concrete IP address, no resolution will occur. If address is a hostname this should be set for resolution other than DNS. Specifying a custom resolver with *STRICT_DNS* or *LOGICAL_DNS* will generate an error at runtime.'
+        address:
+          description: 'The address for this socket. :ref:`Listeners ` will bind to the address. An empty address is not allowed. Specify ``0.0.0.0`` or ``::`` to bind to any address. [#comment:TODO(zuercher) reinstate when implemented: It is possible to distinguish a Listener address via the prefix/suffix matching in :ref:`FilterChainMatch `.] When used within an upstream :ref:`BindConfig `, the address controls the source address of outbound connections. For :ref:`clusters `, the cluster type determines whether the address must be an IP (*STATIC* or *EDS* clusters) or a hostname resolved by DNS (*STRICT_DNS* or *LOGICAL_DNS* clusters). Address resolution can be customized via :ref:`resolver_name `.'
+          type: string
+        protocol:
+          type: string
+          enumDescriptions:
+            - ''
+            - ''
+          enum:
+            - TCP
+            - UDP
+        ipv4Compat:
+          description: 'When binding to an IPv6 address above, this enables `IPv4 compatibility `_. Binding to ``::`` will allow both IPv4 and IPv6 connections, with peer IPv4 addresses mapped into IPv6 space as ``::FFFF:``.'
+          type: boolean
         namedPort:
           description: 'This is only valid if :ref:`resolver_name ` is specified below and the named resolver is capable of named port resolution.'
           type: string
         portValue:
           type: integer
           format: uint32
-        protocol:
-          enum:
-            - TCP
-            - UDP
-          enumDescriptions:
-            - ''
-            - ''
-          type: string
-        resolverName:
-          description: 'The name of the custom resolver. This must have been registered with Envoy. If this is empty, a context dependent default applies. If the address is a concrete IP address, no resolution will occur. If address is a hostname this should be set for resolution other than DNS. Specifying a custom resolver with *STRICT_DNS* or *LOGICAL_DNS* will generate an error at runtime.'
-          type: string
-        address:
-          type: string
-          description: 'The address for this socket. :ref:`Listeners ` will bind to the address. An empty address is not allowed. Specify ``0.0.0.0`` or ``::`` to bind to any address. [#comment:TODO(zuercher) reinstate when implemented: It is possible to distinguish a Listener address via the prefix/suffix matching in :ref:`FilterChainMatch `.] When used within an upstream :ref:`BindConfig `, the address controls the source address of outbound connections. For :ref:`clusters `, the cluster type determines whether the address must be an IP (*STATIC* or *EDS* clusters) or a hostname resolved by DNS (*STRICT_DNS* or *LOGICAL_DNS* clusters). Address resolution can be customized via :ref:`resolver_name `.'
-        ipv4Compat:
-          type: boolean
-          description: 'When binding to an IPv6 address above, this enables `IPv4 compatibility `_. Binding to ``::`` will allow both IPv4 and IPv6 connections, with peer IPv4 addresses mapped into IPv6 space as ``::FFFF:``.'
       description: '[#next-free-field: 7]'
-    ValueMatcher:
-      properties:
-        nullMatch:
-          description: 'If specified, a match occurs if and only if the target value is a NullValue.'
-          $ref: '#/components/schemas/NullMatch'
-        presentMatch:
-          type: boolean
-          description: 'If specified, value match will be performed based on whether the path is referring to a valid primitive value in the metadata. If the path is referring to a non-primitive value, the result is always not matched.'
-        boolMatch:
-          description: 'If specified, a match occurs if and only if the target value is a bool value and is equal to this field.'
-          type: boolean
-        listMatch:
-          description: 'If specified, a match occurs if and only if the target value is a list value and is matched to this field.'
-          $ref: '#/components/schemas/ListMatcher'
-        stringMatch:
-          $ref: '#/components/schemas/StringMatcher'
-          description: 'If specified, a match occurs if and only if the target value is a string value and is matched to this field.'
-        doubleMatch:
-          description: 'If specified, a match occurs if and only if the target value is a double value and is matched to this field.'
-          $ref: '#/components/schemas/DoubleMatcher'
-      id: ValueMatcher
-      description: 'Specifies the way to match a ProtobufWkt::Value. Primitive values and ListValue are supported. StructValue is not supported and is always not matched. [#next-free-field: 7]'
-      type: object
-    BuildVersion:
-      properties:
-        metadata:
-          type: object
-          additionalProperties:
-            type: any
-            description: Properties of the object.
-          description: Free-form build information. Envoy defines several well known keys in the source/common/version/version.h file
-        version:
-          description: SemVer version of extension.
-          $ref: '#/components/schemas/SemanticVersion'
-      type: object
-      description: 'BuildVersion combines SemVer version of extension with free-form build information (i.e. ''alpha'', ''private-build'') as a set of strings.'
-      id: BuildVersion
-    DoubleRange:
-      id: DoubleRange
-      properties:
-        end:
-          format: double
-          description: end of the range (exclusive)
-          type: number
-        start:
-          type: number
-          description: start of the range (inclusive)
-          format: double
-      type: object
-      description: 'Specifies the double start and end of the range using half-open interval semantics [start, end).'
-    ClustersConfigDump:
-      properties:
-        dynamicActiveClusters:
-          items:
-            $ref: '#/components/schemas/DynamicCluster'
-          description: The dynamically loaded active clusters. These are clusters that are available to service data plane traffic.
-          type: array
-        staticClusters:
-          description: The statically loaded cluster configs.
-          items:
-            $ref: '#/components/schemas/StaticCluster'
-          type: array
-        dynamicWarmingClusters:
-          type: array
-          items:
-            $ref: '#/components/schemas/DynamicCluster'
-          description: 'The dynamically loaded warming clusters. These are clusters that are currently undergoing warming in preparation to service data plane traffic. Note that if attempting to recreate an Envoy configuration from a configuration dump, the warming clusters should generally be discarded.'
-        versionInfo:
-          description: 'This is the :ref:`version_info ` in the last processed CDS discovery response. If there are only static bootstrap clusters, this field will be "".'
-          type: string
-      description: Envoy's cluster manager fills this message with all currently known clusters. Cluster configuration information can be used to recreate an Envoy configuration by populating all clusters as static clusters or by returning them in a CDS response.
-      id: ClustersConfigDump
-      type: object
-    InlineScopedRouteConfigs:
+      id: SocketAddress
+    DynamicListener:
       type: object
       properties:
-        lastUpdated:
-          format: google-datetime
-          description: The timestamp when the scoped route config set was last updated.
-          type: string
-        scopedRouteConfigs:
-          description: The scoped route configurations.
-          items:
-            additionalProperties:
-              description: Properties of the object. Contains field @type with type URL.
-              type: any
-            type: object
-          type: array
+        warmingState:
+          $ref: '#/components/schemas/DynamicListenerState'
+          description: 'The listener state for any warming listener by this name. These are listeners that are currently undergoing warming in preparation to service data plane traffic. Note that if attempting to recreate an Envoy configuration from a configuration dump, the warming listeners should generally be discarded.'
+        activeState:
+          description: The listener state for any active listener by this name. These are listeners that are available to service data plane traffic.
+          $ref: '#/components/schemas/DynamicListenerState'
+        drainingState:
+          description: 'The listener state for any draining listener by this name. These are listeners that are currently undergoing draining in preparation to stop servicing data plane traffic. Note that if attempting to recreate an Envoy configuration from a configuration dump, the draining listeners should generally be discarded.'
+          $ref: '#/components/schemas/DynamicListenerState'
+        errorState:
+          $ref: '#/components/schemas/UpdateFailureState'
+          description: 'Set if the last update failed, cleared after the next successful update.'
         name:
-          description: The name assigned to the scoped route configurations.
+          description: 'The name or unique id of this listener, pulled from the DynamicListenerState config.'
           type: string
-      id: InlineScopedRouteConfigs
+      description: 'Describes a dynamically loaded listener via the LDS API. [#next-free-field: 6]'
+      id: DynamicListener
     DoubleMatcher:
+      type: object
+      description: Specifies the way to match a double value.
+      id: DoubleMatcher
       properties:
         range:
           $ref: '#/components/schemas/DoubleRange'
@@ -412,243 +194,452 @@ components:
           format: double
           type: number
           description: 'If specified, the input double value must be equal to the value specified here.'
-      description: Specifies the way to match a double value.
-      type: object
-      id: DoubleMatcher
-    Node:
+    ListenersConfigDump:
+      id: ListenersConfigDump
       type: object
       properties:
-        metadata:
-          description: Opaque metadata extending the node identifier. Envoy will pass this directly to the management server.
-          type: object
-          additionalProperties:
-            description: Properties of the object.
-            type: any
-        id:
-          description: 'An opaque node identifier for the Envoy node. This also provides the local service node name. It should be set if any of the following features are used: :ref:`statsd `, :ref:`CDS `, and :ref:`HTTP tracing `, either in this message or via :option:`--service-node`.'
-          type: string
-        listeningAddresses:
-          description: 'Known listening ports on the node as a generic hint to the management server for filtering :ref:`listeners ` to be returned. For example, if there is a listener bound to port 80, the list can optionally contain the SocketAddress `(0.0.0.0,80)`. The field is optional and just a hint.'
+        dynamicListeners:
           items:
-            $ref: '#/components/schemas/Address'
+            $ref: '#/components/schemas/DynamicListener'
+          description: 'State for any warming, active, or draining listeners.'
           type: array
-        buildVersion:
-          type: string
-          deprecated: true
-          description: This is motivated by informing a management server during canary which version of Envoy is being tested in a heterogeneous fleet. This will be set by Envoy in management server RPCs. This field is deprecated in favor of the user_agent_name and user_agent_version values.
-        cluster:
-          type: string
-          description: 'Defines the local service cluster name where Envoy is running. Though optional, it should be set if any of the following features are used: :ref:`statsd `, :ref:`health check cluster verification `, :ref:`runtime override directory `, :ref:`user agent addition `, :ref:`HTTP global rate limiting `, :ref:`CDS `, and :ref:`HTTP tracing `, either in this message or via :option:`--service-cluster`.'
-        userAgentVersion:
-          description: 'Free-form string that identifies the version of the entity requesting config. E.g. "1.12.2" or "abcd1234", or "SpecialEnvoyBuild"'
-          type: string
-        locality:
-          $ref: '#/components/schemas/Locality'
-          description: Locality specifying where the Envoy instance is running.
-        userAgentName:
-          type: string
-          description: Free-form string that identifies the entity requesting config. E.g. "envoy" or "grpc"
-        clientFeatures:
+        staticListeners:
+          description: The statically loaded listener configs.
+          type: array
           items:
-            type: string
-          type: array
-          description: 'Client feature support list. These are well known features described in the Envoy API repository for a given major version of an API. Client features use reverse DNS naming scheme, for example `com.acme.feature`. See :ref:`the list of features ` that xDS client may support.'
-        userAgentBuildVersion:
-          description: Structured version of the entity requesting config.
-          $ref: '#/components/schemas/BuildVersion'
-        extensions:
-          items:
-            $ref: '#/components/schemas/Extension'
-          description: List of extensions and their versions supported by the node.
-          type: array
-      description: 'Identifies a specific Envoy instance. The node identifier is presented to the management server, which may use this identifier to distinguish per Envoy configuration for serving. [#next-free-field: 12]'
-      id: Node
-    ClientConfig:
-      type: object
-      id: ClientConfig
-      properties:
-        node:
-          $ref: '#/components/schemas/Node'
-          description: Node for a particular client.
-        xdsConfig:
-          items:
-            $ref: '#/components/schemas/PerXdsConfig'
-          type: array
-      description: All xds configs for a particular client.
-    StringMatcher:
-      description: 'Specifies the way to match a string. [#next-free-field: 7]'
-      id: StringMatcher
-      properties:
-        prefix:
-          type: string
-          description: 'The input string must have the prefix specified here. Note: empty prefix is not allowed, please use regex instead. Examples: * *abc* matches the value *abc.xyz*'
-        regex:
-          type: string
-          description: 'The input string must match the regular expression specified here. The regex grammar is defined `here `_. Examples: * The regex ``\d{3}`` matches the value *123* * The regex ``\d{3}`` does not match the value *1234* * The regex ``\d{3}`` does not match the value *123.456* .. attention:: This field has been deprecated in favor of `safe_regex` as it is not safe for use with untrusted input in all cases.'
-          deprecated: true
-        safeRegex:
-          description: The input string must match the regular expression specified here.
-          $ref: '#/components/schemas/RegexMatcher'
-        suffix:
-          description: 'The input string must have the suffix specified here. Note: empty prefix is not allowed, please use regex instead. Examples: * *abc* matches the value *xyz.abc*'
-          type: string
-        exact:
-          type: string
-          description: 'The input string must match exactly the string specified here. Examples: * *abc* only matches the value *abc*.'
-        ignoreCase:
-          description: 'If true, indicates the exact/prefix/suffix matching should be case insensitive. This has no effect for the safe_regex match. For example, the matcher *data* will match both input string *Data* and *data* if set to true.'
-          type: boolean
-      type: object
-    UpdateFailureState:
-      type: object
-      id: UpdateFailureState
-      properties:
-        details:
-          description: Details about the last failed update attempt.
-          type: string
-        failedConfiguration:
-          description: What the component configuration would have been if the update had succeeded.
-          type: object
-          additionalProperties:
-            description: Properties of the object. Contains field @type with type URL.
-            type: any
-        lastUpdateAttempt:
-          type: string
-          format: google-datetime
-          description: Time of the latest failed update attempt.
-    DynamicCluster:
-      id: DynamicCluster
-      description: Describes a dynamically loaded cluster via the CDS API.
-      properties:
-        cluster:
-          type: object
-          additionalProperties:
-            description: Properties of the object. Contains field @type with type URL.
-            type: any
-          description: The cluster config.
+            $ref: '#/components/schemas/StaticListener'
         versionInfo:
-          description: 'This is the per-resource version information. This version is currently taken from the :ref:`version_info ` field at the time that the cluster was loaded. In the future, discrete per-cluster versions may be supported by the API.'
+          description: 'This is the :ref:`version_info ` in the last processed LDS discovery response. If there are only static bootstrap listeners, this field will be "".'
           type: string
-        lastUpdated:
-          format: google-datetime
-          description: The timestamp when the Cluster was last updated.
-          type: string
+      description: Envoy's listener manager fills this message with all currently known listeners. Listener configuration information can be used to recreate an Envoy configuration by populating all listeners as static listeners or by returning them in a LDS response.
+    NullMatch:
+      id: NullMatch
+      description: NullMatch is an empty message to specify a null value.
       type: object
+      properties: {}
+    ClustersConfigDump:
+      type: object
+      id: ClustersConfigDump
+      description: Envoy's cluster manager fills this message with all currently known clusters. Cluster configuration information can be used to recreate an Envoy configuration by populating all clusters as static clusters or by returning them in a CDS response.
+      properties:
+        staticClusters:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaticCluster'
+          description: The statically loaded cluster configs.
+        dynamicWarmingClusters:
+          description: 'The dynamically loaded warming clusters. These are clusters that are currently undergoing warming in preparation to service data plane traffic. Note that if attempting to recreate an Envoy configuration from a configuration dump, the warming clusters should generally be discarded.'
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicCluster'
+        dynamicActiveClusters:
+          description: The dynamically loaded active clusters. These are clusters that are available to service data plane traffic.
+          type: array
+          items:
+            $ref: '#/components/schemas/DynamicCluster'
+        versionInfo:
+          description: 'This is the :ref:`version_info ` in the last processed CDS discovery response. If there are only static bootstrap clusters, this field will be "".'
+          type: string
+    DynamicListenerState:
+      type: object
+      id: DynamicListenerState
+      properties:
+        listener:
+          additionalProperties:
+            type: any
+            description: Properties of the object. Contains field @type with type URL.
+          description: The listener config.
+          type: object
+        versionInfo:
+          type: string
+          description: 'This is the per-resource version information. This version is currently taken from the :ref:`version_info ` field at the time that the listener was loaded. In the future, discrete per-listener versions may be supported by the API.'
+        lastUpdated:
+          type: string
+          format: google-datetime
+          description: The timestamp when the Listener was last successfully updated.
+    Address:
+      description: 'Addresses specify either a logical or physical address and port, which are used to tell Envoy where to bind/listen, connect to upstream and find management servers.'
+      id: Address
+      properties:
+        pipe:
+          $ref: '#/components/schemas/Pipe'
+        socketAddress:
+          $ref: '#/components/schemas/SocketAddress'
+      type: object
+    ValueMatcher:
+      type: object
+      description: 'Specifies the way to match a ProtobufWkt::Value. Primitive values and ListValue are supported. StructValue is not supported and is always not matched. [#next-free-field: 7]'
+      id: ValueMatcher
+      properties:
+        doubleMatch:
+          description: 'If specified, a match occurs if and only if the target value is a double value and is matched to this field.'
+          $ref: '#/components/schemas/DoubleMatcher'
+        listMatch:
+          $ref: '#/components/schemas/ListMatcher'
+          description: 'If specified, a match occurs if and only if the target value is a list value and is matched to this field.'
+        boolMatch:
+          description: 'If specified, a match occurs if and only if the target value is a bool value and is equal to this field.'
+          type: boolean
+        stringMatch:
+          description: 'If specified, a match occurs if and only if the target value is a string value and is matched to this field.'
+          $ref: '#/components/schemas/StringMatcher'
+        nullMatch:
+          description: 'If specified, a match occurs if and only if the target value is a NullValue.'
+          $ref: '#/components/schemas/NullMatch'
+        presentMatch:
+          description: 'If specified, value match will be performed based on whether the path is referring to a valid primitive value in the metadata. If the path is referring to a non-primitive value, the result is always not matched.'
+          type: boolean
+    ClientStatusResponse:
+      properties:
+        config:
+          description: Client configs for the clients specified in the ClientStatusRequest.
+          type: array
+          items:
+            $ref: '#/components/schemas/ClientConfig'
+      id: ClientStatusResponse
+      type: object
+    ScopedRoutesConfigDump:
+      id: ScopedRoutesConfigDump
+      type: object
+      description: 'Envoy''s scoped RDS implementation fills this message with all currently loaded route configuration scopes (defined via ScopedRouteConfigurationsSet protos). This message lists both the scopes defined inline with the higher order object (i.e., the HttpConnectionManager) and the dynamically obtained scopes via the SRDS API.'
+      properties:
+        dynamicScopedRouteConfigs:
+          type: array
+          description: The dynamically loaded scoped route configs.
+          items:
+            $ref: '#/components/schemas/DynamicScopedRouteConfigs'
+        inlineScopedRouteConfigs:
+          items:
+            $ref: '#/components/schemas/InlineScopedRouteConfigs'
+          description: The statically loaded scoped route configs.
+          type: array
+    DoubleRange:
+      id: DoubleRange
+      description: 'Specifies the double start and end of the range using half-open interval semantics [start, end).'
+      type: object
+      properties:
+        end:
+          description: end of the range (exclusive)
+          type: number
+          format: double
+        start:
+          type: number
+          description: start of the range (inclusive)
+          format: double
     ListMatcher:
       properties:
         oneOf:
           description: 'If specified, at least one of the values in the list must match the value specified.'
           $ref: '#/components/schemas/ValueMatcher'
       id: ListMatcher
-      description: Specifies the way to match a list value.
       type: object
-    PerXdsConfig:
-      description: 'Detailed config (per xDS) with status. [#next-free-field: 6]'
-      id: PerXdsConfig
+      description: Specifies the way to match a list value.
+    Locality:
       type: object
       properties:
-        status:
+        zone:
           type: string
-          enum:
-            - UNKNOWN
-            - SYNCED
-            - NOT_SENT
-            - STALE
-            - ERROR
+          description: 'Defines the local service zone where Envoy is running. Though optional, it should be set if discovery service routing is used and the discovery service exposes :ref:`zone data `, either in this message or via :option:`--service-zone`. The meaning of zone is context dependent, e.g. `Availability Zone (AZ) `_ on AWS, `Zone `_ on GCP, etc.'
+        subZone:
+          type: string
+          description: 'When used for locality of upstream hosts, this field further splits zone into smaller chunks of sub-zones so they can be load balanced independently.'
+        region:
+          type: string
+          description: 'Region this :ref:`zone ` belongs to.'
+      id: Locality
+      description: Identifies location of where either Envoy runs or where upstream hosts run.
+    Pipe:
+      id: Pipe
+      type: object
+      properties:
+        path:
+          description: 'Unix Domain Socket path. On Linux, paths starting with ''@'' will use the abstract namespace. The starting ''@'' is replaced by a null byte by Envoy. Paths starting with ''@'' will result in an error in environments other than Linux.'
+          type: string
+        mode:
+          description: The mode for the Pipe. Not applicable for abstract sockets.
+          type: integer
+          format: uint32
+    Extension:
+      id: Extension
+      description: 'Version and identification for an Envoy extension. [#next-free-field: 6]'
+      type: object
+      properties:
+        name:
+          type: string
+          description: 'This is the name of the Envoy filter as specified in the Envoy configuration, e.g. envoy.filters.http.router, com.acme.widget.'
+        disabled:
+          type: boolean
+          description: Indicates that the extension is present but was disabled via dynamic configuration.
+        version:
+          $ref: '#/components/schemas/BuildVersion'
+          description: The version is a property of the extension and maintained independently of other extensions and the Envoy API. This field is not set when extension did not provide version information.
+        category:
+          type: string
+          description: 'Category of the extension. Extension category names use reverse DNS notation. For instance "envoy.filters.listener" for Envoy''s built-in listener filters or "com.acme.filters.http" for HTTP filters from acme.com vendor. [#comment:'
+        typeDescriptor:
+          type: string
+          description: '[#not-implemented-hide:] Type descriptor of extension configuration proto. [#comment:'
+    InlineScopedRouteConfigs:
+      id: InlineScopedRouteConfigs
+      type: object
+      properties:
+        name:
+          description: The name assigned to the scoped route configurations.
+          type: string
+        lastUpdated:
+          type: string
+          description: The timestamp when the scoped route config set was last updated.
+          format: google-datetime
+        scopedRouteConfigs:
+          description: The scoped route configurations.
+          items:
+            type: object
+            additionalProperties:
+              description: Properties of the object. Contains field @type with type URL.
+              type: any
+          type: array
+    SemanticVersion:
+      id: SemanticVersion
+      description: 'Envoy uses SemVer (https://semver.org/). Major/minor versions indicate expected behaviors and APIs, the patch version field is used only for security fixes and can be generally ignored.'
+      properties:
+        minorNumber:
+          format: uint32
+          type: integer
+        majorNumber:
+          type: integer
+          format: uint32
+        patch:
+          format: uint32
+          type: integer
+      type: object
+    DynamicRouteConfig:
+      id: DynamicRouteConfig
+      properties:
+        routeConfig:
+          additionalProperties:
+            description: Properties of the object. Contains field @type with type URL.
+            type: any
+          type: object
+          description: The route config.
+        versionInfo:
+          type: string
+          description: 'This is the per-resource version information. This version is currently taken from the :ref:`version_info ` field at the time that the route configuration was loaded.'
+        lastUpdated:
+          type: string
+          description: The timestamp when the Route was last updated.
+          format: google-datetime
+      type: object
+    StructMatcher:
+      description: 'StructMatcher provides a general interface to check if a given value is matched in google.protobuf.Struct. It uses `path` to retrieve the value from the struct and then check if it''s matched to the specified value. For example, for the following Struct: .. code-block:: yaml fields: a: struct_value: fields: b: struct_value: fields: c: string_value: pro t: list_value: values: - string_value: m - string_value: n The following MetadataMatcher is matched as the path [a, b, c] will retrieve a string value "pro" from the Metadata which is matched to the specified prefix match. .. code-block:: yaml path: - key: a - key: b - key: c value: string_match: prefix: pr The following StructMatcher is matched as the code will match one of the string values in the list at the path [a, t]. .. code-block:: yaml path: - key: a - key: t value: list_match: one_of: string_match: exact: m An example use of StructMatcher is to match metadata in envoy.v*.core.Node.'
+      properties:
+        value:
+          $ref: '#/components/schemas/ValueMatcher'
+          description: The StructMatcher is matched if the value retrieved by path is matched to this value.
+        path:
+          items:
+            $ref: '#/components/schemas/PathSegment'
+          description: The path to retrieve the Value from the Struct.
+          type: array
+      type: object
+      id: StructMatcher
+    StaticRouteConfig:
+      properties:
+        lastUpdated:
+          type: string
+          format: google-datetime
+          description: The timestamp when the Route was last updated.
+        routeConfig:
+          additionalProperties:
+            description: Properties of the object. Contains field @type with type URL.
+            type: any
+          description: The route config.
+          type: object
+      type: object
+      id: StaticRouteConfig
+    DynamicScopedRouteConfigs:
+      id: DynamicScopedRouteConfigs
+      properties:
+        scopedRouteConfigs:
+          type: array
+          items:
+            additionalProperties:
+              type: any
+              description: Properties of the object. Contains field @type with type URL.
+            type: object
+          description: The scoped route configurations.
+        versionInfo:
+          description: 'This is the per-resource version information. This version is currently taken from the :ref:`version_info ` field at the time that the scoped routes configuration was loaded.'
+          type: string
+        name:
+          description: The name assigned to the scoped route configurations.
+          type: string
+        lastUpdated:
+          type: string
+          description: The timestamp when the scoped route config set was last updated.
+          format: google-datetime
+      type: object
+    PathSegment:
+      properties:
+        key:
+          description: 'If specified, use the key to retrieve the value in a Struct.'
+          type: string
+      id: PathSegment
+      description: Specifies the segment in a path to retrieve value from Struct.
+      type: object
+    PerXdsConfig:
+      type: object
+      properties:
+        scopedRouteConfig:
+          $ref: '#/components/schemas/ScopedRoutesConfigDump'
+        listenerConfig:
+          $ref: '#/components/schemas/ListenersConfigDump'
+        status:
           enumDescriptions:
             - Status info is not available/unknown.
             - Management server has sent the config to client and received ACK.
             - Config is not sent.
             - Management server has sent the config to client but hasn’t received ACK/NACK.
             - Management server has sent the config to client but received NACK.
-        clusterConfig:
-          $ref: '#/components/schemas/ClustersConfigDump'
+          enum:
+            - UNKNOWN
+            - SYNCED
+            - NOT_SENT
+            - STALE
+            - ERROR
+          type: string
         routeConfig:
           $ref: '#/components/schemas/RoutesConfigDump'
-        listenerConfig:
-          $ref: '#/components/schemas/ListenersConfigDump'
-        scopedRouteConfig:
-          $ref: '#/components/schemas/ScopedRoutesConfigDump'
-    DynamicScopedRouteConfigs:
-      properties:
-        versionInfo:
-          description: 'This is the per-resource version information. This version is currently taken from the :ref:`version_info ` field at the time that the scoped routes configuration was loaded.'
-          type: string
-        scopedRouteConfigs:
-          items:
-            additionalProperties:
-              type: any
-              description: Properties of the object. Contains field @type with type URL.
-            type: object
-          type: array
-          description: The scoped route configurations.
-        name:
-          type: string
-          description: The name assigned to the scoped route configurations.
-        lastUpdated:
-          format: google-datetime
-          type: string
-          description: The timestamp when the scoped route config set was last updated.
+        clusterConfig:
+          $ref: '#/components/schemas/ClustersConfigDump'
+      id: PerXdsConfig
+      description: 'Detailed config (per xDS) with status. [#next-free-field: 6]'
+    RegexMatcher:
+      description: A regex matcher designed for safety when used with untrusted input.
       type: object
-      id: DynamicScopedRouteConfigs
-    StaticRouteConfig:
+      id: RegexMatcher
+      properties:
+        googleRe2:
+          $ref: '#/components/schemas/GoogleRE2'
+          description: Google's RE2 regex engine.
+        regex:
+          type: string
+          description: The regex match string. The string must be supported by the configured engine.
+    StringMatcher:
+      properties:
+        suffix:
+          description: 'The input string must have the suffix specified here. Note: empty prefix is not allowed, please use regex instead. Examples: * *abc* matches the value *xyz.abc*'
+          type: string
+        exact:
+          description: 'The input string must match exactly the string specified here. Examples: * *abc* only matches the value *abc*.'
+          type: string
+        prefix:
+          description: 'The input string must have the prefix specified here. Note: empty prefix is not allowed, please use regex instead. Examples: * *abc* matches the value *abc.xyz*'
+          type: string
+        regex:
+          deprecated: true
+          description: 'The input string must match the regular expression specified here. The regex grammar is defined `here `_. Examples: * The regex ``\d{3}`` matches the value *123* * The regex ``\d{3}`` does not match the value *1234* * The regex ``\d{3}`` does not match the value *123.456* .. attention:: This field has been deprecated in favor of `safe_regex` as it is not safe for use with untrusted input in all cases.'
+          type: string
+        safeRegex:
+          $ref: '#/components/schemas/RegexMatcher'
+          description: The input string must match the regular expression specified here.
+        ignoreCase:
+          type: boolean
+          description: 'If true, indicates the exact/prefix/suffix matching should be case insensitive. This has no effect for the safe_regex match. For example, the matcher *data* will match both input string *Data* and *data* if set to true.'
+      description: 'Specifies the way to match a string. [#next-free-field: 7]'
       type: object
-      id: StaticRouteConfig
+      id: StringMatcher
+    DynamicCluster:
+      id: DynamicCluster
       properties:
         lastUpdated:
-          description: The timestamp when the Route was last updated.
+          description: The timestamp when the Cluster was last updated.
           type: string
           format: google-datetime
-        routeConfig:
-          description: The route config.
+        cluster:
           type: object
+          description: The cluster config.
           additionalProperties:
             description: Properties of the object. Contains field @type with type URL.
             type: any
-    Pipe:
-      type: object
-      id: Pipe
-      properties:
-        path:
-          description: 'Unix Domain Socket path. On Linux, paths starting with ''@'' will use the abstract namespace. The starting ''@'' is replaced by a null byte by Envoy. Paths starting with ''@'' will result in an error in environments other than Linux.'
-          type: string
-        mode:
-          type: integer
-          description: The mode for the Pipe. Not applicable for abstract sockets.
-          format: uint32
-    DynamicListenerState:
-      type: object
-      properties:
         versionInfo:
-          description: 'This is the per-resource version information. This version is currently taken from the :ref:`version_info ` field at the time that the listener was loaded. In the future, discrete per-listener versions may be supported by the API.'
           type: string
+          description: 'This is the per-resource version information. This version is currently taken from the :ref:`version_info ` field at the time that the cluster was loaded. In the future, discrete per-cluster versions may be supported by the API.'
+      description: Describes a dynamically loaded cluster via the CDS API.
+      type: object
+    StaticCluster:
+      id: StaticCluster
+      type: object
+      description: Describes a statically loaded cluster.
+      properties:
+        cluster:
+          type: object
+          description: The cluster config.
+          additionalProperties:
+            type: any
+            description: Properties of the object. Contains field @type with type URL.
         lastUpdated:
-          type: string
-          description: The timestamp when the Listener was last successfully updated.
           format: google-datetime
+          description: The timestamp when the Cluster was last updated.
+          type: string
+    StaticListener:
+      description: Describes a statically loaded listener.
+      type: object
+      id: StaticListener
+      properties:
         listener:
+          type: object
           description: The listener config.
           additionalProperties:
             type: any
             description: Properties of the object. Contains field @type with type URL.
-          type: object
-      id: DynamicListenerState
+        lastUpdated:
+          format: google-datetime
+          type: string
+          description: The timestamp when the Listener was last successfully updated.
+    ClientConfig:
+      type: object
+      description: All xds configs for a particular client.
+      properties:
+        node:
+          description: Node for a particular client.
+          $ref: '#/components/schemas/Node'
+        xdsConfig:
+          type: array
+          items:
+            $ref: '#/components/schemas/PerXdsConfig'
+      id: ClientConfig
+    RoutesConfigDump:
+      description: 'Envoy''s RDS implementation fills this message with all currently loaded routes, as described by their RouteConfiguration objects. Static routes that are either defined in the bootstrap configuration or defined inline while configuring listeners are separated from those configured dynamically via RDS. Route configuration information can be used to recreate an Envoy configuration by populating all routes as static routes or by returning them in RDS responses.'
+      type: object
+      id: RoutesConfigDump
+      properties:
+        dynamicRouteConfigs:
+          description: The dynamically loaded route configs.
+          items:
+            $ref: '#/components/schemas/DynamicRouteConfig'
+          type: array
+        staticRouteConfigs:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaticRouteConfig'
+          description: The statically loaded route configs.
+    ClientStatusRequest:
+      type: object
+      properties:
+        nodeMatchers:
+          description: Management server can use these match criteria to identify clients. The match follows OR semantics.
+          items:
+            $ref: '#/components/schemas/NodeMatcher'
+          type: array
+      description: Request for client status of clients identified by a list of NodeMatchers.
+      id: ClientStatusRequest
   parameters:
-    key:
-      description: 'API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.'
+    oauth_token:
+      description: OAuth 2.0 token for the current user.
       in: query
-      name: key
+      name: oauth_token
       schema:
         type: string
-    _.xgafv:
-      description: V1 error format.
-      in: query
-      name: _.xgafv
-      schema:
-        type: string
-        enum:
-          - '1'
-          - '2'
     alt:
       description: Data format for response.
       in: query
@@ -659,6 +650,18 @@ components:
           - json
           - media
           - proto
+    fields:
+      description: Selector specifying which fields to include in a partial response.
+      in: query
+      name: fields
+      schema:
+        type: string
+    uploadType:
+      description: 'Legacy upload protocol for media (e.g. "media", "multipart").'
+      in: query
+      name: uploadType
+      schema:
+        type: string
     upload_protocol:
       description: 'Upload protocol for media (e.g. "raw", "multipart").'
       in: query
@@ -677,34 +680,31 @@ components:
       name: prettyPrint
       schema:
         type: boolean
-    access_token:
-      description: OAuth access token.
-      in: query
-      name: access_token
-      schema:
-        type: string
-    uploadType:
-      description: 'Legacy upload protocol for media (e.g. "media", "multipart").'
-      in: query
-      name: uploadType
-      schema:
-        type: string
     callback:
       description: JSONP
       in: query
       name: callback
       schema:
         type: string
-    oauth_token:
-      description: OAuth 2.0 token for the current user.
+    _.xgafv:
+      description: V1 error format.
       in: query
-      name: oauth_token
+      name: _.xgafv
       schema:
         type: string
-    fields:
-      description: Selector specifying which fields to include in a partial response.
+        enum:
+          - '1'
+          - '2'
+    key:
+      description: 'API key. Your API key identifies your project and provides you with API access, quota, and reports. Required unless you provide an OAuth 2.0 token.'
       in: query
-      name: fields
+      name: key
+      schema:
+        type: string
+    access_token:
+      description: OAuth access token.
+      in: query
+      name: access_token
       schema:
         type: string
   x-stackQL-resources:
@@ -727,17 +727,17 @@ components:
 paths:
   '/v2/discovery:client_status':
     parameters:
-      - $ref: '#/components/parameters/key'
-      - $ref: '#/components/parameters/_.xgafv'
+      - $ref: '#/components/parameters/oauth_token'
       - $ref: '#/components/parameters/alt'
+      - $ref: '#/components/parameters/fields'
+      - $ref: '#/components/parameters/uploadType'
       - $ref: '#/components/parameters/upload_protocol'
       - $ref: '#/components/parameters/quotaUser'
       - $ref: '#/components/parameters/prettyPrint'
-      - $ref: '#/components/parameters/access_token'
-      - $ref: '#/components/parameters/uploadType'
       - $ref: '#/components/parameters/callback'
-      - $ref: '#/components/parameters/oauth_token'
-      - $ref: '#/components/parameters/fields'
+      - $ref: '#/components/parameters/_.xgafv'
+      - $ref: '#/components/parameters/key'
+      - $ref: '#/components/parameters/access_token'
     post:
       description: ''
       operationId: trafficdirector.discovery.client_status
