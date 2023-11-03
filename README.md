@@ -8,6 +8,7 @@ A repository of `provider` interface documents supporting [stackql](https://stac
 
 ## Context
 
+
 StackQL provider interface documents inform the stackql application on how to interact with a given provider (like `aws`, `azure`, `google`, etc), including what methods are available in the provider and how to invoke these using SQL semantics.  Provider interface documents are `yaml` formatted, OpenAPI specifications with extensions.  
 
 The documents are versioned per provider in this repository, and built as signed and compressed as packaged artifacts.  The packaged artifacts are registered and published to the StackQL Provider Registry Artifact Repository in AWS S3.  The provider registry API is a [Deno Deploy](https://deno.com/deploy) application that serves the provider interface documents to the stackql application using the `REGISTRY LIST` and `REGISTRY PULL` commands.  
