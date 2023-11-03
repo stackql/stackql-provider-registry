@@ -1,0 +1,237 @@
+openapi: 3.0.0
+info:
+  title: ResilienceHub
+  version: 1.0.0
+paths: {}
+components:
+  schemas:
+    TagValue:
+      type: string
+      maxLength: 256
+    TagMap:
+      type: object
+      x-patternProperties:
+        .{1,128}:
+          $ref: '#/components/schemas/TagValue'
+      additionalProperties: false
+    PhysicalResourceId:
+      type: object
+      additionalProperties: false
+      properties:
+        AwsAccountId:
+          type: string
+          pattern: ^[0-9]{12}$
+        AwsRegion:
+          type: string
+          pattern: ^[a-z]{2}-((iso[a-z]{0,1}-)|(gov-)){0,1}[a-z]+-[0-9]$
+        Identifier:
+          type: string
+          minLength: 1
+          maxLength: 255
+        Type:
+          type: string
+          pattern: Arn|Native
+      required:
+        - Identifier
+        - Type
+    ResourceMapping:
+      description: Resource mapping is used to map logical resources from template to physical resource
+      type: object
+      additionalProperties: false
+      properties:
+        LogicalStackName:
+          type: string
+        MappingType:
+          type: string
+          pattern: CfnStack|Resource|Terraform
+        ResourceName:
+          type: string
+          pattern: ^[A-Za-z0-9][A-Za-z0-9_\-]{1,59}$
+        TerraformSourceName:
+          type: string
+        PhysicalResourceId:
+          $ref: '#/components/schemas/PhysicalResourceId'
+      required:
+        - MappingType
+        - PhysicalResourceId
+    App:
+      type: object
+      properties:
+        Name:
+          description: Name of the app.
+          type: string
+          pattern: ^[A-Za-z0-9][A-Za-z0-9_\-]{1,59}$
+        Description:
+          description: App description.
+          type: string
+          minLength: 0
+          maxLength: 500
+        AppArn:
+          type: string
+          description: Amazon Resource Name (ARN) of the App.
+          pattern: ^arn:(aws|aws-cn|aws-iso|aws-iso-[a-z]{1}|aws-us-gov):[A-Za-z0-9][A-Za-z0-9_/.-]{0,62}:([a-z]{2}-((iso[a-z]{0,1}-)|(gov-)){0,1}[a-z]+-[0-9]):[0-9]{12}:[A-Za-z0-9][A-Za-z0-9:_/+=,@.-]{0,1023}$
+        ResiliencyPolicyArn:
+          type: string
+          description: Amazon Resource Name (ARN) of the Resiliency Policy.
+          pattern: ^arn:(aws|aws-cn|aws-iso|aws-iso-[a-z]{1}|aws-us-gov):[A-Za-z0-9][A-Za-z0-9_/.-]{0,62}:([a-z]{2}-((iso[a-z]{0,1}-)|(gov-)){0,1}[a-z]+-[0-9]):[0-9]{12}:[A-Za-z0-9][A-Za-z0-9:_/+=,@.-]{0,1023}$
+        Tags:
+          $ref: '#/components/schemas/TagMap'
+        AppTemplateBody:
+          description: A string containing full ResilienceHub app template body.
+          type: string
+          minLength: 0
+          maxLength: 5000
+          pattern: ^[\w\s:,-\.'{}\[\]:"]+$
+        ResourceMappings:
+          description: An array of ResourceMapping objects.
+          type: array
+          uniqueItems: false
+          x-insertionOrder: false
+          items:
+            $ref: '#/components/schemas/ResourceMapping'
+        AppAssessmentSchedule:
+          description: Assessment execution schedule.
+          type: string
+          enum:
+            - Disabled
+            - Daily
+      required:
+        - Name
+        - AppTemplateBody
+        - ResourceMappings
+      x-stackql-resource-name: app
+      x-stackql-primaryIdentifier:
+        - AppArn
+    FailurePolicy:
+      description: Failure Policy.
+      type: object
+      properties:
+        RtoInSecs:
+          description: RTO in seconds.
+          type: integer
+        RpoInSecs:
+          description: RPO in seconds.
+          type: integer
+      required:
+        - RtoInSecs
+        - RpoInSecs
+      additionalProperties: false
+    PolicyMap:
+      type: object
+      x-patternProperties:
+        .*{1,8}:
+          $ref: '#/components/schemas/FailurePolicy'
+      additionalProperties: false
+    ResiliencyPolicy:
+      type: object
+      properties:
+        PolicyName:
+          description: Name of Resiliency Policy.
+          type: string
+          pattern: ^[A-Za-z0-9][A-Za-z0-9_\-]{1,59}$
+        PolicyDescription:
+          description: Description of Resiliency Policy.
+          type: string
+          maxLength: 500
+        DataLocationConstraint:
+          type: string
+          description: Data Location Constraint of the Policy.
+          enum:
+            - AnyLocation
+            - SameContinent
+            - SameCountry
+        Tier:
+          type: string
+          description: Resiliency Policy Tier.
+          enum:
+            - MissionCritical
+            - Critical
+            - Important
+            - CoreServices
+            - NonCritical
+        Policy:
+          $ref: '#/components/schemas/PolicyMap'
+        PolicyArn:
+          type: string
+          description: Amazon Resource Name (ARN) of the Resiliency Policy.
+          pattern: ^arn:(aws|aws-cn|aws-iso|aws-iso-[a-z]{1}|aws-us-gov):[A-Za-z0-9][A-Za-z0-9_/.-]{0,62}:([a-z]{2}-((iso[a-z]{0,1}-)|(gov-)){0,1}[a-z]+-[0-9]):[0-9]{12}:[A-Za-z0-9][A-Za-z0-9:_/+=,@.-]{0,1023}$
+        Tags:
+          $ref: '#/components/schemas/TagMap'
+      required:
+        - PolicyName
+        - Tier
+        - Policy
+      x-stackql-resource-name: resiliency_policy
+      x-stackql-primaryIdentifier:
+        - PolicyArn
+  x-stackQL-resources:
+    apps:
+      name: apps
+      id: aws.resiliencehub.apps
+      x-cfn-schema-name: App
+      x-type: list
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.AppArn') as app_arn
+              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ResilienceHub::App'
+    app:
+      name: app
+      id: aws.resiliencehub.app
+      x-cfn-schema-name: App
+      x-type: get
+      x-identifiers:
+        - AppArn
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.Name') as name,
+              JSON_EXTRACT(Properties, '$.Description') as description,
+              JSON_EXTRACT(Properties, '$.AppArn') as app_arn,
+              JSON_EXTRACT(Properties, '$.ResiliencyPolicyArn') as resiliency_policy_arn,
+              JSON_EXTRACT(Properties, '$.AppTemplateBody') as app_template_body,
+              JSON_EXTRACT(Properties, '$.ResourceMappings') as resource_mappings,
+              JSON_EXTRACT(Properties, '$.AppAssessmentSchedule') as app_assessment_schedule
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ResilienceHub::App'
+    resiliency_policies:
+      name: resiliency_policies
+      id: aws.resiliencehub.resiliency_policies
+      x-cfn-schema-name: ResiliencyPolicy
+      x-type: list
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.PolicyArn') as policy_arn
+              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ResilienceHub::ResiliencyPolicy'
+    resiliency_policy:
+      name: resiliency_policy
+      id: aws.resiliencehub.resiliency_policy
+      x-cfn-schema-name: ResiliencyPolicy
+      x-type: get
+      x-identifiers:
+        - PolicyArn
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.PolicyName') as policy_name,
+              JSON_EXTRACT(Properties, '$.PolicyDescription') as policy_description,
+              JSON_EXTRACT(Properties, '$.DataLocationConstraint') as data_location_constraint,
+              JSON_EXTRACT(Properties, '$.Tier') as tier,
+              JSON_EXTRACT(Properties, '$.PolicyArn') as policy_arn
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ResilienceHub::ResiliencyPolicy'
