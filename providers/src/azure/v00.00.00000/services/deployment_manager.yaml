@@ -1,14 +1,14 @@
 openapi: 3.0.0
 servers:
-  - url: https://management.azure.com/
+  - url: 'https://management.azure.com/'
 info:
-  title: Azure Deployment Manager (Microsoft.DeploymentManager)
-  description: REST APIs for orchestrating deployments using the Azure Deployment Manager (ADM). See https://docs.microsoft.com/en-us/azure-resource-manager/deployment-manager-overview for more information.
+  title: Azure Deployment Manager
+  description: Deployment Manager enables you to use safe deployment practices when deploying your service across many regions.
   contact:
     name: StackQL Studios
-    url: https://stackql.io/
+    url: 'https://stackql.io/'
     email: info@stackql.io
-  version: 2022-09-22-stackql-generated
+  version: 2024-01-25-stackql-generated
 security:
   - azure_auth:
       - user_impersonation
@@ -19,10 +19,36 @@ components:
       type: oauth2
       flows:
         implicit:
-          authorizationUrl: https://login.microsoftonline.com/common/oauth2/authorize
+          authorizationUrl: 'https://login.microsoftonline.com/common/oauth2/authorize'
           scopes:
             user_impersonation: impersonate your user account
   parameters:
+    SubscriptionIdParameter:
+      name: subscriptionId
+      in: path
+      description: The ID of the target subscription.
+      required: true
+      schema:
+        minLength: 1
+        type: string
+    ApiVersionParameter:
+      name: api-version
+      in: query
+      description: The API version to use for this operation.
+      required: true
+      x-ms-parameter-location: client
+      schema:
+        type: string
+    ResourceGroupNameParameter:
+      name: resourceGroupName
+      in: path
+      description: The name of the resource group. The name is case insensitive.
+      required: true
+      x-ms-parameter-location: method
+      schema:
+        minLength: 1
+        maxLength: 90
+        type: string
     artifactSourceName:
       name: artifactSourceName
       in: path
@@ -78,7 +104,7 @@ components:
       required: true
       x-ms-parameter-location: method
       schema:
-        pattern: ^[-\w\._\(\)]+$
+        pattern: '^[-\w\._\(\)]+$'
         minLength: 1
         maxLength: 90
         type: string
@@ -93,58 +119,399 @@ components:
     retryAttempt:
       name: retryAttempt
       in: query
-      description: Rollout retry attempt ordinal to get the result of. If not specified, result of the latest attempt will be returned.
+      description: 'Rollout retry attempt ordinal to get the result of. If not specified, result of the latest attempt will be returned.'
       required: false
       x-ms-parameter-location: method
       schema:
         type: integer
-    ApiVersionParameter:
-      name: api-version
-      in: query
-      description: The API version to use for this operation.
-      required: true
-      schema:
-        minLength: 1
-        type: string
-    SubscriptionIdParameter:
-      name: subscriptionId
-      in: path
-      description: The ID of the target subscription.
-      required: true
-      schema:
-        minLength: 1
-        type: string
-    ResourceGroupNameParameter:
-      name: resourceGroupName
-      in: path
-      description: The name of the resource group. The name is case insensitive.
-      required: true
-      x-ms-parameter-location: method
-      schema:
-        minLength: 1
-        maxLength: 90
-        type: string
   schemas:
+    Resource:
+      title: Resource
+      description: Common fields that are returned in the response for all Azure Resource Manager resources
+      type: object
+      properties:
+        id:
+          readOnly: true
+          type: string
+          description: 'Fully qualified resource ID for the resource. Ex - /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}'
+        name:
+          readOnly: true
+          type: string
+          description: The name of the resource
+        type:
+          readOnly: true
+          type: string
+          description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
+      x-ms-azure-resource: true
+    AzureEntityResource:
+      x-ms-client-name: AzureEntityResource
+      title: Entity Resource
+      description: The resource model definition for an Azure Resource Manager resource with an etag.
+      properties:
+        etag:
+          type: string
+          readOnly: true
+          description: Resource Etag.
+        id:
+          readOnly: true
+          type: string
+          description: 'Fully qualified resource ID for the resource. Ex - /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}'
+        name:
+          readOnly: true
+          type: string
+          description: The name of the resource
+        type:
+          readOnly: true
+          type: string
+          description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
+      type: object
+    TrackedResource:
+      title: Tracked Resource
+      description: The resource model definition for an Azure Resource Manager tracked top level resource which has 'tags' and a 'location'
+      required:
+        - location
+      properties:
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+          x-ms-mutability:
+            - read
+            - create
+            - update
+          description: Resource tags.
+        location:
+          type: string
+          x-ms-mutability:
+            - read
+            - create
+          description: The geo-location where the resource lives
+        id:
+          readOnly: true
+          type: string
+          description: 'Fully qualified resource ID for the resource. Ex - /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}'
+        name:
+          readOnly: true
+          type: string
+          description: The name of the resource
+        type:
+          readOnly: true
+          type: string
+          description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
+      type: object
+    ProxyResource:
+      title: Proxy Resource
+      description: The resource model definition for a Azure Resource Manager proxy resource. It will not have tags and a location
+      properties:
+        id:
+          readOnly: true
+          type: string
+          description: 'Fully qualified resource ID for the resource. Ex - /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}'
+        name:
+          readOnly: true
+          type: string
+          description: The name of the resource
+        type:
+          readOnly: true
+          type: string
+          description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
+      type: object
+    ResourceModelWithAllowedPropertySet:
+      description: 'The resource model definition containing the full set of allowed properties for a resource. Except properties bag, there cannot be a top level property outside of this set.'
+      type: object
+      properties:
+        id:
+          readOnly: true
+          type: string
+          x-ms-mutability:
+            - read
+          description: 'Fully qualified resource ID for the resource. Ex - /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}'
+        name:
+          readOnly: true
+          type: string
+          description: The name of the resource
+        type:
+          readOnly: true
+          type: string
+          x-ms-mutability:
+            - read
+          description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
+        location:
+          type: string
+          x-ms-mutability:
+            - read
+            - create
+          description: The geo-location where the resource lives
+        managedBy:
+          type: string
+          x-ms-mutability:
+            - read
+            - create
+            - update
+          description: 'The fully qualified resource ID of the resource that manages this resource. Indicates if this resource is managed by another Azure resource. If this is present, complete mode deployment will not delete the resource if it is removed from the template since it is managed by another resource.'
+        kind:
+          type: string
+          x-ms-mutability:
+            - read
+            - create
+          description: 'Metadata used by portal/tooling/etc to render different UX experiences for resources of the same type; e.g. ApiApps are a kind of Microsoft.Web/sites type.  If supported, the resource provider must validate and persist this value.'
+          pattern: '^[-\w\._,\(\)]+$'
+        etag:
+          readOnly: true
+          type: string
+          description: 'The etag field is *not* required. If it is provided in the response body, it must also be provided as a header per the normal etag convention.  Entity tags are used for comparing two or more entities from the same requested resource. HTTP/1.1 uses entity tags in the etag (section 14.19), If-Match (section 14.24), If-None-Match (section 14.26), and If-Range (section 14.27) header fields. '
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+          x-ms-mutability:
+            - read
+            - create
+            - update
+          description: Resource tags.
+        identity:
+          allOf:
+            - $ref: '#/components/schemas/Identity'
+        sku:
+          allOf:
+            - $ref: '#/components/schemas/Sku'
+        plan:
+          allOf:
+            - $ref: '#/components/schemas/Plan'
+      x-ms-azure-resource: true
+    Sku:
+      description: The resource model definition representing SKU
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the SKU. Ex - P3. It is typically a letter+number code
+        tier:
+          type: string
+          enum:
+            - Free
+            - Basic
+            - Standard
+            - Premium
+          x-ms-enum:
+            name: SkuTier
+            modelAsString: false
+          description: 'This field is required to be implemented by the Resource Provider if the service has more than one tier, but is not required on a PUT.'
+        size:
+          type: string
+          description: 'The SKU size. When the name field is the combination of tier and some other value, this would be the standalone code. '
+        family:
+          type: string
+          description: 'If the service has different generations of hardware, for the same SKU, then that can be captured here.'
+        capacity:
+          type: integer
+          format: int32
+          description: If the SKU supports scale out/in then the capacity integer should be included. If scale out/in is not possible for the resource this may be omitted.
+      required:
+        - name
     Identity:
       description: Identity for the resource.
       type: object
       properties:
-        principalId:
-          readOnly: true
-          type: string
-          description: The principal ID of resource identity.
-        tenantId:
-          readOnly: true
-          type: string
-          description: The tenant ID of resource.
         type:
           type: string
           description: The identity type.
+          example: userAssigned
+        identityIds:
+          type: array
+          items:
+            type: string
+            example: /subscriptions/mySubId/resourcegroups/myRG/providers/Microsoft.ManagedIdentity/userassignedidentities/myIdentity
+          description: The list of identities.
+      required:
+        - type
+        - identityIds
+    Plan:
+      type: object
+      properties:
+        name:
+          type: string
+          description: A user defined name of the 3rd Party Artifact that is being procured.
+        publisher:
+          type: string
+          description: The publisher of the 3rd Party Artifact that is being bought. E.g. NewRelic
+        product:
+          type: string
+          description: 'The 3rd Party artifact that is being procured. E.g. NewRelic. Product maps to the OfferID specified for the artifact at the time of Data Market onboarding. '
+        promotionCode:
+          type: string
+          description: A publisher provided promotion code as provisioned in Data Market for the said product/artifact.
+        version:
+          type: string
+          description: The version of the desired product/artifact.
+      description: Plan for the resource.
+      required:
+        - name
+        - publisher
+        - product
+    ErrorResponse:
+      title: Error Response
+      description: Common error response for all Azure Resource Manager APIs to return error details for failed operations. (This also follows the OData error response format.)
+      type: object
+      properties:
+        code:
+          readOnly: true
+          type: string
+          description: The error code.
+        message:
+          readOnly: true
+          type: string
+          description: The error message.
+        target:
+          readOnly: true
+          type: string
+          description: The error target.
+        details:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorResponse'
+          x-ms-identifiers:
+            - message
+            - target
+          description: The error details.
+        additionalInfo:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorAdditionalInfo'
+          x-ms-identifiers: []
+          description: The error additional info.
+    ErrorAdditionalInfo:
+      type: object
+      properties:
+        type:
+          readOnly: true
+          type: string
+          description: The additional info type.
+        info:
+          readOnly: true
+          type: object
+          description: The additional info.
+      description: The resource management error additional info.
+    Operation:
+      description: Represents an operation that can be performed on the service.
+      properties:
+        name:
+          type: string
+          description: The name of the operation.
+        display:
+          description: The display name of the operation.
+          $ref: '#/components/schemas/OperationDetail'
+        origin:
+          type: string
+          description: The origin of the operation.
+        properties:
+          description: The properties of the operation.
+          type: object
+          x-ms-client-flatten: true
+      type: object
+    OperationListResult:
+      description: A list of REST API operations supported by an Azure Resource Provider. It contains an URL link to get the next set of results.
+      type: object
+      properties:
+        value:
+          type: array
+          items:
+            $ref: '#/components/schemas/Operation'
+          x-ms-identifiers:
+            - name
+          description: List of operations supported by the resource provider
+          readOnly: true
+        nextLink:
+          type: string
+          description: URL to get the next set of operation list results (if there are any).
+          readOnly: true
+    locationData:
+      description: Metadata pertaining to the geographic location of the resource.
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 256
+          description: A canonical name for the geographic or physical location.
+        city:
+          type: string
+          description: The city or locality where the resource is located.
+        district:
+          type: string
+          description: 'The district, state, or province where the resource is located.'
+        countryOrRegion:
+          type: string
+          description: The country or region where the resource is located
+      required:
+        - name
+    systemData:
+      description: Metadata pertaining to creation and last modification of the resource.
+      type: object
+      readOnly: true
+      properties:
+        createdBy:
+          type: string
+          description: The identity that created the resource.
+        createdByType:
+          type: string
+          description: The type of identity that created the resource.
           enum:
-            - SystemAssigned
+            - User
+            - Application
+            - ManagedIdentity
+            - Key
           x-ms-enum:
-            name: ResourceIdentityType
-            modelAsString: false
+            name: createdByType
+            modelAsString: true
+        createdAt:
+          type: string
+          format: date-time
+          description: The timestamp of resource creation (UTC).
+        lastModifiedBy:
+          type: string
+          description: The identity that last modified the resource.
+        lastModifiedByType:
+          type: string
+          description: The type of identity that last modified the resource.
+          enum:
+            - User
+            - Application
+            - ManagedIdentity
+            - Key
+          x-ms-enum:
+            name: createdByType
+            modelAsString: true
+        lastModifiedAt:
+          type: string
+          format: date-time
+          description: The timestamp of resource last modification (UTC)
+    encryptionProperties:
+      description: Configuration of key for data encryption
+      type: object
+      properties:
+        status:
+          description: Indicates whether or not the encryption is enabled for container registry.
+          enum:
+            - enabled
+            - disabled
+          type: string
+          x-ms-enum:
+            name: EncryptionStatus
+            modelAsString: true
+        keyVaultProperties:
+          $ref: '#/components/schemas/KeyVaultProperties'
+          description: Key vault properties.
+    KeyVaultProperties:
+      type: object
+      properties:
+        keyIdentifier:
+          description: Key vault uri to access the encryption key.
+          type: string
+        identity:
+          description: The client ID of the identity which will be used to access key vault.
+          type: string
     RolloutRequest:
       description: Defines the PUT rollout request body.
       required:
@@ -274,7 +641,7 @@ components:
           example: AzureStorage
         artifactRoot:
           type: string
-          description: The path from the location that the 'authentication' property [say, a SAS URI to the blob container] refers to, to the location of the artifacts. This can be used to differentiate different versions of the artifacts. Or, different types of artifacts like binaries or templates. The location referenced by the authentication property concatenated with this optional artifactRoot path forms the artifact source location where the artifacts are expected to be found.
+          description: 'The path from the location that the ''authentication'' property [say, a SAS URI to the blob container] refers to, to the location of the artifacts. This can be used to differentiate different versions of the artifacts. Or, different types of artifacts like binaries or templates. The location referenced by the authentication property concatenated with this optional artifactRoot path forms the artifact source location where the artifacts are expected to be found.'
           example: binaries/2018.09.24
         authentication:
           description: The authentication method to use to access the artifact source.
@@ -373,11 +740,11 @@ components:
           type: integer
           format: int32
           readOnly: true
-          description: The ordinal count of the number of retry attempts on a rollout. 0 if no retries of the rollout have been performed. If the rollout is updated with a PUT, this count is reset to 0.
+          description: 'The ordinal count of the number of retry attempts on a rollout. 0 if no retries of the rollout have been performed. If the rollout is updated with a PUT, this count is reset to 0.'
         skipSucceededOnRetry:
           type: boolean
           readOnly: true
-          description: True, if all steps that succeeded on the previous run/attempt were chosen to be skipped in this retry attempt. False, otherwise.
+          description: 'True, if all steps that succeeded on the previous run/attempt were chosen to be skipped in this retry attempt. False, otherwise.'
         startTime:
           type: string
           format: date-time
@@ -535,7 +902,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RolloutStep'
-          description: Detailed step information, if present.
+          description: 'Detailed step information, if present.'
       type: object
     ServiceUnitProperties:
       description: Defines the properties of a service unit.
@@ -566,11 +933,11 @@ components:
         templateUri:
           type: string
           description: The full URI of the ARM template file with the SAS token.
-          example: https://teststore.blob.core.windows.net/payloadcontainer/template.json?sasUri
+          example: 'https://teststore.blob.core.windows.net/payloadcontainer/template.json?sasUri'
         parametersUri:
           type: string
           description: The full URI of the ARM parameters file with the SAS token.
-          example: https://teststore.blob.core.windows.net/payloadcontainer/parameters.json?sasUri
+          example: 'https://teststore.blob.core.windows.net/payloadcontainer/parameters.json?sasUri'
         templateArtifactSourceRelativePath:
           type: string
           description: The path to the ARM template file relative to the artifact source.
@@ -602,7 +969,7 @@ components:
           readOnly: true
           items:
             $ref: '#/components/schemas/ResourceOperation'
-          description: Set of resource operations that were performed, if any, on an Azure resource.
+          description: 'Set of resource operations that were performed, if any, on an Azure resource.'
         messages:
           type: array
           readOnly: true
@@ -639,7 +1006,7 @@ components:
           readOnly: true
           description: Last time in UTC this operation was updated.
         error:
-          description: The errors, if any, for the action.
+          description: 'The errors, if any, for the action.'
           $ref: '#/components/schemas/CloudErrorBody'
       type: object
     ResourceOperation:
@@ -647,18 +1014,18 @@ components:
       properties:
         resourceName:
           type: string
-          description: Name of the resource as specified in the artifacts. For ARM resources, this is the name of the resource specified in the template.
+          description: 'Name of the resource as specified in the artifacts. For ARM resources, this is the name of the resource specified in the template.'
         operationId:
           type: string
           readOnly: true
-          description: Unique identifier of the operation. For ARM resources, this is the operationId obtained from ARM service.
+          description: 'Unique identifier of the operation. For ARM resources, this is the operationId obtained from ARM service.'
         resourceType:
           type: string
-          description: Type of the resource as specified in the artifacts. For ARM resources, this is the type of the resource specified in the template.
+          description: 'Type of the resource as specified in the artifacts. For ARM resources, this is the type of the resource specified in the template.'
         provisioningState:
           type: string
           readOnly: true
-          description: State of the resource deployment. For ARM resources, this is the current provisioning state of the resource.
+          description: 'State of the resource deployment. For ARM resources, this is the current provisioning state of the resource.'
         statusMessage:
           type: string
           readOnly: true
@@ -717,59 +1084,6 @@ components:
           type: array
           description: The list of supported operations
           $ref: '#/components/schemas/Operation'
-    Operation:
-      title: REST API Operation
-      description: Details of a REST API operation, returned from the Resource Provider Operations API
-      type: object
-      properties:
-        name:
-          description: 'The name of the operation, as per Resource-Based Access Control (RBAC). Examples: "Microsoft.Compute/virtualMachines/write", "Microsoft.Compute/virtualMachines/capture/action"'
-          type: string
-          readOnly: true
-        isDataAction:
-          description: Whether the operation applies to data-plane. This is "true" for data-plane operations and "false" for ARM/control-plane operations.
-          type: boolean
-          readOnly: true
-        display:
-          description: Localized display information for this particular operation.
-          type: object
-          properties:
-            provider:
-              description: The localized friendly form of the resource provider name, e.g. "Microsoft Monitoring Insights" or "Microsoft Compute".
-              type: string
-              readOnly: true
-            resource:
-              description: The localized friendly name of the resource type related to this operation. E.g. "Virtual Machines" or "Job Schedule Collections".
-              type: string
-              readOnly: true
-            operation:
-              description: The concise, localized friendly name for the operation; suitable for dropdowns. E.g. "Create or Update Virtual Machine", "Restart Virtual Machine".
-              type: string
-              readOnly: true
-            description:
-              description: The short, localized friendly description of the operation; suitable for tool tips and detailed views.
-              type: string
-              readOnly: true
-        origin:
-          description: The intended executor of the operation; as in Resource Based Access Control (RBAC) and audit logs UX. Default value is "user,system"
-          type: string
-          readOnly: true
-          enum:
-            - user
-            - system
-            - user,system
-          x-ms-enum:
-            name: Origin
-            modelAsString: true
-        actionType:
-          description: Enum. Indicates the action type. "Internal" refers to actions that are for internal only APIs.
-          type: string
-          readOnly: true
-          enum:
-            - Internal
-          x-ms-enum:
-            name: ActionType
-            modelAsString: true
     OperationDetail:
       description: The detail about an operation.
       properties:
@@ -866,7 +1180,7 @@ components:
           example: PT30M
         healthyStateDuration:
           type: string
-          description: The duration in ISO 8601 format for which the resource is expected to be continuously healthy. If maxElasticDuration is specified, healthy state duration is enforced after the detection of first healthy signal.
+          description: 'The duration in ISO 8601 format for which the resource is expected to be continuously healthy. If maxElasticDuration is specified, healthy state duration is enforced after the detection of first healthy signal.'
           example: PT60M
       required:
         - type
@@ -889,7 +1203,7 @@ components:
           example: PT30M
         healthyStateDuration:
           type: string
-          description: The duration in ISO 8601 format for which the resource is expected to be continuously healthy. If maxElasticDuration is specified, healthy state duration is enforced after the detection of first healthy signal.
+          description: 'The duration in ISO 8601 format for which the resource is expected to be continuously healthy. If maxElasticDuration is specified, healthy state duration is enforced after the detection of first healthy signal.'
           example: PT60M
         properties:
           x-ms-client-flatten: true
@@ -918,7 +1232,7 @@ components:
           description: The request to the health provider.
           $ref: '#/components/schemas/RestRequest'
         response:
-          description: The expected response from the health provider. If no expected response is provided, the default is to expect the received response to have an HTTP status code of 200 OK.
+          description: 'The expected response from the health provider. If no expected response is provided, the default is to expect the received response to have an HTTP status code of 200 OK.'
           $ref: '#/components/schemas/RestResponse'
       required:
         - name
@@ -1019,7 +1333,7 @@ components:
       properties:
         successStatusCodes:
           type: array
-          description: The HTTP status codes expected in a successful health check response. The response is expected to match one of the given status codes. If no expected status codes are provided, default expected status code is 200 OK.
+          description: 'The HTTP status codes expected in a successful health check response. The response is expected to match one of the given status codes. If no expected status codes are provided, default expected status code is 200 OK.'
           items:
             type: string
           example:
@@ -1108,384 +1422,31 @@ components:
       type: array
       items:
         $ref: '#/components/schemas/Rollout'
-    Resource:
-      title: Resource
-      description: Common fields that are returned in the response for all Azure Resource Manager resources
-      type: object
-      properties:
-        id:
-          readOnly: true
-          type: string
-          description: Fully qualified resource ID for the resource. Ex - /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}
-        name:
-          readOnly: true
-          type: string
-          description: The name of the resource
-        type:
-          readOnly: true
-          type: string
-          description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
-      x-ms-azure-resource: true
-    AzureEntityResource:
-      x-ms-client-name: AzureEntityResource
-      title: Entity Resource
-      description: The resource model definition for an Azure Resource Manager resource with an etag.
-      properties:
-        etag:
-          type: string
-          readOnly: true
-          description: Resource Etag.
-        id:
-          readOnly: true
-          type: string
-          description: Fully qualified resource ID for the resource. Ex - /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}
-        name:
-          readOnly: true
-          type: string
-          description: The name of the resource
-        type:
-          readOnly: true
-          type: string
-          description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
-      type: object
-    TrackedResource:
-      title: Tracked Resource
-      description: The resource model definition for an Azure Resource Manager tracked top level resource which has 'tags' and a 'location'
-      required:
-        - location
-      properties:
-        tags:
-          type: object
-          additionalProperties:
-            type: string
-          x-ms-mutability:
-            - read
-            - create
-            - update
-          description: Resource tags.
-        location:
-          type: string
-          x-ms-mutability:
-            - read
-            - create
-          description: The geo-location where the resource lives
-        id:
-          readOnly: true
-          type: string
-          description: Fully qualified resource ID for the resource. Ex - /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}
-        name:
-          readOnly: true
-          type: string
-          description: The name of the resource
-        type:
-          readOnly: true
-          type: string
-          description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
-      type: object
-    ProxyResource:
-      title: Proxy Resource
-      description: The resource model definition for a Azure Resource Manager proxy resource. It will not have tags and a location
-      properties:
-        id:
-          readOnly: true
-          type: string
-          description: Fully qualified resource ID for the resource. Ex - /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}
-        name:
-          readOnly: true
-          type: string
-          description: The name of the resource
-        type:
-          readOnly: true
-          type: string
-          description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
-      type: object
-    ResourceModelWithAllowedPropertySet:
-      description: The resource model definition containing the full set of allowed properties for a resource. Except properties bag, there cannot be a top level property outside of this set.
-      type: object
-      properties:
-        id:
-          readOnly: true
-          type: string
-          x-ms-mutability:
-            - read
-          description: Fully qualified resource ID for the resource. Ex - /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}
-        name:
-          readOnly: true
-          type: string
-          description: The name of the resource
-        type:
-          readOnly: true
-          type: string
-          x-ms-mutability:
-            - read
-          description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
-        location:
-          type: string
-          x-ms-mutability:
-            - read
-            - create
-          description: The geo-location where the resource lives
-        managedBy:
-          type: string
-          x-ms-mutability:
-            - read
-            - create
-            - update
-          description: The fully qualified resource ID of the resource that manages this resource. Indicates if this resource is managed by another Azure resource. If this is present, complete mode deployment will not delete the resource if it is removed from the template since it is managed by another resource.
-        kind:
-          type: string
-          x-ms-mutability:
-            - read
-            - create
-          description: Metadata used by portal/tooling/etc to render different UX experiences for resources of the same type; e.g. ApiApps are a kind of Microsoft.Web/sites type.  If supported, the resource provider must validate and persist this value.
-          pattern: ^[-\w\._,\(\)]+$
-        etag:
-          readOnly: true
-          type: string
-          description: 'The etag field is *not* required. If it is provided in the response body, it must also be provided as a header per the normal etag convention.  Entity tags are used for comparing two or more entities from the same requested resource. HTTP/1.1 uses entity tags in the etag (section 14.19), If-Match (section 14.24), If-None-Match (section 14.26), and If-Range (section 14.27) header fields. '
-        tags:
-          type: object
-          additionalProperties:
-            type: string
-          x-ms-mutability:
-            - read
-            - create
-            - update
-          description: Resource tags.
-        identity:
-          allOf:
-            - $ref: '#/components/schemas/Identity'
-        sku:
-          allOf:
-            - $ref: '#/components/schemas/Sku'
-        plan:
-          allOf:
-            - $ref: '#/components/schemas/Plan'
-      x-ms-azure-resource: true
-    Sku:
-      description: The resource model definition representing SKU
-      type: object
-      properties:
-        name:
-          type: string
-          description: The name of the SKU. Ex - P3. It is typically a letter+number code
-        tier:
-          type: string
-          enum:
-            - Free
-            - Basic
-            - Standard
-            - Premium
-          x-ms-enum:
-            name: SkuTier
-            modelAsString: false
-          description: This field is required to be implemented by the Resource Provider if the service has more than one tier, but is not required on a PUT.
-        size:
-          type: string
-          description: 'The SKU size. When the name field is the combination of tier and some other value, this would be the standalone code. '
-        family:
-          type: string
-          description: If the service has different generations of hardware, for the same SKU, then that can be captured here.
-        capacity:
-          type: integer
-          format: int32
-          description: If the SKU supports scale out/in then the capacity integer should be included. If scale out/in is not possible for the resource this may be omitted.
-      required:
-        - name
-    Plan:
-      type: object
-      properties:
-        name:
-          type: string
-          description: A user defined name of the 3rd Party Artifact that is being procured.
-        publisher:
-          type: string
-          description: The publisher of the 3rd Party Artifact that is being bought. E.g. NewRelic
-        product:
-          type: string
-          description: 'The 3rd Party artifact that is being procured. E.g. NewRelic. Product maps to the OfferID specified for the artifact at the time of Data Market onboarding. '
-        promotionCode:
-          type: string
-          description: A publisher provided promotion code as provisioned in Data Market for the said product/artifact.
-        version:
-          type: string
-          description: The version of the desired product/artifact.
-      description: Plan for the resource.
-      required:
-        - name
-        - publisher
-        - product
-    ErrorResponse:
-      title: Error Response
-      description: Common error response for all Azure Resource Manager APIs to return error details for failed operations. (This also follows the OData error response format.)
-      type: object
-      properties:
-        code:
-          readOnly: true
-          type: string
-          description: The error code.
-        message:
-          readOnly: true
-          type: string
-          description: The error message.
-        target:
-          readOnly: true
-          type: string
-          description: The error target.
-        details:
-          readOnly: true
-          type: array
-          items:
-            $ref: '#/components/schemas/ErrorResponse'
-          x-ms-identifiers:
-            - message
-            - target
-          description: The error details.
-        additionalInfo:
-          readOnly: true
-          type: array
-          items:
-            $ref: '#/components/schemas/ErrorAdditionalInfo'
-          x-ms-identifiers: []
-          description: The error additional info.
-    ErrorAdditionalInfo:
-      type: object
-      properties:
-        type:
-          readOnly: true
-          type: string
-          description: The additional info type.
-        info:
-          readOnly: true
-          type: object
-          description: The additional info.
-      description: The resource management error additional info.
-    OperationListResult:
-      description: A list of REST API operations supported by an Azure Resource Provider. It contains an URL link to get the next set of results.
-      type: object
-      properties:
-        value:
-          type: array
-          items:
-            $ref: '#/components/schemas/Operation'
-          x-ms-identifiers:
-            - name
-          description: List of operations supported by the resource provider
-          readOnly: true
-        nextLink:
-          type: string
-          description: URL to get the next set of operation list results (if there are any).
-          readOnly: true
-    locationData:
-      description: Metadata pertaining to the geographic location of the resource.
-      type: object
-      properties:
-        name:
-          type: string
-          maxLength: 256
-          description: A canonical name for the geographic or physical location.
-        city:
-          type: string
-          description: The city or locality where the resource is located.
-        district:
-          type: string
-          description: The district, state, or province where the resource is located.
-        countryOrRegion:
-          type: string
-          description: The country or region where the resource is located
-      required:
-        - name
-    systemData:
-      description: Metadata pertaining to creation and last modification of the resource.
-      type: object
-      readOnly: true
-      properties:
-        createdBy:
-          type: string
-          description: The identity that created the resource.
-        createdByType:
-          type: string
-          description: The type of identity that created the resource.
-          enum:
-            - User
-            - Application
-            - ManagedIdentity
-            - Key
-          x-ms-enum:
-            name: createdByType
-            modelAsString: true
-        createdAt:
-          type: string
-          format: date-time
-          description: The timestamp of resource creation (UTC).
-        lastModifiedBy:
-          type: string
-          description: The identity that last modified the resource.
-        lastModifiedByType:
-          type: string
-          description: The type of identity that last modified the resource.
-          enum:
-            - User
-            - Application
-            - ManagedIdentity
-            - Key
-          x-ms-enum:
-            name: createdByType
-            modelAsString: true
-        lastModifiedAt:
-          type: string
-          format: date-time
-          description: The timestamp of resource last modification (UTC)
-    encryptionProperties:
-      description: Configuration of key for data encryption
-      type: object
-      properties:
-        status:
-          description: Indicates whether or not the encryption is enabled for container registry.
-          enum:
-            - enabled
-            - disabled
-          type: string
-          x-ms-enum:
-            name: EncryptionStatus
-            modelAsString: true
-        keyVaultProperties:
-          $ref: '#/components/schemas/KeyVaultProperties'
-          description: Key vault properties.
-    KeyVaultProperties:
-      type: object
-      properties:
-        keyIdentifier:
-          description: Key vault uri to access the encryption key.
-          type: string
-        identity:
-          description: The client ID of the identity which will be used to access key vault.
-          type: string
   x-stackQL-resources:
     service_topologies:
       id: azure.deployment_manager.service_topologies
       name: service_topologies
-      title: Service_topologies
+      title: Service Topologies
       methods:
-        ServiceTopologies_CreateOrUpdate:
+        create_or_update:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1serviceTopologies~1{serviceTopologyName}~1?api-version=2019-11-01-preview/put'
           response:
             mediaType: application/json
             openAPIDocKey: '201'
-        ServiceTopologies_Get:
+        get:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1serviceTopologies~1{serviceTopologyName}~1?api-version=2019-11-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        ServiceTopologies_Delete:
+        delete:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1serviceTopologies~1{serviceTopologyName}~1?api-version=2019-11-01-preview/delete'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        ServiceTopologies_List:
+        list:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1serviceTopologies~1?api-version=2019-11-01-preview/get'
           response:
@@ -1493,37 +1454,37 @@ components:
             openAPIDocKey: '200'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/service_topologies/methods/ServiceTopologies_Get'
-          - $ref: '#/components/x-stackQL-resources/service_topologies/methods/ServiceTopologies_List'
+          - $ref: '#/components/x-stackQL-resources/service_topologies/methods/get'
+          - $ref: '#/components/x-stackQL-resources/service_topologies/methods/list'
         insert:
-          - $ref: '#/components/x-stackQL-resources/service_topologies/methods/ServiceTopologies_CreateOrUpdate'
+          - $ref: '#/components/x-stackQL-resources/service_topologies/methods/create_or_update'
         update: []
         delete:
-          - $ref: '#/components/x-stackQL-resources/service_topologies/methods/ServiceTopologies_Delete'
+          - $ref: '#/components/x-stackQL-resources/service_topologies/methods/delete'
     services:
       id: azure.deployment_manager.services
       name: services
       title: Services
       methods:
-        Services_CreateOrUpdate:
+        create_or_update:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1serviceTopologies~1{serviceTopologyName}~1services~1{serviceName}~1?api-version=2019-11-01-preview/put'
           response:
             mediaType: application/json
             openAPIDocKey: '201'
-        Services_Get:
+        get:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1serviceTopologies~1{serviceTopologyName}~1services~1{serviceName}~1?api-version=2019-11-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        Services_Delete:
+        delete:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1serviceTopologies~1{serviceTopologyName}~1services~1{serviceName}~1?api-version=2019-11-01-preview/delete'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        Services_List:
+        list:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1serviceTopologies~1{serviceTopologyName}~1services~1?api-version=2019-11-01-preview/get'
           response:
@@ -1531,37 +1492,37 @@ components:
             openAPIDocKey: '200'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/services/methods/Services_Get'
-          - $ref: '#/components/x-stackQL-resources/services/methods/Services_List'
+          - $ref: '#/components/x-stackQL-resources/services/methods/get'
+          - $ref: '#/components/x-stackQL-resources/services/methods/list'
         insert:
-          - $ref: '#/components/x-stackQL-resources/services/methods/Services_CreateOrUpdate'
+          - $ref: '#/components/x-stackQL-resources/services/methods/create_or_update'
         update: []
         delete:
-          - $ref: '#/components/x-stackQL-resources/services/methods/Services_Delete'
+          - $ref: '#/components/x-stackQL-resources/services/methods/delete'
     service_units:
       id: azure.deployment_manager.service_units
       name: service_units
-      title: Service_units
+      title: Service Units
       methods:
-        ServiceUnits_CreateOrUpdate:
+        create_or_update:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1serviceTopologies~1{serviceTopologyName}~1services~1{serviceName}~1serviceUnits~1{serviceUnitName}~1?api-version=2019-11-01-preview/put'
           response:
             mediaType: application/json
             openAPIDocKey: '201'
-        ServiceUnits_Get:
+        get:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1serviceTopologies~1{serviceTopologyName}~1services~1{serviceName}~1serviceUnits~1{serviceUnitName}~1?api-version=2019-11-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        ServiceUnits_Delete:
+        delete:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1serviceTopologies~1{serviceTopologyName}~1services~1{serviceName}~1serviceUnits~1{serviceUnitName}~1?api-version=2019-11-01-preview/delete'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        ServiceUnits_List:
+        list:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1serviceTopologies~1{serviceTopologyName}~1services~1{serviceName}~1serviceUnits~1?api-version=2019-11-01-preview/get'
           response:
@@ -1569,37 +1530,37 @@ components:
             openAPIDocKey: '200'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/service_units/methods/ServiceUnits_Get'
-          - $ref: '#/components/x-stackQL-resources/service_units/methods/ServiceUnits_List'
+          - $ref: '#/components/x-stackQL-resources/service_units/methods/get'
+          - $ref: '#/components/x-stackQL-resources/service_units/methods/list'
         insert:
-          - $ref: '#/components/x-stackQL-resources/service_units/methods/ServiceUnits_CreateOrUpdate'
+          - $ref: '#/components/x-stackQL-resources/service_units/methods/create_or_update'
         update: []
         delete:
-          - $ref: '#/components/x-stackQL-resources/service_units/methods/ServiceUnits_Delete'
+          - $ref: '#/components/x-stackQL-resources/service_units/methods/delete'
     steps:
       id: azure.deployment_manager.steps
       name: steps
       title: Steps
       methods:
-        Steps_CreateOrUpdate:
+        create_or_update:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1steps~1{stepName}~1?api-version=2019-11-01-preview/put'
           response:
             mediaType: application/json
             openAPIDocKey: '201'
-        Steps_Get:
+        get:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1steps~1{stepName}~1?api-version=2019-11-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        Steps_Delete:
+        delete:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1steps~1{stepName}~1?api-version=2019-11-01-preview/delete'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        Steps_List:
+        list:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1steps~1?api-version=2019-11-01-preview/get'
           response:
@@ -1607,49 +1568,49 @@ components:
             openAPIDocKey: '200'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/steps/methods/Steps_Get'
-          - $ref: '#/components/x-stackQL-resources/steps/methods/Steps_List'
+          - $ref: '#/components/x-stackQL-resources/steps/methods/get'
+          - $ref: '#/components/x-stackQL-resources/steps/methods/list'
         insert:
-          - $ref: '#/components/x-stackQL-resources/steps/methods/Steps_CreateOrUpdate'
+          - $ref: '#/components/x-stackQL-resources/steps/methods/create_or_update'
         update: []
         delete:
-          - $ref: '#/components/x-stackQL-resources/steps/methods/Steps_Delete'
+          - $ref: '#/components/x-stackQL-resources/steps/methods/delete'
     rollouts:
       id: azure.deployment_manager.rollouts
       name: rollouts
       title: Rollouts
       methods:
-        Rollouts_CreateOrUpdate:
+        create_or_update:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1rollouts~1{rolloutName}~1?api-version=2019-11-01-preview/put'
           response:
             mediaType: application/json
             openAPIDocKey: '201'
-        Rollouts_Get:
+        get:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1rollouts~1{rolloutName}~1?api-version=2019-11-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        Rollouts_Delete:
+        delete:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1rollouts~1{rolloutName}~1?api-version=2019-11-01-preview/delete'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        Rollouts_Cancel:
+        cancel:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1rollouts~1{rolloutName}~1cancel~1?api-version=2019-11-01-preview/post'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        Rollouts_Restart:
+        restart:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1rollouts~1{rolloutName}~1restart~1?api-version=2019-11-01-preview/post'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        Rollouts_List:
+        list:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1rollouts~1?api-version=2019-11-01-preview/get'
           response:
@@ -1657,37 +1618,37 @@ components:
             openAPIDocKey: '200'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/rollouts/methods/Rollouts_Get'
-          - $ref: '#/components/x-stackQL-resources/rollouts/methods/Rollouts_List'
+          - $ref: '#/components/x-stackQL-resources/rollouts/methods/get'
+          - $ref: '#/components/x-stackQL-resources/rollouts/methods/list'
         insert:
-          - $ref: '#/components/x-stackQL-resources/rollouts/methods/Rollouts_CreateOrUpdate'
+          - $ref: '#/components/x-stackQL-resources/rollouts/methods/create_or_update'
         update: []
         delete:
-          - $ref: '#/components/x-stackQL-resources/rollouts/methods/Rollouts_Delete'
+          - $ref: '#/components/x-stackQL-resources/rollouts/methods/delete'
     artifact_sources:
       id: azure.deployment_manager.artifact_sources
       name: artifact_sources
-      title: Artifact_sources
+      title: Artifact Sources
       methods:
-        ArtifactSources_CreateOrUpdate:
+        create_or_update:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1artifactSources~1{artifactSourceName}~1?api-version=2019-11-01-preview/put'
           response:
             mediaType: application/json
             openAPIDocKey: '201'
-        ArtifactSources_Get:
+        get:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1artifactSources~1{artifactSourceName}~1?api-version=2019-11-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        ArtifactSources_Delete:
+        delete:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1artifactSources~1{artifactSourceName}~1?api-version=2019-11-01-preview/delete'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        ArtifactSources_List:
+        list:
           operation:
             $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.DeploymentManager~1artifactSources~1?api-version=2019-11-01-preview/get'
           response:
@@ -1695,33 +1656,39 @@ components:
             openAPIDocKey: '200'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/artifact_sources/methods/ArtifactSources_Get'
-          - $ref: '#/components/x-stackQL-resources/artifact_sources/methods/ArtifactSources_List'
+          - $ref: '#/components/x-stackQL-resources/artifact_sources/methods/get'
+          - $ref: '#/components/x-stackQL-resources/artifact_sources/methods/list'
         insert:
-          - $ref: '#/components/x-stackQL-resources/artifact_sources/methods/ArtifactSources_CreateOrUpdate'
+          - $ref: '#/components/x-stackQL-resources/artifact_sources/methods/create_or_update'
         update: []
         delete:
-          - $ref: '#/components/x-stackQL-resources/artifact_sources/methods/ArtifactSources_Delete'
+          - $ref: '#/components/x-stackQL-resources/artifact_sources/methods/delete'
     operations:
       id: azure.deployment_manager.operations
       name: operations
       title: Operations
       methods:
-        Operations_List:
+        list:
           operation:
             $ref: '#/paths/~1providers~1Microsoft.DeploymentManager~1operations~1?api-version=2019-11-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.value
+        _list:
+          operation:
+            $ref: '#/paths/~1providers~1Microsoft.DeploymentManager~1operations~1?api-version=2019-11-01-preview/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/operations/methods/Operations_List'
+          - $ref: '#/components/x-stackQL-resources/operations/methods/list'
         insert: []
         update: []
         delete: []
 paths:
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/?api-version=2019-11-01-preview:
+  '/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/?api-version=2019-11-01-preview':
     put:
       tags:
         - ServiceTopologies
@@ -1754,6 +1721,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: service_topologies
+      x-stackQL-method: create_or_update
       x-stackQL-verb: insert
     get:
       tags:
@@ -1778,6 +1746,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: service_topologies
+      x-stackQL-method: get
       x-stackQL-verb: select
     delete:
       tags:
@@ -1800,8 +1769,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: service_topologies
+      x-stackQL-method: delete
       x-stackQL-verb: delete
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/?api-version=2019-11-01-preview:
+  '/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/?api-version=2019-11-01-preview':
     get:
       tags:
         - ServiceTopologies
@@ -1824,8 +1794,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: service_topologies
+      x-stackQL-method: list
       x-stackQL-verb: select
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}/?api-version=2019-11-01-preview:
+  '/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}/?api-version=2019-11-01-preview':
     put:
       tags:
         - Services
@@ -1859,6 +1830,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: services
+      x-stackQL-method: create_or_update
       x-stackQL-verb: insert
     get:
       tags:
@@ -1884,6 +1856,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: services
+      x-stackQL-method: get
       x-stackQL-verb: select
     delete:
       tags:
@@ -1907,8 +1880,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: services
+      x-stackQL-method: delete
       x-stackQL-verb: delete
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/?api-version=2019-11-01-preview:
+  '/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/?api-version=2019-11-01-preview':
     get:
       tags:
         - Services
@@ -1932,8 +1906,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: services
+      x-stackQL-method: list
       x-stackQL-verb: select
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}/serviceUnits/{serviceUnitName}/?api-version=2019-11-01-preview:
+  '/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}/serviceUnits/{serviceUnitName}/?api-version=2019-11-01-preview':
     put:
       tags:
         - ServiceUnits
@@ -1974,6 +1949,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: service_units
+      x-stackQL-method: create_or_update
       x-stackQL-verb: insert
     get:
       tags:
@@ -2000,6 +1976,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: service_units
+      x-stackQL-method: get
       x-stackQL-verb: select
     delete:
       tags:
@@ -2024,8 +2001,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: service_units
+      x-stackQL-method: delete
       x-stackQL-verb: delete
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}/serviceUnits/?api-version=2019-11-01-preview:
+  '/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}/serviceUnits/?api-version=2019-11-01-preview':
     get:
       tags:
         - ServiceUnits
@@ -2050,8 +2028,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: service_units
+      x-stackQL-method: list
       x-stackQL-verb: select
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/steps/{stepName}/?api-version=2019-11-01-preview:
+  '/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/steps/{stepName}/?api-version=2019-11-01-preview':
     put:
       tags:
         - Steps
@@ -2083,6 +2062,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: steps
+      x-stackQL-method: create_or_update
       x-stackQL-verb: insert
     get:
       tags:
@@ -2107,6 +2087,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: steps
+      x-stackQL-method: get
       x-stackQL-verb: select
     delete:
       tags:
@@ -2129,8 +2110,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: steps
+      x-stackQL-method: delete
       x-stackQL-verb: delete
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/steps/?api-version=2019-11-01-preview:
+  '/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/steps/?api-version=2019-11-01-preview':
     get:
       tags:
         - Steps
@@ -2153,8 +2135,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: steps
+      x-stackQL-method: list
       x-stackQL-verb: select
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts/{rolloutName}/?api-version=2019-11-01-preview:
+  '/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts/{rolloutName}/?api-version=2019-11-01-preview':
     put:
       tags:
         - Rollouts
@@ -2192,6 +2175,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: rollouts
+      x-stackQL-method: create_or_update
       x-stackQL-verb: insert
     get:
       tags:
@@ -2217,6 +2201,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: rollouts
+      x-stackQL-method: get
       x-stackQL-verb: select
     delete:
       tags:
@@ -2240,8 +2225,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: rollouts
+      x-stackQL-method: delete
       x-stackQL-verb: delete
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts/{rolloutName}/cancel/?api-version=2019-11-01-preview:
+  '/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts/{rolloutName}/cancel/?api-version=2019-11-01-preview':
     post:
       tags:
         - Rollouts
@@ -2266,8 +2252,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: rollouts
+      x-stackQL-method: cancel
       x-stackQL-verb: exec
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts/{rolloutName}/restart/?api-version=2019-11-01-preview:
+  '/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts/{rolloutName}/restart/?api-version=2019-11-01-preview':
     post:
       tags:
         - Rollouts
@@ -2280,7 +2267,7 @@ paths:
         - $ref: '#/components/parameters/rolloutName'
         - name: skipSucceeded
           in: query
-          description: If true, will skip all succeeded steps so far in the rollout. If false, will execute the entire rollout again regardless of the current state of individual resources. Defaults to false if not specified.
+          description: 'If true, will skip all succeeded steps so far in the rollout. If false, will execute the entire rollout again regardless of the current state of individual resources. Defaults to false if not specified.'
           required: false
           schema:
             type: boolean
@@ -2298,8 +2285,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: rollouts
+      x-stackQL-method: restart
       x-stackQL-verb: exec
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts/?api-version=2019-11-01-preview:
+  '/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts/?api-version=2019-11-01-preview':
     get:
       tags:
         - Rollouts
@@ -2322,8 +2310,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: rollouts
+      x-stackQL-method: list
       x-stackQL-verb: select
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/artifactSources/{artifactSourceName}/?api-version=2019-11-01-preview:
+  '/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/artifactSources/{artifactSourceName}/?api-version=2019-11-01-preview':
     put:
       tags:
         - ArtifactSources
@@ -2355,6 +2344,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: artifact_sources
+      x-stackQL-method: create_or_update
       x-stackQL-verb: insert
     get:
       tags:
@@ -2379,6 +2369,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: artifact_sources
+      x-stackQL-method: get
       x-stackQL-verb: select
     delete:
       tags:
@@ -2401,8 +2392,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: artifact_sources
+      x-stackQL-method: delete
       x-stackQL-verb: delete
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/artifactSources/?api-version=2019-11-01-preview:
+  '/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/artifactSources/?api-version=2019-11-01-preview':
     get:
       tags:
         - ArtifactSources
@@ -2425,6 +2417,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: artifact_sources
+      x-stackQL-method: list
       x-stackQL-verb: select
   /providers/Microsoft.DeploymentManager/operations/?api-version=2019-11-01-preview:
     get:
@@ -2447,5 +2440,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/CloudError'
       x-stackQL-resource: operations
+      x-stackQL-method: list
       x-stackQL-verb: select
       x-stackQL-objectKey: $.value
