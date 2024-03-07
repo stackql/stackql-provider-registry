@@ -58,6 +58,7 @@ with open('diff.txt', 'r') as f:
         # write list of providers to a text file
         with open('providers.txt', 'w') as f:
             for provider in providers:
+                print(provider['provider'])
                 f.write("%s\n" % (provider['provider']))
 
         # write list of provider dirs to a text file
