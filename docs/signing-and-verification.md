@@ -52,4 +52,14 @@ Some more context and sample code can be drawn from:
 2. We will use the indicated `Ed25519` signing algorithm.
 3. We will couple (2) with a code signing pattern inclusive of chain of trust, similar in nature to [this](https://www.digicert.com/signing/code-signing-certificates#Code-Signing).
 
+### Practicalities
+
+Signing certificate manually:
+
+```bash
+
+signing/Ed25519/setup/re-generate.sh
+
+```
+
 
