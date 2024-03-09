@@ -52,4 +52,21 @@ Some more context and sample code can be drawn from:
 2. We will use the indicated `Ed25519` signing algorithm.
 3. We will couple (2) with a code signing pattern inclusive of chain of trust, similar in nature to [this](https://www.digicert.com/signing/code-signing-certificates#Code-Signing).
 
+### Practicalities
 
+It is possible retrospectively regenerate certificates manually (requires `faketime`):
+
+```bash
+
+signing/Ed25519/setup/re-generate-faketime.sh
+
+```
+
+Easiest thing is edit this script to reflect desired window start datetime.  Of course, you will need to possess key material and ensure it is in expected location per script.
+
+Then, simply copy the output from `signing/Ed25519/setup/out/stackql-cert.pem` to both:
+
+- `signing/Ed25519/app/edcrypto/embeddedcerts/signingcerts/stackql-signing-bundle.pem`.
+- `signing/Ed25519/app/edcrypto/embeddedcerts/stackql-root-cert-bundle.pem`.
+
+Following this, need to propogate a new version of this module through the toolchain.
