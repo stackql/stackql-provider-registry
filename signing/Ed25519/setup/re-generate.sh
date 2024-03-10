@@ -33,7 +33,7 @@ echo "########################################################"
 echo "########################################################" 
 echo
 
-openssl x509 -req -days 700 -in ${_out_dir}/${CSR_FILE_NAME} -signkey ${SCRIPT_DIR}/${_version}/${PRIVATE_KEY_FILE_NAME} -out ${_out_dir}/${SELF_SIGNED_CERT_FILE_NAME}
+faketime '2024-01-31 08:15:42' openssl x509 -req -days 800 -in ${_out_dir}/${CSR_FILE_NAME} -signkey ${SCRIPT_DIR}/${_version}/${PRIVATE_KEY_FILE_NAME} -out ${_out_dir}/${SELF_SIGNED_CERT_FILE_NAME}
 
 echo
 echo "########################################################" 
