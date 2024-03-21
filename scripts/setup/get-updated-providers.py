@@ -64,7 +64,7 @@ with open('diff.txt', 'r') as f:
         # write list of provider dirs to a text file
         with open('provider_dirs.txt', 'w') as f:
             for provider in providers:
-                f.write("%s\n" % (provider['provider_dir']))                
+                f.write("%s\n" % (provider['provider_dir']))
 
         # write all provider updates to file
         with open('updates.json', 'w') as f:
