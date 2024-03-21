@@ -39,6 +39,13 @@ with open('diff.txt', 'r') as f:
     for provider in list(set(all_provider_versions)):
         providers.append(json.loads(provider))
 
+    # if the list of providers includes awscc, add aws as well
+    for provider in providers:
+        if provider['provider'] == 'awscc':
+            providers.append({'provider': 'aws', 'provider_dir': 'aws', 'source_version': 'v00.00.00000', 'target_version': target_version})
+    # remove duplicates
+    providers = list(set(providers))
+
     num_providers = len(providers)
 
     print("%s providers updated" % (str(num_providers)))
@@ -64,7 +71,7 @@ with open('diff.txt', 'r') as f:
         # write list of provider dirs to a text file
         with open('provider_dirs.txt', 'w') as f:
             for provider in providers:
-                f.write("%s\n" % (provider['provider_dir']))                
+                f.write("%s\n" % (provider['provider_dir']))
 
         # write all provider updates to file
         with open('updates.json', 'w') as f:
