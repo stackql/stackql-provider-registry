@@ -34,6 +34,9 @@ with open('diff.txt', 'r') as f:
             provider['path'] = path.rstrip('\n')
             updates.append(provider)
 
+    print("all_provider_versions: %s" % (all_provider_versions))
+    print("updates: %s" % (updates))
+        
     # convert to set to remove duplicates
     providers = []
     for provider in list(set(all_provider_versions)):
