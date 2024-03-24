@@ -33,6 +33,15 @@ with open('diff.txt', 'r') as f:
             provider['action'] = action
             provider['path'] = path.rstrip('\n')
             updates.append(provider)
+            if provider_name == 'awscc':
+                # add faux provider update for aws, as aws is a dependency of awscc
+                all_provider_versions.append(json.dumps({ 'provider' : 'aws', 'provider_dir': 'aws', 'source_version': 'v00.00.00000', 'target_version': target_version}))
+                provider['provider'] = 'aws'
+                provider['provider_dir'] = 'aws'
+                provider['source_version'] = 'v00.00.00000'
+                provider['target_version'] = target_version
+                provider['action'] = 'M'
+                provider['path'] = 'providers/src/awscc/v00.00.00000/provider.yaml'
 
     # convert to set to remove duplicates
     providers = []
