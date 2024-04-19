@@ -1,0 +1,212 @@
+openapi: 3.0.0
+info:
+  title: Kinesis
+  version: 1.0.0
+paths: {}
+components:
+  schemas:
+    StreamModeDetails:
+      description: When specified, enables or updates the mode of stream. Default is PROVISIONED.
+      additionalProperties: false
+      type: object
+      properties:
+        StreamMode:
+          description: The mode of the stream
+          type: string
+          enum:
+            - ON_DEMAND
+            - PROVISIONED
+      required:
+        - StreamMode
+    StreamEncryption:
+      description: When specified, enables or updates server-side encryption using an AWS KMS key for a specified stream. Removing this property from your stack template and updating your stack disables encryption.
+      additionalProperties: false
+      type: object
+      properties:
+        EncryptionType:
+          description: 'The encryption type to use. The only valid value is KMS. '
+          type: string
+          enum:
+            - KMS
+        KeyId:
+          minLength: 1
+          description: The GUID for the customer-managed AWS KMS key to use for encryption. This value can be a globally unique identifier, a fully specified Amazon Resource Name (ARN) to either an alias or a key, or an alias name prefixed by "alias/".You can also use a master key owned by Kinesis Data Streams by specifying the alias aws/kinesis.
+          anyOf:
+            - relationshipRef:
+                typeName: AWS::KMS::Key
+                propertyPath: /properties/Arn
+            - relationshipRef:
+                typeName: AWS::KMS::Key
+                propertyPath: /properties/KeyId
+          type: string
+          maxLength: 2048
+      required:
+        - EncryptionType
+        - KeyId
+    Tag:
+      description: An arbitrary set of tags (key-value pairs) to associate with the Kinesis stream.
+      additionalProperties: false
+      type: object
+      properties:
+        Value:
+          minLength: 0
+          description: 'The value for the tag. You can specify a value that is 0 to 255 Unicode characters in length and cannot be prefixed with aws:. You can use any of the following characters: the set of Unicode letters, digits, whitespace, _, ., /, =, +, and -.'
+          type: string
+          maxLength: 255
+        Key:
+          minLength: 1
+          description: 'The key name of the tag. You can specify a value that is 1 to 128 Unicode characters in length and cannot be prefixed with aws:. You can use any of the following characters: the set of Unicode letters, digits, whitespace, _, ., /, =, +, and -.'
+          type: string
+          maxLength: 128
+      required:
+        - Key
+        - Value
+    Stream:
+      type: object
+      properties:
+        StreamModeDetails:
+          default:
+            StreamMode: PROVISIONED
+          description: The mode in which the stream is running.
+          $ref: '#/components/schemas/StreamModeDetails'
+        StreamEncryption:
+          description: When specified, enables or updates server-side encryption using an AWS KMS key for a specified stream.
+          $ref: '#/components/schemas/StreamEncryption'
+        Arn:
+          description: The Amazon resource name (ARN) of the Kinesis stream
+          type: string
+        RetentionPeriodHours:
+          description: The number of hours for the data records that are stored in shards to remain accessible.
+          type: integer
+          minimum: 24
+        Tags:
+          maxItems: 50
+          uniqueItems: false
+          description: An arbitrary set of tags (key–value pairs) to associate with the Kinesis stream.
+          x-insertionOrder: false
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+        Name:
+          minLength: 1
+          pattern: ^[a-zA-Z0-9_.-]+$
+          description: The name of the Kinesis stream.
+          type: string
+          maxLength: 128
+        ShardCount:
+          description: The number of shards that the stream uses. Required when StreamMode = PROVISIONED is passed.
+          type: integer
+          minimum: 1
+      x-stackql-resource-name: stream
+      description: Resource Type definition for AWS::Kinesis::Stream
+      x-type-name: AWS::Kinesis::Stream
+      x-stackql-primary-identifier:
+        - Name
+      x-create-only-properties:
+        - Name
+      x-read-only-properties:
+        - Arn
+      x-tagging:
+        taggable: true
+        tagOnCreate: true
+        tagUpdatable: true
+        tagProperty: /properties/Tags
+        cloudFormationSystemTags: false
+      x-required-permissions:
+        read:
+          - kinesis:DescribeStreamSummary
+          - kinesis:ListTagsForStream
+        create:
+          - kinesis:EnableEnhancedMonitoring
+          - kinesis:DescribeStreamSummary
+          - kinesis:CreateStream
+          - kinesis:IncreaseStreamRetentionPeriod
+          - kinesis:StartStreamEncryption
+          - kinesis:AddTagsToStream
+          - kinesis:ListTagsForStream
+        update:
+          - kinesis:EnableEnhancedMonitoring
+          - kinesis:DisableEnhancedMonitoring
+          - kinesis:DescribeStreamSummary
+          - kinesis:UpdateShardCount
+          - kinesis:UpdateStreamMode
+          - kinesis:IncreaseStreamRetentionPeriod
+          - kinesis:DecreaseStreamRetentionPeriod
+          - kinesis:StartStreamEncryption
+          - kinesis:StopStreamEncryption
+          - kinesis:AddTagsToStream
+          - kinesis:RemoveTagsFromStream
+          - kinesis:ListTagsForStream
+        list:
+          - kinesis:ListStreams
+        delete:
+          - kinesis:DescribeStreamSummary
+          - kinesis:DeleteStream
+          - kinesis:RemoveTagsFromStream
+  x-stackQL-resources:
+    streams:
+      name: streams
+      id: aws.kinesis.streams
+      x-cfn-schema-name: Stream
+      x-type: list
+      x-identifiers:
+        - Name
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.Name') as name
+              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Kinesis::Stream'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                json_extract_path_text(Properties, 'Name') as name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Kinesis::Stream'
+                AND region = 'us-east-1'
+    kinesis_stream:
+      name: kinesis_stream
+      id: aws.kinesis.kinesis_stream
+      x-cfn-schema-name: Stream
+      x-type: get
+      x-identifiers:
+        - Name
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.StreamModeDetails') as stream_mode_details,
+              JSON_EXTRACT(Properties, '$.StreamEncryption') as stream_encryption,
+              JSON_EXTRACT(Properties, '$.Arn') as arn,
+              JSON_EXTRACT(Properties, '$.RetentionPeriodHours') as retention_period_hours,
+              JSON_EXTRACT(Properties, '$.Tags') as tags,
+              JSON_EXTRACT(Properties, '$.Name') as name,
+              JSON_EXTRACT(Properties, '$.ShardCount') as shard_count
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Kinesis::Stream'
+              AND data__Identifier = '<Name>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                data__Identifier,
+                json_extract_path_text(Properties, 'StreamModeDetails') as stream_mode_details,
+                json_extract_path_text(Properties, 'StreamEncryption') as stream_encryption,
+                json_extract_path_text(Properties, 'Arn') as arn,
+                json_extract_path_text(Properties, 'RetentionPeriodHours') as retention_period_hours,
+                json_extract_path_text(Properties, 'Tags') as tags,
+                json_extract_path_text(Properties, 'Name') as name,
+                json_extract_path_text(Properties, 'ShardCount') as shard_count
+                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Kinesis::Stream'
+                AND data__Identifier = '<Name>'
+                AND region = 'us-east-1'
