@@ -1,0 +1,238 @@
+openapi: 3.0.0
+info:
+  title: Glue
+  version: 1.0.0
+paths: {}
+components:
+  schemas:
+    Tag:
+      type: object
+      properties:
+        Key:
+          description: A key to identify the tag.
+          type: string
+          minLength: 1
+          maxLength: 128
+        Value:
+          description: Corresponding tag value for the key.
+          type: string
+          minLength: 0
+          maxLength: 256
+      required:
+        - Key
+        - Value
+      additionalProperties: false
+    Registry:
+      type: object
+      description: Identifier for the registry which the schema is part of.
+      properties:
+        Name:
+          description: Name of the registry in which the schema will be created.
+          type: string
+          maxLength: 255
+          minLength: 1
+        Arn:
+          description: Amazon Resource Name for the Registry.
+          type: string
+          pattern: arn:aws(-(cn|us-gov|iso(-[bef])?))?:glue:.*
+      additionalProperties: false
+    SchemaVersion:
+      type: object
+      properties:
+        Schema:
+          $ref: '#/components/schemas/Schema'
+        SchemaDefinition:
+          type: string
+          description: Complete definition of the schema in plain-text.
+          minLength: 1
+          maxLength: 170000
+        VersionId:
+          type: string
+          description: Represents the version ID associated with the schema version.
+          pattern: '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}'
+      required:
+        - Schema
+        - SchemaDefinition
+      x-stackql-resource-name: schema_version
+      description: This resource represents an individual schema version of a schema defined in Glue Schema Registry.
+      x-type-name: AWS::Glue::SchemaVersion
+      x-stackql-primary-identifier:
+        - VersionId
+      x-create-only-properties:
+        - Schema
+        - SchemaDefinition
+      x-read-only-properties:
+        - VersionId
+      x-required-properties:
+        - Schema
+        - SchemaDefinition
+      x-required-permissions:
+        create:
+          - glue:RegisterSchemaVersion
+          - glue:GetSchemaVersion
+          - glue:GetSchemaByDefinition
+        read:
+          - glue:GetSchemaVersion
+        delete:
+          - glue:DeleteSchemaVersions
+          - glue:GetSchemaVersion
+        list:
+          - glue:ListSchemaVersions
+    Schema:
+      description: Identifier for the schema where the schema version will be created.
+      type: object
+      properties:
+        SchemaArn:
+          description: Amazon Resource Name for the Schema. This attribute can be used to uniquely represent the Schema.
+          type: string
+          pattern: arn:(aws|aws-us-gov|aws-cn):glue:.*
+        SchemaName:
+          description: Name of the schema. This parameter requires RegistryName to be provided.
+          type: string
+          minLength: 1
+          maxLength: 255
+        RegistryName:
+          description: Name of the registry to identify where the Schema is located.
+          type: string
+          maxLength: 255
+          minLength: 1
+      additionalProperties: false
+    SchemaVersionMetadata:
+      type: object
+      properties:
+        SchemaVersionId:
+          type: string
+          description: Represents the version ID associated with the schema version.
+          pattern: '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}'
+        Key:
+          type: string
+          description: Metadata key
+          minLength: 1
+          maxLength: 128
+        Value:
+          type: string
+          description: Metadata value
+          minLength: 1
+          maxLength: 256
+      required:
+        - SchemaVersionId
+        - Key
+        - Value
+      x-stackql-resource-name: schema_version_metadata
+      description: This resource adds Key-Value metadata to a Schema version of Glue Schema Registry.
+      x-type-name: AWS::Glue::SchemaVersionMetadata
+      x-stackql-primary-identifier:
+        - SchemaVersionId
+        - Key
+        - Value
+      x-create-only-properties:
+        - SchemaVersionId
+        - Key
+        - Value
+      x-required-properties:
+        - SchemaVersionId
+        - Key
+        - Value
+      x-required-permissions:
+        create:
+          - glue:putSchemaVersionMetadata
+        read:
+          - glue:querySchemaVersionMetadata
+        delete:
+          - glue:removeSchemaVersionMetadata
+        list:
+          - glue:querySchemaVersionMetadata
+  x-stackQL-resources:
+    schema_versions:
+      name: schema_versions
+      id: aws.glue.schema_versions
+      x-cfn-schema-name: SchemaVersion
+      x-type: list
+      x-identifiers:
+        - VersionId
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.VersionId') as version_id
+              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Glue::SchemaVersion'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                json_extract_path_text(Properties, 'VersionId') as version_id
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Glue::SchemaVersion'
+                AND region = 'us-east-1'
+    schema_version:
+      name: schema_version
+      id: aws.glue.schema_version
+      x-cfn-schema-name: SchemaVersion
+      x-type: get
+      x-identifiers:
+        - VersionId
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.Schema') as _schema,
+              JSON_EXTRACT(Properties, '$.SchemaDefinition') as schema_definition,
+              JSON_EXTRACT(Properties, '$.VersionId') as version_id
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Glue::SchemaVersion'
+              AND data__Identifier = '<VersionId>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                data__Identifier,
+                json_extract_path_text(Properties, 'Schema') as _schema,
+                json_extract_path_text(Properties, 'SchemaDefinition') as schema_definition,
+                json_extract_path_text(Properties, 'VersionId') as version_id
+                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Glue::SchemaVersion'
+                AND data__Identifier = '<VersionId>'
+                AND region = 'us-east-1'
+    schema_version_metadata:
+      name: schema_version_metadata
+      id: aws.glue.schema_version_metadata
+      x-cfn-schema-name: SchemaVersionMetadata
+      x-type: get
+      x-identifiers:
+        - SchemaVersionId
+        - Key
+        - Value
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.SchemaVersionId') as schema_version_id,
+              JSON_EXTRACT(Properties, '$.Key') as key,
+              JSON_EXTRACT(Properties, '$.Value') as value
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Glue::SchemaVersionMetadata'
+              AND data__Identifier = '<SchemaVersionId>|<Key>|<Value>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                data__Identifier,
+                json_extract_path_text(Properties, 'SchemaVersionId') as schema_version_id,
+                json_extract_path_text(Properties, 'Key') as key,
+                json_extract_path_text(Properties, 'Value') as value
+                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Glue::SchemaVersionMetadata'
+                AND data__Identifier = '<SchemaVersionId>|<Key>|<Value>'
+                AND region = 'us-east-1'
