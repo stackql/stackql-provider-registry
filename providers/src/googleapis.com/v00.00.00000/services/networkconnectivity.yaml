@@ -7,8 +7,8 @@ info:
   title: Network Connectivity API
   description: This API enables connectivity with and between Google Cloud resources.
   version: v1
-  x-discovery-doc-revision: '20240508'
-  x-generated-date: '2024-06-02'
+  x-discovery-doc-revision: '20240523'
+  x-generated-date: '2024-06-03'
 externalDocs:
   url: >-
     https://cloud.google.com/network-connectivity/docs/reference/networkconnectivity/rest
@@ -305,6 +305,15 @@ components:
         producerInstanceId:
           description: Immutable. An immutable identifier for the producer instance.
           type: string
+        serviceAttachmentIpAddressMap:
+          description: >-
+            Output only. A map to store mapping between customer vip and target
+            service attachment. Only service attachment with producer specified
+            ip addresses are stored here.
+          readOnly: true
+          type: object
+          additionalProperties:
+            type: string
     ConsumerPscConnection:
       id: ConsumerPscConnection
       description: PSC connection details on consumer side.
@@ -1525,10 +1534,15 @@ components:
             - >-
               The route leads to a destination within the secondary address
               range of the VPC network's subnet.
+            - >-
+              The route leads to a destination in a dynamic route. Dynamic
+              routes are derived from Border Gateway Protocol (BGP)
+              advertisements received from an NCC hybrid spoke.
           enum:
             - ROUTE_TYPE_UNSPECIFIED
             - VPC_PRIMARY_SUBNET
             - VPC_SECONDARY_SUBNET
+            - DYNAMIC_ROUTE
         nextHopVpcNetwork:
           description: Immutable. The destination VPC network for packets on this route.
           $ref: '#/components/schemas/NextHopVpcNetwork'
@@ -1589,6 +1603,25 @@ components:
             projects/1234/locations/us-central1
           readOnly: true
           type: string
+        priority:
+          description: >-
+            Output only. The priority of this route. Priority is used to break
+            ties in cases where a destination matches more than one route. In
+            these cases the route with the lowest-numbered priority value wins.
+          readOnly: true
+          type: string
+          format: int64
+        nextHopVpnTunnel:
+          description: Immutable. The next-hop VPN tunnel for packets on this route.
+          $ref: '#/components/schemas/NextHopVPNTunnel'
+        nextHopRouterApplianceInstance:
+          description: >-
+            Immutable. The next-hop Router appliance instance for packets on
+            this route.
+          $ref: '#/components/schemas/NextHopRouterApplianceInstance'
+        nextHopInterconnectAttachment:
+          description: Immutable. The next-hop VLAN attachment for packets on this route.
+          $ref: '#/components/schemas/NextHopInterconnectAttachment'
     NextHopVpcNetwork:
       id: NextHopVpcNetwork
       type: object
@@ -1596,6 +1629,59 @@ components:
         uri:
           description: The URI of the VPC network resource
           type: string
+    NextHopVPNTunnel:
+      id: NextHopVPNTunnel
+      description: A route next hop that leads to a VPN tunnel resource.
+      type: object
+      properties:
+        uri:
+          description: The URI of the VPN tunnel resource.
+          type: string
+        vpcNetwork:
+          description: The VPC network where this VPN tunnel is located.
+          type: string
+        siteToSiteDataTransfer:
+          description: >-
+            Indicates whether site-to-site data transfer is allowed for this VPN
+            tunnel resource. Data transfer is available only in [supported
+            locations](https://cloud.google.com/network-connectivity/docs/network-connectivity-center/concepts/locations).
+          type: boolean
+    NextHopRouterApplianceInstance:
+      id: NextHopRouterApplianceInstance
+      description: A route next hop that leads to a Router appliance instance.
+      type: object
+      properties:
+        uri:
+          description: The URI of the Router appliance instance.
+          type: string
+        vpcNetwork:
+          description: The VPC network where this VM is located.
+          type: string
+        siteToSiteDataTransfer:
+          description: >-
+            Indicates whether site-to-site data transfer is allowed for this
+            Router appliance instance resource. Data transfer is available only
+            in [supported
+            locations](https://cloud.google.com/network-connectivity/docs/network-connectivity-center/concepts/locations).
+          type: boolean
+    NextHopInterconnectAttachment:
+      id: NextHopInterconnectAttachment
+      description: A route next hop that leads to an interconnect attachment resource.
+      type: object
+      properties:
+        uri:
+          description: The URI of the interconnect attachment resource.
+          type: string
+        vpcNetwork:
+          description: The VPC network where this interconnect attachment is located.
+          type: string
+        siteToSiteDataTransfer:
+          description: >-
+            Indicates whether site-to-site data transfer is allowed for this
+            interconnect attachment resource. Data transfer is available only in
+            [supported
+            locations](https://cloud.google.com/network-connectivity/docs/network-connectivity-center/concepts/locations).
+          type: boolean
     ListRoutesResponse:
       id: ListRoutesResponse
       description: Response for HubService.ListRoutes method.
@@ -1950,11 +2036,11 @@ components:
         Policy-based routes route L4 network traffic based on not just
         destination IP address, but also source IP address, protocol, and more.
         If a policy-based route conflicts with other types of routes, the
-        policy-based route always take precedence.
+        policy-based route always takes precedence.
       type: object
       properties:
         virtualMachine:
-          description: Optional. VM instances to which this policy-based route applies to.
+          description: Optional. VM instances that this policy-based route applies to.
           $ref: '#/components/schemas/VirtualMachine'
         interconnectAttachment:
           description: >-
@@ -1977,8 +2063,8 @@ components:
             - >-
               Use the routes from the default routing tables (system-generated
               routes, custom routes, peering route) to determine the next hop.
-              This will effectively exclude matching packets being applied on
-              other PBRs with a lower priority.
+              This effectively excludes matching packets being applied on other
+              PBRs with a lower priority.
           enum:
             - OTHER_ROUTES_UNSPECIFIED
             - DEFAULT_ROUTING
@@ -2046,14 +2132,14 @@ components:
           type: string
     VirtualMachine:
       id: VirtualMachine
-      description: VM instances to which this policy-based route applies to.
+      description: VM instances that this policy-based route applies to.
       type: object
       properties:
         tags:
           description: >-
-            Optional. A list of VM instance tags the this policy-based route
-            applies to. VM instances that have ANY of tags specified here will
-            install this PBR.
+            Optional. A list of VM instance tags that this policy-based route
+            applies to. VM instances that have ANY of tags specified here
+            installs this PBR.
           type: array
           items:
             type: string
@@ -2093,7 +2179,8 @@ components:
         protocolVersion:
           description: >-
             Required. Internet protocol versions this policy-based route applies
-            to. For this version, only IPV4 is supported.
+            to. For this version, only IPV4 is supported. IPV6 is supported in
+            preview.
           type: string
           enumDescriptions:
             - Default value.
@@ -2114,7 +2201,7 @@ components:
             - Default value.
             - >-
               The policy-based route is not active and functioning. Common
-              causes are the dependent network was deleted or the resource
+              causes are that the dependent network was deleted or the resource
               project was turned off.
             - >-
               The policy-based route is being modified (e.g. created/deleted) at
@@ -2783,7 +2870,7 @@ components:
           - '2'
   x-stackQL-resources:
     locations:
-      id: networkconnectivity.locations
+      id: google.networkconnectivity.locations
       name: locations
       title: Locations
       methods:
@@ -2805,13 +2892,13 @@ components:
             openAPIDocKey: '200'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/locations/methods/list'
           - $ref: '#/components/x-stackQL-resources/locations/methods/get'
+          - $ref: '#/components/x-stackQL-resources/locations/methods/list'
         insert: []
         update: []
         delete: []
     operations:
-      id: networkconnectivity.operations
+      id: google.networkconnectivity.operations
       name: operations
       title: Operations
       methods:
@@ -2849,14 +2936,14 @@ components:
             openAPIDocKey: '200'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/operations/methods/list'
           - $ref: '#/components/x-stackQL-resources/operations/methods/get'
+          - $ref: '#/components/x-stackQL-resources/operations/methods/list'
         insert: []
         update: []
         delete:
           - $ref: '#/components/x-stackQL-resources/operations/methods/delete'
     service_connection_maps:
-      id: networkconnectivity.service_connection_maps
+      id: google.networkconnectivity.service_connection_maps
       name: service_connection_maps
       title: Service_connection_maps
       methods:
@@ -2902,18 +2989,20 @@ components:
       sqlVerbs:
         select:
           - $ref: >-
-              #/components/x-stackQL-resources/service_connection_maps/methods/list
-          - $ref: >-
               #/components/x-stackQL-resources/service_connection_maps/methods/get
+          - $ref: >-
+              #/components/x-stackQL-resources/service_connection_maps/methods/list
         insert:
           - $ref: >-
               #/components/x-stackQL-resources/service_connection_maps/methods/create
-        update: []
+        update:
+          - $ref: >-
+              #/components/x-stackQL-resources/service_connection_maps/methods/patch
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/service_connection_maps/methods/delete
     service_connection_maps_iam_policies:
-      id: networkconnectivity.service_connection_maps_iam_policies
+      id: google.networkconnectivity.service_connection_maps_iam_policies
       name: service_connection_maps_iam_policies
       title: Service_connection_maps_iam_policies
       methods:
@@ -2950,7 +3039,7 @@ components:
         update: []
         delete: []
     service_connection_policies:
-      id: networkconnectivity.service_connection_policies
+      id: google.networkconnectivity.service_connection_policies
       name: service_connection_policies
       title: Service_connection_policies
       methods:
@@ -2996,18 +3085,20 @@ components:
       sqlVerbs:
         select:
           - $ref: >-
-              #/components/x-stackQL-resources/service_connection_policies/methods/list
-          - $ref: >-
               #/components/x-stackQL-resources/service_connection_policies/methods/get
+          - $ref: >-
+              #/components/x-stackQL-resources/service_connection_policies/methods/list
         insert:
           - $ref: >-
               #/components/x-stackQL-resources/service_connection_policies/methods/create
-        update: []
+        update:
+          - $ref: >-
+              #/components/x-stackQL-resources/service_connection_policies/methods/patch
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/service_connection_policies/methods/delete
     service_connection_policies_iam_policies:
-      id: networkconnectivity.service_connection_policies_iam_policies
+      id: google.networkconnectivity.service_connection_policies_iam_policies
       name: service_connection_policies_iam_policies
       title: Service_connection_policies_iam_policies
       methods:
@@ -3044,7 +3135,7 @@ components:
         update: []
         delete: []
     service_classes:
-      id: networkconnectivity.service_classes
+      id: google.networkconnectivity.service_classes
       name: service_classes
       title: Service_classes
       methods:
@@ -3082,14 +3173,15 @@ components:
             openAPIDocKey: '200'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/service_classes/methods/list'
           - $ref: '#/components/x-stackQL-resources/service_classes/methods/get'
+          - $ref: '#/components/x-stackQL-resources/service_classes/methods/list'
         insert: []
-        update: []
+        update:
+          - $ref: '#/components/x-stackQL-resources/service_classes/methods/patch'
         delete:
           - $ref: '#/components/x-stackQL-resources/service_classes/methods/delete'
     service_classes_iam_policies:
-      id: networkconnectivity.service_classes_iam_policies
+      id: google.networkconnectivity.service_classes_iam_policies
       name: service_classes_iam_policies
       title: Service_classes_iam_policies
       methods:
@@ -3126,7 +3218,7 @@ components:
         update: []
         delete: []
     service_connection_tokens:
-      id: networkconnectivity.service_connection_tokens
+      id: google.networkconnectivity.service_connection_tokens
       name: service_connection_tokens
       title: Service_connection_tokens
       methods:
@@ -3176,7 +3268,7 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/service_connection_tokens/methods/delete
     hubs:
-      id: networkconnectivity.hubs
+      id: google.networkconnectivity.hubs
       name: hubs
       title: Hubs
       methods:
@@ -3233,15 +3325,16 @@ components:
             openAPIDocKey: '200'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/hubs/methods/list'
           - $ref: '#/components/x-stackQL-resources/hubs/methods/get'
+          - $ref: '#/components/x-stackQL-resources/hubs/methods/list'
         insert:
           - $ref: '#/components/x-stackQL-resources/hubs/methods/create'
-        update: []
+        update:
+          - $ref: '#/components/x-stackQL-resources/hubs/methods/patch'
         delete:
           - $ref: '#/components/x-stackQL-resources/hubs/methods/delete'
     spokes:
-      id: networkconnectivity.spokes
+      id: google.networkconnectivity.spokes
       name: spokes
       title: Spokes
       methods:
@@ -3297,16 +3390,17 @@ components:
             openAPIDocKey: '200'
       sqlVerbs:
         select:
+          - $ref: '#/components/x-stackQL-resources/spokes/methods/get'
           - $ref: '#/components/x-stackQL-resources/spokes/methods/list_spokes'
           - $ref: '#/components/x-stackQL-resources/spokes/methods/list'
-          - $ref: '#/components/x-stackQL-resources/spokes/methods/get'
         insert:
           - $ref: '#/components/x-stackQL-resources/spokes/methods/create'
-        update: []
+        update:
+          - $ref: '#/components/x-stackQL-resources/spokes/methods/patch'
         delete:
           - $ref: '#/components/x-stackQL-resources/spokes/methods/delete'
     hubs_iam_policies:
-      id: networkconnectivity.hubs_iam_policies
+      id: google.networkconnectivity.hubs_iam_policies
       name: hubs_iam_policies
       title: Hubs_iam_policies
       methods:
@@ -3343,7 +3437,7 @@ components:
         update: []
         delete: []
     route_tables:
-      id: networkconnectivity.route_tables
+      id: google.networkconnectivity.route_tables
       name: route_tables
       title: Route_tables
       methods:
@@ -3373,7 +3467,7 @@ components:
         update: []
         delete: []
     routes:
-      id: networkconnectivity.routes
+      id: google.networkconnectivity.routes
       name: routes
       title: Routes
       methods:
@@ -3403,7 +3497,7 @@ components:
         update: []
         delete: []
     groups:
-      id: networkconnectivity.groups
+      id: google.networkconnectivity.groups
       name: groups
       title: Groups
       methods:
@@ -3437,10 +3531,11 @@ components:
           - $ref: '#/components/x-stackQL-resources/groups/methods/get'
           - $ref: '#/components/x-stackQL-resources/groups/methods/list'
         insert: []
-        update: []
+        update:
+          - $ref: '#/components/x-stackQL-resources/groups/methods/patch'
         delete: []
     groups_iam_policies:
-      id: networkconnectivity.groups_iam_policies
+      id: google.networkconnectivity.groups_iam_policies
       name: groups_iam_policies
       title: Groups_iam_policies
       methods:
@@ -3477,7 +3572,7 @@ components:
         update: []
         delete: []
     policy_based_routes:
-      id: networkconnectivity.policy_based_routes
+      id: google.networkconnectivity.policy_based_routes
       name: policy_based_routes
       title: Policy_based_routes
       methods:
@@ -3515,8 +3610,8 @@ components:
             openAPIDocKey: '200'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/policy_based_routes/methods/list'
           - $ref: '#/components/x-stackQL-resources/policy_based_routes/methods/get'
+          - $ref: '#/components/x-stackQL-resources/policy_based_routes/methods/list'
         insert:
           - $ref: >-
               #/components/x-stackQL-resources/policy_based_routes/methods/create
@@ -3525,7 +3620,7 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/policy_based_routes/methods/delete
     policy_based_routes_iam_policies:
-      id: networkconnectivity.policy_based_routes_iam_policies
+      id: google.networkconnectivity.policy_based_routes_iam_policies
       name: policy_based_routes_iam_policies
       title: Policy_based_routes_iam_policies
       methods:
@@ -3562,7 +3657,7 @@ components:
         update: []
         delete: []
     spokes_iam_policies:
-      id: networkconnectivity.spokes_iam_policies
+      id: google.networkconnectivity.spokes_iam_policies
       name: spokes_iam_policies
       title: Spokes_iam_policies
       methods:
@@ -3599,7 +3694,7 @@ components:
         update: []
         delete: []
     internal_ranges:
-      id: networkconnectivity.internal_ranges
+      id: google.networkconnectivity.internal_ranges
       name: internal_ranges
       title: Internal_ranges
       methods:
@@ -3644,15 +3739,16 @@ components:
             openAPIDocKey: '200'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/internal_ranges/methods/list'
           - $ref: '#/components/x-stackQL-resources/internal_ranges/methods/get'
+          - $ref: '#/components/x-stackQL-resources/internal_ranges/methods/list'
         insert:
           - $ref: '#/components/x-stackQL-resources/internal_ranges/methods/create'
-        update: []
+        update:
+          - $ref: '#/components/x-stackQL-resources/internal_ranges/methods/patch'
         delete:
           - $ref: '#/components/x-stackQL-resources/internal_ranges/methods/delete'
     regional_endpoints:
-      id: networkconnectivity.regional_endpoints
+      id: google.networkconnectivity.regional_endpoints
       name: regional_endpoints
       title: Regional_endpoints
       methods:
@@ -3690,8 +3786,8 @@ components:
             openAPIDocKey: '200'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/regional_endpoints/methods/list'
           - $ref: '#/components/x-stackQL-resources/regional_endpoints/methods/get'
+          - $ref: '#/components/x-stackQL-resources/regional_endpoints/methods/list'
         insert:
           - $ref: '#/components/x-stackQL-resources/regional_endpoints/methods/create'
         update: []
