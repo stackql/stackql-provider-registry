@@ -473,7 +473,12 @@ components:
         - Arn
       x-required-properties:
         - Regions
-      x-taggable: true
+      x-tagging:
+        taggable: true
+        tagOnCreate: true
+        tagUpdatable: true
+        cloudFormationSystemTags: false
+        tagProperty: /properties/Tags
       x-required-permissions:
         create:
           - ssm-incidents:CreateReplicationSet
@@ -793,7 +798,12 @@ components:
       x-required-properties:
         - Name
         - IncidentTemplate
-      x-taggable: true
+      x-tagging:
+        taggable: true
+        tagOnCreate: true
+        tagUpdatable: true
+        cloudFormationSystemTags: false
+        tagProperty: /properties/Tags
       x-required-permissions:
         create:
           - ssm-incidents:CreateResponsePlan
@@ -803,7 +813,10 @@ components:
           - iam:PassRole
           - secretsmanager:GetSecretValue
           - kms:Decrypt
-          - kms:GenerateDataKey*
+          - kms:GenerateDataKey
+          - kms:GenerateDataKeyPair
+          - kms:GenerateDataKeyPairWithoutPlaintext
+          - kms:GenerateDataKeyWithoutPlaintext
         read:
           - ssm-incidents:GetResponsePlan
           - ssm-incidents:ListTagsForResource
@@ -816,7 +829,10 @@ components:
           - iam:PassRole
           - secretsmanager:GetSecretValue
           - kms:Decrypt
-          - kms:GenerateDataKey*
+          - kms:GenerateDataKey
+          - kms:GenerateDataKeyPair
+          - kms:GenerateDataKeyPairWithoutPlaintext
+          - kms:GenerateDataKeyWithoutPlaintext
         delete:
           - ssm-incidents:DeleteResponsePlan
           - ssm-incidents:GetResponsePlan
@@ -946,7 +962,7 @@ components:
       x-cfn-type-name: AWS::SSMIncidents::ReplicationSet
       x-identifiers:
         - Arn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -954,6 +970,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__ReplicationSet&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SSMIncidents::ReplicationSet"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -980,52 +1008,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/replication_sets/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/replication_sets/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.Arn') as arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SSMIncidents::ReplicationSet'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'Arn') as arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SSMIncidents::ReplicationSet'
-                AND region = 'us-east-1'
-    replication_set:
-      name: replication_set
-      id: aws.ssmincidents.replication_set
-      x-cfn-schema-name: ReplicationSet
-      x-cfn-type-name: AWS::SSMIncidents::ReplicationSet
-      x-identifiers:
-        - Arn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SSMIncidents::ReplicationSet"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/replication_set/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/replication_sets/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -1038,18 +1026,34 @@ components:
               AND data__Identifier = '<Arn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Arn') as arn,
-                json_extract_path_text(Properties, 'Regions') as regions,
-                json_extract_path_text(Properties, 'DeletionProtected') as deletion_protected,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SSMIncidents::ReplicationSet'
-                AND data__Identifier = '<Arn>'
+                JSON_EXTRACT(Properties, '$.Arn') as arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SSMIncidents::ReplicationSet'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'Regions') as regions,
+                  json_extract_path_text(Properties, 'DeletionProtected') as deletion_protected,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SSMIncidents::ReplicationSet'
+                  AND data__Identifier = '<Arn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'Arn') as arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SSMIncidents::ReplicationSet'
+                    AND region = 'us-east-1'
     response_plans:
       name: response_plans
       id: aws.ssmincidents.response_plans
@@ -1057,7 +1061,7 @@ components:
       x-cfn-type-name: AWS::SSMIncidents::ResponsePlan
       x-identifiers:
         - Arn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -1065,6 +1069,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__ResponsePlan&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SSMIncidents::ResponsePlan"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -1091,52 +1107,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/response_plans/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/response_plans/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.Arn') as arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SSMIncidents::ResponsePlan'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'Arn') as arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SSMIncidents::ResponsePlan'
-                AND region = 'us-east-1'
-    response_plan:
-      name: response_plan
-      id: aws.ssmincidents.response_plan
-      x-cfn-schema-name: ResponsePlan
-      x-cfn-type-name: AWS::SSMIncidents::ResponsePlan
-      x-identifiers:
-        - Arn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SSMIncidents::ResponsePlan"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/response_plan/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/response_plans/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -1154,23 +1130,39 @@ components:
               AND data__Identifier = '<Arn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Arn') as arn,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'DisplayName') as display_name,
-                json_extract_path_text(Properties, 'ChatChannel') as chat_channel,
-                json_extract_path_text(Properties, 'Engagements') as engagements,
-                json_extract_path_text(Properties, 'Actions') as actions,
-                json_extract_path_text(Properties, 'Integrations') as integrations,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'IncidentTemplate') as incident_template
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SSMIncidents::ResponsePlan'
-                AND data__Identifier = '<Arn>'
+                JSON_EXTRACT(Properties, '$.Arn') as arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SSMIncidents::ResponsePlan'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'DisplayName') as display_name,
+                  json_extract_path_text(Properties, 'ChatChannel') as chat_channel,
+                  json_extract_path_text(Properties, 'Engagements') as engagements,
+                  json_extract_path_text(Properties, 'Actions') as actions,
+                  json_extract_path_text(Properties, 'Integrations') as integrations,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'IncidentTemplate') as incident_template
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SSMIncidents::ResponsePlan'
+                  AND data__Identifier = '<Arn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'Arn') as arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SSMIncidents::ResponsePlan'
+                    AND region = 'us-east-1'
 paths:
   /?Action=CreateResource&Version=2021-09-30:
     parameters:

@@ -536,218 +536,376 @@ components:
           - gamelift:DeleteBuild
         list:
           - gamelift:ListBuilds
-    ScalingPolicy:
-      description: Rule that controls how a fleet is scaled. Scaling policies are uniquely identified by the combination of name and fleet ID.
-      additionalProperties: false
+    ContainerDefinition:
+      description: Details about a container that is used in a container fleet
       type: object
       properties:
-        Status:
-          description: Current status of the scaling policy. The scaling policy can be in force only when in an ACTIVE status. Scaling policies can be suspended for individual fleets. If the policy is suspended for a fleet, the policy status does not change.
+        ContainerName:
+          description: A descriptive label for the container definition. Container definition names must be unique with a container group definition.
           type: string
-          enum:
-            - ACTIVE
-            - UPDATE_REQUESTED
-            - UPDATING
-            - DELETE_REQUESTED
-            - DELETING
-            - DELETED
-            - ERROR
-        MetricName:
-          description: Name of the Amazon GameLift-defined metric that is used to trigger a scaling adjustment.
+          minLength: 1
+          maxLength: 128
+          pattern: ^[a-zA-Z0-9-]+$
+        ImageUri:
+          description: Specifies the image URI of this container.
           type: string
-          enum:
-            - ActivatingGameSessions
-            - ActiveGameSessions
-            - ActiveInstances
-            - AvailableGameSessions
-            - AvailablePlayerSessions
-            - CurrentPlayerSessions
-            - IdleInstances
-            - PercentAvailableGameSessions
-            - PercentIdleInstances
-            - QueueDepth
-            - WaitTime
-            - ConcurrentActivatableGameSessions
-        PolicyType:
-          description: 'The type of scaling policy to create. For a target-based policy, set the parameter MetricName to ''PercentAvailableGameSessions'' and specify a TargetConfiguration. For a rule-based policy set the following parameters: MetricName, ComparisonOperator, Threshold, EvaluationPeriods, ScalingAdjustmentType, and ScalingAdjustment.'
+          minLength: 1
+          maxLength: 255
+          pattern: ^[a-zA-Z0-9-_\.@\/:]+$
+        ResolvedImageDigest:
+          description: The digest of the container image.
           type: string
-          enum:
-            - RuleBased
-            - TargetBased
-        ComparisonOperator:
-          description: Comparison operator to use when measuring a metric against the threshold value.
-          type: string
-          enum:
-            - GreaterThanOrEqualToThreshold
-            - GreaterThanThreshold
-            - LessThanThreshold
-            - LessThanOrEqualToThreshold
-        TargetConfiguration:
-          description: An object that contains settings for a target-based scaling policy.
-          $ref: '#/components/schemas/TargetConfiguration'
-        UpdateStatus:
-          description: The current status of the fleet's scaling policies in a requested fleet location. The status PENDING_UPDATE indicates that an update was requested for the fleet but has not yet been completed for the location.
-          type: string
-          enum:
-            - PENDING_UPDATE
-        ScalingAdjustment:
-          description: Amount of adjustment to make, based on the scaling adjustment type.
-          type: integer
-        EvaluationPeriods:
-          description: Length of time (in minutes) the metric must be at or beyond the threshold before a scaling event is triggered.
+          pattern: ^sha256:[a-fA-F0-9]{64}$
+        MemoryLimits:
+          description: Specifies how much memory is available to the container. You must specify at least this parameter or the TotalMemoryLimit parameter of the ContainerGroupDefinition.
+          $ref: '#/components/schemas/MemoryLimits'
+        PortConfiguration:
+          description: Defines the ports on the container.
+          $ref: '#/components/schemas/PortConfiguration'
+        Cpu:
+          description: The maximum number of CPU units reserved for this container. The value is expressed as an integer amount of CPU units. 1 vCPU is equal to 1024 CPU units
           type: integer
           minimum: 1
-        Location:
-          $ref: '#/components/schemas/Location'
-        Name:
-          minLength: 1
-          description: A descriptive label that is associated with a fleet's scaling policy. Policy names do not need to be unique.
-          type: string
-          maxLength: 1024
-        ScalingAdjustmentType:
-          description: The type of adjustment to make to a fleet's instance count.
-          type: string
-          enum:
-            - ChangeInCapacity
-            - ExactCapacity
-            - PercentChangeInCapacity
-        Threshold:
-          description: Metric value used to trigger a scaling event.
-          type: number
-      required:
-        - MetricName
-        - Name
-    ServerProcess:
-      description: A set of instructions for launching server processes on each instance in a fleet. Each instruction set identifies the location of the server executable, optional launch parameters, and the number of server processes with this configuration to maintain concurrently on the instance. Server process configurations make up a fleet's RuntimeConfiguration.
-      additionalProperties: false
-      type: object
-      properties:
-        ConcurrentExecutions:
-          description: The number of server processes that use this configuration to run concurrently on an instance.
-          type: integer
-          minimum: 1
-        Parameters:
-          minLength: 1
-          description: An optional list of parameters to pass to the server executable or Realtime script on launch.
-          type: string
-          maxLength: 1024
-        LaunchPath:
-          minLength: 1
-          pattern: ^([Cc]:\\game\S+|/local/game/\S+)
-          description: |-
-            The location of the server executable in a custom game build or the name of the Realtime script file that contains the Init() function. Game builds and Realtime scripts are installed on instances at the root:
-
-            Windows (for custom game builds only): C:\game. Example: "C:\game\MyGame\server.exe"
-
-            Linux: /local/game. Examples: "/local/game/MyGame/server.exe" or "/local/game/MyRealtimeScript.js"
-          type: string
-          maxLength: 1024
-      required:
-        - ConcurrentExecutions
-        - LaunchPath
-    TargetConfiguration:
-      description: Settings for a target-based scaling policy. A target-based policy tracks a particular fleet metric specifies a target value for the metric. As player usage changes, the policy triggers Amazon GameLift to adjust capacity so that the metric returns to the target value. The target configuration specifies settings as needed for the target based policy, including the target value.
-      additionalProperties: false
-      type: object
-      properties:
-        TargetValue:
-          description: Desired value to use with a target-based scaling policy. The value must be relevant for whatever metric the scaling policy is using. For example, in a policy using the metric PercentAvailableGameSessions, the target value should be the preferred size of the fleet's buffer (the percent of capacity that should be idle and ready for new game sessions).
-          type: number
-      required:
-        - TargetValue
-    RuntimeConfiguration:
-      description: >-
-        A collection of server process configurations that describe the processes to run on each instance in a fleet. All fleets must have a runtime configuration. Each instance in the fleet maintains server processes as specified in the runtime configuration, launching new ones as existing processes end. Each instance regularly checks for an updated runtime configuration makes adjustments as called for.
-
-
-        The runtime configuration enables the instances in a fleet to run multiple processes simultaneously. Potential scenarios are as follows: (1) Run multiple processes of a single game server executable to maximize usage of your hosting resources. (2) Run one or more processes of different executables, such as your game server and a metrics tracking program. (3) Run multiple processes of a single game server but with different launch parameters, for example to run one process on each
-        instance in debug mode.
-
-
-        An Amazon GameLift instance is limited to 50 processes running simultaneously. A runtime configuration must specify fewer than this limit. To calculate the total number of processes specified in a runtime configuration, add the values of the ConcurrentExecutions parameter for each ServerProcess object in the runtime configuration.
-      additionalProperties: false
-      type: object
-      properties:
-        ServerProcesses:
-          maxItems: 50
-          description: A collection of server process configurations that describe which server processes to run on each instance in a fleet.
-          x-insertionOrder: false
+          maximum: 10240
+        HealthCheck:
+          description: Specifies how the health of the containers will be checked.
+          $ref: '#/components/schemas/ContainerHealthCheck'
+        Command:
+          description: The command that's passed to the container.
           type: array
+          uniqueItems: false
+          x-insertionOrder: true
+          minItems: 1
+          maxItems: 20
           items:
-            $ref: '#/components/schemas/ServerProcess'
-        MaxConcurrentGameSessionActivations:
-          description: The maximum number of game sessions with status ACTIVATING to allow on an instance simultaneously. This setting limits the amount of instance resources that can be used for new game activations at any one time.
-          maximum: 2147483647
-          type: integer
-          minimum: 1
-        GameSessionActivationTimeoutSeconds:
-          description: The maximum amount of time (in seconds) that a game session can remain in status ACTIVATING. If the game session is not active before the timeout, activation is terminated and the game session status is changed to TERMINATED.
-          maximum: 600
-          type: integer
-          minimum: 1
-    LocationConfiguration:
-      description: A remote location where a multi-location fleet can deploy EC2 instances for game hosting.
+            type: string
+            minLength: 1
+            maxLength: 255
+            pattern: ^.*$
+        Essential:
+          description: Specifies if the container is essential. If an essential container fails a health check, then all containers in the container group will be restarted. You must specify exactly 1 essential container in a container group.
+          type: boolean
+        EntryPoint:
+          description: The entry point that's passed to the container so that it will run as an executable. If there are multiple arguments, each argument is a string in the array.
+          type: array
+          uniqueItems: false
+          x-insertionOrder: true
+          minItems: 1
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 1024
+        WorkingDirectory:
+          description: The working directory to run commands inside the container in.
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: ^.*$
+        Environment:
+          description: The environment variables to pass to a container.
+          type: array
+          uniqueItems: true
+          x-insertionOrder: false
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/ContainerEnvironment'
+        DependsOn:
+          description: A list of container dependencies that determines when this container starts up and shuts down. For container groups with multiple containers, dependencies let you define a startup/shutdown sequence across the containers.
+          type: array
+          uniqueItems: true
+          x-insertionOrder: true
+          minItems: 1
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/ContainerDependency'
+      required:
+        - ContainerName
+        - ImageUri
       additionalProperties: false
+    MemoryLimits:
+      description: Specifies how much memory is available to the container.
       type: object
       properties:
-        LocationCapacity:
-          $ref: '#/components/schemas/LocationCapacity'
-        Location:
-          $ref: '#/components/schemas/Location'
+        SoftLimit:
+          description: The amount of memory that is reserved for the container.
+          type: integer
+          minimum: 4
+          maximum: 1024000
+        HardLimit:
+          description: The hard limit of memory to reserve for the container.
+          type: integer
+          minimum: 4
+          maximum: 1024000
+      additionalProperties: false
+    PortConfiguration:
+      description: Defines the ports on a container.
+      type: object
+      properties:
+        ContainerPortRanges:
+          description: Specifies one or more ranges of ports on a container.
+          type: array
+          uniqueItems: true
+          x-insertionOrder: false
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/ContainerPortRange'
       required:
-        - Location
+        - ContainerPortRanges
+      additionalProperties: false
+    ContainerPortRange:
+      description: A set of one or more port numbers that can be opened on the container.
+      type: object
+      properties:
+        FromPort:
+          description: A starting value for the range of allowed port numbers.
+          type: integer
+          minimum: 1
+          maximum: 60000
+        Protocol:
+          description: Defines the protocol of these ports.
+          type: string
+          enum:
+            - TCP
+            - UDP
+        ToPort:
+          description: An ending value for the range of allowed port numbers. Port numbers are end-inclusive. This value must be equal to or greater than FromPort.
+          type: integer
+          minimum: 1
+          maximum: 60000
+      required:
+        - FromPort
+        - Protocol
+        - ToPort
+      additionalProperties: false
+    ContainerHealthCheck:
+      description: Specifies how the process manager checks the health of containers.
+      type: object
+      properties:
+        Command:
+          description: A string array representing the command that the container runs to determine if it is healthy.
+          type: array
+          uniqueItems: false
+          x-insertionOrder: true
+          minItems: 1
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 255
+            pattern: ^.*$
+        Interval:
+          description: How often (in seconds) the health is checked.
+          type: integer
+          minimum: 60
+          maximum: 300
+        Timeout:
+          description: How many seconds the process manager allows the command to run before canceling it.
+          type: integer
+          minimum: 30
+          maximum: 60
+        Retries:
+          description: How many times the process manager will retry the command after a timeout. (The first run of the command does not count as a retry.)
+          type: integer
+          minimum: 5
+          maximum: 10
+        StartPeriod:
+          description: The optional grace period (in seconds) to give a container time to boostrap before teh health check is declared failed.
+          type: integer
+          minimum: 0
+          maximum: 300
+      required:
+        - Command
+      additionalProperties: false
+    ContainerEnvironment:
+      description: An environment variable to set inside a container, in the form of a key-value pair.
+      type: object
+      properties:
+        Name:
+          description: The environment variable name.
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: ^.*$
+        Value:
+          description: The environment variable value.
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: ^.*$
+      required:
+        - Name
+        - Value
+      additionalProperties: false
+    ContainerDependency:
+      description: A dependency that impacts a container's startup and shutdown.
+      type: object
+      properties:
+        ContainerName:
+          description: A descriptive label for the container definition. The container being defined depends on this container's condition.
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[a-zA-Z0-9-]+$
+        Condition:
+          description: The type of dependency.
+          type: string
+          enum:
+            - START
+            - COMPLETE
+            - SUCCESS
+            - HEALTHY
+      required:
+        - ContainerName
+        - Condition
+      additionalProperties: false
+    Tag:
+      description: A key-value pair to associate with a resource.
+      type: object
+      properties:
+        Key:
+          type: string
+          description: The key name of the tag. You can specify a value that is 1 to 128 Unicode characters in length.
+          minLength: 1
+          maxLength: 128
+        Value:
+          type: string
+          description: The value for the tag. You can specify a value that is 0 to 256 Unicode characters in length.
+          minLength: 0
+          maxLength: 256
+      required:
+        - Key
+        - Value
+      additionalProperties: false
+    ContainerGroupDefinition:
+      type: object
+      properties:
+        ContainerGroupDefinitionArn:
+          description: The Amazon Resource Name (ARN) that is assigned to a Amazon GameLift container group resource and uniquely identifies it across all AWS Regions.
+          type: string
+          minLength: 1
+          maxLength: 512
+          pattern: ^arn:.*:containergroupdefinition/containergroupdefinition-[a-zA-Z0-9-]+$
+        Name:
+          description: A descriptive label for the container group definition.
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[a-zA-Z0-9-]+$
+        CreationTime:
+          description: A time stamp indicating when this data object was created. Format is a number expressed in Unix time as milliseconds (for example "1469498468.057").
+          type: string
+        SchedulingStrategy:
+          description: Specifies whether the container group includes replica or daemon containers.
+          type: string
+          enum:
+            - REPLICA
+            - DAEMON
+        TotalMemoryLimit:
+          description: The maximum amount of memory (in MiB) to allocate for this container group.
+          type: integer
+          minimum: 4
+          maximum: 1024000
+        TotalCpuLimit:
+          description: The maximum number of CPU units reserved for this container group. The value is expressed as an integer amount of CPU units. (1 vCPU is equal to 1024 CPU units.)
+          type: integer
+          minimum: 128
+          maximum: 10240
+        ContainerDefinitions:
+          description: A collection of container definitions that define the containers in this group.
+          type: array
+          uniqueItems: true
+          x-insertionOrder: false
+          minItems: 1
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/ContainerDefinition'
+        Tags:
+          description: An array of key-value pairs to apply to this resource.
+          type: array
+          uniqueItems: true
+          x-insertionOrder: false
+          minItems: 0
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/Tag'
+        OperatingSystem:
+          description: The operating system of the container group
+          type: string
+          enum:
+            - AMAZON_LINUX_2023
+      required:
+        - Name
+        - TotalMemoryLimit
+        - TotalCpuLimit
+        - ContainerDefinitions
+        - OperatingSystem
+      x-stackql-resource-name: container_group_definition
+      description: The AWS::GameLift::ContainerGroupDefinition resource creates an Amazon GameLift container group definition.
+      x-type-name: AWS::GameLift::ContainerGroupDefinition
+      x-stackql-primary-identifier:
+        - Name
+      x-create-only-properties:
+        - Name
+        - SchedulingStrategy
+        - TotalMemoryLimit
+        - TotalCpuLimit
+        - ContainerDefinitions
+        - OperatingSystem
+      x-read-only-properties:
+        - ContainerGroupDefinitionArn
+        - CreationTime
+        - ContainerDefinitions/*/ResolvedImageDigest
+      x-required-properties:
+        - Name
+        - TotalMemoryLimit
+        - TotalCpuLimit
+        - ContainerDefinitions
+        - OperatingSystem
+      x-tagging:
+        taggable: true
+        cloudFormationSystemTags: false
+        tagOnCreate: true
+        tagUpdatable: true
+        tagProperty: /properties/Tags
+      x-required-permissions:
+        create:
+          - gamelift:CreateContainerGroupDefinition
+          - gamelift:DescribeContainerGroupDefinition
+          - gamelift:ListTagsForResource
+          - gamelift:TagResource
+          - ecr:BatchCheckLayerAvailability
+          - ecr:BatchGetImage
+          - ecr:GetDownloadUrlForLayer
+          - ecr:DescribeImages
+        read:
+          - gamelift:DescribeContainerGroupDefinition
+          - gamelift:ListTagsForResource
+        update:
+          - gamelift:ListTagsForResource
+          - gamelift:TagResource
+          - gamelift:UntagResource
+        delete:
+          - gamelift:DescribeContainerGroupDefinition
+          - gamelift:DeleteContainerGroupDefinition
+        list:
+          - gamelift:ListContainerGroupDefinitions
     AnywhereConfiguration:
       description: Configuration for Anywhere fleet.
-      additionalProperties: false
       properties:
         Cost:
-          minLength: 1
-          pattern: ^\d{1,5}(?:\.\d{1,5})?$
           description: Cost of compute can be specified on Anywhere Fleets to prioritize placement across Queue destinations based on Cost.
           type: string
+          pattern: ^\d{1,5}(?:\.\d{1,5})?$
+          minLength: 1
           maxLength: 11
+      additionalProperties: false
       required:
         - Cost
-    ResourceCreationLimitPolicy:
-      description: |-
-        A policy that limits the number of game sessions a player can create on the same fleet. This optional policy gives game owners control over how players can consume available game server resources. A resource creation policy makes the following statement: "An individual player can create a maximum number of new game sessions within a specified time period".
-
-        The policy is evaluated when a player tries to create a new game session. For example, assume you have a policy of 10 new game sessions and a time period of 60 minutes. On receiving a CreateGameSession request, Amazon GameLift checks that the player (identified by CreatorId) has created fewer than 10 game sessions in the past 60 minutes.
-      additionalProperties: false
-      type: object
-      properties:
-        PolicyPeriodInMinutes:
-          description: The time span used in evaluating the resource creation limit policy.
-          type: integer
-          minimum: 0
-        NewGameSessionsPerCreator:
-          description: The maximum number of game sessions that an individual can create during the policy period.
-          type: integer
-          minimum: 0
-    LocationCapacity:
-      description: Current resource capacity settings in a specified fleet or location. The location value might refer to a fleet's remote location or its home Region.
-      additionalProperties: false
-      type: object
-      properties:
-        MinSize:
-          description: The minimum value allowed for the fleet's instance count for a location. When creating a new fleet, GameLift automatically sets this value to "0". After the fleet is active, you can change this value.
-          type: integer
-          minimum: 0
-        DesiredEC2Instances:
-          description: The number of EC2 instances you want to maintain in the specified fleet location. This value must fall between the minimum and maximum size limits.
-          type: integer
-          minimum: 0
-        MaxSize:
-          description: The maximum value that is allowed for the fleet's instance count for a location. When creating a new fleet, GameLift automatically sets this value to "1". Once the fleet is active, you can change this value.
-          type: integer
-          minimum: 0
-      required:
-        - DesiredEC2Instances
-        - MinSize
-        - MaxSize
     CertificateConfiguration:
       description: Information about the use of a TLS/SSL certificate for a fleet. TLS certificate generation is enabled at the fleet level, with one certificate generated for the fleet. When this feature is enabled, the certificate can be retrieved using the GameLift Server SDK call GetInstanceCertificate. All instances in a fleet share the same certificate.
-      additionalProperties: false
       type: object
       properties:
         CertificateType:
@@ -755,35 +913,92 @@ components:
           enum:
             - DISABLED
             - GENERATED
+      additionalProperties: false
       required:
         - CertificateType
+    ConnectionPortRange:
+      description: Defines the range of ports on the instance that allow inbound traffic to connect with containers in a fleet.
+      type: object
+      properties:
+        FromPort:
+          description: A starting value for a range of allowed port numbers.
+          type: integer
+          minimum: 1
+          maximum: 60000
+        ToPort:
+          description: An ending value for a range of allowed port numbers. Port numbers are end-inclusive. This value must be higher than FromPort.
+          type: integer
+          minimum: 1
+          maximum: 60000
+      additionalProperties: false
+      required:
+        - FromPort
+        - ToPort
+    ContainerGroupsConfiguration:
+      description: Specifies container groups that this instance will hold. You must specify exactly one replica group. Optionally, you may specify exactly one daemon group. You can't change this property after you create the fleet.
+      type: object
+      properties:
+        ContainerGroupDefinitionNames:
+          description: The names of the container group definitions that will be created in an instance. You must specify exactly one REPLICA container group. You have the option to also specify one DAEMON container group.
+          type: array
+          x-insertionOrder: false
+          minItems: 1
+          maxItems: 2
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: ^[a-zA-Z0-9\-]+$
+        ConnectionPortRange:
+          $ref: '#/components/schemas/ConnectionPortRange'
+        ContainerGroupsPerInstance:
+          $ref: '#/components/schemas/ContainerGroupsPerInstance'
+      additionalProperties: false
+      required:
+        - ContainerGroupDefinitionNames
+        - ConnectionPortRange
+    ContainerGroupsPerInstance:
+      description: The number of container groups per instance.
+      type: object
+      properties:
+        DesiredReplicaContainerGroupsPerInstance:
+          description: Use this parameter to override the number of replica container groups GameLift will launch per instance with a number that is lower than that calculated maximum.
+          type: integer
+          minimum: 1
+          maximum: 5000
+        MaxReplicaContainerGroupsPerInstance:
+          description: GameLift calculates the maximum number of replica container groups it can launch per instance based on instance properties such as CPU, memory, and connection ports.
+          type: integer
+          minimum: 1
+          maximum: 5000
+      additionalProperties: false
     IpPermission:
       description: >-
         A range of IP addresses and port settings that allow inbound traffic to connect to server processes on an Amazon GameLift hosting resource. New game sessions that are started on the fleet are assigned an IP address/port number combination, which must fall into the fleet's allowed ranges. For fleets created with a custom game server, the ranges reflect the server's game session assignments. For Realtime Servers fleets, Amazon GameLift automatically opens two port ranges, one for TCP
         messaging and one for UDP, for use by the Realtime servers.
-      additionalProperties: false
       type: object
       properties:
-        IpRange:
-          pattern: (^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$)
-          description: 'A range of allowed IP addresses. This value must be expressed in CIDR notation. Example: "000.000.000.000/[subnet mask]" or optionally the shortened version "0.0.0.0/[subnet mask]".'
-          type: string
         FromPort:
           description: A starting value for a range of allowed port numbers.
-          maximum: 60000
           type: integer
           minimum: 1
-        ToPort:
-          description: An ending value for a range of allowed port numbers. Port numbers are end-inclusive. This value must be higher than FromPort.
           maximum: 60000
-          type: integer
-          minimum: 1
+        IpRange:
+          description: 'A range of allowed IP addresses. This value must be expressed in CIDR notation. Example: "000.000.000.000/[subnet mask]" or optionally the shortened version "0.0.0.0/[subnet mask]".'
+          type: string
+          pattern: (^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/([0-9]|[1-2][0-9]|3[0-2]))$)
         Protocol:
           description: The network communication protocol used by the fleet.
           type: string
           enum:
             - TCP
             - UDP
+        ToPort:
+          description: An ending value for a range of allowed port numbers. Port numbers are end-inclusive. This value must be higher than FromPort.
+          type: integer
+          minimum: 1
+          maximum: 60000
+      additionalProperties: false
       required:
         - FromPort
         - IpRange
@@ -843,155 +1058,355 @@ components:
           - gamelift:ListTagsForResource
           - gamelift:TagResource
           - gamelift:UntagResource
+    LocationCapacity:
+      description: Current resource capacity settings in a specified fleet or location. The location value might refer to a fleet's remote location or its home Region.
+      type: object
+      properties:
+        DesiredEC2Instances:
+          description: The number of EC2 instances you want to maintain in the specified fleet location. This value must fall between the minimum and maximum size limits.
+          type: integer
+          minimum: 0
+        MinSize:
+          description: The minimum value allowed for the fleet's instance count for a location. When creating a new fleet, GameLift automatically sets this value to "0". After the fleet is active, you can change this value.
+          type: integer
+          minimum: 0
+        MaxSize:
+          description: The maximum value that is allowed for the fleet's instance count for a location. When creating a new fleet, GameLift automatically sets this value to "1". Once the fleet is active, you can change this value.
+          type: integer
+          minimum: 0
+      additionalProperties: false
+      required:
+        - DesiredEC2Instances
+        - MinSize
+        - MaxSize
+    LocationConfiguration:
+      description: A remote location where a multi-location fleet can deploy EC2 instances for game hosting.
+      type: object
+      properties:
+        Location:
+          $ref: '#/components/schemas/Location'
+        LocationCapacity:
+          $ref: '#/components/schemas/LocationCapacity'
+      additionalProperties: false
+      required:
+        - Location
+    ResourceCreationLimitPolicy:
+      description: |-
+        A policy that limits the number of game sessions a player can create on the same fleet. This optional policy gives game owners control over how players can consume available game server resources. A resource creation policy makes the following statement: "An individual player can create a maximum number of new game sessions within a specified time period".
+
+        The policy is evaluated when a player tries to create a new game session. For example, assume you have a policy of 10 new game sessions and a time period of 60 minutes. On receiving a CreateGameSession request, Amazon GameLift checks that the player (identified by CreatorId) has created fewer than 10 game sessions in the past 60 minutes.
+      type: object
+      properties:
+        NewGameSessionsPerCreator:
+          description: The maximum number of game sessions that an individual can create during the policy period.
+          type: integer
+          minimum: 0
+        PolicyPeriodInMinutes:
+          description: The time span used in evaluating the resource creation limit policy.
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    RuntimeConfiguration:
+      description: >-
+        A collection of server process configurations that describe the processes to run on each instance in a fleet. All fleets must have a runtime configuration. Each instance in the fleet maintains server processes as specified in the runtime configuration, launching new ones as existing processes end. Each instance regularly checks for an updated runtime configuration makes adjustments as called for.
+
+
+        The runtime configuration enables the instances in a fleet to run multiple processes simultaneously. Potential scenarios are as follows: (1) Run multiple processes of a single game server executable to maximize usage of your hosting resources. (2) Run one or more processes of different executables, such as your game server and a metrics tracking program. (3) Run multiple processes of a single game server but with different launch parameters, for example to run one process on each
+        instance in debug mode.
+
+
+        An Amazon GameLift instance is limited to 50 processes running simultaneously. A runtime configuration must specify fewer than this limit. To calculate the total number of processes specified in a runtime configuration, add the values of the ConcurrentExecutions parameter for each ServerProcess object in the runtime configuration.
+      type: object
+      properties:
+        GameSessionActivationTimeoutSeconds:
+          description: The maximum amount of time (in seconds) that a game session can remain in status ACTIVATING. If the game session is not active before the timeout, activation is terminated and the game session status is changed to TERMINATED.
+          type: integer
+          minimum: 1
+          maximum: 600
+        MaxConcurrentGameSessionActivations:
+          description: The maximum number of game sessions with status ACTIVATING to allow on an instance simultaneously. This setting limits the amount of instance resources that can be used for new game activations at any one time.
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        ServerProcesses:
+          description: A collection of server process configurations that describe which server processes to run on each instance in a fleet.
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/ServerProcess'
+          x-insertionOrder: false
+      additionalProperties: false
+    ScalingPolicy:
+      description: Rule that controls how a fleet is scaled. Scaling policies are uniquely identified by the combination of name and fleet ID.
+      type: object
+      properties:
+        ComparisonOperator:
+          description: Comparison operator to use when measuring a metric against the threshold value.
+          type: string
+          enum:
+            - GreaterThanOrEqualToThreshold
+            - GreaterThanThreshold
+            - LessThanThreshold
+            - LessThanOrEqualToThreshold
+        EvaluationPeriods:
+          description: Length of time (in minutes) the metric must be at or beyond the threshold before a scaling event is triggered.
+          type: integer
+          minimum: 1
+        Location:
+          $ref: '#/components/schemas/Location'
+        MetricName:
+          description: Name of the Amazon GameLift-defined metric that is used to trigger a scaling adjustment.
+          type: string
+          enum:
+            - ActivatingGameSessions
+            - ActiveGameSessions
+            - ActiveInstances
+            - AvailableGameSessions
+            - AvailablePlayerSessions
+            - CurrentPlayerSessions
+            - IdleInstances
+            - PercentAvailableGameSessions
+            - PercentIdleInstances
+            - QueueDepth
+            - WaitTime
+            - ConcurrentActivatableGameSessions
+        Name:
+          description: A descriptive label that is associated with a fleet's scaling policy. Policy names do not need to be unique.
+          type: string
+          minLength: 1
+          maxLength: 1024
+        PolicyType:
+          description: 'The type of scaling policy to create. For a target-based policy, set the parameter MetricName to ''PercentAvailableGameSessions'' and specify a TargetConfiguration. For a rule-based policy set the following parameters: MetricName, ComparisonOperator, Threshold, EvaluationPeriods, ScalingAdjustmentType, and ScalingAdjustment.'
+          type: string
+          enum:
+            - RuleBased
+            - TargetBased
+        ScalingAdjustment:
+          description: Amount of adjustment to make, based on the scaling adjustment type.
+          type: integer
+        ScalingAdjustmentType:
+          description: The type of adjustment to make to a fleet's instance count.
+          type: string
+          enum:
+            - ChangeInCapacity
+            - ExactCapacity
+            - PercentChangeInCapacity
+        Status:
+          description: Current status of the scaling policy. The scaling policy can be in force only when in an ACTIVE status. Scaling policies can be suspended for individual fleets. If the policy is suspended for a fleet, the policy status does not change.
+          type: string
+          enum:
+            - ACTIVE
+            - UPDATE_REQUESTED
+            - UPDATING
+            - DELETE_REQUESTED
+            - DELETING
+            - DELETED
+            - ERROR
+        TargetConfiguration:
+          description: An object that contains settings for a target-based scaling policy.
+          $ref: '#/components/schemas/TargetConfiguration'
+        Threshold:
+          description: Metric value used to trigger a scaling event.
+          type: number
+        UpdateStatus:
+          description: The current status of the fleet's scaling policies in a requested fleet location. The status PENDING_UPDATE indicates that an update was requested for the fleet but has not yet been completed for the location.
+          type: string
+          enum:
+            - PENDING_UPDATE
+      additionalProperties: false
+      required:
+        - MetricName
+        - Name
+    ServerProcess:
+      description: A set of instructions for launching server processes on each instance in a fleet. Each instruction set identifies the location of the server executable, optional launch parameters, and the number of server processes with this configuration to maintain concurrently on the instance. Server process configurations make up a fleet's RuntimeConfiguration.
+      type: object
+      properties:
+        ConcurrentExecutions:
+          description: The number of server processes that use this configuration to run concurrently on an instance.
+          type: integer
+          minimum: 1
+        LaunchPath:
+          description: |-
+            The location of the server executable in a custom game build or the name of the Realtime script file that contains the Init() function. Game builds and Realtime scripts are installed on instances at the root:
+
+            Windows (for custom game builds only): C:\game. Example: "C:\game\MyGame\server.exe"
+
+            Linux: /local/game. Examples: "/local/game/MyGame/server.exe" or "/local/game/MyRealtimeScript.js"
+          type: string
+          minLength: 1
+          maxLength: 1024
+          pattern: ^([Cc]:\\game\S+|/local/game/\S+)
+        Parameters:
+          description: An optional list of parameters to pass to the server executable or Realtime script on launch.
+          type: string
+          minLength: 1
+          maxLength: 1024
+      additionalProperties: false
+      required:
+        - ConcurrentExecutions
+        - LaunchPath
+    TargetConfiguration:
+      description: Settings for a target-based scaling policy. A target-based policy tracks a particular fleet metric specifies a target value for the metric. As player usage changes, the policy triggers Amazon GameLift to adjust capacity so that the metric returns to the target value. The target configuration specifies settings as needed for the target based policy, including the target value.
+      type: object
+      properties:
+        TargetValue:
+          description: Desired value to use with a target-based scaling policy. The value must be relevant for whatever metric the scaling policy is using. For example, in a policy using the metric PercentAvailableGameSessions, the target value should be the preferred size of the fleet's buffer (the percent of capacity that should be idle and ready for new game sessions).
+          type: number
+      additionalProperties: false
+      required:
+        - TargetValue
     Fleet:
       type: object
       properties:
         ScalingPolicies:
-          maxItems: 50
           description: A list of rules that control how a fleet is scaled.
-          x-insertionOrder: false
           type: array
+          maxItems: 50
           items:
             $ref: '#/components/schemas/ScalingPolicy'
-        Description:
-          minLength: 1
-          description: A human-readable description of a fleet.
-          type: string
-          maxLength: 1024
-        PeerVpcId:
-          minLength: 1
-          pattern: ^vpc-\S+
-          description: A unique identifier for a VPC with resources to be accessed by your Amazon GameLift fleet. The VPC must be in the same Region as your fleet. To look up a VPC ID, use the VPC Dashboard in the AWS Management Console.
-          type: string
-          maxLength: 1024
+          x-insertionOrder: false
+        AnywhereConfiguration:
+          description: Configuration for Anywhere fleet.
+          $ref: '#/components/schemas/AnywhereConfiguration'
         ApplyCapacity:
           description: Determines whether to apply fleet or location capacities on fleet creation.
           type: string
           enum:
             - ON_UPDATE
             - ON_CREATE_AND_UPDATE
-        EC2InboundPermissions:
-          maxItems: 50
-          description: A range of IP addresses and port settings that allow inbound traffic to connect to server processes on an Amazon GameLift server.
-          x-insertionOrder: false
-          type: array
-          items:
-            $ref: '#/components/schemas/IpPermission'
+        CertificateConfiguration:
+          description: Indicates whether to generate a TLS/SSL certificate for the new fleet. TLS certificates are used for encrypting traffic between game clients and game servers running on GameLift. If this parameter is not set, certificate generation is disabled. This fleet setting cannot be changed once the fleet is created.
+          $ref: '#/components/schemas/CertificateConfiguration'
         ComputeType:
           description: ComputeType to differentiate EC2 hardware managed by GameLift and Anywhere hardware managed by the customer.
           type: string
           enum:
             - EC2
             - ANYWHERE
-        Name:
-          minLength: 1
-          description: A descriptive label that is associated with a fleet. Fleet names do not need to be unique.
+            - CONTAINER
+        ContainerGroupsConfiguration:
+          $ref: '#/components/schemas/ContainerGroupsConfiguration'
+        Description:
+          description: A human-readable description of a fleet.
           type: string
+          minLength: 1
           maxLength: 1024
-        AnywhereConfiguration:
-          description: Configuration for Anywhere fleet.
-          $ref: '#/components/schemas/AnywhereConfiguration'
-        InstanceRoleARN:
-          minLength: 1
-          pattern: ^arn:aws(-.*)?:[a-z-]+:(([a-z]+-)+[0-9])?:([0-9]{12})?:[^.]+$
-          description: A unique identifier for an AWS IAM role that manages access to your AWS services. With an instance role ARN set, any application that runs on an instance in this fleet can assume the role, including install scripts, server processes, and daemons (background processes). Create a role or look up a role's ARN from the IAM dashboard in the AWS Management Console.
-          type: string
-        FleetId:
-          pattern: ^fleet-\S+
-          description: Unique fleet ID
-          type: string
-        CertificateConfiguration:
-          description: Indicates whether to generate a TLS/SSL certificate for the new fleet. TLS certificates are used for encrypting traffic between game clients and game servers running on GameLift. If this parameter is not set, certificate generation is disabled. This fleet setting cannot be changed once the fleet is created.
-          $ref: '#/components/schemas/CertificateConfiguration'
-        InstanceRoleCredentialsProvider:
-          description: Credentials provider implementation that loads credentials from the Amazon EC2 Instance Metadata Service.
-          type: string
-          enum:
-            - SHARED_CREDENTIAL_FILE
         DesiredEC2Instances:
           description: '[DEPRECATED] The number of EC2 instances that you want this fleet to host. When creating a new fleet, GameLift automatically sets this value to "1" and initiates a single instance. Once the fleet is active, update this value to trigger GameLift to add or remove instances from the fleet.'
           type: integer
           minimum: 0
-        ServerLaunchParameters:
-          minLength: 1
-          description: This parameter is no longer used but is retained for backward compatibility. Instead, specify server launch parameters in the RuntimeConfiguration parameter. A request must specify either a runtime configuration or values for both ServerLaunchParameters and ServerLaunchPath.
+        EC2InboundPermissions:
+          description: A range of IP addresses and port settings that allow inbound traffic to connect to server processes on an Amazon GameLift server.
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/IpPermission'
+          x-insertionOrder: false
+        EC2InstanceType:
+          description: The name of an EC2 instance type that is supported in Amazon GameLift. A fleet instance type determines the computing resources of each instance in the fleet, including CPU, memory, storage, and networking capacity. Amazon GameLift supports the following EC2 instance types. See Amazon EC2 Instance Types for detailed descriptions.
           type: string
-          maxLength: 1024
+          pattern: ^.*..*$
         FleetType:
           description: Indicates whether to use On-Demand instances or Spot instances for this fleet. If empty, the default is ON_DEMAND. Both categories of instances use identical hardware and configurations based on the instance type selected for this fleet.
           type: string
           enum:
             - ON_DEMAND
             - SPOT
+        InstanceRoleARN:
+          description: A unique identifier for an AWS IAM role that manages access to your AWS services. With an instance role ARN set, any application that runs on an instance in this fleet can assume the role, including install scripts, server processes, and daemons (background processes). Create a role or look up a role's ARN from the IAM dashboard in the AWS Management Console.
+          type: string
+          minLength: 1
+          pattern: ^arn:aws(-.*)?:[a-z-]+:(([a-z]+-)+[0-9])?:([0-9]{12})?:[^.]+$
+        InstanceRoleCredentialsProvider:
+          description: Credentials provider implementation that loads credentials from the Amazon EC2 Instance Metadata Service.
+          type: string
+          enum:
+            - SHARED_CREDENTIAL_FILE
         Locations:
+          type: array
           minItems: 1
           maxItems: 100
-          x-insertionOrder: false
-          type: array
           items:
             $ref: '#/components/schemas/LocationConfiguration'
+          x-insertionOrder: false
+        LogPaths:
+          description: This parameter is no longer used. When hosting a custom game build, specify where Amazon GameLift should store log files using the Amazon GameLift server API call ProcessReady()
+          type: array
+          items:
+            type: string
+          x-insertionOrder: false
+        MaxSize:
+          description: '[DEPRECATED] The maximum value that is allowed for the fleet''s instance count. When creating a new fleet, GameLift automatically sets this value to "1". Once the fleet is active, you can change this value.'
+          type: integer
+          minimum: 0
+        MetricGroups:
+          description: The name of an Amazon CloudWatch metric group. A metric group aggregates the metrics for all fleets in the group. Specify a string containing the metric group name. You can use an existing name or use a new name to create a new metric group. Currently, this parameter can have only one string.
+          type: array
+          maxItems: 1
+          items:
+            type: string
+          x-insertionOrder: false
+        MinSize:
+          description: '[DEPRECATED] The minimum value allowed for the fleet''s instance count. When creating a new fleet, GameLift automatically sets this value to "0". After the fleet is active, you can change this value.'
+          type: integer
+          minimum: 0
+        Name:
+          description: A descriptive label that is associated with a fleet. Fleet names do not need to be unique.
+          type: string
+          minLength: 1
+          maxLength: 1024
         NewGameSessionProtectionPolicy:
           description: A game session protection policy to apply to all game sessions hosted on instances in this fleet. When protected, active game sessions cannot be terminated during a scale-down event. If this parameter is not set, instances in this fleet default to no protection. You can change a fleet's protection policy to affect future game sessions on the fleet. You can also set protection for individual game sessions.
           type: string
           enum:
             - FullProtection
             - NoProtection
+        PeerVpcAwsAccountId:
+          description: A unique identifier for the AWS account with the VPC that you want to peer your Amazon GameLift fleet with. You can find your account ID in the AWS Management Console under account settings.
+          type: string
+          minLength: 1
+          maxLength: 1024
+          pattern: ^[0-9]{12}$
+        PeerVpcId:
+          description: A unique identifier for a VPC with resources to be accessed by your Amazon GameLift fleet. The VPC must be in the same Region as your fleet. To look up a VPC ID, use the VPC Dashboard in the AWS Management Console.
+          type: string
+          minLength: 1
+          maxLength: 1024
+          pattern: ^vpc-\S+
+        ResourceCreationLimitPolicy:
+          description: A policy that limits the number of game sessions an individual player can create over a span of time for this fleet.
+          $ref: '#/components/schemas/ResourceCreationLimitPolicy'
+        FleetId:
+          description: Unique fleet ID
+          type: string
+          pattern: ^fleet-\S+
+        BuildId:
+          description: A unique identifier for a build to be deployed on the new fleet. If you are deploying the fleet with a custom game build, you must specify this property. The build must have been successfully uploaded to Amazon GameLift and be in a READY status. This fleet setting cannot be changed once the fleet is created.
+          type: string
+          pattern: ^build-\S+|^arn:.*:build/build-\S+
         ScriptId:
-          pattern: ^script-\S+|^arn:.*:script/script-\S+
           description: |-
             A unique identifier for a Realtime script to be deployed on a new Realtime Servers fleet. The script must have been successfully uploaded to Amazon GameLift. This fleet setting cannot be changed once the fleet is created.
 
             Note: It is not currently possible to use the !Ref command to reference a script created with a CloudFormation template for the fleet property ScriptId. Instead, use Fn::GetAtt Script.Arn or Fn::GetAtt Script.Id to retrieve either of these properties as input for ScriptId. Alternatively, enter a ScriptId string manually.
           type: string
-        MaxSize:
-          description: '[DEPRECATED] The maximum value that is allowed for the fleet''s instance count. When creating a new fleet, GameLift automatically sets this value to "1". Once the fleet is active, you can change this value.'
-          type: integer
-          minimum: 0
+          pattern: ^script-\S+|^arn:.*:script/script-\S+
         RuntimeConfiguration:
           description: |-
             Instructions for launching server processes on each instance in the fleet. Server processes run either a custom game build executable or a Realtime script. The runtime configuration defines the server executables or launch script file, launch parameters, and the number of processes to run concurrently on each instance. When creating a fleet, the runtime configuration must have at least one server process configuration; otherwise the request fails with an invalid request exception.
 
             This parameter is required unless the parameters ServerLaunchPath and ServerLaunchParameters are defined. Runtime configuration has replaced these parameters, but fleets that use them will continue to work.
           $ref: '#/components/schemas/RuntimeConfiguration'
-        LogPaths:
-          description: This parameter is no longer used. When hosting a custom game build, specify where Amazon GameLift should store log files using the Amazon GameLift server API call ProcessReady()
-          x-insertionOrder: false
-          type: array
-          items:
-            type: string
-        ServerLaunchPath:
+        ServerLaunchParameters:
+          description: This parameter is no longer used but is retained for backward compatibility. Instead, specify server launch parameters in the RuntimeConfiguration parameter. A request must specify either a runtime configuration or values for both ServerLaunchParameters and ServerLaunchPath.
+          type: string
           minLength: 1
+          maxLength: 1024
+        ServerLaunchPath:
           description: This parameter is no longer used. Instead, specify a server launch path using the RuntimeConfiguration parameter. Requests that specify a server launch path and launch parameters instead of a runtime configuration will continue to work.
           type: string
-          maxLength: 1024
-        MinSize:
-          description: '[DEPRECATED] The minimum value allowed for the fleet''s instance count. When creating a new fleet, GameLift automatically sets this value to "0". After the fleet is active, you can change this value.'
-          type: integer
-          minimum: 0
-        PeerVpcAwsAccountId:
           minLength: 1
-          pattern: ^[0-9]{12}$
-          description: A unique identifier for the AWS account with the VPC that you want to peer your Amazon GameLift fleet with. You can find your account ID in the AWS Management Console under account settings.
-          type: string
           maxLength: 1024
-        MetricGroups:
-          maxItems: 1
-          description: The name of an Amazon CloudWatch metric group. A metric group aggregates the metrics for all fleets in the group. Specify a string containing the metric group name. You can use an existing name or use a new name to create a new metric group. Currently, this parameter can have only one string.
-          x-insertionOrder: false
-          type: array
-          items:
-            type: string
-        BuildId:
-          pattern: ^build-\S+|^arn:.*:build/build-\S+
-          description: A unique identifier for a build to be deployed on the new fleet. If you are deploying the fleet with a custom game build, you must specify this property. The build must have been successfully uploaded to Amazon GameLift and be in a READY status. This fleet setting cannot be changed once the fleet is created.
-          type: string
-        ResourceCreationLimitPolicy:
-          description: A policy that limits the number of game sessions an individual player can create over a span of time for this fleet.
-          $ref: '#/components/schemas/ResourceCreationLimitPolicy'
-        EC2InstanceType:
-          pattern: ^.*..*$
-          description: The name of an EC2 instance type that is supported in Amazon GameLift. A fleet instance type determines the computing resources of each instance in the fleet, including CPU, memory, storage, and networking capacity. Amazon GameLift supports the following EC2 instance types. See Amazon EC2 Instance Types for detailed descriptions.
-          type: string
       required:
         - Name
       x-stackql-resource-name: fleet
@@ -1003,6 +1418,7 @@ components:
         - ApplyCapacity
         - BuildId
         - CertificateConfiguration
+        - ContainerGroupsConfiguration
         - EC2InstanceType
         - FleetType
         - InstanceRoleARN
@@ -1017,11 +1433,20 @@ components:
       x-write-only-properties:
         - ApplyCapacity
       x-read-only-properties:
+        - ContainerGroupsConfiguration/ContainerGroupsPerInstance/MaxReplicaContainerGroupsPerInstance
         - FleetId
       x-required-properties:
         - Name
       x-taggable: true
       x-required-permissions:
+        create:
+          - gamelift:CreateFleet
+          - gamelift:DescribeFleetAttributes
+          - gamelift:DescribeFleetLocationAttributes
+          - gamelift:UpdateFleetCapacity
+          - gamelift:DescribeFleetLocationCapacity
+          - gamelift:PutScalingPolicy
+          - gamelift:DescribeScalingPolicies
         read:
           - gamelift:DescribeFleetAttributes
           - gamelift:DescribeFleetLocationAttributes
@@ -1031,14 +1456,6 @@ components:
           - gamelift:DescribeRuntimeConfiguration
           - gamelift:DescribeEC2InstanceLimits
           - gamelift:DescribeFleetEvents
-          - gamelift:DescribeScalingPolicies
-        create:
-          - gamelift:CreateFleet
-          - gamelift:DescribeFleetAttributes
-          - gamelift:DescribeFleetLocationAttributes
-          - gamelift:UpdateFleetCapacity
-          - gamelift:DescribeFleetLocationCapacity
-          - gamelift:PutScalingPolicy
           - gamelift:DescribeScalingPolicies
         update:
           - gamelift:UpdateFleetAttributes
@@ -1053,13 +1470,13 @@ components:
           - gamelift:PutScalingPolicy
           - gamelift:DescribeScalingPolicies
           - gamelift:DeleteScalingPolicy
-        list:
-          - gamelift:ListFleets
         delete:
           - gamelift:DeleteFleet
           - gamelift:DescribeFleetLocationCapacity
           - gamelift:DescribeScalingPolicies
           - gamelift:DeleteScalingPolicy
+        list:
+          - gamelift:ListFleets
     AutoScalingPolicy:
       type: object
       description: Configuration settings to define a scaling policy for the Auto Scaling group that is optimized for game hosting. Updating this game server group property will not take effect for the created EC2 Auto Scaling group, please update the EC2 Auto Scaling group directly after creating the resource.
@@ -1186,24 +1603,6 @@ components:
       minItems: 0
       maxItems: 200
       x-insertionOrder: false
-    Tag:
-      description: A key-value pair to associate with a resource.
-      type: object
-      properties:
-        Key:
-          type: string
-          description: The key name of the tag. You can specify a value that is 1 to 128 Unicode characters in length.
-          minLength: 1
-          maxLength: 128
-        Value:
-          type: string
-          description: The value for the tag. You can specify a value that is 0 to 256 Unicode characters in length.
-          minLength: 0
-          maxLength: 256
-      required:
-        - Key
-        - Value
-      additionalProperties: false
     VpcSubnets:
       type: array
       description: A list of virtual private cloud (VPC) subnets to use with instances in the game server group. Updating this game server group property will not take effect for the created EC2 Auto Scaling group, please update the EC2 Auto Scaling group directly after creating the resource.
@@ -1956,6 +2355,77 @@ components:
       x-title: CreateBuildRequest
       type: object
       required: []
+    CreateContainerGroupDefinitionRequest:
+      properties:
+        ClientToken:
+          type: string
+        RoleArn:
+          type: string
+        TypeName:
+          type: string
+        TypeVersionId:
+          type: string
+        DesiredState:
+          type: object
+          properties:
+            ContainerGroupDefinitionArn:
+              description: The Amazon Resource Name (ARN) that is assigned to a Amazon GameLift container group resource and uniquely identifies it across all AWS Regions.
+              type: string
+              minLength: 1
+              maxLength: 512
+              pattern: ^arn:.*:containergroupdefinition/containergroupdefinition-[a-zA-Z0-9-]+$
+            Name:
+              description: A descriptive label for the container group definition.
+              type: string
+              minLength: 1
+              maxLength: 128
+              pattern: ^[a-zA-Z0-9-]+$
+            CreationTime:
+              description: A time stamp indicating when this data object was created. Format is a number expressed in Unix time as milliseconds (for example "1469498468.057").
+              type: string
+            SchedulingStrategy:
+              description: Specifies whether the container group includes replica or daemon containers.
+              type: string
+              enum:
+                - REPLICA
+                - DAEMON
+            TotalMemoryLimit:
+              description: The maximum amount of memory (in MiB) to allocate for this container group.
+              type: integer
+              minimum: 4
+              maximum: 1024000
+            TotalCpuLimit:
+              description: The maximum number of CPU units reserved for this container group. The value is expressed as an integer amount of CPU units. (1 vCPU is equal to 1024 CPU units.)
+              type: integer
+              minimum: 128
+              maximum: 10240
+            ContainerDefinitions:
+              description: A collection of container definitions that define the containers in this group.
+              type: array
+              uniqueItems: true
+              x-insertionOrder: false
+              minItems: 1
+              maxItems: 10
+              items:
+                $ref: '#/components/schemas/ContainerDefinition'
+            Tags:
+              description: An array of key-value pairs to apply to this resource.
+              type: array
+              uniqueItems: true
+              x-insertionOrder: false
+              minItems: 0
+              maxItems: 200
+              items:
+                $ref: '#/components/schemas/Tag'
+            OperatingSystem:
+              description: The operating system of the container group
+              type: string
+              enum:
+                - AMAZON_LINUX_2023
+          x-stackQL-stringOnly: true
+      x-title: CreateContainerGroupDefinitionRequest
+      type: object
+      required: []
     CreateLocationRequest:
       properties:
         ClientToken:
@@ -2003,106 +2473,138 @@ components:
           type: object
           properties:
             ScalingPolicies:
-              maxItems: 50
               description: A list of rules that control how a fleet is scaled.
-              x-insertionOrder: false
               type: array
+              maxItems: 50
               items:
                 $ref: '#/components/schemas/ScalingPolicy'
-            Description:
-              minLength: 1
-              description: A human-readable description of a fleet.
-              type: string
-              maxLength: 1024
-            PeerVpcId:
-              minLength: 1
-              pattern: ^vpc-\S+
-              description: A unique identifier for a VPC with resources to be accessed by your Amazon GameLift fleet. The VPC must be in the same Region as your fleet. To look up a VPC ID, use the VPC Dashboard in the AWS Management Console.
-              type: string
-              maxLength: 1024
+              x-insertionOrder: false
+            AnywhereConfiguration:
+              description: Configuration for Anywhere fleet.
+              $ref: '#/components/schemas/AnywhereConfiguration'
             ApplyCapacity:
               description: Determines whether to apply fleet or location capacities on fleet creation.
               type: string
               enum:
                 - ON_UPDATE
                 - ON_CREATE_AND_UPDATE
-            EC2InboundPermissions:
-              maxItems: 50
-              description: A range of IP addresses and port settings that allow inbound traffic to connect to server processes on an Amazon GameLift server.
-              x-insertionOrder: false
-              type: array
-              items:
-                $ref: '#/components/schemas/IpPermission'
+            CertificateConfiguration:
+              description: Indicates whether to generate a TLS/SSL certificate for the new fleet. TLS certificates are used for encrypting traffic between game clients and game servers running on GameLift. If this parameter is not set, certificate generation is disabled. This fleet setting cannot be changed once the fleet is created.
+              $ref: '#/components/schemas/CertificateConfiguration'
             ComputeType:
               description: ComputeType to differentiate EC2 hardware managed by GameLift and Anywhere hardware managed by the customer.
               type: string
               enum:
                 - EC2
                 - ANYWHERE
-            Name:
-              minLength: 1
-              description: A descriptive label that is associated with a fleet. Fleet names do not need to be unique.
+                - CONTAINER
+            ContainerGroupsConfiguration:
+              $ref: '#/components/schemas/ContainerGroupsConfiguration'
+            Description:
+              description: A human-readable description of a fleet.
               type: string
+              minLength: 1
               maxLength: 1024
-            AnywhereConfiguration:
-              description: Configuration for Anywhere fleet.
-              $ref: '#/components/schemas/AnywhereConfiguration'
-            InstanceRoleARN:
-              minLength: 1
-              pattern: ^arn:aws(-.*)?:[a-z-]+:(([a-z]+-)+[0-9])?:([0-9]{12})?:[^.]+$
-              description: A unique identifier for an AWS IAM role that manages access to your AWS services. With an instance role ARN set, any application that runs on an instance in this fleet can assume the role, including install scripts, server processes, and daemons (background processes). Create a role or look up a role's ARN from the IAM dashboard in the AWS Management Console.
-              type: string
-            FleetId:
-              pattern: ^fleet-\S+
-              description: Unique fleet ID
-              type: string
-            CertificateConfiguration:
-              description: Indicates whether to generate a TLS/SSL certificate for the new fleet. TLS certificates are used for encrypting traffic between game clients and game servers running on GameLift. If this parameter is not set, certificate generation is disabled. This fleet setting cannot be changed once the fleet is created.
-              $ref: '#/components/schemas/CertificateConfiguration'
-            InstanceRoleCredentialsProvider:
-              description: Credentials provider implementation that loads credentials from the Amazon EC2 Instance Metadata Service.
-              type: string
-              enum:
-                - SHARED_CREDENTIAL_FILE
             DesiredEC2Instances:
               description: '[DEPRECATED] The number of EC2 instances that you want this fleet to host. When creating a new fleet, GameLift automatically sets this value to "1" and initiates a single instance. Once the fleet is active, update this value to trigger GameLift to add or remove instances from the fleet.'
               type: integer
               minimum: 0
-            ServerLaunchParameters:
-              minLength: 1
-              description: This parameter is no longer used but is retained for backward compatibility. Instead, specify server launch parameters in the RuntimeConfiguration parameter. A request must specify either a runtime configuration or values for both ServerLaunchParameters and ServerLaunchPath.
+            EC2InboundPermissions:
+              description: A range of IP addresses and port settings that allow inbound traffic to connect to server processes on an Amazon GameLift server.
+              type: array
+              maxItems: 50
+              items:
+                $ref: '#/components/schemas/IpPermission'
+              x-insertionOrder: false
+            EC2InstanceType:
+              description: The name of an EC2 instance type that is supported in Amazon GameLift. A fleet instance type determines the computing resources of each instance in the fleet, including CPU, memory, storage, and networking capacity. Amazon GameLift supports the following EC2 instance types. See Amazon EC2 Instance Types for detailed descriptions.
               type: string
-              maxLength: 1024
+              pattern: ^.*..*$
             FleetType:
               description: Indicates whether to use On-Demand instances or Spot instances for this fleet. If empty, the default is ON_DEMAND. Both categories of instances use identical hardware and configurations based on the instance type selected for this fleet.
               type: string
               enum:
                 - ON_DEMAND
                 - SPOT
+            InstanceRoleARN:
+              description: A unique identifier for an AWS IAM role that manages access to your AWS services. With an instance role ARN set, any application that runs on an instance in this fleet can assume the role, including install scripts, server processes, and daemons (background processes). Create a role or look up a role's ARN from the IAM dashboard in the AWS Management Console.
+              type: string
+              minLength: 1
+              pattern: ^arn:aws(-.*)?:[a-z-]+:(([a-z]+-)+[0-9])?:([0-9]{12})?:[^.]+$
+            InstanceRoleCredentialsProvider:
+              description: Credentials provider implementation that loads credentials from the Amazon EC2 Instance Metadata Service.
+              type: string
+              enum:
+                - SHARED_CREDENTIAL_FILE
             Locations:
+              type: array
               minItems: 1
               maxItems: 100
-              x-insertionOrder: false
-              type: array
               items:
                 $ref: '#/components/schemas/LocationConfiguration'
+              x-insertionOrder: false
+            LogPaths:
+              description: This parameter is no longer used. When hosting a custom game build, specify where Amazon GameLift should store log files using the Amazon GameLift server API call ProcessReady()
+              type: array
+              items:
+                type: string
+              x-insertionOrder: false
+            MaxSize:
+              description: '[DEPRECATED] The maximum value that is allowed for the fleet''s instance count. When creating a new fleet, GameLift automatically sets this value to "1". Once the fleet is active, you can change this value.'
+              type: integer
+              minimum: 0
+            MetricGroups:
+              description: The name of an Amazon CloudWatch metric group. A metric group aggregates the metrics for all fleets in the group. Specify a string containing the metric group name. You can use an existing name or use a new name to create a new metric group. Currently, this parameter can have only one string.
+              type: array
+              maxItems: 1
+              items:
+                type: string
+              x-insertionOrder: false
+            MinSize:
+              description: '[DEPRECATED] The minimum value allowed for the fleet''s instance count. When creating a new fleet, GameLift automatically sets this value to "0". After the fleet is active, you can change this value.'
+              type: integer
+              minimum: 0
+            Name:
+              description: A descriptive label that is associated with a fleet. Fleet names do not need to be unique.
+              type: string
+              minLength: 1
+              maxLength: 1024
             NewGameSessionProtectionPolicy:
               description: A game session protection policy to apply to all game sessions hosted on instances in this fleet. When protected, active game sessions cannot be terminated during a scale-down event. If this parameter is not set, instances in this fleet default to no protection. You can change a fleet's protection policy to affect future game sessions on the fleet. You can also set protection for individual game sessions.
               type: string
               enum:
                 - FullProtection
                 - NoProtection
+            PeerVpcAwsAccountId:
+              description: A unique identifier for the AWS account with the VPC that you want to peer your Amazon GameLift fleet with. You can find your account ID in the AWS Management Console under account settings.
+              type: string
+              minLength: 1
+              maxLength: 1024
+              pattern: ^[0-9]{12}$
+            PeerVpcId:
+              description: A unique identifier for a VPC with resources to be accessed by your Amazon GameLift fleet. The VPC must be in the same Region as your fleet. To look up a VPC ID, use the VPC Dashboard in the AWS Management Console.
+              type: string
+              minLength: 1
+              maxLength: 1024
+              pattern: ^vpc-\S+
+            ResourceCreationLimitPolicy:
+              description: A policy that limits the number of game sessions an individual player can create over a span of time for this fleet.
+              $ref: '#/components/schemas/ResourceCreationLimitPolicy'
+            FleetId:
+              description: Unique fleet ID
+              type: string
+              pattern: ^fleet-\S+
+            BuildId:
+              description: A unique identifier for a build to be deployed on the new fleet. If you are deploying the fleet with a custom game build, you must specify this property. The build must have been successfully uploaded to Amazon GameLift and be in a READY status. This fleet setting cannot be changed once the fleet is created.
+              type: string
+              pattern: ^build-\S+|^arn:.*:build/build-\S+
             ScriptId:
-              pattern: ^script-\S+|^arn:.*:script/script-\S+
               description: |-
                 A unique identifier for a Realtime script to be deployed on a new Realtime Servers fleet. The script must have been successfully uploaded to Amazon GameLift. This fleet setting cannot be changed once the fleet is created.
 
                 Note: It is not currently possible to use the !Ref command to reference a script created with a CloudFormation template for the fleet property ScriptId. Instead, use Fn::GetAtt Script.Arn or Fn::GetAtt Script.Id to retrieve either of these properties as input for ScriptId. Alternatively, enter a ScriptId string manually.
               type: string
-            MaxSize:
-              description: '[DEPRECATED] The maximum value that is allowed for the fleet''s instance count. When creating a new fleet, GameLift automatically sets this value to "1". Once the fleet is active, you can change this value.'
-              type: integer
-              minimum: 0
+              pattern: ^script-\S+|^arn:.*:script/script-\S+
             RuntimeConfiguration:
               description: >-
                 Instructions for launching server processes on each instance in the fleet. Server processes run either a custom game build executable or a Realtime script. The runtime configuration defines the server executables or launch script file, launch parameters, and the number of processes to run concurrently on each instance. When creating a fleet, the runtime configuration must have at least one server process configuration; otherwise the request fails with an invalid request
@@ -2111,45 +2613,16 @@ components:
 
                 This parameter is required unless the parameters ServerLaunchPath and ServerLaunchParameters are defined. Runtime configuration has replaced these parameters, but fleets that use them will continue to work.
               $ref: '#/components/schemas/RuntimeConfiguration'
-            LogPaths:
-              description: This parameter is no longer used. When hosting a custom game build, specify where Amazon GameLift should store log files using the Amazon GameLift server API call ProcessReady()
-              x-insertionOrder: false
-              type: array
-              items:
-                type: string
-            ServerLaunchPath:
+            ServerLaunchParameters:
+              description: This parameter is no longer used but is retained for backward compatibility. Instead, specify server launch parameters in the RuntimeConfiguration parameter. A request must specify either a runtime configuration or values for both ServerLaunchParameters and ServerLaunchPath.
+              type: string
               minLength: 1
+              maxLength: 1024
+            ServerLaunchPath:
               description: This parameter is no longer used. Instead, specify a server launch path using the RuntimeConfiguration parameter. Requests that specify a server launch path and launch parameters instead of a runtime configuration will continue to work.
               type: string
-              maxLength: 1024
-            MinSize:
-              description: '[DEPRECATED] The minimum value allowed for the fleet''s instance count. When creating a new fleet, GameLift automatically sets this value to "0". After the fleet is active, you can change this value.'
-              type: integer
-              minimum: 0
-            PeerVpcAwsAccountId:
               minLength: 1
-              pattern: ^[0-9]{12}$
-              description: A unique identifier for the AWS account with the VPC that you want to peer your Amazon GameLift fleet with. You can find your account ID in the AWS Management Console under account settings.
-              type: string
               maxLength: 1024
-            MetricGroups:
-              maxItems: 1
-              description: The name of an Amazon CloudWatch metric group. A metric group aggregates the metrics for all fleets in the group. Specify a string containing the metric group name. You can use an existing name or use a new name to create a new metric group. Currently, this parameter can have only one string.
-              x-insertionOrder: false
-              type: array
-              items:
-                type: string
-            BuildId:
-              pattern: ^build-\S+|^arn:.*:build/build-\S+
-              description: A unique identifier for a build to be deployed on the new fleet. If you are deploying the fleet with a custom game build, you must specify this property. The build must have been successfully uploaded to Amazon GameLift and be in a READY status. This fleet setting cannot be changed once the fleet is created.
-              type: string
-            ResourceCreationLimitPolicy:
-              description: A policy that limits the number of game sessions an individual player can create over a span of time for this fleet.
-              $ref: '#/components/schemas/ResourceCreationLimitPolicy'
-            EC2InstanceType:
-              pattern: ^.*..*$
-              description: The name of an EC2 instance type that is supported in Amazon GameLift. A fleet instance type determines the computing resources of each instance in the fleet, including CPU, memory, storage, and networking capacity. Amazon GameLift supports the following EC2 instance types. See Amazon EC2 Instance Types for detailed descriptions.
-              type: string
           x-stackQL-stringOnly: true
       x-title: CreateFleetRequest
       type: object
@@ -2513,7 +2986,7 @@ components:
       x-cfn-type-name: AWS::GameLift::Alias
       x-identifiers:
         - AliasId
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -2521,6 +2994,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Alias&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::GameLift::Alias"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -2547,52 +3032,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/aliases/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/aliases/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.AliasId') as alias_id
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Alias'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'AliasId') as alias_id
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Alias'
-                AND region = 'us-east-1'
-    alias:
-      name: alias
-      id: aws.gamelift.alias
-      x-cfn-schema-name: Alias
-      x-cfn-type-name: AWS::GameLift::Alias
-      x-identifiers:
-        - AliasId
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::GameLift::Alias"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/alias/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/aliases/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2605,18 +3050,34 @@ components:
               AND data__Identifier = '<AliasId>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Description') as description,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'RoutingStrategy') as routing_strategy,
-                json_extract_path_text(Properties, 'AliasId') as alias_id
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::Alias'
-                AND data__Identifier = '<AliasId>'
+                JSON_EXTRACT(Properties, '$.AliasId') as alias_id
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Alias'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Description') as description,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'RoutingStrategy') as routing_strategy,
+                  json_extract_path_text(Properties, 'AliasId') as alias_id
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::Alias'
+                  AND data__Identifier = '<AliasId>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'AliasId') as alias_id
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Alias'
+                    AND region = 'us-east-1'
     builds:
       name: builds
       id: aws.gamelift.builds
@@ -2624,7 +3085,7 @@ components:
       x-cfn-type-name: AWS::GameLift::Build
       x-identifiers:
         - BuildId
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -2632,6 +3093,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Build&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::GameLift::Build"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -2658,52 +3131,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/builds/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/builds/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.BuildId') as build_id
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Build'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'BuildId') as build_id
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Build'
-                AND region = 'us-east-1'
-    build:
-      name: build
-      id: aws.gamelift.build
-      x-cfn-schema-name: Build
-      x-cfn-type-name: AWS::GameLift::Build
-      x-identifiers:
-        - BuildId
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::GameLift::Build"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/build/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/builds/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2718,20 +3151,145 @@ components:
               AND data__Identifier = '<BuildId>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'BuildId') as build_id,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'OperatingSystem') as operating_system,
-                json_extract_path_text(Properties, 'StorageLocation') as storage_location,
-                json_extract_path_text(Properties, 'Version') as version,
-                json_extract_path_text(Properties, 'ServerSdkVersion') as server_sdk_version
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::Build'
-                AND data__Identifier = '<BuildId>'
+                JSON_EXTRACT(Properties, '$.BuildId') as build_id
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Build'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'BuildId') as build_id,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'OperatingSystem') as operating_system,
+                  json_extract_path_text(Properties, 'StorageLocation') as storage_location,
+                  json_extract_path_text(Properties, 'Version') as version,
+                  json_extract_path_text(Properties, 'ServerSdkVersion') as server_sdk_version
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::Build'
+                  AND data__Identifier = '<BuildId>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'BuildId') as build_id
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Build'
+                    AND region = 'us-east-1'
+    container_group_definitions:
+      name: container_group_definitions
+      id: aws.gamelift.container_group_definitions
+      x-cfn-schema-name: ContainerGroupDefinition
+      x-cfn-type-name: AWS::GameLift::ContainerGroupDefinition
+      x-identifiers:
+        - Name
+      x-type: cloud_control
+      methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__ContainerGroupDefinition&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::GameLift::ContainerGroupDefinition"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::GameLift::ContainerGroupDefinition"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::GameLift::ContainerGroupDefinition"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/container_group_definitions/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/container_group_definitions/methods/delete_resource'
+        update:
+          - $ref: '#/components/x-stackQL-resources/container_group_definitions/methods/update_resource'
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.ContainerGroupDefinitionArn') as container_group_definition_arn,
+              JSON_EXTRACT(Properties, '$.Name') as name,
+              JSON_EXTRACT(Properties, '$.CreationTime') as creation_time,
+              JSON_EXTRACT(Properties, '$.SchedulingStrategy') as scheduling_strategy,
+              JSON_EXTRACT(Properties, '$.TotalMemoryLimit') as total_memory_limit,
+              JSON_EXTRACT(Properties, '$.TotalCpuLimit') as total_cpu_limit,
+              JSON_EXTRACT(Properties, '$.ContainerDefinitions') as container_definitions,
+              JSON_EXTRACT(Properties, '$.Tags') as tags,
+              JSON_EXTRACT(Properties, '$.OperatingSystem') as operating_system
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::ContainerGroupDefinition'
+              AND data__Identifier = '<Name>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "sqlite3"
+              ddl: |-
+                SELECT
+                region,
+                JSON_EXTRACT(Properties, '$.Name') as name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::ContainerGroupDefinition'
+                AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'ContainerGroupDefinitionArn') as container_group_definition_arn,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'CreationTime') as creation_time,
+                  json_extract_path_text(Properties, 'SchedulingStrategy') as scheduling_strategy,
+                  json_extract_path_text(Properties, 'TotalMemoryLimit') as total_memory_limit,
+                  json_extract_path_text(Properties, 'TotalCpuLimit') as total_cpu_limit,
+                  json_extract_path_text(Properties, 'ContainerDefinitions') as container_definitions,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'OperatingSystem') as operating_system
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::ContainerGroupDefinition'
+                  AND data__Identifier = '<Name>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'Name') as name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::ContainerGroupDefinition'
+                    AND region = 'us-east-1'
     locations:
       name: locations
       id: aws.gamelift.locations
@@ -2739,7 +3297,7 @@ components:
       x-cfn-type-name: AWS::GameLift::Location
       x-identifiers:
         - LocationName
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -2747,6 +3305,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Location&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::GameLift::Location"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -2773,52 +3343,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/locations/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/locations/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.LocationName') as location_name
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Location'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'LocationName') as location_name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Location'
-                AND region = 'us-east-1'
-    location:
-      name: location
-      id: aws.gamelift.location
-      x-cfn-schema-name: Location
-      x-cfn-type-name: AWS::GameLift::Location
-      x-identifiers:
-        - LocationName
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::GameLift::Location"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/location/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/locations/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2830,17 +3360,33 @@ components:
               AND data__Identifier = '<LocationName>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'LocationName') as location_name,
-                json_extract_path_text(Properties, 'LocationArn') as location_arn,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::Location'
-                AND data__Identifier = '<LocationName>'
+                JSON_EXTRACT(Properties, '$.LocationName') as location_name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Location'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'LocationName') as location_name,
+                  json_extract_path_text(Properties, 'LocationArn') as location_arn,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::Location'
+                  AND data__Identifier = '<LocationName>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'LocationName') as location_name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Location'
+                    AND region = 'us-east-1'
     fleets:
       name: fleets
       id: aws.gamelift.fleets
@@ -2848,7 +3394,7 @@ components:
       x-cfn-type-name: AWS::GameLift::Fleet
       x-identifiers:
         - FleetId
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -2856,6 +3402,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Fleet&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::GameLift::Fleet"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -2882,124 +3440,102 @@ components:
           - $ref: '#/components/x-stackQL-resources/fleets/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/fleets/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.FleetId') as fleet_id
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Fleet'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'FleetId') as fleet_id
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Fleet'
-                AND region = 'us-east-1'
-    fleet:
-      name: fleet
-      id: aws.gamelift.fleet
-      x-cfn-schema-name: Fleet
-      x-cfn-type-name: AWS::GameLift::Fleet
-      x-identifiers:
-        - FleetId
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::GameLift::Fleet"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/fleet/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/fleets/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
               data__Identifier,
               JSON_EXTRACT(Properties, '$.ScalingPolicies') as scaling_policies,
-              JSON_EXTRACT(Properties, '$.Description') as description,
-              JSON_EXTRACT(Properties, '$.PeerVpcId') as peer_vpc_id,
-              JSON_EXTRACT(Properties, '$.ApplyCapacity') as apply_capacity,
-              JSON_EXTRACT(Properties, '$.EC2InboundPermissions') as e_c2_inbound_permissions,
-              JSON_EXTRACT(Properties, '$.ComputeType') as compute_type,
-              JSON_EXTRACT(Properties, '$.Name') as name,
               JSON_EXTRACT(Properties, '$.AnywhereConfiguration') as anywhere_configuration,
-              JSON_EXTRACT(Properties, '$.InstanceRoleARN') as instance_role_arn,
-              JSON_EXTRACT(Properties, '$.FleetId') as fleet_id,
+              JSON_EXTRACT(Properties, '$.ApplyCapacity') as apply_capacity,
               JSON_EXTRACT(Properties, '$.CertificateConfiguration') as certificate_configuration,
-              JSON_EXTRACT(Properties, '$.InstanceRoleCredentialsProvider') as instance_role_credentials_provider,
+              JSON_EXTRACT(Properties, '$.ComputeType') as compute_type,
+              JSON_EXTRACT(Properties, '$.ContainerGroupsConfiguration') as container_groups_configuration,
+              JSON_EXTRACT(Properties, '$.Description') as description,
               JSON_EXTRACT(Properties, '$.DesiredEC2Instances') as desired_ec2_instances,
-              JSON_EXTRACT(Properties, '$.ServerLaunchParameters') as server_launch_parameters,
+              JSON_EXTRACT(Properties, '$.EC2InboundPermissions') as e_c2_inbound_permissions,
+              JSON_EXTRACT(Properties, '$.EC2InstanceType') as e_c2_instance_type,
               JSON_EXTRACT(Properties, '$.FleetType') as fleet_type,
+              JSON_EXTRACT(Properties, '$.InstanceRoleARN') as instance_role_arn,
+              JSON_EXTRACT(Properties, '$.InstanceRoleCredentialsProvider') as instance_role_credentials_provider,
               JSON_EXTRACT(Properties, '$.Locations') as locations,
-              JSON_EXTRACT(Properties, '$.NewGameSessionProtectionPolicy') as new_game_session_protection_policy,
-              JSON_EXTRACT(Properties, '$.ScriptId') as script_id,
-              JSON_EXTRACT(Properties, '$.MaxSize') as max_size,
-              JSON_EXTRACT(Properties, '$.RuntimeConfiguration') as runtime_configuration,
               JSON_EXTRACT(Properties, '$.LogPaths') as log_paths,
-              JSON_EXTRACT(Properties, '$.ServerLaunchPath') as server_launch_path,
-              JSON_EXTRACT(Properties, '$.MinSize') as min_size,
-              JSON_EXTRACT(Properties, '$.PeerVpcAwsAccountId') as peer_vpc_aws_account_id,
+              JSON_EXTRACT(Properties, '$.MaxSize') as max_size,
               JSON_EXTRACT(Properties, '$.MetricGroups') as metric_groups,
-              JSON_EXTRACT(Properties, '$.BuildId') as build_id,
+              JSON_EXTRACT(Properties, '$.MinSize') as min_size,
+              JSON_EXTRACT(Properties, '$.Name') as name,
+              JSON_EXTRACT(Properties, '$.NewGameSessionProtectionPolicy') as new_game_session_protection_policy,
+              JSON_EXTRACT(Properties, '$.PeerVpcAwsAccountId') as peer_vpc_aws_account_id,
+              JSON_EXTRACT(Properties, '$.PeerVpcId') as peer_vpc_id,
               JSON_EXTRACT(Properties, '$.ResourceCreationLimitPolicy') as resource_creation_limit_policy,
-              JSON_EXTRACT(Properties, '$.EC2InstanceType') as e_c2_instance_type
+              JSON_EXTRACT(Properties, '$.FleetId') as fleet_id,
+              JSON_EXTRACT(Properties, '$.BuildId') as build_id,
+              JSON_EXTRACT(Properties, '$.ScriptId') as script_id,
+              JSON_EXTRACT(Properties, '$.RuntimeConfiguration') as runtime_configuration,
+              JSON_EXTRACT(Properties, '$.ServerLaunchParameters') as server_launch_parameters,
+              JSON_EXTRACT(Properties, '$.ServerLaunchPath') as server_launch_path
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::Fleet'
               AND data__Identifier = '<FleetId>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'ScalingPolicies') as scaling_policies,
-                json_extract_path_text(Properties, 'Description') as description,
-                json_extract_path_text(Properties, 'PeerVpcId') as peer_vpc_id,
-                json_extract_path_text(Properties, 'ApplyCapacity') as apply_capacity,
-                json_extract_path_text(Properties, 'EC2InboundPermissions') as e_c2_inbound_permissions,
-                json_extract_path_text(Properties, 'ComputeType') as compute_type,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'AnywhereConfiguration') as anywhere_configuration,
-                json_extract_path_text(Properties, 'InstanceRoleARN') as instance_role_arn,
-                json_extract_path_text(Properties, 'FleetId') as fleet_id,
-                json_extract_path_text(Properties, 'CertificateConfiguration') as certificate_configuration,
-                json_extract_path_text(Properties, 'InstanceRoleCredentialsProvider') as instance_role_credentials_provider,
-                json_extract_path_text(Properties, 'DesiredEC2Instances') as desired_ec2_instances,
-                json_extract_path_text(Properties, 'ServerLaunchParameters') as server_launch_parameters,
-                json_extract_path_text(Properties, 'FleetType') as fleet_type,
-                json_extract_path_text(Properties, 'Locations') as locations,
-                json_extract_path_text(Properties, 'NewGameSessionProtectionPolicy') as new_game_session_protection_policy,
-                json_extract_path_text(Properties, 'ScriptId') as script_id,
-                json_extract_path_text(Properties, 'MaxSize') as max_size,
-                json_extract_path_text(Properties, 'RuntimeConfiguration') as runtime_configuration,
-                json_extract_path_text(Properties, 'LogPaths') as log_paths,
-                json_extract_path_text(Properties, 'ServerLaunchPath') as server_launch_path,
-                json_extract_path_text(Properties, 'MinSize') as min_size,
-                json_extract_path_text(Properties, 'PeerVpcAwsAccountId') as peer_vpc_aws_account_id,
-                json_extract_path_text(Properties, 'MetricGroups') as metric_groups,
-                json_extract_path_text(Properties, 'BuildId') as build_id,
-                json_extract_path_text(Properties, 'ResourceCreationLimitPolicy') as resource_creation_limit_policy,
-                json_extract_path_text(Properties, 'EC2InstanceType') as e_c2_instance_type
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::Fleet'
-                AND data__Identifier = '<FleetId>'
+                JSON_EXTRACT(Properties, '$.FleetId') as fleet_id
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Fleet'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'ScalingPolicies') as scaling_policies,
+                  json_extract_path_text(Properties, 'AnywhereConfiguration') as anywhere_configuration,
+                  json_extract_path_text(Properties, 'ApplyCapacity') as apply_capacity,
+                  json_extract_path_text(Properties, 'CertificateConfiguration') as certificate_configuration,
+                  json_extract_path_text(Properties, 'ComputeType') as compute_type,
+                  json_extract_path_text(Properties, 'ContainerGroupsConfiguration') as container_groups_configuration,
+                  json_extract_path_text(Properties, 'Description') as description,
+                  json_extract_path_text(Properties, 'DesiredEC2Instances') as desired_ec2_instances,
+                  json_extract_path_text(Properties, 'EC2InboundPermissions') as e_c2_inbound_permissions,
+                  json_extract_path_text(Properties, 'EC2InstanceType') as e_c2_instance_type,
+                  json_extract_path_text(Properties, 'FleetType') as fleet_type,
+                  json_extract_path_text(Properties, 'InstanceRoleARN') as instance_role_arn,
+                  json_extract_path_text(Properties, 'InstanceRoleCredentialsProvider') as instance_role_credentials_provider,
+                  json_extract_path_text(Properties, 'Locations') as locations,
+                  json_extract_path_text(Properties, 'LogPaths') as log_paths,
+                  json_extract_path_text(Properties, 'MaxSize') as max_size,
+                  json_extract_path_text(Properties, 'MetricGroups') as metric_groups,
+                  json_extract_path_text(Properties, 'MinSize') as min_size,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'NewGameSessionProtectionPolicy') as new_game_session_protection_policy,
+                  json_extract_path_text(Properties, 'PeerVpcAwsAccountId') as peer_vpc_aws_account_id,
+                  json_extract_path_text(Properties, 'PeerVpcId') as peer_vpc_id,
+                  json_extract_path_text(Properties, 'ResourceCreationLimitPolicy') as resource_creation_limit_policy,
+                  json_extract_path_text(Properties, 'FleetId') as fleet_id,
+                  json_extract_path_text(Properties, 'BuildId') as build_id,
+                  json_extract_path_text(Properties, 'ScriptId') as script_id,
+                  json_extract_path_text(Properties, 'RuntimeConfiguration') as runtime_configuration,
+                  json_extract_path_text(Properties, 'ServerLaunchParameters') as server_launch_parameters,
+                  json_extract_path_text(Properties, 'ServerLaunchPath') as server_launch_path
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::Fleet'
+                  AND data__Identifier = '<FleetId>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'FleetId') as fleet_id
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Fleet'
+                    AND region = 'us-east-1'
     game_server_groups:
       name: game_server_groups
       id: aws.gamelift.game_server_groups
@@ -3007,7 +3543,7 @@ components:
       x-cfn-type-name: AWS::GameLift::GameServerGroup
       x-identifiers:
         - GameServerGroupArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -3015,6 +3551,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__GameServerGroup&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::GameLift::GameServerGroup"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -3041,52 +3589,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/game_server_groups/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/game_server_groups/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.GameServerGroupArn') as game_server_group_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::GameServerGroup'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'GameServerGroupArn') as game_server_group_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::GameServerGroup'
-                AND region = 'us-east-1'
-    game_server_group:
-      name: game_server_group
-      id: aws.gamelift.game_server_group
-      x-cfn-schema-name: GameServerGroup
-      x-cfn-type-name: AWS::GameLift::GameServerGroup
-      x-identifiers:
-        - GameServerGroupArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::GameLift::GameServerGroup"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/game_server_group/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/game_server_groups/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -3109,28 +3617,44 @@ components:
               AND data__Identifier = '<GameServerGroupArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'AutoScalingGroupArn') as auto_scaling_group_arn,
-                json_extract_path_text(Properties, 'AutoScalingPolicy') as auto_scaling_policy,
-                json_extract_path_text(Properties, 'BalancingStrategy') as balancing_strategy,
-                json_extract_path_text(Properties, 'DeleteOption') as delete_option,
-                json_extract_path_text(Properties, 'GameServerGroupArn') as game_server_group_arn,
-                json_extract_path_text(Properties, 'GameServerGroupName') as game_server_group_name,
-                json_extract_path_text(Properties, 'GameServerProtectionPolicy') as game_server_protection_policy,
-                json_extract_path_text(Properties, 'InstanceDefinitions') as instance_definitions,
-                json_extract_path_text(Properties, 'LaunchTemplate') as launch_template,
-                json_extract_path_text(Properties, 'MaxSize') as max_size,
-                json_extract_path_text(Properties, 'MinSize') as min_size,
-                json_extract_path_text(Properties, 'RoleArn') as role_arn,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'VpcSubnets') as vpc_subnets
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::GameServerGroup'
-                AND data__Identifier = '<GameServerGroupArn>'
+                JSON_EXTRACT(Properties, '$.GameServerGroupArn') as game_server_group_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::GameServerGroup'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'AutoScalingGroupArn') as auto_scaling_group_arn,
+                  json_extract_path_text(Properties, 'AutoScalingPolicy') as auto_scaling_policy,
+                  json_extract_path_text(Properties, 'BalancingStrategy') as balancing_strategy,
+                  json_extract_path_text(Properties, 'DeleteOption') as delete_option,
+                  json_extract_path_text(Properties, 'GameServerGroupArn') as game_server_group_arn,
+                  json_extract_path_text(Properties, 'GameServerGroupName') as game_server_group_name,
+                  json_extract_path_text(Properties, 'GameServerProtectionPolicy') as game_server_protection_policy,
+                  json_extract_path_text(Properties, 'InstanceDefinitions') as instance_definitions,
+                  json_extract_path_text(Properties, 'LaunchTemplate') as launch_template,
+                  json_extract_path_text(Properties, 'MaxSize') as max_size,
+                  json_extract_path_text(Properties, 'MinSize') as min_size,
+                  json_extract_path_text(Properties, 'RoleArn') as role_arn,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'VpcSubnets') as vpc_subnets
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::GameServerGroup'
+                  AND data__Identifier = '<GameServerGroupArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'GameServerGroupArn') as game_server_group_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::GameServerGroup'
+                    AND region = 'us-east-1'
     game_session_queues:
       name: game_session_queues
       id: aws.gamelift.game_session_queues
@@ -3138,7 +3662,7 @@ components:
       x-cfn-type-name: AWS::GameLift::GameSessionQueue
       x-identifiers:
         - Name
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -3146,6 +3670,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__GameSessionQueue&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::GameLift::GameSessionQueue"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -3172,52 +3708,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/game_session_queues/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/game_session_queues/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.Name') as name
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::GameSessionQueue'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'Name') as name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::GameSessionQueue'
-                AND region = 'us-east-1'
-    game_session_queue:
-      name: game_session_queue
-      id: aws.gamelift.game_session_queue
-      x-cfn-schema-name: GameSessionQueue
-      x-cfn-type-name: AWS::GameLift::GameSessionQueue
-      x-identifiers:
-        - Name
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::GameLift::GameSessionQueue"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/game_session_queue/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/game_session_queues/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -3236,24 +3732,40 @@ components:
               AND data__Identifier = '<Name>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'TimeoutInSeconds') as timeout_in_seconds,
-                json_extract_path_text(Properties, 'Destinations') as destinations,
-                json_extract_path_text(Properties, 'PlayerLatencyPolicies') as player_latency_policies,
-                json_extract_path_text(Properties, 'CustomEventData') as custom_event_data,
-                json_extract_path_text(Properties, 'NotificationTarget') as notification_target,
-                json_extract_path_text(Properties, 'FilterConfiguration') as filter_configuration,
-                json_extract_path_text(Properties, 'PriorityConfiguration') as priority_configuration,
-                json_extract_path_text(Properties, 'Arn') as arn,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::GameSessionQueue'
-                AND data__Identifier = '<Name>'
+                JSON_EXTRACT(Properties, '$.Name') as name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::GameSessionQueue'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'TimeoutInSeconds') as timeout_in_seconds,
+                  json_extract_path_text(Properties, 'Destinations') as destinations,
+                  json_extract_path_text(Properties, 'PlayerLatencyPolicies') as player_latency_policies,
+                  json_extract_path_text(Properties, 'CustomEventData') as custom_event_data,
+                  json_extract_path_text(Properties, 'NotificationTarget') as notification_target,
+                  json_extract_path_text(Properties, 'FilterConfiguration') as filter_configuration,
+                  json_extract_path_text(Properties, 'PriorityConfiguration') as priority_configuration,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::GameSessionQueue'
+                  AND data__Identifier = '<Name>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'Name') as name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::GameSessionQueue'
+                    AND region = 'us-east-1'
     matchmaking_configurations:
       name: matchmaking_configurations
       id: aws.gamelift.matchmaking_configurations
@@ -3261,7 +3773,7 @@ components:
       x-cfn-type-name: AWS::GameLift::MatchmakingConfiguration
       x-identifiers:
         - Name
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -3269,6 +3781,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__MatchmakingConfiguration&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::GameLift::MatchmakingConfiguration"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -3295,52 +3819,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/matchmaking_configurations/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/matchmaking_configurations/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.Name') as name
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::MatchmakingConfiguration'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'Name') as name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::MatchmakingConfiguration'
-                AND region = 'us-east-1'
-    matchmaking_configuration:
-      name: matchmaking_configuration
-      id: aws.gamelift.matchmaking_configuration
-      x-cfn-schema-name: MatchmakingConfiguration
-      x-cfn-type-name: AWS::GameLift::MatchmakingConfiguration
-      x-identifiers:
-        - Name
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::GameLift::MatchmakingConfiguration"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/matchmaking_configuration/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/matchmaking_configurations/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -3367,32 +3851,48 @@ components:
               AND data__Identifier = '<Name>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'AcceptanceRequired') as acceptance_required,
-                json_extract_path_text(Properties, 'AcceptanceTimeoutSeconds') as acceptance_timeout_seconds,
-                json_extract_path_text(Properties, 'AdditionalPlayerCount') as additional_player_count,
-                json_extract_path_text(Properties, 'BackfillMode') as backfill_mode,
-                json_extract_path_text(Properties, 'Arn') as arn,
-                json_extract_path_text(Properties, 'CreationTime') as creation_time,
-                json_extract_path_text(Properties, 'CustomEventData') as custom_event_data,
-                json_extract_path_text(Properties, 'Description') as description,
-                json_extract_path_text(Properties, 'FlexMatchMode') as flex_match_mode,
-                json_extract_path_text(Properties, 'GameProperties') as game_properties,
-                json_extract_path_text(Properties, 'GameSessionData') as game_session_data,
-                json_extract_path_text(Properties, 'GameSessionQueueArns') as game_session_queue_arns,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'NotificationTarget') as notification_target,
-                json_extract_path_text(Properties, 'RequestTimeoutSeconds') as request_timeout_seconds,
-                json_extract_path_text(Properties, 'RuleSetArn') as rule_set_arn,
-                json_extract_path_text(Properties, 'RuleSetName') as rule_set_name,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::MatchmakingConfiguration'
-                AND data__Identifier = '<Name>'
+                JSON_EXTRACT(Properties, '$.Name') as name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::MatchmakingConfiguration'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'AcceptanceRequired') as acceptance_required,
+                  json_extract_path_text(Properties, 'AcceptanceTimeoutSeconds') as acceptance_timeout_seconds,
+                  json_extract_path_text(Properties, 'AdditionalPlayerCount') as additional_player_count,
+                  json_extract_path_text(Properties, 'BackfillMode') as backfill_mode,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'CreationTime') as creation_time,
+                  json_extract_path_text(Properties, 'CustomEventData') as custom_event_data,
+                  json_extract_path_text(Properties, 'Description') as description,
+                  json_extract_path_text(Properties, 'FlexMatchMode') as flex_match_mode,
+                  json_extract_path_text(Properties, 'GameProperties') as game_properties,
+                  json_extract_path_text(Properties, 'GameSessionData') as game_session_data,
+                  json_extract_path_text(Properties, 'GameSessionQueueArns') as game_session_queue_arns,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'NotificationTarget') as notification_target,
+                  json_extract_path_text(Properties, 'RequestTimeoutSeconds') as request_timeout_seconds,
+                  json_extract_path_text(Properties, 'RuleSetArn') as rule_set_arn,
+                  json_extract_path_text(Properties, 'RuleSetName') as rule_set_name,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::MatchmakingConfiguration'
+                  AND data__Identifier = '<Name>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'Name') as name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::MatchmakingConfiguration'
+                    AND region = 'us-east-1'
     matchmaking_rule_sets:
       name: matchmaking_rule_sets
       id: aws.gamelift.matchmaking_rule_sets
@@ -3400,7 +3900,7 @@ components:
       x-cfn-type-name: AWS::GameLift::MatchmakingRuleSet
       x-identifiers:
         - Name
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -3408,6 +3908,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__MatchmakingRuleSet&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::GameLift::MatchmakingRuleSet"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -3434,52 +3946,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/matchmaking_rule_sets/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/matchmaking_rule_sets/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.Name') as name
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::MatchmakingRuleSet'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'Name') as name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::MatchmakingRuleSet'
-                AND region = 'us-east-1'
-    matchmaking_rule_set:
-      name: matchmaking_rule_set
-      id: aws.gamelift.matchmaking_rule_set
-      x-cfn-schema-name: MatchmakingRuleSet
-      x-cfn-type-name: AWS::GameLift::MatchmakingRuleSet
-      x-identifiers:
-        - Name
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::GameLift::MatchmakingRuleSet"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/matchmaking_rule_set/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/matchmaking_rule_sets/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -3493,19 +3965,35 @@ components:
               AND data__Identifier = '<Name>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'RuleSetBody') as rule_set_body,
-                json_extract_path_text(Properties, 'CreationTime') as creation_time,
-                json_extract_path_text(Properties, 'Arn') as arn,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::MatchmakingRuleSet'
-                AND data__Identifier = '<Name>'
+                JSON_EXTRACT(Properties, '$.Name') as name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::MatchmakingRuleSet'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'RuleSetBody') as rule_set_body,
+                  json_extract_path_text(Properties, 'CreationTime') as creation_time,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::MatchmakingRuleSet'
+                  AND data__Identifier = '<Name>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'Name') as name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::MatchmakingRuleSet'
+                    AND region = 'us-east-1'
     scripts:
       name: scripts
       id: aws.gamelift.scripts
@@ -3513,7 +4001,7 @@ components:
       x-cfn-type-name: AWS::GameLift::Script
       x-identifiers:
         - Id
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -3521,6 +4009,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Script&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::GameLift::Script"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -3547,52 +4047,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/scripts/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/scripts/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.Id') as id
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Script'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'Id') as id
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Script'
-                AND region = 'us-east-1'
-    script:
-      name: script
-      id: aws.gamelift.script
-      x-cfn-schema-name: Script
-      x-cfn-type-name: AWS::GameLift::Script
-      x-identifiers:
-        - Id
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::GameLift::Script"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/script/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/scripts/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -3609,22 +4069,38 @@ components:
               AND data__Identifier = '<Id>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'StorageLocation') as storage_location,
-                json_extract_path_text(Properties, 'Version') as version,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'CreationTime') as creation_time,
-                json_extract_path_text(Properties, 'Arn') as arn,
-                json_extract_path_text(Properties, 'Id') as id,
-                json_extract_path_text(Properties, 'SizeOnDisk') as size_on_disk
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::Script'
-                AND data__Identifier = '<Id>'
+                JSON_EXTRACT(Properties, '$.Id') as id
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Script'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'StorageLocation') as storage_location,
+                  json_extract_path_text(Properties, 'Version') as version,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'CreationTime') as creation_time,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'Id') as id,
+                  json_extract_path_text(Properties, 'SizeOnDisk') as size_on_disk
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::GameLift::Script'
+                  AND data__Identifier = '<Id>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'Id') as id
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::GameLift::Script'
+                    AND region = 'us-east-1'
 paths:
   /?Action=CreateResource&Version=2021-09-30:
     parameters:
@@ -3844,6 +4320,48 @@ paths:
           application/x-amz-json-1.0:
             schema:
               $ref: '#/components/schemas/CreateBuildRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
+          description: Success
+  /?Action=CreateResource&Version=2021-09-30&__ContainerGroupDefinition&__detailTransformed=true:
+    parameters:
+      - $ref: '#/components/parameters/X-Amz-Content-Sha256'
+      - $ref: '#/components/parameters/X-Amz-Date'
+      - $ref: '#/components/parameters/X-Amz-Algorithm'
+      - $ref: '#/components/parameters/X-Amz-Credential'
+      - $ref: '#/components/parameters/X-Amz-Security-Token'
+      - $ref: '#/components/parameters/X-Amz-Signature'
+      - $ref: '#/components/parameters/X-Amz-SignedHeaders'
+    post:
+      operationId: CreateContainerGroupDefinition
+      parameters:
+        - description: Action Header
+          in: header
+          name: X-Amz-Target
+          required: false
+          schema:
+            default: CloudApiService.CreateResource
+            enum:
+              - CloudApiService.CreateResource
+            type: string
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            default: application/x-amz-json-1.0
+            enum:
+              - application/x-amz-json-1.0
+            type: string
+      requestBody:
+        content:
+          application/x-amz-json-1.0:
+            schema:
+              $ref: '#/components/schemas/CreateContainerGroupDefinitionRequest'
         required: true
       responses:
         '200':

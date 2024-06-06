@@ -539,6 +539,14 @@ components:
       type: integer
       description: Minimum worker compute units.
       minimum: 1
+    MaxWebservers:
+      type: integer
+      description: Maximum webserver compute units.
+      minimum: 2
+    MinWebservers:
+      type: integer
+      description: Minimum webserver compute units.
+      minimum: 2
     Schedulers:
       type: integer
       description: Scheduler compute units.
@@ -716,6 +724,10 @@ components:
           $ref: '#/components/schemas/MaxWorkers'
         MinWorkers:
           $ref: '#/components/schemas/MinWorkers'
+        MaxWebservers:
+          $ref: '#/components/schemas/MaxWebservers'
+        MinWebservers:
+          $ref: '#/components/schemas/MinWebservers'
         Schedulers:
           $ref: '#/components/schemas/Schedulers'
         NetworkConfiguration:
@@ -835,6 +847,10 @@ components:
               $ref: '#/components/schemas/MaxWorkers'
             MinWorkers:
               $ref: '#/components/schemas/MinWorkers'
+            MaxWebservers:
+              $ref: '#/components/schemas/MaxWebservers'
+            MinWebservers:
+              $ref: '#/components/schemas/MinWebservers'
             Schedulers:
               $ref: '#/components/schemas/Schedulers'
             NetworkConfiguration:
@@ -875,7 +891,7 @@ components:
       x-cfn-type-name: AWS::MWAA::Environment
       x-identifiers:
         - Name
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -883,6 +899,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Environment&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::MWAA::Environment"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -909,52 +937,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/environments/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/environments/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.Name') as name
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MWAA::Environment'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'Name') as name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MWAA::Environment'
-                AND region = 'us-east-1'
-    environment:
-      name: environment
-      id: aws.mwaa.environment
-      x-cfn-schema-name: Environment
-      x-cfn-type-name: AWS::MWAA::Environment
-      x-identifiers:
-        - Name
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::MWAA::Environment"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/environment/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/environments/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -977,6 +965,8 @@ components:
               JSON_EXTRACT(Properties, '$.EnvironmentClass') as environment_class,
               JSON_EXTRACT(Properties, '$.MaxWorkers') as max_workers,
               JSON_EXTRACT(Properties, '$.MinWorkers') as min_workers,
+              JSON_EXTRACT(Properties, '$.MaxWebservers') as max_webservers,
+              JSON_EXTRACT(Properties, '$.MinWebservers') as min_webservers,
               JSON_EXTRACT(Properties, '$.Schedulers') as schedulers,
               JSON_EXTRACT(Properties, '$.NetworkConfiguration') as network_configuration,
               JSON_EXTRACT(Properties, '$.LoggingConfiguration') as logging_configuration,
@@ -991,42 +981,60 @@ components:
               AND data__Identifier = '<Name>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'Arn') as arn,
-                json_extract_path_text(Properties, 'WebserverUrl') as webserver_url,
-                json_extract_path_text(Properties, 'ExecutionRoleArn') as execution_role_arn,
-                json_extract_path_text(Properties, 'KmsKey') as kms_key,
-                json_extract_path_text(Properties, 'AirflowVersion') as airflow_version,
-                json_extract_path_text(Properties, 'SourceBucketArn') as source_bucket_arn,
-                json_extract_path_text(Properties, 'DagS3Path') as dag_s3_path,
-                json_extract_path_text(Properties, 'PluginsS3Path') as plugins_s3_path,
-                json_extract_path_text(Properties, 'PluginsS3ObjectVersion') as plugins_s3_object_version,
-                json_extract_path_text(Properties, 'RequirementsS3Path') as requirements_s3_path,
-                json_extract_path_text(Properties, 'RequirementsS3ObjectVersion') as requirements_s3_object_version,
-                json_extract_path_text(Properties, 'StartupScriptS3Path') as startup_script_s3_path,
-                json_extract_path_text(Properties, 'StartupScriptS3ObjectVersion') as startup_script_s3_object_version,
-                json_extract_path_text(Properties, 'AirflowConfigurationOptions') as airflow_configuration_options,
-                json_extract_path_text(Properties, 'EnvironmentClass') as environment_class,
-                json_extract_path_text(Properties, 'MaxWorkers') as max_workers,
-                json_extract_path_text(Properties, 'MinWorkers') as min_workers,
-                json_extract_path_text(Properties, 'Schedulers') as schedulers,
-                json_extract_path_text(Properties, 'NetworkConfiguration') as network_configuration,
-                json_extract_path_text(Properties, 'LoggingConfiguration') as logging_configuration,
-                json_extract_path_text(Properties, 'WeeklyMaintenanceWindowStart') as weekly_maintenance_window_start,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'WebserverAccessMode') as webserver_access_mode,
-                json_extract_path_text(Properties, 'EndpointManagement') as endpoint_management,
-                json_extract_path_text(Properties, 'CeleryExecutorQueue') as celery_executor_queue,
-                json_extract_path_text(Properties, 'DatabaseVpcEndpointService') as database_vpc_endpoint_service,
-                json_extract_path_text(Properties, 'WebserverVpcEndpointService') as webserver_vpc_endpoint_service
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::MWAA::Environment'
-                AND data__Identifier = '<Name>'
+                JSON_EXTRACT(Properties, '$.Name') as name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MWAA::Environment'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'WebserverUrl') as webserver_url,
+                  json_extract_path_text(Properties, 'ExecutionRoleArn') as execution_role_arn,
+                  json_extract_path_text(Properties, 'KmsKey') as kms_key,
+                  json_extract_path_text(Properties, 'AirflowVersion') as airflow_version,
+                  json_extract_path_text(Properties, 'SourceBucketArn') as source_bucket_arn,
+                  json_extract_path_text(Properties, 'DagS3Path') as dag_s3_path,
+                  json_extract_path_text(Properties, 'PluginsS3Path') as plugins_s3_path,
+                  json_extract_path_text(Properties, 'PluginsS3ObjectVersion') as plugins_s3_object_version,
+                  json_extract_path_text(Properties, 'RequirementsS3Path') as requirements_s3_path,
+                  json_extract_path_text(Properties, 'RequirementsS3ObjectVersion') as requirements_s3_object_version,
+                  json_extract_path_text(Properties, 'StartupScriptS3Path') as startup_script_s3_path,
+                  json_extract_path_text(Properties, 'StartupScriptS3ObjectVersion') as startup_script_s3_object_version,
+                  json_extract_path_text(Properties, 'AirflowConfigurationOptions') as airflow_configuration_options,
+                  json_extract_path_text(Properties, 'EnvironmentClass') as environment_class,
+                  json_extract_path_text(Properties, 'MaxWorkers') as max_workers,
+                  json_extract_path_text(Properties, 'MinWorkers') as min_workers,
+                  json_extract_path_text(Properties, 'MaxWebservers') as max_webservers,
+                  json_extract_path_text(Properties, 'MinWebservers') as min_webservers,
+                  json_extract_path_text(Properties, 'Schedulers') as schedulers,
+                  json_extract_path_text(Properties, 'NetworkConfiguration') as network_configuration,
+                  json_extract_path_text(Properties, 'LoggingConfiguration') as logging_configuration,
+                  json_extract_path_text(Properties, 'WeeklyMaintenanceWindowStart') as weekly_maintenance_window_start,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'WebserverAccessMode') as webserver_access_mode,
+                  json_extract_path_text(Properties, 'EndpointManagement') as endpoint_management,
+                  json_extract_path_text(Properties, 'CeleryExecutorQueue') as celery_executor_queue,
+                  json_extract_path_text(Properties, 'DatabaseVpcEndpointService') as database_vpc_endpoint_service,
+                  json_extract_path_text(Properties, 'WebserverVpcEndpointService') as webserver_vpc_endpoint_service
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::MWAA::Environment'
+                  AND data__Identifier = '<Name>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'Name') as name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MWAA::Environment'
+                    AND region = 'us-east-1'
 paths:
   /?Action=CreateResource&Version=2021-09-30:
     parameters:
