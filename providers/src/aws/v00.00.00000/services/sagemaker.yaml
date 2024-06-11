@@ -1380,6 +1380,22 @@ components:
             type: string
             maxLength: 32
             pattern: '[-0-9a-zA-Z]+'
+        JupyterLabAppSettings:
+          $ref: '#/components/schemas/JupyterLabAppSettings'
+          description: The Jupyter lab's app settings.
+        SpaceStorageSettings:
+          $ref: '#/components/schemas/DefaultSpaceStorageSettings'
+          description: The Jupyter lab's space storage settings.
+        CustomPosixUserConfig:
+          $ref: '#/components/schemas/CustomPosixUserConfig'
+          description: The Jupyter lab's custom posix user configurations.
+        CustomFileSystemConfigs:
+          type: array
+          uniqueItems: true
+          minItems: 0
+          maxItems: 2
+          items:
+            $ref: '#/components/schemas/CustomFileSystemConfig'
       required:
         - ExecutionRole
     JupyterServerAppSettings:
@@ -1622,8 +1638,9 @@ components:
           maxItems: 10
           items:
             type: string
+            minLength: 12
             maxLength: 12
-            pattern: ^[0-9]$
+            pattern: ^\d+$
     RStudioServerProDomainSettings:
       type: object
       description: A collection of settings that update the current configuration for the RStudioServerPro Domain-level app.
@@ -1658,7 +1675,7 @@ components:
           x-insertionOrder: false
           uniqueItems: false
           minItems: 0
-          maxItems: 30
+          maxItems: 200
           items:
             $ref: '#/components/schemas/CustomImage'
         DefaultResourceSpec:
@@ -3638,6 +3655,7 @@ components:
       x-required-permissions:
         create:
           - sagemaker:CreateModelCard
+          - sagemaker:DescribeModel
           - kms:DescribeKey
           - kms:GenerateDataKey
           - kms:CreateGrant
@@ -3653,6 +3671,7 @@ components:
         update:
           - sagemaker:UpdateModelCard
           - sagemaker:DescribeModelCard
+          - sagemaker:DescribeModel
           - kms:GenerateDataKey
           - kms:Decrypt
           - sagemaker:DescribeModelPackageGroup
@@ -6897,7 +6916,7 @@ components:
         - AppType
         - DomainId
         - UserProfileName
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -6931,48 +6950,11 @@ components:
           - $ref: '#/components/x-stackQL-resources/apps/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/apps/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.AppName') as app_name,
-              JSON_EXTRACT(Properties, '$.AppType') as app_type,
-              JSON_EXTRACT(Properties, '$.DomainId') as domain_id,
-              JSON_EXTRACT(Properties, '$.UserProfileName') as user_profile_name
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::App'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'AppName') as app_name,
-                json_extract_path_text(Properties, 'AppType') as app_type,
-                json_extract_path_text(Properties, 'DomainId') as domain_id,
-                json_extract_path_text(Properties, 'UserProfileName') as user_profile_name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::App'
-                AND region = 'us-east-1'
-    app:
-      name: app
-      id: aws.sagemaker.app
-      x-cfn-schema-name: App
-      x-cfn-type-name: AWS::SageMaker::App
-      x-identifiers:
-        - AppName
-        - AppType
-        - DomainId
-        - UserProfileName
-      x-type: get
-      methods: {}
-      sqlVerbs:
         update: []
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -6988,21 +6970,43 @@ components:
               AND data__Identifier = '<AppName>|<AppType>|<DomainId>|<UserProfileName>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'AppArn') as app_arn,
-                json_extract_path_text(Properties, 'AppName') as app_name,
-                json_extract_path_text(Properties, 'AppType') as app_type,
-                json_extract_path_text(Properties, 'DomainId') as domain_id,
-                json_extract_path_text(Properties, 'ResourceSpec') as resource_spec,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'UserProfileName') as user_profile_name
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::App'
-                AND data__Identifier = '<AppName>|<AppType>|<DomainId>|<UserProfileName>'
+                JSON_EXTRACT(Properties, '$.AppName') as app_name,
+                JSON_EXTRACT(Properties, '$.AppType') as app_type,
+                JSON_EXTRACT(Properties, '$.DomainId') as domain_id,
+                JSON_EXTRACT(Properties, '$.UserProfileName') as user_profile_name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::App'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'AppArn') as app_arn,
+                  json_extract_path_text(Properties, 'AppName') as app_name,
+                  json_extract_path_text(Properties, 'AppType') as app_type,
+                  json_extract_path_text(Properties, 'DomainId') as domain_id,
+                  json_extract_path_text(Properties, 'ResourceSpec') as resource_spec,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'UserProfileName') as user_profile_name
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::App'
+                  AND data__Identifier = '<AppName>|<AppType>|<DomainId>|<UserProfileName>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'AppName') as app_name,
+                    json_extract_path_text(Properties, 'AppType') as app_type,
+                    json_extract_path_text(Properties, 'DomainId') as domain_id,
+                    json_extract_path_text(Properties, 'UserProfileName') as user_profile_name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::App'
+                    AND region = 'us-east-1'
     app_image_configs:
       name: app_image_configs
       id: aws.sagemaker.app_image_configs
@@ -7010,7 +7014,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::AppImageConfig
       x-identifiers:
         - AppImageConfigName
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -7018,6 +7022,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__AppImageConfig&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SageMaker::AppImageConfig"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -7044,52 +7060,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/app_image_configs/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/app_image_configs/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.AppImageConfigName') as app_image_config_name
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::AppImageConfig'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'AppImageConfigName') as app_image_config_name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::AppImageConfig'
-                AND region = 'us-east-1'
-    app_image_config:
-      name: app_image_config
-      id: aws.sagemaker.app_image_config
-      x-cfn-schema-name: AppImageConfig
-      x-cfn-type-name: AWS::SageMaker::AppImageConfig
-      x-identifiers:
-        - AppImageConfigName
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SageMaker::AppImageConfig"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/app_image_config/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/app_image_configs/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -7104,20 +7080,36 @@ components:
               AND data__Identifier = '<AppImageConfigName>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'AppImageConfigArn') as app_image_config_arn,
-                json_extract_path_text(Properties, 'AppImageConfigName') as app_image_config_name,
-                json_extract_path_text(Properties, 'KernelGatewayImageConfig') as kernel_gateway_image_config,
-                json_extract_path_text(Properties, 'JupyterLabAppImageConfig') as jupyter_lab_app_image_config,
-                json_extract_path_text(Properties, 'CodeEditorAppImageConfig') as code_editor_app_image_config,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::AppImageConfig'
-                AND data__Identifier = '<AppImageConfigName>'
+                JSON_EXTRACT(Properties, '$.AppImageConfigName') as app_image_config_name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::AppImageConfig'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'AppImageConfigArn') as app_image_config_arn,
+                  json_extract_path_text(Properties, 'AppImageConfigName') as app_image_config_name,
+                  json_extract_path_text(Properties, 'KernelGatewayImageConfig') as kernel_gateway_image_config,
+                  json_extract_path_text(Properties, 'JupyterLabAppImageConfig') as jupyter_lab_app_image_config,
+                  json_extract_path_text(Properties, 'CodeEditorAppImageConfig') as code_editor_app_image_config,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::AppImageConfig'
+                  AND data__Identifier = '<AppImageConfigName>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'AppImageConfigName') as app_image_config_name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::AppImageConfig'
+                    AND region = 'us-east-1'
     data_quality_job_definitions:
       name: data_quality_job_definitions
       id: aws.sagemaker.data_quality_job_definitions
@@ -7125,7 +7117,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::DataQualityJobDefinition
       x-identifiers:
         - JobDefinitionArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -7159,39 +7151,11 @@ components:
           - $ref: '#/components/x-stackQL-resources/data_quality_job_definitions/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/data_quality_job_definitions/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.JobDefinitionArn') as job_definition_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::DataQualityJobDefinition'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'JobDefinitionArn') as job_definition_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::DataQualityJobDefinition'
-                AND region = 'us-east-1'
-    data_quality_job_definition:
-      name: data_quality_job_definition
-      id: aws.sagemaker.data_quality_job_definition
-      x-cfn-schema-name: DataQualityJobDefinition
-      x-cfn-type-name: AWS::SageMaker::DataQualityJobDefinition
-      x-identifiers:
-        - JobDefinitionArn
-      x-type: get
-      methods: {}
-      sqlVerbs:
         update: []
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -7213,27 +7177,43 @@ components:
               AND data__Identifier = '<JobDefinitionArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'JobDefinitionArn') as job_definition_arn,
-                json_extract_path_text(Properties, 'JobDefinitionName') as job_definition_name,
-                json_extract_path_text(Properties, 'DataQualityBaselineConfig') as data_quality_baseline_config,
-                json_extract_path_text(Properties, 'DataQualityAppSpecification') as data_quality_app_specification,
-                json_extract_path_text(Properties, 'DataQualityJobInput') as data_quality_job_input,
-                json_extract_path_text(Properties, 'DataQualityJobOutputConfig') as data_quality_job_output_config,
-                json_extract_path_text(Properties, 'JobResources') as job_resources,
-                json_extract_path_text(Properties, 'NetworkConfig') as network_config,
-                json_extract_path_text(Properties, 'EndpointName') as endpoint_name,
-                json_extract_path_text(Properties, 'RoleArn') as role_arn,
-                json_extract_path_text(Properties, 'StoppingCondition') as stopping_condition,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'CreationTime') as creation_time
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::DataQualityJobDefinition'
-                AND data__Identifier = '<JobDefinitionArn>'
+                JSON_EXTRACT(Properties, '$.JobDefinitionArn') as job_definition_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::DataQualityJobDefinition'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'JobDefinitionArn') as job_definition_arn,
+                  json_extract_path_text(Properties, 'JobDefinitionName') as job_definition_name,
+                  json_extract_path_text(Properties, 'DataQualityBaselineConfig') as data_quality_baseline_config,
+                  json_extract_path_text(Properties, 'DataQualityAppSpecification') as data_quality_app_specification,
+                  json_extract_path_text(Properties, 'DataQualityJobInput') as data_quality_job_input,
+                  json_extract_path_text(Properties, 'DataQualityJobOutputConfig') as data_quality_job_output_config,
+                  json_extract_path_text(Properties, 'JobResources') as job_resources,
+                  json_extract_path_text(Properties, 'NetworkConfig') as network_config,
+                  json_extract_path_text(Properties, 'EndpointName') as endpoint_name,
+                  json_extract_path_text(Properties, 'RoleArn') as role_arn,
+                  json_extract_path_text(Properties, 'StoppingCondition') as stopping_condition,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'CreationTime') as creation_time
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::DataQualityJobDefinition'
+                  AND data__Identifier = '<JobDefinitionArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'JobDefinitionArn') as job_definition_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::DataQualityJobDefinition'
+                    AND region = 'us-east-1'
     devices:
       name: devices
       id: aws.sagemaker.devices
@@ -7241,7 +7221,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::Device
       x-identifiers:
         - Device/DeviceName
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -7249,6 +7229,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Device&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SageMaker::Device"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -7275,34 +7267,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/devices/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/devices/methods/delete_resource'
-    device:
-      name: device
-      id: aws.sagemaker.device
-      x-cfn-schema-name: Device
-      x-cfn-type-name: AWS::SageMaker::Device
-      x-identifiers:
-        - Device/DeviceName
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SageMaker::Device"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/device/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/devices/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -7314,7 +7284,7 @@ components:
               AND data__Identifier = '<Device/DeviceName>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
               ddl: |-
                 SELECT
                 region,
@@ -7332,7 +7302,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::DeviceFleet
       x-identifiers:
         - DeviceFleetName
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -7340,6 +7310,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__DeviceFleet&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SageMaker::DeviceFleet"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -7366,34 +7348,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/device_fleets/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/device_fleets/methods/delete_resource'
-    device_fleet:
-      name: device_fleet
-      id: aws.sagemaker.device_fleet
-      x-cfn-schema-name: DeviceFleet
-      x-cfn-type-name: AWS::SageMaker::DeviceFleet
-      x-identifiers:
-        - DeviceFleetName
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SageMaker::DeviceFleet"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/device_fleet/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/device_fleets/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -7407,7 +7367,7 @@ components:
               AND data__Identifier = '<DeviceFleetName>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
               ddl: |-
                 SELECT
                 region,
@@ -7427,7 +7387,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::FeatureGroup
       x-identifiers:
         - FeatureGroupName
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -7435,6 +7395,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__FeatureGroup&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SageMaker::FeatureGroup"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -7461,52 +7433,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/feature_groups/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/feature_groups/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.FeatureGroupName') as feature_group_name
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::FeatureGroup'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'FeatureGroupName') as feature_group_name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::FeatureGroup'
-                AND region = 'us-east-1'
-    feature_group:
-      name: feature_group
-      id: aws.sagemaker.feature_group
-      x-cfn-schema-name: FeatureGroup
-      x-cfn-type-name: AWS::SageMaker::FeatureGroup
-      x-identifiers:
-        - FeatureGroupName
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SageMaker::FeatureGroup"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/feature_group/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/feature_groups/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -7527,26 +7459,42 @@ components:
               AND data__Identifier = '<FeatureGroupName>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'FeatureGroupName') as feature_group_name,
-                json_extract_path_text(Properties, 'RecordIdentifierFeatureName') as record_identifier_feature_name,
-                json_extract_path_text(Properties, 'EventTimeFeatureName') as event_time_feature_name,
-                json_extract_path_text(Properties, 'FeatureDefinitions') as feature_definitions,
-                json_extract_path_text(Properties, 'OnlineStoreConfig') as online_store_config,
-                json_extract_path_text(Properties, 'OfflineStoreConfig') as offline_store_config,
-                json_extract_path_text(Properties, 'ThroughputConfig') as throughput_config,
-                json_extract_path_text(Properties, 'RoleArn') as role_arn,
-                json_extract_path_text(Properties, 'Description') as description,
-                json_extract_path_text(Properties, 'CreationTime') as creation_time,
-                json_extract_path_text(Properties, 'FeatureGroupStatus') as feature_group_status,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::FeatureGroup'
-                AND data__Identifier = '<FeatureGroupName>'
+                JSON_EXTRACT(Properties, '$.FeatureGroupName') as feature_group_name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::FeatureGroup'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'FeatureGroupName') as feature_group_name,
+                  json_extract_path_text(Properties, 'RecordIdentifierFeatureName') as record_identifier_feature_name,
+                  json_extract_path_text(Properties, 'EventTimeFeatureName') as event_time_feature_name,
+                  json_extract_path_text(Properties, 'FeatureDefinitions') as feature_definitions,
+                  json_extract_path_text(Properties, 'OnlineStoreConfig') as online_store_config,
+                  json_extract_path_text(Properties, 'OfflineStoreConfig') as offline_store_config,
+                  json_extract_path_text(Properties, 'ThroughputConfig') as throughput_config,
+                  json_extract_path_text(Properties, 'RoleArn') as role_arn,
+                  json_extract_path_text(Properties, 'Description') as description,
+                  json_extract_path_text(Properties, 'CreationTime') as creation_time,
+                  json_extract_path_text(Properties, 'FeatureGroupStatus') as feature_group_status,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::FeatureGroup'
+                  AND data__Identifier = '<FeatureGroupName>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'FeatureGroupName') as feature_group_name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::FeatureGroup'
+                    AND region = 'us-east-1'
     images:
       name: images
       id: aws.sagemaker.images
@@ -7554,7 +7502,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::Image
       x-identifiers:
         - ImageArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -7562,6 +7510,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Image&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SageMaker::Image"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -7588,52 +7548,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/images/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/images/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.ImageArn') as image_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::Image'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'ImageArn') as image_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::Image'
-                AND region = 'us-east-1'
-    image:
-      name: image
-      id: aws.sagemaker.image
-      x-cfn-schema-name: Image
-      x-cfn-type-name: AWS::SageMaker::Image
-      x-identifiers:
-        - ImageArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SageMaker::Image"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/image/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/images/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -7648,20 +7568,36 @@ components:
               AND data__Identifier = '<ImageArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'ImageName') as image_name,
-                json_extract_path_text(Properties, 'ImageArn') as image_arn,
-                json_extract_path_text(Properties, 'ImageRoleArn') as image_role_arn,
-                json_extract_path_text(Properties, 'ImageDisplayName') as image_display_name,
-                json_extract_path_text(Properties, 'ImageDescription') as image_description,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::Image'
-                AND data__Identifier = '<ImageArn>'
+                JSON_EXTRACT(Properties, '$.ImageArn') as image_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::Image'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'ImageName') as image_name,
+                  json_extract_path_text(Properties, 'ImageArn') as image_arn,
+                  json_extract_path_text(Properties, 'ImageRoleArn') as image_role_arn,
+                  json_extract_path_text(Properties, 'ImageDisplayName') as image_display_name,
+                  json_extract_path_text(Properties, 'ImageDescription') as image_description,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::Image'
+                  AND data__Identifier = '<ImageArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'ImageArn') as image_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::Image'
+                    AND region = 'us-east-1'
     image_versions:
       name: image_versions
       id: aws.sagemaker.image_versions
@@ -7669,7 +7605,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::ImageVersion
       x-identifiers:
         - ImageVersionArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -7677,6 +7613,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__ImageVersion&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SageMaker::ImageVersion"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -7703,52 +7651,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/image_versions/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/image_versions/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.ImageVersionArn') as image_version_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ImageVersion'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'ImageVersionArn') as image_version_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ImageVersion'
-                AND region = 'us-east-1'
-    image_version:
-      name: image_version
-      id: aws.sagemaker.image_version
-      x-cfn-schema-name: ImageVersion
-      x-cfn-type-name: AWS::SageMaker::ImageVersion
-      x-identifiers:
-        - ImageVersionArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SageMaker::ImageVersion"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/image_version/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/image_versions/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -7772,29 +7680,45 @@ components:
               AND data__Identifier = '<ImageVersionArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'ImageName') as image_name,
-                json_extract_path_text(Properties, 'ImageArn') as image_arn,
-                json_extract_path_text(Properties, 'ImageVersionArn') as image_version_arn,
-                json_extract_path_text(Properties, 'BaseImage') as base_image,
-                json_extract_path_text(Properties, 'ContainerImage') as container_image,
-                json_extract_path_text(Properties, 'Version') as version,
-                json_extract_path_text(Properties, 'Alias') as alias,
-                json_extract_path_text(Properties, 'Aliases') as aliases,
-                json_extract_path_text(Properties, 'VendorGuidance') as vendor_guidance,
-                json_extract_path_text(Properties, 'JobType') as job_type,
-                json_extract_path_text(Properties, 'MLFramework') as ml_framework,
-                json_extract_path_text(Properties, 'ProgrammingLang') as programming_lang,
-                json_extract_path_text(Properties, 'Processor') as processor,
-                json_extract_path_text(Properties, 'Horovod') as horovod,
-                json_extract_path_text(Properties, 'ReleaseNotes') as release_notes
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::ImageVersion'
-                AND data__Identifier = '<ImageVersionArn>'
+                JSON_EXTRACT(Properties, '$.ImageVersionArn') as image_version_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ImageVersion'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'ImageName') as image_name,
+                  json_extract_path_text(Properties, 'ImageArn') as image_arn,
+                  json_extract_path_text(Properties, 'ImageVersionArn') as image_version_arn,
+                  json_extract_path_text(Properties, 'BaseImage') as base_image,
+                  json_extract_path_text(Properties, 'ContainerImage') as container_image,
+                  json_extract_path_text(Properties, 'Version') as version,
+                  json_extract_path_text(Properties, 'Alias') as alias,
+                  json_extract_path_text(Properties, 'Aliases') as aliases,
+                  json_extract_path_text(Properties, 'VendorGuidance') as vendor_guidance,
+                  json_extract_path_text(Properties, 'JobType') as job_type,
+                  json_extract_path_text(Properties, 'MLFramework') as ml_framework,
+                  json_extract_path_text(Properties, 'ProgrammingLang') as programming_lang,
+                  json_extract_path_text(Properties, 'Processor') as processor,
+                  json_extract_path_text(Properties, 'Horovod') as horovod,
+                  json_extract_path_text(Properties, 'ReleaseNotes') as release_notes
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::ImageVersion'
+                  AND data__Identifier = '<ImageVersionArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'ImageVersionArn') as image_version_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ImageVersion'
+                    AND region = 'us-east-1'
     inference_components:
       name: inference_components
       id: aws.sagemaker.inference_components
@@ -7802,7 +7726,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::InferenceComponent
       x-identifiers:
         - InferenceComponentArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -7810,6 +7734,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__InferenceComponent&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SageMaker::InferenceComponent"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -7836,52 +7772,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/inference_components/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/inference_components/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.InferenceComponentArn') as inference_component_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::InferenceComponent'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'InferenceComponentArn') as inference_component_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::InferenceComponent'
-                AND region = 'us-east-1'
-    inference_component:
-      name: inference_component
-      id: aws.sagemaker.inference_component
-      x-cfn-schema-name: InferenceComponent
-      x-cfn-type-name: AWS::SageMaker::InferenceComponent
-      x-identifiers:
-        - InferenceComponentArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SageMaker::InferenceComponent"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/inference_component/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/inference_components/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -7902,26 +7798,42 @@ components:
               AND data__Identifier = '<InferenceComponentArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'InferenceComponentArn') as inference_component_arn,
-                json_extract_path_text(Properties, 'InferenceComponentName') as inference_component_name,
-                json_extract_path_text(Properties, 'EndpointArn') as endpoint_arn,
-                json_extract_path_text(Properties, 'EndpointName') as endpoint_name,
-                json_extract_path_text(Properties, 'VariantName') as variant_name,
-                json_extract_path_text(Properties, 'FailureReason') as failure_reason,
-                json_extract_path_text(Properties, 'Specification') as specification,
-                json_extract_path_text(Properties, 'RuntimeConfig') as runtime_config,
-                json_extract_path_text(Properties, 'InferenceComponentStatus') as inference_component_status,
-                json_extract_path_text(Properties, 'CreationTime') as creation_time,
-                json_extract_path_text(Properties, 'LastModifiedTime') as last_modified_time,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::InferenceComponent'
-                AND data__Identifier = '<InferenceComponentArn>'
+                JSON_EXTRACT(Properties, '$.InferenceComponentArn') as inference_component_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::InferenceComponent'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'InferenceComponentArn') as inference_component_arn,
+                  json_extract_path_text(Properties, 'InferenceComponentName') as inference_component_name,
+                  json_extract_path_text(Properties, 'EndpointArn') as endpoint_arn,
+                  json_extract_path_text(Properties, 'EndpointName') as endpoint_name,
+                  json_extract_path_text(Properties, 'VariantName') as variant_name,
+                  json_extract_path_text(Properties, 'FailureReason') as failure_reason,
+                  json_extract_path_text(Properties, 'Specification') as specification,
+                  json_extract_path_text(Properties, 'RuntimeConfig') as runtime_config,
+                  json_extract_path_text(Properties, 'InferenceComponentStatus') as inference_component_status,
+                  json_extract_path_text(Properties, 'CreationTime') as creation_time,
+                  json_extract_path_text(Properties, 'LastModifiedTime') as last_modified_time,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::InferenceComponent'
+                  AND data__Identifier = '<InferenceComponentArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'InferenceComponentArn') as inference_component_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::InferenceComponent'
+                    AND region = 'us-east-1'
     inference_experiments:
       name: inference_experiments
       id: aws.sagemaker.inference_experiments
@@ -7929,7 +7841,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::InferenceExperiment
       x-identifiers:
         - Name
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -7937,6 +7849,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__InferenceExperiment&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SageMaker::InferenceExperiment"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -7963,52 +7887,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/inference_experiments/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/inference_experiments/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.Name') as name
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::InferenceExperiment'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'Name') as name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::InferenceExperiment'
-                AND region = 'us-east-1'
-    inference_experiment:
-      name: inference_experiment
-      id: aws.sagemaker.inference_experiment
-      x-cfn-schema-name: InferenceExperiment
-      x-cfn-type-name: AWS::SageMaker::InferenceExperiment
-      x-identifiers:
-        - Name
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SageMaker::InferenceExperiment"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/inference_experiment/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/inference_experiments/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -8035,32 +7919,48 @@ components:
               AND data__Identifier = '<Name>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Arn') as arn,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'Type') as type,
-                json_extract_path_text(Properties, 'Description') as description,
-                json_extract_path_text(Properties, 'RoleArn') as role_arn,
-                json_extract_path_text(Properties, 'EndpointName') as endpoint_name,
-                json_extract_path_text(Properties, 'EndpointMetadata') as endpoint_metadata,
-                json_extract_path_text(Properties, 'Schedule') as schedule,
-                json_extract_path_text(Properties, 'KmsKey') as kms_key,
-                json_extract_path_text(Properties, 'DataStorageConfig') as data_storage_config,
-                json_extract_path_text(Properties, 'ModelVariants') as model_variants,
-                json_extract_path_text(Properties, 'ShadowModeConfig') as shadow_mode_config,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'CreationTime') as creation_time,
-                json_extract_path_text(Properties, 'LastModifiedTime') as last_modified_time,
-                json_extract_path_text(Properties, 'Status') as status,
-                json_extract_path_text(Properties, 'StatusReason') as status_reason,
-                json_extract_path_text(Properties, 'DesiredState') as desired_state
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::InferenceExperiment'
-                AND data__Identifier = '<Name>'
+                JSON_EXTRACT(Properties, '$.Name') as name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::InferenceExperiment'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'Type') as type,
+                  json_extract_path_text(Properties, 'Description') as description,
+                  json_extract_path_text(Properties, 'RoleArn') as role_arn,
+                  json_extract_path_text(Properties, 'EndpointName') as endpoint_name,
+                  json_extract_path_text(Properties, 'EndpointMetadata') as endpoint_metadata,
+                  json_extract_path_text(Properties, 'Schedule') as schedule,
+                  json_extract_path_text(Properties, 'KmsKey') as kms_key,
+                  json_extract_path_text(Properties, 'DataStorageConfig') as data_storage_config,
+                  json_extract_path_text(Properties, 'ModelVariants') as model_variants,
+                  json_extract_path_text(Properties, 'ShadowModeConfig') as shadow_mode_config,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'CreationTime') as creation_time,
+                  json_extract_path_text(Properties, 'LastModifiedTime') as last_modified_time,
+                  json_extract_path_text(Properties, 'Status') as status,
+                  json_extract_path_text(Properties, 'StatusReason') as status_reason,
+                  json_extract_path_text(Properties, 'DesiredState') as desired_state
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::InferenceExperiment'
+                  AND data__Identifier = '<Name>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'Name') as name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::InferenceExperiment'
+                    AND region = 'us-east-1'
     model_bias_job_definitions:
       name: model_bias_job_definitions
       id: aws.sagemaker.model_bias_job_definitions
@@ -8068,7 +7968,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::ModelBiasJobDefinition
       x-identifiers:
         - JobDefinitionArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -8102,39 +8002,11 @@ components:
           - $ref: '#/components/x-stackQL-resources/model_bias_job_definitions/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/model_bias_job_definitions/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.JobDefinitionArn') as job_definition_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelBiasJobDefinition'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'JobDefinitionArn') as job_definition_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelBiasJobDefinition'
-                AND region = 'us-east-1'
-    model_bias_job_definition:
-      name: model_bias_job_definition
-      id: aws.sagemaker.model_bias_job_definition
-      x-cfn-schema-name: ModelBiasJobDefinition
-      x-cfn-type-name: AWS::SageMaker::ModelBiasJobDefinition
-      x-identifiers:
-        - JobDefinitionArn
-      x-type: get
-      methods: {}
-      sqlVerbs:
         update: []
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -8156,27 +8028,43 @@ components:
               AND data__Identifier = '<JobDefinitionArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'JobDefinitionArn') as job_definition_arn,
-                json_extract_path_text(Properties, 'JobDefinitionName') as job_definition_name,
-                json_extract_path_text(Properties, 'ModelBiasBaselineConfig') as model_bias_baseline_config,
-                json_extract_path_text(Properties, 'ModelBiasAppSpecification') as model_bias_app_specification,
-                json_extract_path_text(Properties, 'ModelBiasJobInput') as model_bias_job_input,
-                json_extract_path_text(Properties, 'ModelBiasJobOutputConfig') as model_bias_job_output_config,
-                json_extract_path_text(Properties, 'JobResources') as job_resources,
-                json_extract_path_text(Properties, 'NetworkConfig') as network_config,
-                json_extract_path_text(Properties, 'EndpointName') as endpoint_name,
-                json_extract_path_text(Properties, 'RoleArn') as role_arn,
-                json_extract_path_text(Properties, 'StoppingCondition') as stopping_condition,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'CreationTime') as creation_time
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::ModelBiasJobDefinition'
-                AND data__Identifier = '<JobDefinitionArn>'
+                JSON_EXTRACT(Properties, '$.JobDefinitionArn') as job_definition_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelBiasJobDefinition'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'JobDefinitionArn') as job_definition_arn,
+                  json_extract_path_text(Properties, 'JobDefinitionName') as job_definition_name,
+                  json_extract_path_text(Properties, 'ModelBiasBaselineConfig') as model_bias_baseline_config,
+                  json_extract_path_text(Properties, 'ModelBiasAppSpecification') as model_bias_app_specification,
+                  json_extract_path_text(Properties, 'ModelBiasJobInput') as model_bias_job_input,
+                  json_extract_path_text(Properties, 'ModelBiasJobOutputConfig') as model_bias_job_output_config,
+                  json_extract_path_text(Properties, 'JobResources') as job_resources,
+                  json_extract_path_text(Properties, 'NetworkConfig') as network_config,
+                  json_extract_path_text(Properties, 'EndpointName') as endpoint_name,
+                  json_extract_path_text(Properties, 'RoleArn') as role_arn,
+                  json_extract_path_text(Properties, 'StoppingCondition') as stopping_condition,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'CreationTime') as creation_time
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::ModelBiasJobDefinition'
+                  AND data__Identifier = '<JobDefinitionArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'JobDefinitionArn') as job_definition_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelBiasJobDefinition'
+                    AND region = 'us-east-1'
     model_cards:
       name: model_cards
       id: aws.sagemaker.model_cards
@@ -8184,7 +8072,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::ModelCard
       x-identifiers:
         - ModelCardName
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -8192,6 +8080,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__ModelCard&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SageMaker::ModelCard"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -8218,52 +8118,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/model_cards/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/model_cards/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.ModelCardName') as model_card_name
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelCard'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'ModelCardName') as model_card_name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelCard'
-                AND region = 'us-east-1'
-    model_card:
-      name: model_card
-      id: aws.sagemaker.model_card
-      x-cfn-schema-name: ModelCard
-      x-cfn-type-name: AWS::SageMaker::ModelCard
-      x-identifiers:
-        - ModelCardName
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SageMaker::ModelCard"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/model_card/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/model_cards/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -8284,26 +8144,42 @@ components:
               AND data__Identifier = '<ModelCardName>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'ModelCardArn') as model_card_arn,
-                json_extract_path_text(Properties, 'ModelCardVersion') as model_card_version,
-                json_extract_path_text(Properties, 'ModelCardName') as model_card_name,
-                json_extract_path_text(Properties, 'SecurityConfig') as security_config,
-                json_extract_path_text(Properties, 'ModelCardStatus') as model_card_status,
-                json_extract_path_text(Properties, 'Content') as content,
-                json_extract_path_text(Properties, 'CreationTime') as creation_time,
-                json_extract_path_text(Properties, 'CreatedBy') as created_by,
-                json_extract_path_text(Properties, 'LastModifiedTime') as last_modified_time,
-                json_extract_path_text(Properties, 'LastModifiedBy') as last_modified_by,
-                json_extract_path_text(Properties, 'ModelCardProcessingStatus') as model_card_processing_status,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::ModelCard'
-                AND data__Identifier = '<ModelCardName>'
+                JSON_EXTRACT(Properties, '$.ModelCardName') as model_card_name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelCard'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'ModelCardArn') as model_card_arn,
+                  json_extract_path_text(Properties, 'ModelCardVersion') as model_card_version,
+                  json_extract_path_text(Properties, 'ModelCardName') as model_card_name,
+                  json_extract_path_text(Properties, 'SecurityConfig') as security_config,
+                  json_extract_path_text(Properties, 'ModelCardStatus') as model_card_status,
+                  json_extract_path_text(Properties, 'Content') as content,
+                  json_extract_path_text(Properties, 'CreationTime') as creation_time,
+                  json_extract_path_text(Properties, 'CreatedBy') as created_by,
+                  json_extract_path_text(Properties, 'LastModifiedTime') as last_modified_time,
+                  json_extract_path_text(Properties, 'LastModifiedBy') as last_modified_by,
+                  json_extract_path_text(Properties, 'ModelCardProcessingStatus') as model_card_processing_status,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::ModelCard'
+                  AND data__Identifier = '<ModelCardName>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'ModelCardName') as model_card_name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelCard'
+                    AND region = 'us-east-1'
     model_explainability_job_definitions:
       name: model_explainability_job_definitions
       id: aws.sagemaker.model_explainability_job_definitions
@@ -8311,7 +8187,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::ModelExplainabilityJobDefinition
       x-identifiers:
         - JobDefinitionArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -8345,39 +8221,11 @@ components:
           - $ref: '#/components/x-stackQL-resources/model_explainability_job_definitions/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/model_explainability_job_definitions/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.JobDefinitionArn') as job_definition_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelExplainabilityJobDefinition'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'JobDefinitionArn') as job_definition_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelExplainabilityJobDefinition'
-                AND region = 'us-east-1'
-    model_explainability_job_definition:
-      name: model_explainability_job_definition
-      id: aws.sagemaker.model_explainability_job_definition
-      x-cfn-schema-name: ModelExplainabilityJobDefinition
-      x-cfn-type-name: AWS::SageMaker::ModelExplainabilityJobDefinition
-      x-identifiers:
-        - JobDefinitionArn
-      x-type: get
-      methods: {}
-      sqlVerbs:
         update: []
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -8399,27 +8247,43 @@ components:
               AND data__Identifier = '<JobDefinitionArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'JobDefinitionArn') as job_definition_arn,
-                json_extract_path_text(Properties, 'JobDefinitionName') as job_definition_name,
-                json_extract_path_text(Properties, 'ModelExplainabilityBaselineConfig') as model_explainability_baseline_config,
-                json_extract_path_text(Properties, 'ModelExplainabilityAppSpecification') as model_explainability_app_specification,
-                json_extract_path_text(Properties, 'ModelExplainabilityJobInput') as model_explainability_job_input,
-                json_extract_path_text(Properties, 'ModelExplainabilityJobOutputConfig') as model_explainability_job_output_config,
-                json_extract_path_text(Properties, 'JobResources') as job_resources,
-                json_extract_path_text(Properties, 'NetworkConfig') as network_config,
-                json_extract_path_text(Properties, 'EndpointName') as endpoint_name,
-                json_extract_path_text(Properties, 'RoleArn') as role_arn,
-                json_extract_path_text(Properties, 'StoppingCondition') as stopping_condition,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'CreationTime') as creation_time
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::ModelExplainabilityJobDefinition'
-                AND data__Identifier = '<JobDefinitionArn>'
+                JSON_EXTRACT(Properties, '$.JobDefinitionArn') as job_definition_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelExplainabilityJobDefinition'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'JobDefinitionArn') as job_definition_arn,
+                  json_extract_path_text(Properties, 'JobDefinitionName') as job_definition_name,
+                  json_extract_path_text(Properties, 'ModelExplainabilityBaselineConfig') as model_explainability_baseline_config,
+                  json_extract_path_text(Properties, 'ModelExplainabilityAppSpecification') as model_explainability_app_specification,
+                  json_extract_path_text(Properties, 'ModelExplainabilityJobInput') as model_explainability_job_input,
+                  json_extract_path_text(Properties, 'ModelExplainabilityJobOutputConfig') as model_explainability_job_output_config,
+                  json_extract_path_text(Properties, 'JobResources') as job_resources,
+                  json_extract_path_text(Properties, 'NetworkConfig') as network_config,
+                  json_extract_path_text(Properties, 'EndpointName') as endpoint_name,
+                  json_extract_path_text(Properties, 'RoleArn') as role_arn,
+                  json_extract_path_text(Properties, 'StoppingCondition') as stopping_condition,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'CreationTime') as creation_time
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::ModelExplainabilityJobDefinition'
+                  AND data__Identifier = '<JobDefinitionArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'JobDefinitionArn') as job_definition_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelExplainabilityJobDefinition'
+                    AND region = 'us-east-1'
     model_packages:
       name: model_packages
       id: aws.sagemaker.model_packages
@@ -8427,7 +8291,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::ModelPackage
       x-identifiers:
         - ModelPackageArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -8435,6 +8299,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__ModelPackage&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SageMaker::ModelPackage"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -8461,52 +8337,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/model_packages/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/model_packages/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.ModelPackageArn') as model_package_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelPackage'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'ModelPackageArn') as model_package_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelPackage'
-                AND region = 'us-east-1'
-    model_package:
-      name: model_package
-      id: aws.sagemaker.model_package
-      x-cfn-schema-name: ModelPackage
-      x-cfn-type-name: AWS::SageMaker::ModelPackage
-      x-identifiers:
-        - ModelPackageArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SageMaker::ModelPackage"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/model_package/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/model_packages/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -8542,41 +8378,57 @@ components:
               AND data__Identifier = '<ModelPackageArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'AdditionalInferenceSpecifications') as additional_inference_specifications,
-                json_extract_path_text(Properties, 'CertifyForMarketplace') as certify_for_marketplace,
-                json_extract_path_text(Properties, 'ClientToken') as client_token,
-                json_extract_path_text(Properties, 'CustomerMetadataProperties') as customer_metadata_properties,
-                json_extract_path_text(Properties, 'Domain') as domain,
-                json_extract_path_text(Properties, 'DriftCheckBaselines') as drift_check_baselines,
-                json_extract_path_text(Properties, 'InferenceSpecification') as inference_specification,
-                json_extract_path_text(Properties, 'MetadataProperties') as metadata_properties,
-                json_extract_path_text(Properties, 'ModelApprovalStatus') as model_approval_status,
-                json_extract_path_text(Properties, 'ModelMetrics') as model_metrics,
-                json_extract_path_text(Properties, 'ModelPackageDescription') as model_package_description,
-                json_extract_path_text(Properties, 'ModelPackageGroupName') as model_package_group_name,
-                json_extract_path_text(Properties, 'ModelPackageName') as model_package_name,
-                json_extract_path_text(Properties, 'SamplePayloadUrl') as sample_payload_url,
-                json_extract_path_text(Properties, 'SkipModelValidation') as skip_model_validation,
-                json_extract_path_text(Properties, 'SourceAlgorithmSpecification') as source_algorithm_specification,
-                json_extract_path_text(Properties, 'Task') as task,
-                json_extract_path_text(Properties, 'ValidationSpecification') as validation_specification,
-                json_extract_path_text(Properties, 'ModelPackageArn') as model_package_arn,
-                json_extract_path_text(Properties, 'ApprovalDescription') as approval_description,
-                json_extract_path_text(Properties, 'CreationTime') as creation_time,
-                json_extract_path_text(Properties, 'LastModifiedTime') as last_modified_time,
-                json_extract_path_text(Properties, 'ModelPackageStatus') as model_package_status,
-                json_extract_path_text(Properties, 'ModelPackageVersion') as model_package_version,
-                json_extract_path_text(Properties, 'AdditionalInferenceSpecificationsToAdd') as additional_inference_specifications_to_add,
-                json_extract_path_text(Properties, 'ModelPackageStatusDetails') as model_package_status_details
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::ModelPackage'
-                AND data__Identifier = '<ModelPackageArn>'
+                JSON_EXTRACT(Properties, '$.ModelPackageArn') as model_package_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelPackage'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'AdditionalInferenceSpecifications') as additional_inference_specifications,
+                  json_extract_path_text(Properties, 'CertifyForMarketplace') as certify_for_marketplace,
+                  json_extract_path_text(Properties, 'ClientToken') as client_token,
+                  json_extract_path_text(Properties, 'CustomerMetadataProperties') as customer_metadata_properties,
+                  json_extract_path_text(Properties, 'Domain') as domain,
+                  json_extract_path_text(Properties, 'DriftCheckBaselines') as drift_check_baselines,
+                  json_extract_path_text(Properties, 'InferenceSpecification') as inference_specification,
+                  json_extract_path_text(Properties, 'MetadataProperties') as metadata_properties,
+                  json_extract_path_text(Properties, 'ModelApprovalStatus') as model_approval_status,
+                  json_extract_path_text(Properties, 'ModelMetrics') as model_metrics,
+                  json_extract_path_text(Properties, 'ModelPackageDescription') as model_package_description,
+                  json_extract_path_text(Properties, 'ModelPackageGroupName') as model_package_group_name,
+                  json_extract_path_text(Properties, 'ModelPackageName') as model_package_name,
+                  json_extract_path_text(Properties, 'SamplePayloadUrl') as sample_payload_url,
+                  json_extract_path_text(Properties, 'SkipModelValidation') as skip_model_validation,
+                  json_extract_path_text(Properties, 'SourceAlgorithmSpecification') as source_algorithm_specification,
+                  json_extract_path_text(Properties, 'Task') as task,
+                  json_extract_path_text(Properties, 'ValidationSpecification') as validation_specification,
+                  json_extract_path_text(Properties, 'ModelPackageArn') as model_package_arn,
+                  json_extract_path_text(Properties, 'ApprovalDescription') as approval_description,
+                  json_extract_path_text(Properties, 'CreationTime') as creation_time,
+                  json_extract_path_text(Properties, 'LastModifiedTime') as last_modified_time,
+                  json_extract_path_text(Properties, 'ModelPackageStatus') as model_package_status,
+                  json_extract_path_text(Properties, 'ModelPackageVersion') as model_package_version,
+                  json_extract_path_text(Properties, 'AdditionalInferenceSpecificationsToAdd') as additional_inference_specifications_to_add,
+                  json_extract_path_text(Properties, 'ModelPackageStatusDetails') as model_package_status_details
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::ModelPackage'
+                  AND data__Identifier = '<ModelPackageArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'ModelPackageArn') as model_package_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelPackage'
+                    AND region = 'us-east-1'
     model_package_groups:
       name: model_package_groups
       id: aws.sagemaker.model_package_groups
@@ -8584,7 +8436,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::ModelPackageGroup
       x-identifiers:
         - ModelPackageGroupArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -8592,6 +8444,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__ModelPackageGroup&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SageMaker::ModelPackageGroup"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -8618,52 +8482,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/model_package_groups/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/model_package_groups/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.ModelPackageGroupArn') as model_package_group_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelPackageGroup'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'ModelPackageGroupArn') as model_package_group_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelPackageGroup'
-                AND region = 'us-east-1'
-    model_package_group:
-      name: model_package_group
-      id: aws.sagemaker.model_package_group
-      x-cfn-schema-name: ModelPackageGroup
-      x-cfn-type-name: AWS::SageMaker::ModelPackageGroup
-      x-identifiers:
-        - ModelPackageGroupArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SageMaker::ModelPackageGroup"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/model_package_group/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/model_package_groups/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -8679,21 +8503,37 @@ components:
               AND data__Identifier = '<ModelPackageGroupArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'ModelPackageGroupArn') as model_package_group_arn,
-                json_extract_path_text(Properties, 'ModelPackageGroupName') as model_package_group_name,
-                json_extract_path_text(Properties, 'ModelPackageGroupDescription') as model_package_group_description,
-                json_extract_path_text(Properties, 'ModelPackageGroupPolicy') as model_package_group_policy,
-                json_extract_path_text(Properties, 'CreationTime') as creation_time,
-                json_extract_path_text(Properties, 'ModelPackageGroupStatus') as model_package_group_status
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::ModelPackageGroup'
-                AND data__Identifier = '<ModelPackageGroupArn>'
+                JSON_EXTRACT(Properties, '$.ModelPackageGroupArn') as model_package_group_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelPackageGroup'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'ModelPackageGroupArn') as model_package_group_arn,
+                  json_extract_path_text(Properties, 'ModelPackageGroupName') as model_package_group_name,
+                  json_extract_path_text(Properties, 'ModelPackageGroupDescription') as model_package_group_description,
+                  json_extract_path_text(Properties, 'ModelPackageGroupPolicy') as model_package_group_policy,
+                  json_extract_path_text(Properties, 'CreationTime') as creation_time,
+                  json_extract_path_text(Properties, 'ModelPackageGroupStatus') as model_package_group_status
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::ModelPackageGroup'
+                  AND data__Identifier = '<ModelPackageGroupArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'ModelPackageGroupArn') as model_package_group_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelPackageGroup'
+                    AND region = 'us-east-1'
     model_quality_job_definitions:
       name: model_quality_job_definitions
       id: aws.sagemaker.model_quality_job_definitions
@@ -8701,7 +8541,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::ModelQualityJobDefinition
       x-identifiers:
         - JobDefinitionArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -8735,39 +8575,11 @@ components:
           - $ref: '#/components/x-stackQL-resources/model_quality_job_definitions/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/model_quality_job_definitions/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.JobDefinitionArn') as job_definition_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelQualityJobDefinition'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'JobDefinitionArn') as job_definition_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelQualityJobDefinition'
-                AND region = 'us-east-1'
-    model_quality_job_definition:
-      name: model_quality_job_definition
-      id: aws.sagemaker.model_quality_job_definition
-      x-cfn-schema-name: ModelQualityJobDefinition
-      x-cfn-type-name: AWS::SageMaker::ModelQualityJobDefinition
-      x-identifiers:
-        - JobDefinitionArn
-      x-type: get
-      methods: {}
-      sqlVerbs:
         update: []
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -8789,27 +8601,43 @@ components:
               AND data__Identifier = '<JobDefinitionArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'JobDefinitionArn') as job_definition_arn,
-                json_extract_path_text(Properties, 'JobDefinitionName') as job_definition_name,
-                json_extract_path_text(Properties, 'ModelQualityBaselineConfig') as model_quality_baseline_config,
-                json_extract_path_text(Properties, 'ModelQualityAppSpecification') as model_quality_app_specification,
-                json_extract_path_text(Properties, 'ModelQualityJobInput') as model_quality_job_input,
-                json_extract_path_text(Properties, 'ModelQualityJobOutputConfig') as model_quality_job_output_config,
-                json_extract_path_text(Properties, 'JobResources') as job_resources,
-                json_extract_path_text(Properties, 'NetworkConfig') as network_config,
-                json_extract_path_text(Properties, 'EndpointName') as endpoint_name,
-                json_extract_path_text(Properties, 'RoleArn') as role_arn,
-                json_extract_path_text(Properties, 'StoppingCondition') as stopping_condition,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'CreationTime') as creation_time
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::ModelQualityJobDefinition'
-                AND data__Identifier = '<JobDefinitionArn>'
+                JSON_EXTRACT(Properties, '$.JobDefinitionArn') as job_definition_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelQualityJobDefinition'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'JobDefinitionArn') as job_definition_arn,
+                  json_extract_path_text(Properties, 'JobDefinitionName') as job_definition_name,
+                  json_extract_path_text(Properties, 'ModelQualityBaselineConfig') as model_quality_baseline_config,
+                  json_extract_path_text(Properties, 'ModelQualityAppSpecification') as model_quality_app_specification,
+                  json_extract_path_text(Properties, 'ModelQualityJobInput') as model_quality_job_input,
+                  json_extract_path_text(Properties, 'ModelQualityJobOutputConfig') as model_quality_job_output_config,
+                  json_extract_path_text(Properties, 'JobResources') as job_resources,
+                  json_extract_path_text(Properties, 'NetworkConfig') as network_config,
+                  json_extract_path_text(Properties, 'EndpointName') as endpoint_name,
+                  json_extract_path_text(Properties, 'RoleArn') as role_arn,
+                  json_extract_path_text(Properties, 'StoppingCondition') as stopping_condition,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'CreationTime') as creation_time
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::ModelQualityJobDefinition'
+                  AND data__Identifier = '<JobDefinitionArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'JobDefinitionArn') as job_definition_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::ModelQualityJobDefinition'
+                    AND region = 'us-east-1'
     monitoring_schedules:
       name: monitoring_schedules
       id: aws.sagemaker.monitoring_schedules
@@ -8817,7 +8645,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::MonitoringSchedule
       x-identifiers:
         - MonitoringScheduleArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -8825,6 +8653,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__MonitoringSchedule&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SageMaker::MonitoringSchedule"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -8851,52 +8691,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/monitoring_schedules/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/monitoring_schedules/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.MonitoringScheduleArn') as monitoring_schedule_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::MonitoringSchedule'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'MonitoringScheduleArn') as monitoring_schedule_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::MonitoringSchedule'
-                AND region = 'us-east-1'
-    monitoring_schedule:
-      name: monitoring_schedule
-      id: aws.sagemaker.monitoring_schedule
-      x-cfn-schema-name: MonitoringSchedule
-      x-cfn-type-name: AWS::SageMaker::MonitoringSchedule
-      x-identifiers:
-        - MonitoringScheduleArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SageMaker::MonitoringSchedule"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/monitoring_schedule/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/monitoring_schedules/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -8915,24 +8715,40 @@ components:
               AND data__Identifier = '<MonitoringScheduleArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'MonitoringScheduleArn') as monitoring_schedule_arn,
-                json_extract_path_text(Properties, 'MonitoringScheduleName') as monitoring_schedule_name,
-                json_extract_path_text(Properties, 'MonitoringScheduleConfig') as monitoring_schedule_config,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'CreationTime') as creation_time,
-                json_extract_path_text(Properties, 'EndpointName') as endpoint_name,
-                json_extract_path_text(Properties, 'FailureReason') as failure_reason,
-                json_extract_path_text(Properties, 'LastModifiedTime') as last_modified_time,
-                json_extract_path_text(Properties, 'LastMonitoringExecutionSummary') as last_monitoring_execution_summary,
-                json_extract_path_text(Properties, 'MonitoringScheduleStatus') as monitoring_schedule_status
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::MonitoringSchedule'
-                AND data__Identifier = '<MonitoringScheduleArn>'
+                JSON_EXTRACT(Properties, '$.MonitoringScheduleArn') as monitoring_schedule_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::MonitoringSchedule'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'MonitoringScheduleArn') as monitoring_schedule_arn,
+                  json_extract_path_text(Properties, 'MonitoringScheduleName') as monitoring_schedule_name,
+                  json_extract_path_text(Properties, 'MonitoringScheduleConfig') as monitoring_schedule_config,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'CreationTime') as creation_time,
+                  json_extract_path_text(Properties, 'EndpointName') as endpoint_name,
+                  json_extract_path_text(Properties, 'FailureReason') as failure_reason,
+                  json_extract_path_text(Properties, 'LastModifiedTime') as last_modified_time,
+                  json_extract_path_text(Properties, 'LastMonitoringExecutionSummary') as last_monitoring_execution_summary,
+                  json_extract_path_text(Properties, 'MonitoringScheduleStatus') as monitoring_schedule_status
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::MonitoringSchedule'
+                  AND data__Identifier = '<MonitoringScheduleArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'MonitoringScheduleArn') as monitoring_schedule_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::MonitoringSchedule'
+                    AND region = 'us-east-1'
     pipelines:
       name: pipelines
       id: aws.sagemaker.pipelines
@@ -8940,7 +8756,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::Pipeline
       x-identifiers:
         - PipelineName
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -8948,6 +8764,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Pipeline&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SageMaker::Pipeline"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -8974,52 +8802,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/pipelines/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/pipelines/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.PipelineName') as pipeline_name
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::Pipeline'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'PipelineName') as pipeline_name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::Pipeline'
-                AND region = 'us-east-1'
-    pipeline:
-      name: pipeline
-      id: aws.sagemaker.pipeline
-      x-cfn-schema-name: Pipeline
-      x-cfn-type-name: AWS::SageMaker::Pipeline
-      x-identifiers:
-        - PipelineName
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SageMaker::Pipeline"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/pipeline/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/pipelines/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -9035,21 +8823,37 @@ components:
               AND data__Identifier = '<PipelineName>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'PipelineName') as pipeline_name,
-                json_extract_path_text(Properties, 'PipelineDisplayName') as pipeline_display_name,
-                json_extract_path_text(Properties, 'PipelineDescription') as pipeline_description,
-                json_extract_path_text(Properties, 'PipelineDefinition') as pipeline_definition,
-                json_extract_path_text(Properties, 'RoleArn') as role_arn,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'ParallelismConfiguration') as parallelism_configuration
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::Pipeline'
-                AND data__Identifier = '<PipelineName>'
+                JSON_EXTRACT(Properties, '$.PipelineName') as pipeline_name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::Pipeline'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'PipelineName') as pipeline_name,
+                  json_extract_path_text(Properties, 'PipelineDisplayName') as pipeline_display_name,
+                  json_extract_path_text(Properties, 'PipelineDescription') as pipeline_description,
+                  json_extract_path_text(Properties, 'PipelineDefinition') as pipeline_definition,
+                  json_extract_path_text(Properties, 'RoleArn') as role_arn,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'ParallelismConfiguration') as parallelism_configuration
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::Pipeline'
+                  AND data__Identifier = '<PipelineName>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'PipelineName') as pipeline_name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::Pipeline'
+                    AND region = 'us-east-1'
     projects:
       name: projects
       id: aws.sagemaker.projects
@@ -9057,7 +8861,7 @@ components:
       x-cfn-type-name: AWS::SageMaker::Project
       x-identifiers:
         - ProjectArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -9065,6 +8869,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Project&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SageMaker::Project"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -9091,52 +8907,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/projects/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/projects/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.ProjectArn') as project_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::Project'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'ProjectArn') as project_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::Project'
-                AND region = 'us-east-1'
-    project:
-      name: project
-      id: aws.sagemaker.project
-      x-cfn-schema-name: Project
-      x-cfn-type-name: AWS::SageMaker::Project
-      x-identifiers:
-        - ProjectArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SageMaker::Project"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/project/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/projects/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -9154,23 +8930,39 @@ components:
               AND data__Identifier = '<ProjectArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'ProjectArn') as project_arn,
-                json_extract_path_text(Properties, 'ProjectId') as project_id,
-                json_extract_path_text(Properties, 'ProjectName') as project_name,
-                json_extract_path_text(Properties, 'ProjectDescription') as project_description,
-                json_extract_path_text(Properties, 'CreationTime') as creation_time,
-                json_extract_path_text(Properties, 'ServiceCatalogProvisioningDetails') as service_catalog_provisioning_details,
-                json_extract_path_text(Properties, 'ServiceCatalogProvisionedProductDetails') as service_catalog_provisioned_product_details,
-                json_extract_path_text(Properties, 'ProjectStatus') as project_status
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::Project'
-                AND data__Identifier = '<ProjectArn>'
+                JSON_EXTRACT(Properties, '$.ProjectArn') as project_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::Project'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'ProjectArn') as project_arn,
+                  json_extract_path_text(Properties, 'ProjectId') as project_id,
+                  json_extract_path_text(Properties, 'ProjectName') as project_name,
+                  json_extract_path_text(Properties, 'ProjectDescription') as project_description,
+                  json_extract_path_text(Properties, 'CreationTime') as creation_time,
+                  json_extract_path_text(Properties, 'ServiceCatalogProvisioningDetails') as service_catalog_provisioning_details,
+                  json_extract_path_text(Properties, 'ServiceCatalogProvisionedProductDetails') as service_catalog_provisioned_product_details,
+                  json_extract_path_text(Properties, 'ProjectStatus') as project_status
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::Project'
+                  AND data__Identifier = '<ProjectArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'ProjectArn') as project_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::Project'
+                    AND region = 'us-east-1'
     spaces:
       name: spaces
       id: aws.sagemaker.spaces
@@ -9179,7 +8971,7 @@ components:
       x-identifiers:
         - DomainId
         - SpaceName
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -9187,6 +8979,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Space&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SageMaker::Space"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -9213,55 +9017,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/spaces/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/spaces/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.DomainId') as domain_id,
-              JSON_EXTRACT(Properties, '$.SpaceName') as space_name
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::Space'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'DomainId') as domain_id,
-                json_extract_path_text(Properties, 'SpaceName') as space_name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::Space'
-                AND region = 'us-east-1'
-    space:
-      name: space
-      id: aws.sagemaker.space
-      x-cfn-schema-name: Space
-      x-cfn-type-name: AWS::SageMaker::Space
-      x-identifiers:
-        - DomainId
-        - SpaceName
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SageMaker::Space"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/space/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/spaces/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -9279,23 +9040,41 @@ components:
               AND data__Identifier = '<DomainId>|<SpaceName>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'SpaceArn') as space_arn,
-                json_extract_path_text(Properties, 'DomainId') as domain_id,
-                json_extract_path_text(Properties, 'SpaceName') as space_name,
-                json_extract_path_text(Properties, 'SpaceSettings') as space_settings,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'OwnershipSettings') as ownership_settings,
-                json_extract_path_text(Properties, 'SpaceSharingSettings') as space_sharing_settings,
-                json_extract_path_text(Properties, 'SpaceDisplayName') as space_display_name,
-                json_extract_path_text(Properties, 'Url') as url
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::Space'
-                AND data__Identifier = '<DomainId>|<SpaceName>'
+                JSON_EXTRACT(Properties, '$.DomainId') as domain_id,
+                JSON_EXTRACT(Properties, '$.SpaceName') as space_name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::Space'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'SpaceArn') as space_arn,
+                  json_extract_path_text(Properties, 'DomainId') as domain_id,
+                  json_extract_path_text(Properties, 'SpaceName') as space_name,
+                  json_extract_path_text(Properties, 'SpaceSettings') as space_settings,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'OwnershipSettings') as ownership_settings,
+                  json_extract_path_text(Properties, 'SpaceSharingSettings') as space_sharing_settings,
+                  json_extract_path_text(Properties, 'SpaceDisplayName') as space_display_name,
+                  json_extract_path_text(Properties, 'Url') as url
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::Space'
+                  AND data__Identifier = '<DomainId>|<SpaceName>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'DomainId') as domain_id,
+                    json_extract_path_text(Properties, 'SpaceName') as space_name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::Space'
+                    AND region = 'us-east-1'
     user_profiles:
       name: user_profiles
       id: aws.sagemaker.user_profiles
@@ -9304,7 +9083,7 @@ components:
       x-identifiers:
         - UserProfileName
         - DomainId
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -9312,6 +9091,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__UserProfile&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::SageMaker::UserProfile"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -9338,55 +9129,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/user_profiles/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/user_profiles/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.UserProfileName') as user_profile_name,
-              JSON_EXTRACT(Properties, '$.DomainId') as domain_id
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::UserProfile'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'UserProfileName') as user_profile_name,
-                json_extract_path_text(Properties, 'DomainId') as domain_id
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::UserProfile'
-                AND region = 'us-east-1'
-    user_profile:
-      name: user_profile
-      id: aws.sagemaker.user_profile
-      x-cfn-schema-name: UserProfile
-      x-cfn-type-name: AWS::SageMaker::UserProfile
-      x-identifiers:
-        - UserProfileName
-        - DomainId
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::SageMaker::UserProfile"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/user_profile/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/user_profiles/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -9402,21 +9150,39 @@ components:
               AND data__Identifier = '<UserProfileName>|<DomainId>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'UserProfileArn') as user_profile_arn,
-                json_extract_path_text(Properties, 'DomainId') as domain_id,
-                json_extract_path_text(Properties, 'SingleSignOnUserIdentifier') as single_sign_on_user_identifier,
-                json_extract_path_text(Properties, 'SingleSignOnUserValue') as single_sign_on_user_value,
-                json_extract_path_text(Properties, 'UserProfileName') as user_profile_name,
-                json_extract_path_text(Properties, 'UserSettings') as user_settings,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::UserProfile'
-                AND data__Identifier = '<UserProfileName>|<DomainId>'
+                JSON_EXTRACT(Properties, '$.UserProfileName') as user_profile_name,
+                JSON_EXTRACT(Properties, '$.DomainId') as domain_id
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::UserProfile'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'UserProfileArn') as user_profile_arn,
+                  json_extract_path_text(Properties, 'DomainId') as domain_id,
+                  json_extract_path_text(Properties, 'SingleSignOnUserIdentifier') as single_sign_on_user_identifier,
+                  json_extract_path_text(Properties, 'SingleSignOnUserValue') as single_sign_on_user_value,
+                  json_extract_path_text(Properties, 'UserProfileName') as user_profile_name,
+                  json_extract_path_text(Properties, 'UserSettings') as user_settings,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::SageMaker::UserProfile'
+                  AND data__Identifier = '<UserProfileName>|<DomainId>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'UserProfileName') as user_profile_name,
+                    json_extract_path_text(Properties, 'DomainId') as domain_id
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::SageMaker::UserProfile'
+                    AND region = 'us-east-1'
 paths:
   /?Action=CreateResource&Version=2021-09-30:
     parameters:

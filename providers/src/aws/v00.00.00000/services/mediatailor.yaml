@@ -708,16 +708,23 @@ components:
       additionalProperties: false
       properties:
         Mode:
-          description: Sets the ad suppression mode. By default, ad suppression is set to OFF and all ad breaks are filled with ads or slate. When Mode is set to BEHIND_LIVE_EDGE, ad suppression is active and MediaTailor won't fill ad breaks on or behind the ad suppression Value time in the manifest lookback window.
+          description: Sets the ad suppression mode. By default, ad suppression is off and all ad breaks are filled with ads or slate. When Mode is set to BEHIND_LIVE_EDGE, ad suppression is active and MediaTailor won't fill ad breaks on or behind the ad suppression Value time in the manifest lookback window. When Mode is set to AFTER_LIVE_EDGE, ad suppression is active and MediaTailor won't fill ad breaks that are within the live edge plus the avail suppression value.
           type: string
           enum:
             - 'OFF'
             - BEHIND_LIVE_EDGE
+            - AFTER_LIVE_EDGE
         Value:
           description: >-
             A live edge offset time in HH:MM:SS. MediaTailor won't fill ad breaks on or behind this time in the manifest lookback window. If Value is set to 00:00:00, it is in sync with the live edge, and MediaTailor won't fill any ad breaks on or behind the live edge. If you set a Value time, MediaTailor won't fill any ad breaks on or behind this time in the manifest lookback window. For example, if you set 00:45:00, then MediaTailor will fill ad breaks that occur within 45 minutes behind the
             live edge, but won't fill ad breaks on or behind 45 minutes behind the live edge.
           type: string
+        FillPolicy:
+          description: Defines the policy to apply to the avail suppression mode. BEHIND_LIVE_EDGE will always use the full avail suppression policy. AFTER_LIVE_EDGE mode can be used to invoke partial ad break fills when a session starts mid-break. Valid values are FULL_AVAIL_ONLY and PARTIAL_AVAIL
+          type: string
+          enum:
+            - PARTIAL_AVAIL
+            - FULL_AVAIL_ONLY
     Bumper:
       description: The configuration for bumpers. Bumpers are short audio or video clips that play at the start or before the end of an ad break. To learn more about bumpers, see Bumpers (https://docs.aws.amazon.com/mediatailor/latest/ug/bumpers.html).
       type: object
@@ -1381,7 +1388,7 @@ components:
       x-cfn-type-name: AWS::MediaTailor::Channel
       x-identifiers:
         - ChannelName
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -1389,6 +1396,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Channel&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::MediaTailor::Channel"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -1415,52 +1434,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/channels/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/channels/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.ChannelName') as channel_name
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::Channel'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'ChannelName') as channel_name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::Channel'
-                AND region = 'us-east-1'
-    channel:
-      name: channel
-      id: aws.mediatailor.channel
-      x-cfn-schema-name: Channel
-      x-cfn-type-name: AWS::MediaTailor::Channel
-      x-identifiers:
-        - ChannelName
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::MediaTailor::Channel"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/channel/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/channels/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -1479,24 +1458,40 @@ components:
               AND data__Identifier = '<ChannelName>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Arn') as arn,
-                json_extract_path_text(Properties, 'Audiences') as audiences,
-                json_extract_path_text(Properties, 'ChannelName') as channel_name,
-                json_extract_path_text(Properties, 'FillerSlate') as filler_slate,
-                json_extract_path_text(Properties, 'LogConfiguration') as log_configuration,
-                json_extract_path_text(Properties, 'Outputs') as outputs,
-                json_extract_path_text(Properties, 'PlaybackMode') as playback_mode,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'Tier') as tier,
-                json_extract_path_text(Properties, 'TimeShiftConfiguration') as time_shift_configuration
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::MediaTailor::Channel'
-                AND data__Identifier = '<ChannelName>'
+                JSON_EXTRACT(Properties, '$.ChannelName') as channel_name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::Channel'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'Audiences') as audiences,
+                  json_extract_path_text(Properties, 'ChannelName') as channel_name,
+                  json_extract_path_text(Properties, 'FillerSlate') as filler_slate,
+                  json_extract_path_text(Properties, 'LogConfiguration') as log_configuration,
+                  json_extract_path_text(Properties, 'Outputs') as outputs,
+                  json_extract_path_text(Properties, 'PlaybackMode') as playback_mode,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'Tier') as tier,
+                  json_extract_path_text(Properties, 'TimeShiftConfiguration') as time_shift_configuration
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::MediaTailor::Channel'
+                  AND data__Identifier = '<ChannelName>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'ChannelName') as channel_name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::Channel'
+                    AND region = 'us-east-1'
     channel_policies:
       name: channel_policies
       id: aws.mediatailor.channel_policies
@@ -1504,7 +1499,7 @@ components:
       x-cfn-type-name: AWS::MediaTailor::ChannelPolicy
       x-identifiers:
         - ChannelName
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -1512,6 +1507,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__ChannelPolicy&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::MediaTailor::ChannelPolicy"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -1538,34 +1545,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/channel_policies/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/channel_policies/methods/delete_resource'
-    channel_policy:
-      name: channel_policy
-      id: aws.mediatailor.channel_policy
-      x-cfn-schema-name: ChannelPolicy
-      x-cfn-type-name: AWS::MediaTailor::ChannelPolicy
-      x-identifiers:
-        - ChannelName
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::MediaTailor::ChannelPolicy"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/channel_policy/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/channel_policies/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -1576,7 +1561,7 @@ components:
               AND data__Identifier = '<ChannelName>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
               ddl: |-
                 SELECT
                 region,
@@ -1594,7 +1579,7 @@ components:
       x-identifiers:
         - LiveSourceName
         - SourceLocationName
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -1602,6 +1587,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__LiveSource&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::MediaTailor::LiveSource"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -1628,55 +1625,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/live_sources/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/live_sources/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.LiveSourceName') as live_source_name,
-              JSON_EXTRACT(Properties, '$.SourceLocationName') as source_location_name
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::LiveSource'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'LiveSourceName') as live_source_name,
-                json_extract_path_text(Properties, 'SourceLocationName') as source_location_name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::LiveSource'
-                AND region = 'us-east-1'
-    live_source:
-      name: live_source
-      id: aws.mediatailor.live_source
-      x-cfn-schema-name: LiveSource
-      x-cfn-type-name: AWS::MediaTailor::LiveSource
-      x-identifiers:
-        - LiveSourceName
-        - SourceLocationName
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::MediaTailor::LiveSource"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/live_source/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/live_sources/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -1690,19 +1644,37 @@ components:
               AND data__Identifier = '<LiveSourceName>|<SourceLocationName>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Arn') as arn,
-                json_extract_path_text(Properties, 'HttpPackageConfigurations') as http_package_configurations,
-                json_extract_path_text(Properties, 'LiveSourceName') as live_source_name,
-                json_extract_path_text(Properties, 'SourceLocationName') as source_location_name,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::MediaTailor::LiveSource'
-                AND data__Identifier = '<LiveSourceName>|<SourceLocationName>'
+                JSON_EXTRACT(Properties, '$.LiveSourceName') as live_source_name,
+                JSON_EXTRACT(Properties, '$.SourceLocationName') as source_location_name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::LiveSource'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'HttpPackageConfigurations') as http_package_configurations,
+                  json_extract_path_text(Properties, 'LiveSourceName') as live_source_name,
+                  json_extract_path_text(Properties, 'SourceLocationName') as source_location_name,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::MediaTailor::LiveSource'
+                  AND data__Identifier = '<LiveSourceName>|<SourceLocationName>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'LiveSourceName') as live_source_name,
+                    json_extract_path_text(Properties, 'SourceLocationName') as source_location_name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::LiveSource'
+                    AND region = 'us-east-1'
     playback_configurations:
       name: playback_configurations
       id: aws.mediatailor.playback_configurations
@@ -1710,7 +1682,7 @@ components:
       x-cfn-type-name: AWS::MediaTailor::PlaybackConfiguration
       x-identifiers:
         - Name
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -1718,6 +1690,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__PlaybackConfiguration&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::MediaTailor::PlaybackConfiguration"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -1744,52 +1728,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/playback_configurations/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/playback_configurations/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.Name') as name
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::PlaybackConfiguration'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'Name') as name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::PlaybackConfiguration'
-                AND region = 'us-east-1'
-    playback_configuration:
-      name: playback_configuration
-      id: aws.mediatailor.playback_configuration
-      x-cfn-schema-name: PlaybackConfiguration
-      x-cfn-type-name: AWS::MediaTailor::PlaybackConfiguration
-      x-identifiers:
-        - Name
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::MediaTailor::PlaybackConfiguration"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/playback_configuration/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/playback_configurations/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -1816,32 +1760,48 @@ components:
               AND data__Identifier = '<Name>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'AdDecisionServerUrl') as ad_decision_server_url,
-                json_extract_path_text(Properties, 'AvailSuppression') as avail_suppression,
-                json_extract_path_text(Properties, 'Bumper') as bumper,
-                json_extract_path_text(Properties, 'CdnConfiguration') as cdn_configuration,
-                json_extract_path_text(Properties, 'ConfigurationAliases') as configuration_aliases,
-                json_extract_path_text(Properties, 'DashConfiguration') as dash_configuration,
-                json_extract_path_text(Properties, 'LivePreRollConfiguration') as live_pre_roll_configuration,
-                json_extract_path_text(Properties, 'ManifestProcessingRules') as manifest_processing_rules,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'PersonalizationThresholdSeconds') as personalization_threshold_seconds,
-                json_extract_path_text(Properties, 'SessionInitializationEndpointPrefix') as session_initialization_endpoint_prefix,
-                json_extract_path_text(Properties, 'HlsConfiguration') as hls_configuration,
-                json_extract_path_text(Properties, 'PlaybackConfigurationArn') as playback_configuration_arn,
-                json_extract_path_text(Properties, 'PlaybackEndpointPrefix') as playback_endpoint_prefix,
-                json_extract_path_text(Properties, 'SlateAdUrl') as slate_ad_url,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'TranscodeProfileName') as transcode_profile_name,
-                json_extract_path_text(Properties, 'VideoContentSourceUrl') as video_content_source_url
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::MediaTailor::PlaybackConfiguration'
-                AND data__Identifier = '<Name>'
+                JSON_EXTRACT(Properties, '$.Name') as name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::PlaybackConfiguration'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'AdDecisionServerUrl') as ad_decision_server_url,
+                  json_extract_path_text(Properties, 'AvailSuppression') as avail_suppression,
+                  json_extract_path_text(Properties, 'Bumper') as bumper,
+                  json_extract_path_text(Properties, 'CdnConfiguration') as cdn_configuration,
+                  json_extract_path_text(Properties, 'ConfigurationAliases') as configuration_aliases,
+                  json_extract_path_text(Properties, 'DashConfiguration') as dash_configuration,
+                  json_extract_path_text(Properties, 'LivePreRollConfiguration') as live_pre_roll_configuration,
+                  json_extract_path_text(Properties, 'ManifestProcessingRules') as manifest_processing_rules,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'PersonalizationThresholdSeconds') as personalization_threshold_seconds,
+                  json_extract_path_text(Properties, 'SessionInitializationEndpointPrefix') as session_initialization_endpoint_prefix,
+                  json_extract_path_text(Properties, 'HlsConfiguration') as hls_configuration,
+                  json_extract_path_text(Properties, 'PlaybackConfigurationArn') as playback_configuration_arn,
+                  json_extract_path_text(Properties, 'PlaybackEndpointPrefix') as playback_endpoint_prefix,
+                  json_extract_path_text(Properties, 'SlateAdUrl') as slate_ad_url,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'TranscodeProfileName') as transcode_profile_name,
+                  json_extract_path_text(Properties, 'VideoContentSourceUrl') as video_content_source_url
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::MediaTailor::PlaybackConfiguration'
+                  AND data__Identifier = '<Name>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'Name') as name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::PlaybackConfiguration'
+                    AND region = 'us-east-1'
     source_locations:
       name: source_locations
       id: aws.mediatailor.source_locations
@@ -1849,7 +1809,7 @@ components:
       x-cfn-type-name: AWS::MediaTailor::SourceLocation
       x-identifiers:
         - SourceLocationName
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -1857,6 +1817,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__SourceLocation&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::MediaTailor::SourceLocation"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -1883,52 +1855,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/source_locations/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/source_locations/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.SourceLocationName') as source_location_name
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::SourceLocation'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'SourceLocationName') as source_location_name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::SourceLocation'
-                AND region = 'us-east-1'
-    source_location:
-      name: source_location
-      id: aws.mediatailor.source_location
-      x-cfn-schema-name: SourceLocation
-      x-cfn-type-name: AWS::MediaTailor::SourceLocation
-      x-identifiers:
-        - SourceLocationName
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::MediaTailor::SourceLocation"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/source_location/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/source_locations/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -1944,21 +1876,37 @@ components:
               AND data__Identifier = '<SourceLocationName>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'AccessConfiguration') as access_configuration,
-                json_extract_path_text(Properties, 'Arn') as arn,
-                json_extract_path_text(Properties, 'DefaultSegmentDeliveryConfiguration') as default_segment_delivery_configuration,
-                json_extract_path_text(Properties, 'HttpConfiguration') as http_configuration,
-                json_extract_path_text(Properties, 'SegmentDeliveryConfigurations') as segment_delivery_configurations,
-                json_extract_path_text(Properties, 'SourceLocationName') as source_location_name,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::MediaTailor::SourceLocation'
-                AND data__Identifier = '<SourceLocationName>'
+                JSON_EXTRACT(Properties, '$.SourceLocationName') as source_location_name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::SourceLocation'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'AccessConfiguration') as access_configuration,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'DefaultSegmentDeliveryConfiguration') as default_segment_delivery_configuration,
+                  json_extract_path_text(Properties, 'HttpConfiguration') as http_configuration,
+                  json_extract_path_text(Properties, 'SegmentDeliveryConfigurations') as segment_delivery_configurations,
+                  json_extract_path_text(Properties, 'SourceLocationName') as source_location_name,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::MediaTailor::SourceLocation'
+                  AND data__Identifier = '<SourceLocationName>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'SourceLocationName') as source_location_name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::SourceLocation'
+                    AND region = 'us-east-1'
     vod_sources:
       name: vod_sources
       id: aws.mediatailor.vod_sources
@@ -1967,7 +1915,7 @@ components:
       x-identifiers:
         - SourceLocationName
         - VodSourceName
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -1975,6 +1923,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__VodSource&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::MediaTailor::VodSource"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -2001,55 +1961,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/vod_sources/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/vod_sources/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.SourceLocationName') as source_location_name,
-              JSON_EXTRACT(Properties, '$.VodSourceName') as vod_source_name
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::VodSource'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'SourceLocationName') as source_location_name,
-                json_extract_path_text(Properties, 'VodSourceName') as vod_source_name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::VodSource'
-                AND region = 'us-east-1'
-    vod_source:
-      name: vod_source
-      id: aws.mediatailor.vod_source
-      x-cfn-schema-name: VodSource
-      x-cfn-type-name: AWS::MediaTailor::VodSource
-      x-identifiers:
-        - SourceLocationName
-        - VodSourceName
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::MediaTailor::VodSource"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/vod_source/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/vod_sources/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2063,19 +1980,37 @@ components:
               AND data__Identifier = '<SourceLocationName>|<VodSourceName>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Arn') as arn,
-                json_extract_path_text(Properties, 'HttpPackageConfigurations') as http_package_configurations,
-                json_extract_path_text(Properties, 'SourceLocationName') as source_location_name,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'VodSourceName') as vod_source_name
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::MediaTailor::VodSource'
-                AND data__Identifier = '<SourceLocationName>|<VodSourceName>'
+                JSON_EXTRACT(Properties, '$.SourceLocationName') as source_location_name,
+                JSON_EXTRACT(Properties, '$.VodSourceName') as vod_source_name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::VodSource'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'HttpPackageConfigurations') as http_package_configurations,
+                  json_extract_path_text(Properties, 'SourceLocationName') as source_location_name,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'VodSourceName') as vod_source_name
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::MediaTailor::VodSource'
+                  AND data__Identifier = '<SourceLocationName>|<VodSourceName>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'SourceLocationName') as source_location_name,
+                    json_extract_path_text(Properties, 'VodSourceName') as vod_source_name
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::MediaTailor::VodSource'
+                    AND region = 'us-east-1'
 paths:
   /?Action=CreateResource&Version=2021-09-30:
     parameters:

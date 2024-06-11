@@ -406,17 +406,27 @@ components:
             - Payload
           additionalProperties: false
     ActionGroupExecutor:
-      type: object
-      x-title: Lambda
-      properties:
-        Lambda:
-          type: string
-          maxLength: 2048
-          pattern: ^arn:(aws[a-zA-Z-]*)?:lambda:[a-z]{2}(-gov)?-[a-z]+-\d{1}:\d{12}:function:[a-zA-Z0-9-_\.]+(:(\$LATEST|[a-zA-Z0-9-_]+))?$
-          description: ARN of a Lambda.
-      required:
-        - Lambda
-      additionalProperties: false
+      description: Type of Executors for an Action Group
+      oneOf:
+        - type: object
+          title: Lambda
+          properties:
+            Lambda:
+              type: string
+              maxLength: 2048
+              pattern: ^arn:(aws[a-zA-Z-]*)?:lambda:[a-z]{2}(-gov)?-[a-z]+-\d{1}:\d{12}:function:[a-zA-Z0-9-_\.]+(:(\$LATEST|[a-zA-Z0-9-_]+))?$
+              description: ARN of a Lambda.
+          required:
+            - Lambda
+          additionalProperties: false
+        - type: object
+          title: CustomControl
+          properties:
+            CustomControl:
+              $ref: '#/components/schemas/CustomControlMethod'
+          required:
+            - CustomControl
+          additionalProperties: false
     ActionGroupSignature:
       type: string
       description: Action Group Signature for a BuiltIn Action
@@ -449,6 +459,8 @@ components:
           $ref: '#/components/schemas/APISchema'
         ActionGroupState:
           $ref: '#/components/schemas/ActionGroupState'
+        FunctionSchema:
+          $ref: '#/components/schemas/FunctionSchema'
         SkipResourceInUseCheckOnDelete:
           description: Specifies whether to allow deleting action group while it is in use.
           type: boolean
@@ -493,6 +505,43 @@ components:
       enum:
         - DEFAULT
         - OVERRIDDEN
+    CustomControlMethod:
+      type: string
+      description: Custom control of action execution
+      enum:
+        - RETURN_CONTROL
+    Function:
+      type: object
+      description: Function definition
+      properties:
+        Name:
+          type: string
+          pattern: ^([0-9a-zA-Z][_-]?){1,100}$
+          description: Name for a resource.
+        Description:
+          type: string
+          maxLength: 1200
+          minLength: 1
+          description: Description of function
+        Parameters:
+          $ref: '#/components/schemas/ParameterMap'
+      required:
+        - Name
+      additionalProperties: false
+    FunctionSchema:
+      description: Schema of Functions
+      type: object
+      x-title: Functions
+      properties:
+        Functions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Function'
+          description: List of Function definitions
+          x-insertionOrder: false
+      required:
+        - Functions
+      additionalProperties: false
     InferenceConfiguration:
       type: object
       description: Configuration for inference in prompt configuration
@@ -532,6 +581,30 @@ components:
       enum:
         - ENABLED
         - DISABLED
+    ParameterDetail:
+      type: object
+      description: Parameter detail
+      properties:
+        Description:
+          type: string
+          maxLength: 500
+          minLength: 1
+          description: Description of function parameter.
+        Type:
+          $ref: '#/components/schemas/Type'
+        Required:
+          type: boolean
+          description: Information about if a parameter is required for function call. Default to false.
+      required:
+        - Type
+      additionalProperties: false
+    ParameterMap:
+      type: object
+      description: A map of parameter name and detail
+      x-patternProperties:
+        ^([0-9a-zA-Z][_-]?){1,100}$:
+          $ref: '#/components/schemas/ParameterDetail'
+      additionalProperties: false
     PromptConfiguration:
       type: object
       description: BasePromptConfiguration per Prompt Type.
@@ -613,6 +686,15 @@ components:
           pattern: ^[a-zA-Z0-9\s._:/=+@-]*$
           description: Value of a tag
       additionalProperties: false
+    Type:
+      type: string
+      description: Parameter Type
+      enum:
+        - string
+        - number
+        - integer
+        - boolean
+        - array
     Agent:
       type: object
       properties:
@@ -638,7 +720,6 @@ components:
         AgentResourceRoleArn:
           type: string
           maxLength: 2048
-          pattern: ^arn:aws(-[^:]+)?:iam::([0-9]{12})?:role/(service-role/)?AmazonBedrockExecutionRoleForAgents.+$
           description: ARN of a IAM role.
         AgentStatus:
           $ref: '#/components/schemas/AgentStatus'
@@ -693,8 +774,8 @@ components:
           description: Max Session Time.
         Instruction:
           type: string
-          maxLength: 1200
           minLength: 40
+          maxLength: 4000
           description: Instruction for the agent.
         KnowledgeBases:
           type: array
@@ -718,6 +799,8 @@ components:
           description: The recommended actions users can take to resolve an error in failureReasons.
           x-insertionOrder: false
         Tags:
+          $ref: '#/components/schemas/TagsMap'
+        TestAliasTags:
           $ref: '#/components/schemas/TagsMap'
         UpdatedAt:
           type: string
@@ -974,11 +1057,18 @@ components:
       enum:
         - AVAILABLE
         - DELETING
+        - DELETE_UNSUCCESSFUL
     DataSourceType:
       type: string
       description: The type of the data source location.
       enum:
         - S3
+    DataDeletionPolicy:
+      type: string
+      description: The deletion policy for the data source.
+      enum:
+        - RETAIN
+        - DELETE
     FixedSizeChunkingConfiguration:
       type: object
       description: Configurations for when you choose fixed-size chunking. If you set the chunkingStrategy as NONE, exclude this field.
@@ -1017,6 +1107,12 @@ components:
           minItems: 1
           description: A list of S3 prefixes that define the object containing the data sources.
           x-insertionOrder: false
+        BucketOwnerAccountId:
+          type: string
+          maxLength: 12
+          minLength: 12
+          pattern: ^[0-9]{12}$
+          description: The account ID for the owner of the S3 bucket.
       required:
         - BucketArn
       additionalProperties: false
@@ -1066,12 +1162,23 @@ components:
           $ref: '#/components/schemas/ServerSideEncryptionConfiguration'
         VectorIngestionConfiguration:
           $ref: '#/components/schemas/VectorIngestionConfiguration'
+        DataDeletionPolicy:
+          $ref: '#/components/schemas/DataDeletionPolicy'
         CreatedAt:
           type: string
           description: The time at which the data source was created.
         UpdatedAt:
           type: string
           description: The time at which the knowledge base was last updated.
+        FailureReasons:
+          type: array
+          items:
+            type: string
+            maxLength: 2048
+            description: Failure Reason for Error.
+          maxItems: 2048
+          description: The details of the failure reasons related to the data source.
+          x-insertionOrder: false
       required:
         - DataSourceConfiguration
         - Name
@@ -1090,6 +1197,7 @@ components:
         - DataSourceStatus
         - CreatedAt
         - UpdatedAt
+        - FailureReasons
       x-required-properties:
         - DataSourceConfiguration
         - Name
@@ -1112,6 +1220,543 @@ components:
           - bedrock:DeleteDataSource
         list:
           - bedrock:ListDataSources
+    ContentFilter:
+      type: object
+      description: Content filter in content policy.
+      properties:
+        Type:
+          $ref: '#/components/schemas/ContentFilterType'
+        InputStrength:
+          $ref: '#/components/schemas/FilterStrength'
+        OutputStrength:
+          $ref: '#/components/schemas/FilterStrength'
+      required:
+        - InputStrength
+        - OutputStrength
+        - Type
+      additionalProperties: false
+    ContentFilterConfig:
+      type: object
+      description: Content filter config in content policy.
+      properties:
+        Type:
+          $ref: '#/components/schemas/ContentFilterType'
+        InputStrength:
+          $ref: '#/components/schemas/FilterStrength'
+        OutputStrength:
+          $ref: '#/components/schemas/FilterStrength'
+      required:
+        - InputStrength
+        - OutputStrength
+        - Type
+      additionalProperties: false
+    ContentFilterType:
+      type: string
+      description: Type of filter in content policy
+      enum:
+        - SEXUAL
+        - VIOLENCE
+        - HATE
+        - INSULTS
+        - MISCONDUCT
+        - PROMPT_ATTACK
+    ContentPolicyConfig:
+      type: object
+      description: Content policy config for a guardrail.
+      properties:
+        FiltersConfig:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentFilterConfig'
+          maxItems: 6
+          minItems: 1
+          description: List of content filter configs in content policy.
+      required:
+        - FiltersConfig
+      additionalProperties: false
+    FilterStrength:
+      type: string
+      description: Strength for filters
+      enum:
+        - NONE
+        - LOW
+        - MEDIUM
+        - HIGH
+    GuardrailStatus:
+      type: string
+      description: Status of the guardrail
+      enum:
+        - CREATING
+        - UPDATING
+        - VERSIONING
+        - READY
+        - FAILED
+        - DELETING
+    ManagedWords:
+      type: object
+      description: A managed words definition.
+      properties:
+        Type:
+          $ref: '#/components/schemas/ManagedWordsType'
+      required:
+        - Type
+      additionalProperties: false
+    ManagedWordsConfig:
+      type: object
+      description: A managed words config.
+      properties:
+        Type:
+          $ref: '#/components/schemas/ManagedWordsType'
+      required:
+        - Type
+      additionalProperties: false
+    ManagedWordsType:
+      type: string
+      description: Options for managed words.
+      enum:
+        - PROFANITY
+    PiiEntity:
+      type: object
+      description: Entity name and behavior.
+      properties:
+        Type:
+          $ref: '#/components/schemas/PiiEntityType'
+        Action:
+          $ref: '#/components/schemas/SensitiveInformationAction'
+      required:
+        - Action
+        - Type
+      additionalProperties: false
+    PiiEntityConfig:
+      type: object
+      description: Pii entity configuration.
+      properties:
+        Type:
+          $ref: '#/components/schemas/PiiEntityType'
+        Action:
+          $ref: '#/components/schemas/SensitiveInformationAction'
+      required:
+        - Action
+        - Type
+      additionalProperties: false
+    PiiEntityType:
+      type: string
+      description: The currently supported PII entities
+      enum:
+        - ADDRESS
+        - AGE
+        - AWS_ACCESS_KEY
+        - AWS_SECRET_KEY
+        - CA_HEALTH_NUMBER
+        - CA_SOCIAL_INSURANCE_NUMBER
+        - CREDIT_DEBIT_CARD_CVV
+        - CREDIT_DEBIT_CARD_EXPIRY
+        - CREDIT_DEBIT_CARD_NUMBER
+        - DRIVER_ID
+        - EMAIL
+        - INTERNATIONAL_BANK_ACCOUNT_NUMBER
+        - IP_ADDRESS
+        - LICENSE_PLATE
+        - MAC_ADDRESS
+        - NAME
+        - PASSWORD
+        - PHONE
+        - PIN
+        - SWIFT_CODE
+        - UK_NATIONAL_HEALTH_SERVICE_NUMBER
+        - UK_NATIONAL_INSURANCE_NUMBER
+        - UK_UNIQUE_TAXPAYER_REFERENCE_NUMBER
+        - URL
+        - USERNAME
+        - US_BANK_ACCOUNT_NUMBER
+        - US_BANK_ROUTING_NUMBER
+        - US_INDIVIDUAL_TAX_IDENTIFICATION_NUMBER
+        - US_PASSPORT_NUMBER
+        - US_SOCIAL_SECURITY_NUMBER
+        - VEHICLE_IDENTIFICATION_NUMBER
+    RegexConfig:
+      type: object
+      description: A regex configuration.
+      properties:
+        Name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          description: The regex name.
+        Description:
+          type: string
+          maxLength: 1000
+          minLength: 1
+          description: The regex description.
+        Pattern:
+          type: string
+          minLength: 1
+          description: The regex pattern.
+        Action:
+          $ref: '#/components/schemas/SensitiveInformationAction'
+      required:
+        - Action
+        - Name
+        - Pattern
+      additionalProperties: false
+    SensitiveInformationAction:
+      type: string
+      description: Options for sensitive information action.
+      enum:
+        - BLOCK
+        - ANONYMIZE
+    SensitiveInformationPolicyConfig:
+      type: object
+      description: Sensitive information policy config for a guardrail.
+      properties:
+        PiiEntitiesConfig:
+          type: array
+          items:
+            $ref: '#/components/schemas/PiiEntityConfig'
+          minItems: 1
+          uniqueItems: true
+          description: List of entities.
+        RegexesConfig:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegexConfig'
+          minItems: 1
+          description: List of regex.
+      additionalProperties: false
+    Tag:
+      type: object
+      description: Definition of the key/value pair for a tag
+      properties:
+        Key:
+          type: string
+          maxLength: 128
+          minLength: 1
+          pattern: ^[a-zA-Z0-9\s._:/=+@-]*$
+          description: Tag Key
+        Value:
+          type: string
+          maxLength: 256
+          minLength: 0
+          pattern: ^[a-zA-Z0-9\s._:/=+@-]*$
+          description: Tag Value
+      required:
+        - Key
+        - Value
+      additionalProperties: false
+    Topic:
+      type: object
+      description: Topic in topic policy.
+      properties:
+        Name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          pattern: ^[0-9a-zA-Z-_ !?.]+$
+          description: Name of topic in topic policy
+        Definition:
+          type: string
+          maxLength: 200
+          minLength: 1
+          description: Definition of topic in topic policy
+        Examples:
+          type: array
+          items:
+            type: string
+            maxLength: 100
+            minLength: 1
+            description: Text example in topic policy
+          minItems: 0
+          description: List of text examples
+        Type:
+          $ref: '#/components/schemas/TopicType'
+      required:
+        - Definition
+        - Name
+        - Type
+      additionalProperties: false
+    TopicConfig:
+      type: object
+      description: Topic config in topic policy.
+      properties:
+        Name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          pattern: ^[0-9a-zA-Z-_ !?.]+$
+          description: Name of topic in topic policy
+        Definition:
+          type: string
+          maxLength: 200
+          minLength: 1
+          description: Definition of topic in topic policy
+        Examples:
+          type: array
+          items:
+            type: string
+            maxLength: 100
+            minLength: 1
+            description: Text example in topic policy
+          minItems: 0
+          description: List of text examples
+        Type:
+          $ref: '#/components/schemas/TopicType'
+      required:
+        - Definition
+        - Name
+        - Type
+      additionalProperties: false
+    TopicPolicyConfig:
+      type: object
+      description: Topic policy config for a guardrail.
+      properties:
+        TopicsConfig:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicConfig'
+          minItems: 1
+          description: List of topic configs in topic policy.
+      required:
+        - TopicsConfig
+      additionalProperties: false
+    TopicType:
+      type: string
+      description: Type of topic in a policy
+      enum:
+        - DENY
+    WordConfig:
+      type: object
+      description: A custom word config.
+      properties:
+        Text:
+          type: string
+          minLength: 1
+          description: The custom word text.
+      required:
+        - Text
+      additionalProperties: false
+    WordPolicyConfig:
+      type: object
+      description: Word policy config for a guardrail.
+      properties:
+        WordsConfig:
+          type: array
+          items:
+            $ref: '#/components/schemas/WordConfig'
+          minItems: 1
+          description: List of custom word configs.
+        ManagedWordListsConfig:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagedWordsConfig'
+          description: A config for the list of managed words.
+      additionalProperties: false
+    Guardrail:
+      type: object
+      properties:
+        BlockedInputMessaging:
+          type: string
+          maxLength: 500
+          minLength: 1
+          description: Messaging for when violations are detected in text
+        BlockedOutputsMessaging:
+          type: string
+          maxLength: 500
+          minLength: 1
+          description: Messaging for when violations are detected in text
+        ContentPolicyConfig:
+          $ref: '#/components/schemas/ContentPolicyConfig'
+        CreatedAt:
+          type: string
+          description: Time Stamp
+          format: date-time
+        Description:
+          type: string
+          maxLength: 200
+          minLength: 1
+          description: Description of the guardrail or its version
+        FailureRecommendations:
+          type: array
+          items:
+            type: string
+            maxLength: 200
+            minLength: 1
+            description: Recommendation for guardrail failure status
+          maxItems: 100
+          description: List of failure recommendations
+        GuardrailArn:
+          type: string
+          maxLength: 2048
+          pattern: ^arn:aws(-[^:]+)?:bedrock:[a-z0-9-]{1,20}:[0-9]{12}:guardrail/[a-z0-9]+$
+          description: Arn representation for the guardrail
+        GuardrailId:
+          type: string
+          maxLength: 64
+          pattern: ^[a-z0-9]+$
+          description: Unique id for the guardrail
+        KmsKeyArn:
+          type: string
+          maxLength: 2048
+          minLength: 1
+          pattern: ^arn:aws(-[^:]+)?:kms:[a-zA-Z0-9-]*:[0-9]{12}:key/[a-zA-Z0-9-]{36}$
+          description: The KMS key with which the guardrail was encrypted at rest
+        Name:
+          type: string
+          maxLength: 50
+          minLength: 1
+          pattern: ^[0-9a-zA-Z-_]+$
+          description: Name of the guardrail
+        SensitiveInformationPolicyConfig:
+          $ref: '#/components/schemas/SensitiveInformationPolicyConfig'
+        Status:
+          $ref: '#/components/schemas/GuardrailStatus'
+        StatusReasons:
+          type: array
+          items:
+            type: string
+            maxLength: 200
+            minLength: 1
+            description: Reason for guardrail status
+          maxItems: 100
+          description: List of status reasons
+        Tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+          maxItems: 200
+          minItems: 0
+          description: List of Tags
+        TopicPolicyConfig:
+          $ref: '#/components/schemas/TopicPolicyConfig'
+        UpdatedAt:
+          type: string
+          description: Time Stamp
+          format: date-time
+        Version:
+          type: string
+          pattern: ^(([1-9][0-9]{0,7})|(DRAFT))$
+          description: Guardrail version
+        WordPolicyConfig:
+          $ref: '#/components/schemas/WordPolicyConfig'
+      required:
+        - Name
+        - BlockedInputMessaging
+        - BlockedOutputsMessaging
+      x-stackql-resource-name: guardrail
+      description: Definition of AWS::Bedrock::Guardrail Resource Type
+      x-type-name: AWS::Bedrock::Guardrail
+      x-stackql-primary-identifier:
+        - GuardrailArn
+      x-read-only-properties:
+        - CreatedAt
+        - FailureRecommendations
+        - GuardrailArn
+        - GuardrailId
+        - Status
+        - StatusReasons
+        - UpdatedAt
+        - Version
+      x-required-properties:
+        - Name
+        - BlockedInputMessaging
+        - BlockedOutputsMessaging
+      x-tagging:
+        cloudFormationSystemTags: false
+        tagOnCreate: true
+        tagProperty: /properties/Tags
+        tagUpdatable: true
+        taggable: true
+      x-required-permissions:
+        create:
+          - bedrock:CreateGuardrail
+          - bedrock:GetGuardrail
+          - kms:DescribeKey
+          - kms:CreateGrant
+          - kms:GenerateDataKey
+          - kms:Decrypt
+          - bedrock:TagResource
+          - bedrock:ListTagsForResource
+        read:
+          - bedrock:GetGuardrail
+          - kms:Decrypt
+          - bedrock:ListTagsForResource
+        update:
+          - bedrock:UpdateGuardrail
+          - bedrock:GetGuardrail
+          - bedrock:ListTagsForResource
+          - bedrock:TagResource
+          - bedrock:UntagResource
+          - kms:DescribeKey
+          - kms:CreateGrant
+          - kms:GenerateDataKey
+          - kms:Decrypt
+        delete:
+          - bedrock:DeleteGuardrail
+          - bedrock:GetGuardrail
+          - kms:Decrypt
+          - kms:RetireGrant
+        list:
+          - bedrock:ListGuardrails
+    GuardrailVersion:
+      type: object
+      properties:
+        Description:
+          type: string
+          maxLength: 200
+          minLength: 1
+          description: Description of the Guardrail version
+        GuardrailArn:
+          type: string
+          maxLength: 2048
+          pattern: ^arn:aws(-[^:]+)?:bedrock:[a-z0-9-]{1,20}:[0-9]{12}:guardrail/[a-z0-9]+$
+          description: Arn representation for the guardrail
+        GuardrailId:
+          type: string
+          maxLength: 64
+          pattern: ^[a-z0-9]+$
+          description: Unique id for the guardrail
+        GuardrailIdentifier:
+          type: string
+          maxLength: 2048
+          pattern: ^(([a-z0-9]+)|(arn:aws(-[^:]+)?:bedrock:[a-z0-9-]{1,20}:[0-9]{12}:guardrail/[a-z0-9]+))$
+          description: Identifier (GuardrailId or GuardrailArn) for the guardrail
+        Version:
+          type: string
+          pattern: ^[1-9][0-9]{0,7}$
+          description: Guardrail version
+      required:
+        - GuardrailIdentifier
+      x-stackql-resource-name: guardrail_version
+      description: Definition of AWS::Bedrock::GuardrailVersion Resource Type
+      x-type-name: AWS::Bedrock::GuardrailVersion
+      x-stackql-primary-identifier:
+        - GuardrailId
+        - Version
+      x-create-only-properties:
+        - Description
+        - GuardrailIdentifier
+      x-write-only-properties:
+        - GuardrailIdentifier
+      x-read-only-properties:
+        - GuardrailArn
+        - GuardrailId
+        - Version
+      x-required-properties:
+        - GuardrailIdentifier
+      x-tagging:
+        taggable: false
+      x-required-permissions:
+        create:
+          - bedrock:CreateGuardrailVersion
+          - bedrock:GetGuardrail
+          - kms:CreateGrant
+          - kms:Decrypt
+        read:
+          - bedrock:GetGuardrail
+          - kms:Decrypt
+        delete:
+          - bedrock:DeleteGuardrail
+          - bedrock:GetGuardrail
+          - kms:RetireGrant
     KnowledgeBaseConfiguration:
       type: object
       description: Contains details about the embeddings model used for the knowledge base.
@@ -1133,6 +1778,7 @@ components:
         - DELETING
         - UPDATING
         - FAILED
+        - DELETE_UNSUCCESSFUL
     KnowledgeBaseStorageType:
       type: string
       description: The storage type of a knowledge base.
@@ -1520,7 +2166,6 @@ components:
             AgentResourceRoleArn:
               type: string
               maxLength: 2048
-              pattern: ^arn:aws(-[^:]+)?:iam::([0-9]{12})?:role/(service-role/)?AmazonBedrockExecutionRoleForAgents.+$
               description: ARN of a IAM role.
             AgentStatus:
               $ref: '#/components/schemas/AgentStatus'
@@ -1575,8 +2220,8 @@ components:
               description: Max Session Time.
             Instruction:
               type: string
-              maxLength: 1200
               minLength: 40
+              maxLength: 4000
               description: Instruction for the agent.
             KnowledgeBases:
               type: array
@@ -1600,6 +2245,8 @@ components:
               description: The recommended actions users can take to resolve an error in failureReasons.
               x-insertionOrder: false
             Tags:
+              $ref: '#/components/schemas/TagsMap'
+            TestAliasTags:
               $ref: '#/components/schemas/TagsMap'
             UpdatedAt:
               type: string
@@ -1712,14 +2359,167 @@ components:
               $ref: '#/components/schemas/ServerSideEncryptionConfiguration'
             VectorIngestionConfiguration:
               $ref: '#/components/schemas/VectorIngestionConfiguration'
+            DataDeletionPolicy:
+              $ref: '#/components/schemas/DataDeletionPolicy'
             CreatedAt:
               type: string
               description: The time at which the data source was created.
             UpdatedAt:
               type: string
               description: The time at which the knowledge base was last updated.
+            FailureReasons:
+              type: array
+              items:
+                type: string
+                maxLength: 2048
+                description: Failure Reason for Error.
+              maxItems: 2048
+              description: The details of the failure reasons related to the data source.
+              x-insertionOrder: false
           x-stackQL-stringOnly: true
       x-title: CreateDataSourceRequest
+      type: object
+      required: []
+    CreateGuardrailRequest:
+      properties:
+        ClientToken:
+          type: string
+        RoleArn:
+          type: string
+        TypeName:
+          type: string
+        TypeVersionId:
+          type: string
+        DesiredState:
+          type: object
+          properties:
+            BlockedInputMessaging:
+              type: string
+              maxLength: 500
+              minLength: 1
+              description: Messaging for when violations are detected in text
+            BlockedOutputsMessaging:
+              type: string
+              maxLength: 500
+              minLength: 1
+              description: Messaging for when violations are detected in text
+            ContentPolicyConfig:
+              $ref: '#/components/schemas/ContentPolicyConfig'
+            CreatedAt:
+              type: string
+              description: Time Stamp
+              format: date-time
+            Description:
+              type: string
+              maxLength: 200
+              minLength: 1
+              description: Description of the guardrail or its version
+            FailureRecommendations:
+              type: array
+              items:
+                type: string
+                maxLength: 200
+                minLength: 1
+                description: Recommendation for guardrail failure status
+              maxItems: 100
+              description: List of failure recommendations
+            GuardrailArn:
+              type: string
+              maxLength: 2048
+              pattern: ^arn:aws(-[^:]+)?:bedrock:[a-z0-9-]{1,20}:[0-9]{12}:guardrail/[a-z0-9]+$
+              description: Arn representation for the guardrail
+            GuardrailId:
+              type: string
+              maxLength: 64
+              pattern: ^[a-z0-9]+$
+              description: Unique id for the guardrail
+            KmsKeyArn:
+              type: string
+              maxLength: 2048
+              minLength: 1
+              pattern: ^arn:aws(-[^:]+)?:kms:[a-zA-Z0-9-]*:[0-9]{12}:key/[a-zA-Z0-9-]{36}$
+              description: The KMS key with which the guardrail was encrypted at rest
+            Name:
+              type: string
+              maxLength: 50
+              minLength: 1
+              pattern: ^[0-9a-zA-Z-_]+$
+              description: Name of the guardrail
+            SensitiveInformationPolicyConfig:
+              $ref: '#/components/schemas/SensitiveInformationPolicyConfig'
+            Status:
+              $ref: '#/components/schemas/GuardrailStatus'
+            StatusReasons:
+              type: array
+              items:
+                type: string
+                maxLength: 200
+                minLength: 1
+                description: Reason for guardrail status
+              maxItems: 100
+              description: List of status reasons
+            Tags:
+              type: array
+              items:
+                $ref: '#/components/schemas/Tag'
+              maxItems: 200
+              minItems: 0
+              description: List of Tags
+            TopicPolicyConfig:
+              $ref: '#/components/schemas/TopicPolicyConfig'
+            UpdatedAt:
+              type: string
+              description: Time Stamp
+              format: date-time
+            Version:
+              type: string
+              pattern: ^(([1-9][0-9]{0,7})|(DRAFT))$
+              description: Guardrail version
+            WordPolicyConfig:
+              $ref: '#/components/schemas/WordPolicyConfig'
+          x-stackQL-stringOnly: true
+      x-title: CreateGuardrailRequest
+      type: object
+      required: []
+    CreateGuardrailVersionRequest:
+      properties:
+        ClientToken:
+          type: string
+        RoleArn:
+          type: string
+        TypeName:
+          type: string
+        TypeVersionId:
+          type: string
+        DesiredState:
+          type: object
+          properties:
+            Description:
+              type: string
+              maxLength: 200
+              minLength: 1
+              description: Description of the Guardrail version
+            GuardrailArn:
+              type: string
+              maxLength: 2048
+              pattern: ^arn:aws(-[^:]+)?:bedrock:[a-z0-9-]{1,20}:[0-9]{12}:guardrail/[a-z0-9]+$
+              description: Arn representation for the guardrail
+            GuardrailId:
+              type: string
+              maxLength: 64
+              pattern: ^[a-z0-9]+$
+              description: Unique id for the guardrail
+            GuardrailIdentifier:
+              type: string
+              maxLength: 2048
+              pattern: ^(([a-z0-9]+)|(arn:aws(-[^:]+)?:bedrock:[a-z0-9-]{1,20}:[0-9]{12}:guardrail/[a-z0-9]+))$
+              description: Identifier (GuardrailId or GuardrailArn) for the guardrail
+            Version:
+              type: string
+              pattern: ^[1-9][0-9]{0,7}$
+              description: Guardrail version
+          x-stackQL-stringOnly: true
+      x-title: CreateGuardrailVersionRequest
       type: object
       required: []
     CreateKnowledgeBaseRequest:
@@ -1801,7 +2601,7 @@ components:
       x-cfn-type-name: AWS::Bedrock::Agent
       x-identifiers:
         - AgentId
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -1809,6 +2609,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Agent&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Bedrock::Agent"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -1835,52 +2647,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/agents/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/agents/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.AgentId') as agent_id
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::Agent'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'AgentId') as agent_id
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::Agent'
-                AND region = 'us-east-1'
-    agent:
-      name: agent
-      id: aws.bedrock.agent
-      x-cfn-schema-name: Agent
-      x-cfn-type-name: AWS::Bedrock::Agent
-      x-identifiers:
-        - AgentId
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::Bedrock::Agent"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/agent/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/agents/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -1906,41 +2678,59 @@ components:
               JSON_EXTRACT(Properties, '$.PromptOverrideConfiguration') as prompt_override_configuration,
               JSON_EXTRACT(Properties, '$.RecommendedActions') as recommended_actions,
               JSON_EXTRACT(Properties, '$.Tags') as tags,
+              JSON_EXTRACT(Properties, '$.TestAliasTags') as test_alias_tags,
               JSON_EXTRACT(Properties, '$.UpdatedAt') as updated_at
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Bedrock::Agent'
               AND data__Identifier = '<AgentId>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'ActionGroups') as action_groups,
-                json_extract_path_text(Properties, 'AgentArn') as agent_arn,
-                json_extract_path_text(Properties, 'AgentId') as agent_id,
-                json_extract_path_text(Properties, 'AgentName') as agent_name,
-                json_extract_path_text(Properties, 'AgentResourceRoleArn') as agent_resource_role_arn,
-                json_extract_path_text(Properties, 'AgentStatus') as agent_status,
-                json_extract_path_text(Properties, 'AgentVersion') as agent_version,
-                json_extract_path_text(Properties, 'AutoPrepare') as auto_prepare,
-                json_extract_path_text(Properties, 'CreatedAt') as created_at,
-                json_extract_path_text(Properties, 'CustomerEncryptionKeyArn') as customer_encryption_key_arn,
-                json_extract_path_text(Properties, 'SkipResourceInUseCheckOnDelete') as skip_resource_in_use_check_on_delete,
-                json_extract_path_text(Properties, 'Description') as description,
-                json_extract_path_text(Properties, 'FailureReasons') as failure_reasons,
-                json_extract_path_text(Properties, 'FoundationModel') as foundation_model,
-                json_extract_path_text(Properties, 'IdleSessionTTLInSeconds') as idle_session_ttl_in_seconds,
-                json_extract_path_text(Properties, 'Instruction') as instruction,
-                json_extract_path_text(Properties, 'KnowledgeBases') as knowledge_bases,
-                json_extract_path_text(Properties, 'PreparedAt') as prepared_at,
-                json_extract_path_text(Properties, 'PromptOverrideConfiguration') as prompt_override_configuration,
-                json_extract_path_text(Properties, 'RecommendedActions') as recommended_actions,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'UpdatedAt') as updated_at
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Bedrock::Agent'
-                AND data__Identifier = '<AgentId>'
+                JSON_EXTRACT(Properties, '$.AgentId') as agent_id
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::Agent'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'ActionGroups') as action_groups,
+                  json_extract_path_text(Properties, 'AgentArn') as agent_arn,
+                  json_extract_path_text(Properties, 'AgentId') as agent_id,
+                  json_extract_path_text(Properties, 'AgentName') as agent_name,
+                  json_extract_path_text(Properties, 'AgentResourceRoleArn') as agent_resource_role_arn,
+                  json_extract_path_text(Properties, 'AgentStatus') as agent_status,
+                  json_extract_path_text(Properties, 'AgentVersion') as agent_version,
+                  json_extract_path_text(Properties, 'AutoPrepare') as auto_prepare,
+                  json_extract_path_text(Properties, 'CreatedAt') as created_at,
+                  json_extract_path_text(Properties, 'CustomerEncryptionKeyArn') as customer_encryption_key_arn,
+                  json_extract_path_text(Properties, 'SkipResourceInUseCheckOnDelete') as skip_resource_in_use_check_on_delete,
+                  json_extract_path_text(Properties, 'Description') as description,
+                  json_extract_path_text(Properties, 'FailureReasons') as failure_reasons,
+                  json_extract_path_text(Properties, 'FoundationModel') as foundation_model,
+                  json_extract_path_text(Properties, 'IdleSessionTTLInSeconds') as idle_session_ttl_in_seconds,
+                  json_extract_path_text(Properties, 'Instruction') as instruction,
+                  json_extract_path_text(Properties, 'KnowledgeBases') as knowledge_bases,
+                  json_extract_path_text(Properties, 'PreparedAt') as prepared_at,
+                  json_extract_path_text(Properties, 'PromptOverrideConfiguration') as prompt_override_configuration,
+                  json_extract_path_text(Properties, 'RecommendedActions') as recommended_actions,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'TestAliasTags') as test_alias_tags,
+                  json_extract_path_text(Properties, 'UpdatedAt') as updated_at
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Bedrock::Agent'
+                  AND data__Identifier = '<AgentId>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'AgentId') as agent_id
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::Agent'
+                    AND region = 'us-east-1'
     agent_aliases:
       name: agent_aliases
       id: aws.bedrock.agent_aliases
@@ -1949,7 +2739,7 @@ components:
       x-identifiers:
         - AgentId
         - AgentAliasId
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -1957,6 +2747,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__AgentAlias&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Bedrock::AgentAlias"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -1983,55 +2785,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/agent_aliases/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/agent_aliases/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.AgentId') as agent_id,
-              JSON_EXTRACT(Properties, '$.AgentAliasId') as agent_alias_id
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::AgentAlias'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'AgentId') as agent_id,
-                json_extract_path_text(Properties, 'AgentAliasId') as agent_alias_id
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::AgentAlias'
-                AND region = 'us-east-1'
-    agent_alias:
-      name: agent_alias
-      id: aws.bedrock.agent_alias
-      x-cfn-schema-name: AgentAlias
-      x-cfn-type-name: AWS::Bedrock::AgentAlias
-      x-identifiers:
-        - AgentId
-        - AgentAliasId
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::Bedrock::AgentAlias"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/agent_alias/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/agent_aliases/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2051,25 +2810,43 @@ components:
               AND data__Identifier = '<AgentId>|<AgentAliasId>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'AgentAliasArn') as agent_alias_arn,
-                json_extract_path_text(Properties, 'AgentAliasHistoryEvents') as agent_alias_history_events,
-                json_extract_path_text(Properties, 'AgentAliasId') as agent_alias_id,
-                json_extract_path_text(Properties, 'AgentAliasName') as agent_alias_name,
-                json_extract_path_text(Properties, 'AgentAliasStatus') as agent_alias_status,
-                json_extract_path_text(Properties, 'AgentId') as agent_id,
-                json_extract_path_text(Properties, 'CreatedAt') as created_at,
-                json_extract_path_text(Properties, 'Description') as description,
-                json_extract_path_text(Properties, 'RoutingConfiguration') as routing_configuration,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'UpdatedAt') as updated_at
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Bedrock::AgentAlias'
-                AND data__Identifier = '<AgentId>|<AgentAliasId>'
+                JSON_EXTRACT(Properties, '$.AgentId') as agent_id,
+                JSON_EXTRACT(Properties, '$.AgentAliasId') as agent_alias_id
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::AgentAlias'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'AgentAliasArn') as agent_alias_arn,
+                  json_extract_path_text(Properties, 'AgentAliasHistoryEvents') as agent_alias_history_events,
+                  json_extract_path_text(Properties, 'AgentAliasId') as agent_alias_id,
+                  json_extract_path_text(Properties, 'AgentAliasName') as agent_alias_name,
+                  json_extract_path_text(Properties, 'AgentAliasStatus') as agent_alias_status,
+                  json_extract_path_text(Properties, 'AgentId') as agent_id,
+                  json_extract_path_text(Properties, 'CreatedAt') as created_at,
+                  json_extract_path_text(Properties, 'Description') as description,
+                  json_extract_path_text(Properties, 'RoutingConfiguration') as routing_configuration,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'UpdatedAt') as updated_at
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Bedrock::AgentAlias'
+                  AND data__Identifier = '<AgentId>|<AgentAliasId>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'AgentId') as agent_id,
+                    json_extract_path_text(Properties, 'AgentAliasId') as agent_alias_id
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::AgentAlias'
+                    AND region = 'us-east-1'
     data_sources:
       name: data_sources
       id: aws.bedrock.data_sources
@@ -2078,7 +2855,7 @@ components:
       x-identifiers:
         - KnowledgeBaseId
         - DataSourceId
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -2086,6 +2863,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__DataSource&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Bedrock::DataSource"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -2112,55 +2901,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/data_sources/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/data_sources/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.KnowledgeBaseId') as knowledge_base_id,
-              JSON_EXTRACT(Properties, '$.DataSourceId') as data_source_id
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::DataSource'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'KnowledgeBaseId') as knowledge_base_id,
-                json_extract_path_text(Properties, 'DataSourceId') as data_source_id
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::DataSource'
-                AND region = 'us-east-1'
-    data_source:
-      name: data_source
-      id: aws.bedrock.data_source
-      x-cfn-schema-name: DataSource
-      x-cfn-type-name: AWS::Bedrock::DataSource
-      x-identifiers:
-        - KnowledgeBaseId
-        - DataSourceId
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::Bedrock::DataSource"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/data_source/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/data_sources/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2173,29 +2919,251 @@ components:
               JSON_EXTRACT(Properties, '$.Name') as name,
               JSON_EXTRACT(Properties, '$.ServerSideEncryptionConfiguration') as server_side_encryption_configuration,
               JSON_EXTRACT(Properties, '$.VectorIngestionConfiguration') as vector_ingestion_configuration,
+              JSON_EXTRACT(Properties, '$.DataDeletionPolicy') as data_deletion_policy,
               JSON_EXTRACT(Properties, '$.CreatedAt') as created_at,
-              JSON_EXTRACT(Properties, '$.UpdatedAt') as updated_at
+              JSON_EXTRACT(Properties, '$.UpdatedAt') as updated_at,
+              JSON_EXTRACT(Properties, '$.FailureReasons') as failure_reasons
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Bedrock::DataSource'
               AND data__Identifier = '<KnowledgeBaseId>|<DataSourceId>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
+              ddl: |-
+                SELECT
+                region,
+                JSON_EXTRACT(Properties, '$.KnowledgeBaseId') as knowledge_base_id,
+                JSON_EXTRACT(Properties, '$.DataSourceId') as data_source_id
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::DataSource'
+                AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'DataSourceConfiguration') as data_source_configuration,
+                  json_extract_path_text(Properties, 'DataSourceId') as data_source_id,
+                  json_extract_path_text(Properties, 'Description') as description,
+                  json_extract_path_text(Properties, 'KnowledgeBaseId') as knowledge_base_id,
+                  json_extract_path_text(Properties, 'DataSourceStatus') as data_source_status,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'ServerSideEncryptionConfiguration') as server_side_encryption_configuration,
+                  json_extract_path_text(Properties, 'VectorIngestionConfiguration') as vector_ingestion_configuration,
+                  json_extract_path_text(Properties, 'DataDeletionPolicy') as data_deletion_policy,
+                  json_extract_path_text(Properties, 'CreatedAt') as created_at,
+                  json_extract_path_text(Properties, 'UpdatedAt') as updated_at,
+                  json_extract_path_text(Properties, 'FailureReasons') as failure_reasons
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Bedrock::DataSource'
+                  AND data__Identifier = '<KnowledgeBaseId>|<DataSourceId>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'KnowledgeBaseId') as knowledge_base_id,
+                    json_extract_path_text(Properties, 'DataSourceId') as data_source_id
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::DataSource'
+                    AND region = 'us-east-1'
+    guardrails:
+      name: guardrails
+      id: aws.bedrock.guardrails
+      x-cfn-schema-name: Guardrail
+      x-cfn-type-name: AWS::Bedrock::Guardrail
+      x-identifiers:
+        - GuardrailArn
+      x-type: cloud_control
+      methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Guardrail&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Bedrock::Guardrail"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Bedrock::Guardrail"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Bedrock::Guardrail"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/guardrails/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/guardrails/methods/delete_resource'
+        update:
+          - $ref: '#/components/x-stackQL-resources/guardrails/methods/update_resource'
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.BlockedInputMessaging') as blocked_input_messaging,
+              JSON_EXTRACT(Properties, '$.BlockedOutputsMessaging') as blocked_outputs_messaging,
+              JSON_EXTRACT(Properties, '$.ContentPolicyConfig') as content_policy_config,
+              JSON_EXTRACT(Properties, '$.CreatedAt') as created_at,
+              JSON_EXTRACT(Properties, '$.Description') as description,
+              JSON_EXTRACT(Properties, '$.FailureRecommendations') as failure_recommendations,
+              JSON_EXTRACT(Properties, '$.GuardrailArn') as guardrail_arn,
+              JSON_EXTRACT(Properties, '$.GuardrailId') as guardrail_id,
+              JSON_EXTRACT(Properties, '$.KmsKeyArn') as kms_key_arn,
+              JSON_EXTRACT(Properties, '$.Name') as name,
+              JSON_EXTRACT(Properties, '$.SensitiveInformationPolicyConfig') as sensitive_information_policy_config,
+              JSON_EXTRACT(Properties, '$.Status') as status,
+              JSON_EXTRACT(Properties, '$.StatusReasons') as status_reasons,
+              JSON_EXTRACT(Properties, '$.Tags') as tags,
+              JSON_EXTRACT(Properties, '$.TopicPolicyConfig') as topic_policy_config,
+              JSON_EXTRACT(Properties, '$.UpdatedAt') as updated_at,
+              JSON_EXTRACT(Properties, '$.Version') as version,
+              JSON_EXTRACT(Properties, '$.WordPolicyConfig') as word_policy_config
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Bedrock::Guardrail'
+              AND data__Identifier = '<GuardrailArn>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "sqlite3"
+              ddl: |-
+                SELECT
+                region,
+                JSON_EXTRACT(Properties, '$.GuardrailArn') as guardrail_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::Guardrail'
+                AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'BlockedInputMessaging') as blocked_input_messaging,
+                  json_extract_path_text(Properties, 'BlockedOutputsMessaging') as blocked_outputs_messaging,
+                  json_extract_path_text(Properties, 'ContentPolicyConfig') as content_policy_config,
+                  json_extract_path_text(Properties, 'CreatedAt') as created_at,
+                  json_extract_path_text(Properties, 'Description') as description,
+                  json_extract_path_text(Properties, 'FailureRecommendations') as failure_recommendations,
+                  json_extract_path_text(Properties, 'GuardrailArn') as guardrail_arn,
+                  json_extract_path_text(Properties, 'GuardrailId') as guardrail_id,
+                  json_extract_path_text(Properties, 'KmsKeyArn') as kms_key_arn,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'SensitiveInformationPolicyConfig') as sensitive_information_policy_config,
+                  json_extract_path_text(Properties, 'Status') as status,
+                  json_extract_path_text(Properties, 'StatusReasons') as status_reasons,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'TopicPolicyConfig') as topic_policy_config,
+                  json_extract_path_text(Properties, 'UpdatedAt') as updated_at,
+                  json_extract_path_text(Properties, 'Version') as version,
+                  json_extract_path_text(Properties, 'WordPolicyConfig') as word_policy_config
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Bedrock::Guardrail'
+                  AND data__Identifier = '<GuardrailArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'GuardrailArn') as guardrail_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::Guardrail'
+                    AND region = 'us-east-1'
+    guardrail_versions:
+      name: guardrail_versions
+      id: aws.bedrock.guardrail_versions
+      x-cfn-schema-name: GuardrailVersion
+      x-cfn-type-name: AWS::Bedrock::GuardrailVersion
+      x-identifiers:
+        - GuardrailId
+        - Version
+      x-type: cloud_control
+      methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__GuardrailVersion&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Bedrock::GuardrailVersion"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Bedrock::GuardrailVersion"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/guardrail_versions/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/guardrail_versions/methods/delete_resource'
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.Description') as description,
+              JSON_EXTRACT(Properties, '$.GuardrailArn') as guardrail_arn,
+              JSON_EXTRACT(Properties, '$.GuardrailId') as guardrail_id,
+              JSON_EXTRACT(Properties, '$.GuardrailIdentifier') as guardrail_identifier,
+              JSON_EXTRACT(Properties, '$.Version') as version
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Bedrock::GuardrailVersion'
+              AND data__Identifier = '<GuardrailId>|<Version>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
               ddl: |-
                 SELECT
                 region,
                 data__Identifier,
-                json_extract_path_text(Properties, 'DataSourceConfiguration') as data_source_configuration,
-                json_extract_path_text(Properties, 'DataSourceId') as data_source_id,
                 json_extract_path_text(Properties, 'Description') as description,
-                json_extract_path_text(Properties, 'KnowledgeBaseId') as knowledge_base_id,
-                json_extract_path_text(Properties, 'DataSourceStatus') as data_source_status,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'ServerSideEncryptionConfiguration') as server_side_encryption_configuration,
-                json_extract_path_text(Properties, 'VectorIngestionConfiguration') as vector_ingestion_configuration,
-                json_extract_path_text(Properties, 'CreatedAt') as created_at,
-                json_extract_path_text(Properties, 'UpdatedAt') as updated_at
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Bedrock::DataSource'
-                AND data__Identifier = '<KnowledgeBaseId>|<DataSourceId>'
+                json_extract_path_text(Properties, 'GuardrailArn') as guardrail_arn,
+                json_extract_path_text(Properties, 'GuardrailId') as guardrail_id,
+                json_extract_path_text(Properties, 'GuardrailIdentifier') as guardrail_identifier,
+                json_extract_path_text(Properties, 'Version') as version
+                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Bedrock::GuardrailVersion'
+                AND data__Identifier = '<GuardrailId>|<Version>'
                 AND region = 'us-east-1'
     knowledge_bases:
       name: knowledge_bases
@@ -2204,7 +3172,7 @@ components:
       x-cfn-type-name: AWS::Bedrock::KnowledgeBase
       x-identifiers:
         - KnowledgeBaseId
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -2212,6 +3180,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__KnowledgeBase&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Bedrock::KnowledgeBase"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -2238,52 +3218,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/knowledge_bases/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/knowledge_bases/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.KnowledgeBaseId') as knowledge_base_id
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::KnowledgeBase'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'KnowledgeBaseId') as knowledge_base_id
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::KnowledgeBase'
-                AND region = 'us-east-1'
-    knowledge_base:
-      name: knowledge_base
-      id: aws.bedrock.knowledge_base
-      x-cfn-schema-name: KnowledgeBase
-      x-cfn-type-name: AWS::Bedrock::KnowledgeBase
-      x-identifiers:
-        - KnowledgeBaseId
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::Bedrock::KnowledgeBase"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/knowledge_base/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/knowledge_bases/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2304,26 +3244,42 @@ components:
               AND data__Identifier = '<KnowledgeBaseId>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Description') as description,
-                json_extract_path_text(Properties, 'KnowledgeBaseConfiguration') as knowledge_base_configuration,
-                json_extract_path_text(Properties, 'KnowledgeBaseId') as knowledge_base_id,
-                json_extract_path_text(Properties, 'KnowledgeBaseArn') as knowledge_base_arn,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'Status') as status,
-                json_extract_path_text(Properties, 'RoleArn') as role_arn,
-                json_extract_path_text(Properties, 'CreatedAt') as created_at,
-                json_extract_path_text(Properties, 'FailureReasons') as failure_reasons,
-                json_extract_path_text(Properties, 'UpdatedAt') as updated_at,
-                json_extract_path_text(Properties, 'StorageConfiguration') as storage_configuration,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Bedrock::KnowledgeBase'
-                AND data__Identifier = '<KnowledgeBaseId>'
+                JSON_EXTRACT(Properties, '$.KnowledgeBaseId') as knowledge_base_id
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::KnowledgeBase'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Description') as description,
+                  json_extract_path_text(Properties, 'KnowledgeBaseConfiguration') as knowledge_base_configuration,
+                  json_extract_path_text(Properties, 'KnowledgeBaseId') as knowledge_base_id,
+                  json_extract_path_text(Properties, 'KnowledgeBaseArn') as knowledge_base_arn,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'Status') as status,
+                  json_extract_path_text(Properties, 'RoleArn') as role_arn,
+                  json_extract_path_text(Properties, 'CreatedAt') as created_at,
+                  json_extract_path_text(Properties, 'FailureReasons') as failure_reasons,
+                  json_extract_path_text(Properties, 'UpdatedAt') as updated_at,
+                  json_extract_path_text(Properties, 'StorageConfiguration') as storage_configuration,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Bedrock::KnowledgeBase'
+                  AND data__Identifier = '<KnowledgeBaseId>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'KnowledgeBaseId') as knowledge_base_id
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Bedrock::KnowledgeBase'
+                    AND region = 'us-east-1'
 paths:
   /?Action=CreateResource&Version=2021-09-30:
     parameters:
@@ -2585,6 +3541,90 @@ paths:
           application/x-amz-json-1.0:
             schema:
               $ref: '#/components/schemas/CreateDataSourceRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
+          description: Success
+  /?Action=CreateResource&Version=2021-09-30&__Guardrail&__detailTransformed=true:
+    parameters:
+      - $ref: '#/components/parameters/X-Amz-Content-Sha256'
+      - $ref: '#/components/parameters/X-Amz-Date'
+      - $ref: '#/components/parameters/X-Amz-Algorithm'
+      - $ref: '#/components/parameters/X-Amz-Credential'
+      - $ref: '#/components/parameters/X-Amz-Security-Token'
+      - $ref: '#/components/parameters/X-Amz-Signature'
+      - $ref: '#/components/parameters/X-Amz-SignedHeaders'
+    post:
+      operationId: CreateGuardrail
+      parameters:
+        - description: Action Header
+          in: header
+          name: X-Amz-Target
+          required: false
+          schema:
+            default: CloudApiService.CreateResource
+            enum:
+              - CloudApiService.CreateResource
+            type: string
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            default: application/x-amz-json-1.0
+            enum:
+              - application/x-amz-json-1.0
+            type: string
+      requestBody:
+        content:
+          application/x-amz-json-1.0:
+            schema:
+              $ref: '#/components/schemas/CreateGuardrailRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
+          description: Success
+  /?Action=CreateResource&Version=2021-09-30&__GuardrailVersion&__detailTransformed=true:
+    parameters:
+      - $ref: '#/components/parameters/X-Amz-Content-Sha256'
+      - $ref: '#/components/parameters/X-Amz-Date'
+      - $ref: '#/components/parameters/X-Amz-Algorithm'
+      - $ref: '#/components/parameters/X-Amz-Credential'
+      - $ref: '#/components/parameters/X-Amz-Security-Token'
+      - $ref: '#/components/parameters/X-Amz-Signature'
+      - $ref: '#/components/parameters/X-Amz-SignedHeaders'
+    post:
+      operationId: CreateGuardrailVersion
+      parameters:
+        - description: Action Header
+          in: header
+          name: X-Amz-Target
+          required: false
+          schema:
+            default: CloudApiService.CreateResource
+            enum:
+              - CloudApiService.CreateResource
+            type: string
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            default: application/x-amz-json-1.0
+            enum:
+              - application/x-amz-json-1.0
+            type: string
+      requestBody:
+        content:
+          application/x-amz-json-1.0:
+            schema:
+              $ref: '#/components/schemas/CreateGuardrailVersionRequest'
         required: true
       responses:
         '200':
