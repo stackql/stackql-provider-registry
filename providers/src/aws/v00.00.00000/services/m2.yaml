@@ -677,6 +677,7 @@ components:
           - ec2:ModifyNetworkInterfaceAttribute
           - elasticfilesystem:DescribeMountTargets
           - elasticloadbalancing:CreateLoadBalancer
+          - elasticloadbalancing:DeleteLoadBalancer
           - elasticloadbalancing:AddTags
           - fsx:DescribeFileSystems
           - iam:CreateServiceLinkedRole
@@ -695,6 +696,7 @@ components:
           - m2:ListTagsForResource
           - m2:GetEnvironment
           - m2:UpdateEnvironment
+          - kms:DescribeKey
         delete:
           - elasticloadbalancing:DeleteLoadBalancer
           - m2:DeleteEnvironment
@@ -839,7 +841,7 @@ components:
       x-cfn-type-name: AWS::M2::Application
       x-identifiers:
         - ApplicationArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -847,6 +849,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Application&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::M2::Application"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -873,52 +887,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/applications/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/applications/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.ApplicationArn') as application_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::M2::Application'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'ApplicationArn') as application_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::M2::Application'
-                AND region = 'us-east-1'
-    application:
-      name: application
-      id: aws.m2.application
-      x-cfn-schema-name: Application
-      x-cfn-type-name: AWS::M2::Application
-      x-identifiers:
-        - ApplicationArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::M2::Application"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/application/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/applications/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -936,23 +910,39 @@ components:
               AND data__Identifier = '<ApplicationArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'ApplicationArn') as application_arn,
-                json_extract_path_text(Properties, 'ApplicationId') as application_id,
-                json_extract_path_text(Properties, 'Definition') as definition,
-                json_extract_path_text(Properties, 'Description') as description,
-                json_extract_path_text(Properties, 'EngineType') as engine_type,
-                json_extract_path_text(Properties, 'KmsKeyId') as kms_key_id,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'RoleArn') as role_arn,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::M2::Application'
-                AND data__Identifier = '<ApplicationArn>'
+                JSON_EXTRACT(Properties, '$.ApplicationArn') as application_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::M2::Application'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'ApplicationArn') as application_arn,
+                  json_extract_path_text(Properties, 'ApplicationId') as application_id,
+                  json_extract_path_text(Properties, 'Definition') as definition,
+                  json_extract_path_text(Properties, 'Description') as description,
+                  json_extract_path_text(Properties, 'EngineType') as engine_type,
+                  json_extract_path_text(Properties, 'KmsKeyId') as kms_key_id,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'RoleArn') as role_arn,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::M2::Application'
+                  AND data__Identifier = '<ApplicationArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'ApplicationArn') as application_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::M2::Application'
+                    AND region = 'us-east-1'
     environments:
       name: environments
       id: aws.m2.environments
@@ -960,7 +950,7 @@ components:
       x-cfn-type-name: AWS::M2::Environment
       x-identifiers:
         - EnvironmentArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -968,6 +958,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Environment&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::M2::Environment"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -994,52 +996,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/environments/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/environments/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.EnvironmentArn') as environment_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::M2::Environment'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'EnvironmentArn') as environment_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::M2::Environment'
-                AND region = 'us-east-1'
-    environment:
-      name: environment
-      id: aws.m2.environment
-      x-cfn-schema-name: Environment
-      x-cfn-type-name: AWS::M2::Environment
-      x-identifiers:
-        - EnvironmentArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::M2::Environment"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/environment/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/environments/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -1063,29 +1025,45 @@ components:
               AND data__Identifier = '<EnvironmentArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Description') as description,
-                json_extract_path_text(Properties, 'EngineType') as engine_type,
-                json_extract_path_text(Properties, 'EngineVersion') as engine_version,
-                json_extract_path_text(Properties, 'EnvironmentArn') as environment_arn,
-                json_extract_path_text(Properties, 'EnvironmentId') as environment_id,
-                json_extract_path_text(Properties, 'HighAvailabilityConfig') as high_availability_config,
-                json_extract_path_text(Properties, 'InstanceType') as instance_type,
-                json_extract_path_text(Properties, 'KmsKeyId') as kms_key_id,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'PreferredMaintenanceWindow') as preferred_maintenance_window,
-                json_extract_path_text(Properties, 'PubliclyAccessible') as publicly_accessible,
-                json_extract_path_text(Properties, 'SecurityGroupIds') as security_group_ids,
-                json_extract_path_text(Properties, 'StorageConfigurations') as storage_configurations,
-                json_extract_path_text(Properties, 'SubnetIds') as subnet_ids,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::M2::Environment'
-                AND data__Identifier = '<EnvironmentArn>'
+                JSON_EXTRACT(Properties, '$.EnvironmentArn') as environment_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::M2::Environment'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Description') as description,
+                  json_extract_path_text(Properties, 'EngineType') as engine_type,
+                  json_extract_path_text(Properties, 'EngineVersion') as engine_version,
+                  json_extract_path_text(Properties, 'EnvironmentArn') as environment_arn,
+                  json_extract_path_text(Properties, 'EnvironmentId') as environment_id,
+                  json_extract_path_text(Properties, 'HighAvailabilityConfig') as high_availability_config,
+                  json_extract_path_text(Properties, 'InstanceType') as instance_type,
+                  json_extract_path_text(Properties, 'KmsKeyId') as kms_key_id,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'PreferredMaintenanceWindow') as preferred_maintenance_window,
+                  json_extract_path_text(Properties, 'PubliclyAccessible') as publicly_accessible,
+                  json_extract_path_text(Properties, 'SecurityGroupIds') as security_group_ids,
+                  json_extract_path_text(Properties, 'StorageConfigurations') as storage_configurations,
+                  json_extract_path_text(Properties, 'SubnetIds') as subnet_ids,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::M2::Environment'
+                  AND data__Identifier = '<EnvironmentArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'EnvironmentArn') as environment_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::M2::Environment'
+                    AND region = 'us-east-1'
 paths:
   /?Action=CreateResource&Version=2021-09-30:
     parameters:

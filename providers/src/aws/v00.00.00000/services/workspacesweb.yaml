@@ -454,9 +454,6 @@ components:
       x-create-only-properties:
         - AdditionalEncryptionContext
         - CustomerManagedKey
-      x-write-only-properties:
-        - AdditionalEncryptionContext
-        - CustomerManagedKey
       x-read-only-properties:
         - AssociatedPortalArns
         - BrowserSettingsArn
@@ -665,9 +662,6 @@ components:
       x-create-only-properties:
         - AdditionalEncryptionContext
         - CustomerManagedKey
-      x-write-only-properties:
-        - AdditionalEncryptionContext
-        - CustomerManagedKey
       x-read-only-properties:
         - AssociatedPortalArns
         - CreationDate
@@ -820,6 +814,12 @@ components:
       type: string
       enum:
         - Chrome
+    InstanceType:
+      type: string
+      enum:
+        - standard.regular
+        - standard.large
+        - standard.xlarge
     PortalStatus:
       type: string
       enum:
@@ -857,11 +857,17 @@ components:
           maxLength: 64
           minLength: 1
           pattern: ^.+$
+        InstanceType:
+          $ref: '#/components/schemas/InstanceType'
         IpAccessSettingsArn:
           type: string
           maxLength: 2048
           minLength: 20
           pattern: ^arn:[\w+=\/,.@-]+:[a-zA-Z0-9\-]+:[a-zA-Z0-9\-]*:[a-zA-Z0-9]{1,12}:[a-zA-Z]+(\/[a-fA-F0-9\-]{36})+$
+        MaxConcurrentSessions:
+          type: number
+          maximum: 5000
+          minimum: 1
         NetworkSettingsArn:
           type: string
           maxLength: 2048
@@ -919,9 +925,6 @@ components:
       x-stackql-primary-identifier:
         - PortalArn
       x-create-only-properties:
-        - AdditionalEncryptionContext
-        - CustomerManagedKey
-      x-write-only-properties:
         - AdditionalEncryptionContext
         - CustomerManagedKey
       x-read-only-properties:
@@ -1274,9 +1277,6 @@ components:
       x-create-only-properties:
         - AdditionalEncryptionContext
         - CustomerManagedKey
-      x-write-only-properties:
-        - AdditionalEncryptionContext
-        - CustomerManagedKey
       x-read-only-properties:
         - AssociatedPortalArns
         - UserSettingsArn
@@ -1580,11 +1580,17 @@ components:
               maxLength: 64
               minLength: 1
               pattern: ^.+$
+            InstanceType:
+              $ref: '#/components/schemas/InstanceType'
             IpAccessSettingsArn:
               type: string
               maxLength: 2048
               minLength: 20
               pattern: ^arn:[\w+=\/,.@-]+:[a-zA-Z0-9\-]+:[a-zA-Z0-9\-]*:[a-zA-Z0-9]{1,12}:[a-zA-Z]+(\/[a-fA-F0-9\-]{36})+$
+            MaxConcurrentSessions:
+              type: number
+              maximum: 5000
+              minimum: 1
             NetworkSettingsArn:
               type: string
               maxLength: 2048
@@ -1806,8 +1812,23 @@ components:
       x-cfn-type-name: AWS::WorkSpacesWeb::BrowserSettings
       x-identifiers:
         - BrowserSettingsArn
-      x-type: get
+      x-type: cloud_control
       methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__BrowserSettings&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::WorkSpacesWeb::BrowserSettings"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
         update_resource:
           operation:
             $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
@@ -1820,13 +1841,29 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::WorkSpacesWeb::BrowserSettings"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
       sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/browser_settings/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/browser_settings/methods/delete_resource'
         update:
           - $ref: '#/components/x-stackQL-resources/browser_settings/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -1841,20 +1878,36 @@ components:
               AND data__Identifier = '<BrowserSettingsArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'AdditionalEncryptionContext') as additional_encryption_context,
-                json_extract_path_text(Properties, 'AssociatedPortalArns') as associated_portal_arns,
-                json_extract_path_text(Properties, 'BrowserPolicy') as browser_policy,
-                json_extract_path_text(Properties, 'BrowserSettingsArn') as browser_settings_arn,
-                json_extract_path_text(Properties, 'CustomerManagedKey') as customer_managed_key,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::WorkSpacesWeb::BrowserSettings'
-                AND data__Identifier = '<BrowserSettingsArn>'
+                JSON_EXTRACT(Properties, '$.BrowserSettingsArn') as browser_settings_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::BrowserSettings'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'AdditionalEncryptionContext') as additional_encryption_context,
+                  json_extract_path_text(Properties, 'AssociatedPortalArns') as associated_portal_arns,
+                  json_extract_path_text(Properties, 'BrowserPolicy') as browser_policy,
+                  json_extract_path_text(Properties, 'BrowserSettingsArn') as browser_settings_arn,
+                  json_extract_path_text(Properties, 'CustomerManagedKey') as customer_managed_key,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::WorkSpacesWeb::BrowserSettings'
+                  AND data__Identifier = '<BrowserSettingsArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'BrowserSettingsArn') as browser_settings_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::BrowserSettings'
+                    AND region = 'us-east-1'
     identity_providers:
       name: identity_providers
       id: aws.workspacesweb.identity_providers
@@ -1862,7 +1915,7 @@ components:
       x-cfn-type-name: AWS::WorkSpacesWeb::IdentityProvider
       x-identifiers:
         - IdentityProviderArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -1870,6 +1923,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__IdentityProvider&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::WorkSpacesWeb::IdentityProvider"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -1896,52 +1961,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/identity_providers/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/identity_providers/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.IdentityProviderArn') as identity_provider_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::IdentityProvider'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'IdentityProviderArn') as identity_provider_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::IdentityProvider'
-                AND region = 'us-east-1'
-    identity_provider:
-      name: identity_provider
-      id: aws.workspacesweb.identity_provider
-      x-cfn-schema-name: IdentityProvider
-      x-cfn-type-name: AWS::WorkSpacesWeb::IdentityProvider
-      x-identifiers:
-        - IdentityProviderArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::WorkSpacesWeb::IdentityProvider"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/identity_provider/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/identity_providers/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -1955,19 +1980,35 @@ components:
               AND data__Identifier = '<IdentityProviderArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'IdentityProviderArn') as identity_provider_arn,
-                json_extract_path_text(Properties, 'IdentityProviderDetails') as identity_provider_details,
-                json_extract_path_text(Properties, 'IdentityProviderName') as identity_provider_name,
-                json_extract_path_text(Properties, 'IdentityProviderType') as identity_provider_type,
-                json_extract_path_text(Properties, 'PortalArn') as portal_arn
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::WorkSpacesWeb::IdentityProvider'
-                AND data__Identifier = '<IdentityProviderArn>'
+                JSON_EXTRACT(Properties, '$.IdentityProviderArn') as identity_provider_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::IdentityProvider'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'IdentityProviderArn') as identity_provider_arn,
+                  json_extract_path_text(Properties, 'IdentityProviderDetails') as identity_provider_details,
+                  json_extract_path_text(Properties, 'IdentityProviderName') as identity_provider_name,
+                  json_extract_path_text(Properties, 'IdentityProviderType') as identity_provider_type,
+                  json_extract_path_text(Properties, 'PortalArn') as portal_arn
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::WorkSpacesWeb::IdentityProvider'
+                  AND data__Identifier = '<IdentityProviderArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'IdentityProviderArn') as identity_provider_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::IdentityProvider'
+                    AND region = 'us-east-1'
     ip_access_settings:
       name: ip_access_settings
       id: aws.workspacesweb.ip_access_settings
@@ -1975,8 +2016,23 @@ components:
       x-cfn-type-name: AWS::WorkSpacesWeb::IpAccessSettings
       x-identifiers:
         - IpAccessSettingsArn
-      x-type: get
+      x-type: cloud_control
       methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__IpAccessSettings&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::WorkSpacesWeb::IpAccessSettings"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
         update_resource:
           operation:
             $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
@@ -1989,13 +2045,29 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::WorkSpacesWeb::IpAccessSettings"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
       sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/ip_access_settings/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/ip_access_settings/methods/delete_resource'
         update:
           - $ref: '#/components/x-stackQL-resources/ip_access_settings/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2013,23 +2085,39 @@ components:
               AND data__Identifier = '<IpAccessSettingsArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'AdditionalEncryptionContext') as additional_encryption_context,
-                json_extract_path_text(Properties, 'AssociatedPortalArns') as associated_portal_arns,
-                json_extract_path_text(Properties, 'CreationDate') as creation_date,
-                json_extract_path_text(Properties, 'CustomerManagedKey') as customer_managed_key,
-                json_extract_path_text(Properties, 'Description') as description,
-                json_extract_path_text(Properties, 'DisplayName') as display_name,
-                json_extract_path_text(Properties, 'IpAccessSettingsArn') as ip_access_settings_arn,
-                json_extract_path_text(Properties, 'IpRules') as ip_rules,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::WorkSpacesWeb::IpAccessSettings'
-                AND data__Identifier = '<IpAccessSettingsArn>'
+                JSON_EXTRACT(Properties, '$.IpAccessSettingsArn') as ip_access_settings_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::IpAccessSettings'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'AdditionalEncryptionContext') as additional_encryption_context,
+                  json_extract_path_text(Properties, 'AssociatedPortalArns') as associated_portal_arns,
+                  json_extract_path_text(Properties, 'CreationDate') as creation_date,
+                  json_extract_path_text(Properties, 'CustomerManagedKey') as customer_managed_key,
+                  json_extract_path_text(Properties, 'Description') as description,
+                  json_extract_path_text(Properties, 'DisplayName') as display_name,
+                  json_extract_path_text(Properties, 'IpAccessSettingsArn') as ip_access_settings_arn,
+                  json_extract_path_text(Properties, 'IpRules') as ip_rules,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::WorkSpacesWeb::IpAccessSettings'
+                  AND data__Identifier = '<IpAccessSettingsArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'IpAccessSettingsArn') as ip_access_settings_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::IpAccessSettings'
+                    AND region = 'us-east-1'
     network_settings:
       name: network_settings
       id: aws.workspacesweb.network_settings
@@ -2037,8 +2125,23 @@ components:
       x-cfn-type-name: AWS::WorkSpacesWeb::NetworkSettings
       x-identifiers:
         - NetworkSettingsArn
-      x-type: get
+      x-type: cloud_control
       methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__NetworkSettings&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::WorkSpacesWeb::NetworkSettings"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
         update_resource:
           operation:
             $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
@@ -2051,13 +2154,29 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::WorkSpacesWeb::NetworkSettings"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
       sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/network_settings/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/network_settings/methods/delete_resource'
         update:
           - $ref: '#/components/x-stackQL-resources/network_settings/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2072,20 +2191,36 @@ components:
               AND data__Identifier = '<NetworkSettingsArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'AssociatedPortalArns') as associated_portal_arns,
-                json_extract_path_text(Properties, 'NetworkSettingsArn') as network_settings_arn,
-                json_extract_path_text(Properties, 'SecurityGroupIds') as security_group_ids,
-                json_extract_path_text(Properties, 'SubnetIds') as subnet_ids,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'VpcId') as vpc_id
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::WorkSpacesWeb::NetworkSettings'
-                AND data__Identifier = '<NetworkSettingsArn>'
+                JSON_EXTRACT(Properties, '$.NetworkSettingsArn') as network_settings_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::NetworkSettings'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'AssociatedPortalArns') as associated_portal_arns,
+                  json_extract_path_text(Properties, 'NetworkSettingsArn') as network_settings_arn,
+                  json_extract_path_text(Properties, 'SecurityGroupIds') as security_group_ids,
+                  json_extract_path_text(Properties, 'SubnetIds') as subnet_ids,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'VpcId') as vpc_id
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::WorkSpacesWeb::NetworkSettings'
+                  AND data__Identifier = '<NetworkSettingsArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'NetworkSettingsArn') as network_settings_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::NetworkSettings'
+                    AND region = 'us-east-1'
     portals:
       name: portals
       id: aws.workspacesweb.portals
@@ -2093,7 +2228,7 @@ components:
       x-cfn-type-name: AWS::WorkSpacesWeb::Portal
       x-identifiers:
         - PortalArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -2101,6 +2236,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Portal&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::WorkSpacesWeb::Portal"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -2127,52 +2274,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/portals/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/portals/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.PortalArn') as portal_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::Portal'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'PortalArn') as portal_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::Portal'
-                AND region = 'us-east-1'
-    portal:
-      name: portal
-      id: aws.workspacesweb.portal
-      x-cfn-schema-name: Portal
-      x-cfn-type-name: AWS::WorkSpacesWeb::Portal
-      x-identifiers:
-        - PortalArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::WorkSpacesWeb::Portal"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/portal/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/portals/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2184,7 +2291,9 @@ components:
               JSON_EXTRACT(Properties, '$.CreationDate') as creation_date,
               JSON_EXTRACT(Properties, '$.CustomerManagedKey') as customer_managed_key,
               JSON_EXTRACT(Properties, '$.DisplayName') as display_name,
+              JSON_EXTRACT(Properties, '$.InstanceType') as instance_type,
               JSON_EXTRACT(Properties, '$.IpAccessSettingsArn') as ip_access_settings_arn,
+              JSON_EXTRACT(Properties, '$.MaxConcurrentSessions') as max_concurrent_sessions,
               JSON_EXTRACT(Properties, '$.NetworkSettingsArn') as network_settings_arn,
               JSON_EXTRACT(Properties, '$.PortalArn') as portal_arn,
               JSON_EXTRACT(Properties, '$.PortalEndpoint') as portal_endpoint,
@@ -2200,33 +2309,51 @@ components:
               AND data__Identifier = '<PortalArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'AdditionalEncryptionContext') as additional_encryption_context,
-                json_extract_path_text(Properties, 'AuthenticationType') as authentication_type,
-                json_extract_path_text(Properties, 'BrowserSettingsArn') as browser_settings_arn,
-                json_extract_path_text(Properties, 'BrowserType') as browser_type,
-                json_extract_path_text(Properties, 'CreationDate') as creation_date,
-                json_extract_path_text(Properties, 'CustomerManagedKey') as customer_managed_key,
-                json_extract_path_text(Properties, 'DisplayName') as display_name,
-                json_extract_path_text(Properties, 'IpAccessSettingsArn') as ip_access_settings_arn,
-                json_extract_path_text(Properties, 'NetworkSettingsArn') as network_settings_arn,
-                json_extract_path_text(Properties, 'PortalArn') as portal_arn,
-                json_extract_path_text(Properties, 'PortalEndpoint') as portal_endpoint,
-                json_extract_path_text(Properties, 'PortalStatus') as portal_status,
-                json_extract_path_text(Properties, 'RendererType') as renderer_type,
-                json_extract_path_text(Properties, 'ServiceProviderSamlMetadata') as service_provider_saml_metadata,
-                json_extract_path_text(Properties, 'StatusReason') as status_reason,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'TrustStoreArn') as trust_store_arn,
-                json_extract_path_text(Properties, 'UserAccessLoggingSettingsArn') as user_access_logging_settings_arn,
-                json_extract_path_text(Properties, 'UserSettingsArn') as user_settings_arn
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::WorkSpacesWeb::Portal'
-                AND data__Identifier = '<PortalArn>'
+                JSON_EXTRACT(Properties, '$.PortalArn') as portal_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::Portal'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'AdditionalEncryptionContext') as additional_encryption_context,
+                  json_extract_path_text(Properties, 'AuthenticationType') as authentication_type,
+                  json_extract_path_text(Properties, 'BrowserSettingsArn') as browser_settings_arn,
+                  json_extract_path_text(Properties, 'BrowserType') as browser_type,
+                  json_extract_path_text(Properties, 'CreationDate') as creation_date,
+                  json_extract_path_text(Properties, 'CustomerManagedKey') as customer_managed_key,
+                  json_extract_path_text(Properties, 'DisplayName') as display_name,
+                  json_extract_path_text(Properties, 'InstanceType') as instance_type,
+                  json_extract_path_text(Properties, 'IpAccessSettingsArn') as ip_access_settings_arn,
+                  json_extract_path_text(Properties, 'MaxConcurrentSessions') as max_concurrent_sessions,
+                  json_extract_path_text(Properties, 'NetworkSettingsArn') as network_settings_arn,
+                  json_extract_path_text(Properties, 'PortalArn') as portal_arn,
+                  json_extract_path_text(Properties, 'PortalEndpoint') as portal_endpoint,
+                  json_extract_path_text(Properties, 'PortalStatus') as portal_status,
+                  json_extract_path_text(Properties, 'RendererType') as renderer_type,
+                  json_extract_path_text(Properties, 'ServiceProviderSamlMetadata') as service_provider_saml_metadata,
+                  json_extract_path_text(Properties, 'StatusReason') as status_reason,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'TrustStoreArn') as trust_store_arn,
+                  json_extract_path_text(Properties, 'UserAccessLoggingSettingsArn') as user_access_logging_settings_arn,
+                  json_extract_path_text(Properties, 'UserSettingsArn') as user_settings_arn
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::WorkSpacesWeb::Portal'
+                  AND data__Identifier = '<PortalArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'PortalArn') as portal_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::Portal'
+                    AND region = 'us-east-1'
     trust_stores:
       name: trust_stores
       id: aws.workspacesweb.trust_stores
@@ -2234,7 +2361,7 @@ components:
       x-cfn-type-name: AWS::WorkSpacesWeb::TrustStore
       x-identifiers:
         - TrustStoreArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -2242,6 +2369,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__TrustStore&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::WorkSpacesWeb::TrustStore"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -2268,52 +2407,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/trust_stores/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/trust_stores/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.TrustStoreArn') as trust_store_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::TrustStore'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'TrustStoreArn') as trust_store_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::TrustStore'
-                AND region = 'us-east-1'
-    trust_store:
-      name: trust_store
-      id: aws.workspacesweb.trust_store
-      x-cfn-schema-name: TrustStore
-      x-cfn-type-name: AWS::WorkSpacesWeb::TrustStore
-      x-identifiers:
-        - TrustStoreArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::WorkSpacesWeb::TrustStore"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/trust_store/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/trust_stores/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2326,18 +2425,34 @@ components:
               AND data__Identifier = '<TrustStoreArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'AssociatedPortalArns') as associated_portal_arns,
-                json_extract_path_text(Properties, 'CertificateList') as certificate_list,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'TrustStoreArn') as trust_store_arn
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::WorkSpacesWeb::TrustStore'
-                AND data__Identifier = '<TrustStoreArn>'
+                JSON_EXTRACT(Properties, '$.TrustStoreArn') as trust_store_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::TrustStore'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'AssociatedPortalArns') as associated_portal_arns,
+                  json_extract_path_text(Properties, 'CertificateList') as certificate_list,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'TrustStoreArn') as trust_store_arn
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::WorkSpacesWeb::TrustStore'
+                  AND data__Identifier = '<TrustStoreArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'TrustStoreArn') as trust_store_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::TrustStore'
+                    AND region = 'us-east-1'
     user_access_logging_settings:
       name: user_access_logging_settings
       id: aws.workspacesweb.user_access_logging_settings
@@ -2345,8 +2460,23 @@ components:
       x-cfn-type-name: AWS::WorkSpacesWeb::UserAccessLoggingSettings
       x-identifiers:
         - UserAccessLoggingSettingsArn
-      x-type: get
+      x-type: cloud_control
       methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__UserAccessLoggingSettings&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::WorkSpacesWeb::UserAccessLoggingSettings"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
         update_resource:
           operation:
             $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
@@ -2359,13 +2489,29 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::WorkSpacesWeb::UserAccessLoggingSettings"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
       sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/user_access_logging_settings/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/user_access_logging_settings/methods/delete_resource'
         update:
           - $ref: '#/components/x-stackQL-resources/user_access_logging_settings/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2378,18 +2524,34 @@ components:
               AND data__Identifier = '<UserAccessLoggingSettingsArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'AssociatedPortalArns') as associated_portal_arns,
-                json_extract_path_text(Properties, 'KinesisStreamArn') as kinesis_stream_arn,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'UserAccessLoggingSettingsArn') as user_access_logging_settings_arn
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::WorkSpacesWeb::UserAccessLoggingSettings'
-                AND data__Identifier = '<UserAccessLoggingSettingsArn>'
+                JSON_EXTRACT(Properties, '$.UserAccessLoggingSettingsArn') as user_access_logging_settings_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::UserAccessLoggingSettings'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'AssociatedPortalArns') as associated_portal_arns,
+                  json_extract_path_text(Properties, 'KinesisStreamArn') as kinesis_stream_arn,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'UserAccessLoggingSettingsArn') as user_access_logging_settings_arn
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::WorkSpacesWeb::UserAccessLoggingSettings'
+                  AND data__Identifier = '<UserAccessLoggingSettingsArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'UserAccessLoggingSettingsArn') as user_access_logging_settings_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::UserAccessLoggingSettings'
+                    AND region = 'us-east-1'
     user_settings:
       name: user_settings
       id: aws.workspacesweb.user_settings
@@ -2397,8 +2559,23 @@ components:
       x-cfn-type-name: AWS::WorkSpacesWeb::UserSettings
       x-identifiers:
         - UserSettingsArn
-      x-type: get
+      x-type: cloud_control
       methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__UserSettings&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::WorkSpacesWeb::UserSettings"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
         update_resource:
           operation:
             $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
@@ -2411,13 +2588,29 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::WorkSpacesWeb::UserSettings"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
       sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/user_settings/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/user_settings/methods/delete_resource'
         update:
           - $ref: '#/components/x-stackQL-resources/user_settings/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2439,27 +2632,43 @@ components:
               AND data__Identifier = '<UserSettingsArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'AdditionalEncryptionContext') as additional_encryption_context,
-                json_extract_path_text(Properties, 'AssociatedPortalArns') as associated_portal_arns,
-                json_extract_path_text(Properties, 'CookieSynchronizationConfiguration') as cookie_synchronization_configuration,
-                json_extract_path_text(Properties, 'CopyAllowed') as copy_allowed,
-                json_extract_path_text(Properties, 'CustomerManagedKey') as customer_managed_key,
-                json_extract_path_text(Properties, 'DisconnectTimeoutInMinutes') as disconnect_timeout_in_minutes,
-                json_extract_path_text(Properties, 'DownloadAllowed') as download_allowed,
-                json_extract_path_text(Properties, 'IdleDisconnectTimeoutInMinutes') as idle_disconnect_timeout_in_minutes,
-                json_extract_path_text(Properties, 'PasteAllowed') as paste_allowed,
-                json_extract_path_text(Properties, 'PrintAllowed') as print_allowed,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'UploadAllowed') as upload_allowed,
-                json_extract_path_text(Properties, 'UserSettingsArn') as user_settings_arn
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::WorkSpacesWeb::UserSettings'
-                AND data__Identifier = '<UserSettingsArn>'
+                JSON_EXTRACT(Properties, '$.UserSettingsArn') as user_settings_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::UserSettings'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'AdditionalEncryptionContext') as additional_encryption_context,
+                  json_extract_path_text(Properties, 'AssociatedPortalArns') as associated_portal_arns,
+                  json_extract_path_text(Properties, 'CookieSynchronizationConfiguration') as cookie_synchronization_configuration,
+                  json_extract_path_text(Properties, 'CopyAllowed') as copy_allowed,
+                  json_extract_path_text(Properties, 'CustomerManagedKey') as customer_managed_key,
+                  json_extract_path_text(Properties, 'DisconnectTimeoutInMinutes') as disconnect_timeout_in_minutes,
+                  json_extract_path_text(Properties, 'DownloadAllowed') as download_allowed,
+                  json_extract_path_text(Properties, 'IdleDisconnectTimeoutInMinutes') as idle_disconnect_timeout_in_minutes,
+                  json_extract_path_text(Properties, 'PasteAllowed') as paste_allowed,
+                  json_extract_path_text(Properties, 'PrintAllowed') as print_allowed,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'UploadAllowed') as upload_allowed,
+                  json_extract_path_text(Properties, 'UserSettingsArn') as user_settings_arn
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::WorkSpacesWeb::UserSettings'
+                  AND data__Identifier = '<UserSettingsArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'UserSettingsArn') as user_settings_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::WorkSpacesWeb::UserSettings'
+                    AND region = 'us-east-1'
 paths:
   /?Action=CreateResource&Version=2021-09-30:
     parameters:

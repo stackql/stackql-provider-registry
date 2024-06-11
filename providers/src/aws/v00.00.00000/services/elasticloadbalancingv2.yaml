@@ -386,19 +386,19 @@ components:
       type: object
   schemas:
     MutualAuthentication:
-      type: object
-      additionalProperties: false
-      properties:
-        Mode:
-          type: string
-          description: The client certificate handling method. Options are ``off``, ``passthrough`` or ``verify``. The default value is ``off``.
-        TrustStoreArn:
-          type: string
-          description: The Amazon Resource Name (ARN) of the trust store.
-        IgnoreClientCertificateExpiry:
-          type: boolean
-          description: Indicates whether expired client certificates are ignored.
       description: Specifies the configuration information for mutual authentication.
+      additionalProperties: false
+      type: object
+      properties:
+        IgnoreClientCertificateExpiry:
+          description: Indicates whether expired client certificates are ignored.
+          type: boolean
+        Mode:
+          description: The client certificate handling method. Options are ``off``, ``passthrough`` or ``verify``. The default value is ``off``.
+          type: string
+        TrustStoreArn:
+          description: The Amazon Resource Name (ARN) of the trust store.
+          type: string
     FixedResponseConfig:
       type: object
       additionalProperties: false
@@ -621,58 +621,65 @@ components:
         - AuthorizationEndpoint
       description: Specifies information required using an identity provide (IdP) that is compliant with OpenID Connect (OIDC) to authenticate users.
     Certificate:
-      type: object
+      description: Specifies an SSL server certificate to use as the default certificate for a secure listener.
       additionalProperties: false
+      type: object
       properties:
         CertificateArn:
-          type: string
+          anyOf:
+            - relationshipRef:
+                typeName: AWS::CertificateManager::Certificate
+                propertyPath: /properties/Id
+            - relationshipRef:
+                typeName: AWS::IAM::ServerCertificate
+                propertyPath: /properties/Arn
           description: The Amazon Resource Name (ARN) of the certificate.
-      description: Specifies an SSL server certificate to use as the default certificate for a secure listener.
+          type: string
     Listener:
       type: object
       properties:
-        SslPolicy:
+        ListenerArn:
+          description: ''
           type: string
+        MutualAuthentication:
+          description: The mutual authentication configuration information.
+          $ref: '#/components/schemas/MutualAuthentication'
+        AlpnPolicy:
+          description: '[TLS listener] The name of the Application-Layer Protocol Negotiation (ALPN) policy.'
+          type: array
+          items:
+            type: string
+        SslPolicy:
           description: |-
             [HTTPS and TLS listeners] The security policy that defines which protocols and ciphers are supported.
              Updating the security policy can result in interruptions if the load balancer is handling a high volume of traffic.
              For more information, see [Security policies](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/create-https-listener.html#describe-ssl-policies) in the *Application Load Balancers Guide* and [Security policies](https://docs.aws.amazon.com/elasticloadbalancing/latest/network/create-tls-listener.html#describe-ssl-policies) in the *Network Load Balancers Guide*.
-        LoadBalancerArn:
           type: string
+        LoadBalancerArn:
           description: The Amazon Resource Name (ARN) of the load balancer.
+          type: string
         DefaultActions:
-          type: array
           uniqueItems: true
-          items:
-            $ref: '#/components/schemas/Action'
           description: |-
             The actions for the default rule. You cannot define a condition for a default rule.
              To create additional rules for an Application Load Balancer, use [AWS::ElasticLoadBalancingV2::ListenerRule](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-listenerrule.html).
-        Port:
-          type: integer
-          description: The port on which the load balancer is listening. You cannot specify a port for a Gateway Load Balancer.
-        Certificates:
           type: array
-          uniqueItems: true
           items:
-            $ref: '#/components/schemas/Certificate'
+            $ref: '#/components/schemas/Action'
+        Port:
+          description: The port on which the load balancer is listening. You cannot specify a port for a Gateway Load Balancer.
+          type: integer
+        Certificates:
+          uniqueItems: true
           description: |-
             The default SSL server certificate for a secure listener. You must provide exactly one certificate if the listener protocol is HTTPS or TLS.
              To create a certificate list for a secure listener, use [AWS::ElasticLoadBalancingV2::ListenerCertificate](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-listenercertificate.html).
-        Protocol:
-          type: string
-          description: The protocol for connections from clients to the load balancer. For Application Load Balancers, the supported protocols are HTTP and HTTPS. For Network Load Balancers, the supported protocols are TCP, TLS, UDP, and TCP_UDP. You can’t specify the UDP or TCP_UDP protocol if dual-stack mode is enabled. You cannot specify a protocol for a Gateway Load Balancer.
-        ListenerArn:
-          type: string
-          description: ''
-        AlpnPolicy:
           type: array
           items:
-            type: string
-          description: '[TLS listener] The name of the Application-Layer Protocol Negotiation (ALPN) policy.'
-        MutualAuthentication:
-          $ref: '#/components/schemas/MutualAuthentication'
-          description: The mutual authentication configuration information.
+            $ref: '#/components/schemas/Certificate'
+        Protocol:
+          description: The protocol for connections from clients to the load balancer. For Application Load Balancers, the supported protocols are HTTP and HTTPS. For Network Load Balancers, the supported protocols are TCP, TLS, UDP, and TCP_UDP. You can’t specify the UDP or TCP_UDP protocol if dual-stack mode is enabled. You cannot specify a protocol for a Gateway Load Balancer.
+          type: string
       required:
         - LoadBalancerArn
         - DefaultActions
@@ -696,21 +703,21 @@ components:
         tagUpdatable: false
         cloudFormationSystemTags: false
       x-required-permissions:
+        read:
+          - elasticloadbalancing:DescribeListeners
         create:
           - elasticloadbalancing:CreateListener
           - elasticloadbalancing:DescribeListeners
           - cognito-idp:DescribeUserPoolClient
-        delete:
-          - elasticloadbalancing:DeleteListener
-          - elasticloadbalancing:DescribeListeners
-        list:
-          - elasticloadbalancing:DescribeListeners
-        read:
-          - elasticloadbalancing:DescribeListeners
         update:
           - elasticloadbalancing:ModifyListener
           - elasticloadbalancing:DescribeListeners
           - cognito-idp:DescribeUserPoolClient
+        list:
+          - elasticloadbalancing:DescribeListeners
+        delete:
+          - elasticloadbalancing:DeleteListener
+          - elasticloadbalancing:DescribeListeners
     RuleCondition:
       type: object
       additionalProperties: false
@@ -1489,48 +1496,48 @@ components:
         DesiredState:
           type: object
           properties:
-            SslPolicy:
+            ListenerArn:
+              description: ''
               type: string
+            MutualAuthentication:
+              description: The mutual authentication configuration information.
+              $ref: '#/components/schemas/MutualAuthentication'
+            AlpnPolicy:
+              description: '[TLS listener] The name of the Application-Layer Protocol Negotiation (ALPN) policy.'
+              type: array
+              items:
+                type: string
+            SslPolicy:
               description: |-
                 [HTTPS and TLS listeners] The security policy that defines which protocols and ciphers are supported.
                  Updating the security policy can result in interruptions if the load balancer is handling a high volume of traffic.
                  For more information, see [Security policies](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/create-https-listener.html#describe-ssl-policies) in the *Application Load Balancers Guide* and [Security policies](https://docs.aws.amazon.com/elasticloadbalancing/latest/network/create-tls-listener.html#describe-ssl-policies) in the *Network Load Balancers Guide*.
-            LoadBalancerArn:
               type: string
+            LoadBalancerArn:
               description: The Amazon Resource Name (ARN) of the load balancer.
+              type: string
             DefaultActions:
-              type: array
               uniqueItems: true
-              items:
-                $ref: '#/components/schemas/Action'
               description: |-
                 The actions for the default rule. You cannot define a condition for a default rule.
                  To create additional rules for an Application Load Balancer, use [AWS::ElasticLoadBalancingV2::ListenerRule](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-listenerrule.html).
-            Port:
-              type: integer
-              description: The port on which the load balancer is listening. You cannot specify a port for a Gateway Load Balancer.
-            Certificates:
               type: array
-              uniqueItems: true
               items:
-                $ref: '#/components/schemas/Certificate'
+                $ref: '#/components/schemas/Action'
+            Port:
+              description: The port on which the load balancer is listening. You cannot specify a port for a Gateway Load Balancer.
+              type: integer
+            Certificates:
+              uniqueItems: true
               description: |-
                 The default SSL server certificate for a secure listener. You must provide exactly one certificate if the listener protocol is HTTPS or TLS.
                  To create a certificate list for a secure listener, use [AWS::ElasticLoadBalancingV2::ListenerCertificate](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-listenercertificate.html).
-            Protocol:
-              type: string
-              description: The protocol for connections from clients to the load balancer. For Application Load Balancers, the supported protocols are HTTP and HTTPS. For Network Load Balancers, the supported protocols are TCP, TLS, UDP, and TCP_UDP. You can’t specify the UDP or TCP_UDP protocol if dual-stack mode is enabled. You cannot specify a protocol for a Gateway Load Balancer.
-            ListenerArn:
-              type: string
-              description: ''
-            AlpnPolicy:
               type: array
               items:
-                type: string
-              description: '[TLS listener] The name of the Application-Layer Protocol Negotiation (ALPN) policy.'
-            MutualAuthentication:
-              $ref: '#/components/schemas/MutualAuthentication'
-              description: The mutual authentication configuration information.
+                $ref: '#/components/schemas/Certificate'
+            Protocol:
+              description: The protocol for connections from clients to the load balancer. For Application Load Balancers, the supported protocols are HTTP and HTTPS. For Network Load Balancers, the supported protocols are TCP, TLS, UDP, and TCP_UDP. You can’t specify the UDP or TCP_UDP protocol if dual-stack mode is enabled. You cannot specify a protocol for a Gateway Load Balancer.
+              type: string
           x-stackQL-stringOnly: true
       x-title: CreateListenerRequest
       type: object
@@ -1886,7 +1893,7 @@ components:
       x-cfn-type-name: AWS::ElasticLoadBalancingV2::Listener
       x-identifiers:
         - ListenerArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -1894,6 +1901,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Listener&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::ElasticLoadBalancingV2::Listener"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -1920,86 +1939,62 @@ components:
           - $ref: '#/components/x-stackQL-resources/listeners/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/listeners/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.ListenerArn') as listener_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::Listener'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'ListenerArn') as listener_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::Listener'
-                AND region = 'us-east-1'
-    listener:
-      name: listener
-      id: aws.elasticloadbalancingv2.listener
-      x-cfn-schema-name: Listener
-      x-cfn-type-name: AWS::ElasticLoadBalancingV2::Listener
-      x-identifiers:
-        - ListenerArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::ElasticLoadBalancingV2::Listener"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/listener/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/listeners/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
               data__Identifier,
+              JSON_EXTRACT(Properties, '$.ListenerArn') as listener_arn,
+              JSON_EXTRACT(Properties, '$.MutualAuthentication') as mutual_authentication,
+              JSON_EXTRACT(Properties, '$.AlpnPolicy') as alpn_policy,
               JSON_EXTRACT(Properties, '$.SslPolicy') as ssl_policy,
               JSON_EXTRACT(Properties, '$.LoadBalancerArn') as load_balancer_arn,
               JSON_EXTRACT(Properties, '$.DefaultActions') as default_actions,
               JSON_EXTRACT(Properties, '$.Port') as port,
               JSON_EXTRACT(Properties, '$.Certificates') as certificates,
-              JSON_EXTRACT(Properties, '$.Protocol') as protocol,
-              JSON_EXTRACT(Properties, '$.ListenerArn') as listener_arn,
-              JSON_EXTRACT(Properties, '$.AlpnPolicy') as alpn_policy,
-              JSON_EXTRACT(Properties, '$.MutualAuthentication') as mutual_authentication
+              JSON_EXTRACT(Properties, '$.Protocol') as protocol
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::Listener'
               AND data__Identifier = '<ListenerArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'SslPolicy') as ssl_policy,
-                json_extract_path_text(Properties, 'LoadBalancerArn') as load_balancer_arn,
-                json_extract_path_text(Properties, 'DefaultActions') as default_actions,
-                json_extract_path_text(Properties, 'Port') as port,
-                json_extract_path_text(Properties, 'Certificates') as certificates,
-                json_extract_path_text(Properties, 'Protocol') as protocol,
-                json_extract_path_text(Properties, 'ListenerArn') as listener_arn,
-                json_extract_path_text(Properties, 'AlpnPolicy') as alpn_policy,
-                json_extract_path_text(Properties, 'MutualAuthentication') as mutual_authentication
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::Listener'
-                AND data__Identifier = '<ListenerArn>'
+                JSON_EXTRACT(Properties, '$.ListenerArn') as listener_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::Listener'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'ListenerArn') as listener_arn,
+                  json_extract_path_text(Properties, 'MutualAuthentication') as mutual_authentication,
+                  json_extract_path_text(Properties, 'AlpnPolicy') as alpn_policy,
+                  json_extract_path_text(Properties, 'SslPolicy') as ssl_policy,
+                  json_extract_path_text(Properties, 'LoadBalancerArn') as load_balancer_arn,
+                  json_extract_path_text(Properties, 'DefaultActions') as default_actions,
+                  json_extract_path_text(Properties, 'Port') as port,
+                  json_extract_path_text(Properties, 'Certificates') as certificates,
+                  json_extract_path_text(Properties, 'Protocol') as protocol
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::Listener'
+                  AND data__Identifier = '<ListenerArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'ListenerArn') as listener_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::Listener'
+                    AND region = 'us-east-1'
     listener_rules:
       name: listener_rules
       id: aws.elasticloadbalancingv2.listener_rules
@@ -2007,7 +2002,7 @@ components:
       x-cfn-type-name: AWS::ElasticLoadBalancingV2::ListenerRule
       x-identifiers:
         - RuleArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -2015,6 +2010,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__ListenerRule&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::ElasticLoadBalancingV2::ListenerRule"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -2041,52 +2048,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/listener_rules/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/listener_rules/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.RuleArn') as rule_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::ListenerRule'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'RuleArn') as rule_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::ListenerRule'
-                AND region = 'us-east-1'
-    listener_rule:
-      name: listener_rule
-      id: aws.elasticloadbalancingv2.listener_rule
-      x-cfn-schema-name: ListenerRule
-      x-cfn-type-name: AWS::ElasticLoadBalancingV2::ListenerRule
-      x-identifiers:
-        - RuleArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::ElasticLoadBalancingV2::ListenerRule"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/listener_rule/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/listener_rules/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2101,20 +2068,36 @@ components:
               AND data__Identifier = '<RuleArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'ListenerArn') as listener_arn,
-                json_extract_path_text(Properties, 'RuleArn') as rule_arn,
-                json_extract_path_text(Properties, 'Actions') as actions,
-                json_extract_path_text(Properties, 'Priority') as priority,
-                json_extract_path_text(Properties, 'Conditions') as conditions,
-                json_extract_path_text(Properties, 'IsDefault') as is_default
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::ListenerRule'
-                AND data__Identifier = '<RuleArn>'
+                JSON_EXTRACT(Properties, '$.RuleArn') as rule_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::ListenerRule'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'ListenerArn') as listener_arn,
+                  json_extract_path_text(Properties, 'RuleArn') as rule_arn,
+                  json_extract_path_text(Properties, 'Actions') as actions,
+                  json_extract_path_text(Properties, 'Priority') as priority,
+                  json_extract_path_text(Properties, 'Conditions') as conditions,
+                  json_extract_path_text(Properties, 'IsDefault') as is_default
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::ListenerRule'
+                  AND data__Identifier = '<RuleArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'RuleArn') as rule_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::ListenerRule'
+                    AND region = 'us-east-1'
     load_balancers:
       name: load_balancers
       id: aws.elasticloadbalancingv2.load_balancers
@@ -2122,7 +2105,7 @@ components:
       x-cfn-type-name: AWS::ElasticLoadBalancingV2::LoadBalancer
       x-identifiers:
         - LoadBalancerArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -2130,6 +2113,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__LoadBalancer&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::ElasticLoadBalancingV2::LoadBalancer"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -2156,52 +2151,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/load_balancers/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/load_balancers/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.LoadBalancerArn') as load_balancer_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::LoadBalancer'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'LoadBalancerArn') as load_balancer_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::LoadBalancer'
-                AND region = 'us-east-1'
-    load_balancer:
-      name: load_balancer
-      id: aws.elasticloadbalancingv2.load_balancer
-      x-cfn-schema-name: LoadBalancer
-      x-cfn-type-name: AWS::ElasticLoadBalancingV2::LoadBalancer
-      x-identifiers:
-        - LoadBalancerArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::ElasticLoadBalancingV2::LoadBalancer"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/load_balancer/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/load_balancers/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2225,29 +2180,45 @@ components:
               AND data__Identifier = '<LoadBalancerArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'IpAddressType') as ip_address_type,
-                json_extract_path_text(Properties, 'SecurityGroups') as security_groups,
-                json_extract_path_text(Properties, 'LoadBalancerAttributes') as load_balancer_attributes,
-                json_extract_path_text(Properties, 'Scheme') as scheme,
-                json_extract_path_text(Properties, 'DNSName') as dns_name,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'LoadBalancerName') as load_balancer_name,
-                json_extract_path_text(Properties, 'LoadBalancerFullName') as load_balancer_full_name,
-                json_extract_path_text(Properties, 'Subnets') as subnets,
-                json_extract_path_text(Properties, 'Type') as type,
-                json_extract_path_text(Properties, 'CanonicalHostedZoneID') as canonical_hosted_zone_id,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'LoadBalancerArn') as load_balancer_arn,
-                json_extract_path_text(Properties, 'SubnetMappings') as subnet_mappings,
-                json_extract_path_text(Properties, 'EnforceSecurityGroupInboundRulesOnPrivateLinkTraffic') as enforce_security_group_inbound_rules_on_private_link_traffic
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::LoadBalancer'
-                AND data__Identifier = '<LoadBalancerArn>'
+                JSON_EXTRACT(Properties, '$.LoadBalancerArn') as load_balancer_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::LoadBalancer'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'IpAddressType') as ip_address_type,
+                  json_extract_path_text(Properties, 'SecurityGroups') as security_groups,
+                  json_extract_path_text(Properties, 'LoadBalancerAttributes') as load_balancer_attributes,
+                  json_extract_path_text(Properties, 'Scheme') as scheme,
+                  json_extract_path_text(Properties, 'DNSName') as dns_name,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'LoadBalancerName') as load_balancer_name,
+                  json_extract_path_text(Properties, 'LoadBalancerFullName') as load_balancer_full_name,
+                  json_extract_path_text(Properties, 'Subnets') as subnets,
+                  json_extract_path_text(Properties, 'Type') as type,
+                  json_extract_path_text(Properties, 'CanonicalHostedZoneID') as canonical_hosted_zone_id,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'LoadBalancerArn') as load_balancer_arn,
+                  json_extract_path_text(Properties, 'SubnetMappings') as subnet_mappings,
+                  json_extract_path_text(Properties, 'EnforceSecurityGroupInboundRulesOnPrivateLinkTraffic') as enforce_security_group_inbound_rules_on_private_link_traffic
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+                  AND data__Identifier = '<LoadBalancerArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'LoadBalancerArn') as load_balancer_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+                    AND region = 'us-east-1'
     target_groups:
       name: target_groups
       id: aws.elasticloadbalancingv2.target_groups
@@ -2255,7 +2226,7 @@ components:
       x-cfn-type-name: AWS::ElasticLoadBalancingV2::TargetGroup
       x-identifiers:
         - TargetGroupArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -2263,6 +2234,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__TargetGroup&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::ElasticLoadBalancingV2::TargetGroup"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -2289,52 +2272,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/target_groups/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/target_groups/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.TargetGroupArn') as target_group_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TargetGroup'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'TargetGroupArn') as target_group_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TargetGroup'
-                AND region = 'us-east-1'
-    target_group:
-      name: target_group
-      id: aws.elasticloadbalancingv2.target_group
-      x-cfn-schema-name: TargetGroup
-      x-cfn-type-name: AWS::ElasticLoadBalancingV2::TargetGroup
-      x-identifiers:
-        - TargetGroupArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::ElasticLoadBalancingV2::TargetGroup"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/target_group/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/target_groups/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2366,37 +2309,53 @@ components:
               AND data__Identifier = '<TargetGroupArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'IpAddressType') as ip_address_type,
-                json_extract_path_text(Properties, 'HealthCheckIntervalSeconds') as health_check_interval_seconds,
-                json_extract_path_text(Properties, 'LoadBalancerArns') as load_balancer_arns,
-                json_extract_path_text(Properties, 'Matcher') as matcher,
-                json_extract_path_text(Properties, 'HealthCheckPath') as health_check_path,
-                json_extract_path_text(Properties, 'Port') as port,
-                json_extract_path_text(Properties, 'Targets') as targets,
-                json_extract_path_text(Properties, 'HealthCheckEnabled') as health_check_enabled,
-                json_extract_path_text(Properties, 'ProtocolVersion') as protocol_version,
-                json_extract_path_text(Properties, 'UnhealthyThresholdCount') as unhealthy_threshold_count,
-                json_extract_path_text(Properties, 'HealthCheckTimeoutSeconds') as health_check_timeout_seconds,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'VpcId') as vpc_id,
-                json_extract_path_text(Properties, 'TargetGroupFullName') as target_group_full_name,
-                json_extract_path_text(Properties, 'HealthyThresholdCount') as healthy_threshold_count,
-                json_extract_path_text(Properties, 'HealthCheckProtocol') as health_check_protocol,
-                json_extract_path_text(Properties, 'TargetGroupAttributes') as target_group_attributes,
-                json_extract_path_text(Properties, 'TargetType') as target_type,
-                json_extract_path_text(Properties, 'HealthCheckPort') as health_check_port,
-                json_extract_path_text(Properties, 'TargetGroupArn') as target_group_arn,
-                json_extract_path_text(Properties, 'Protocol') as protocol,
-                json_extract_path_text(Properties, 'TargetGroupName') as target_group_name,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TargetGroup'
-                AND data__Identifier = '<TargetGroupArn>'
+                JSON_EXTRACT(Properties, '$.TargetGroupArn') as target_group_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TargetGroup'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'IpAddressType') as ip_address_type,
+                  json_extract_path_text(Properties, 'HealthCheckIntervalSeconds') as health_check_interval_seconds,
+                  json_extract_path_text(Properties, 'LoadBalancerArns') as load_balancer_arns,
+                  json_extract_path_text(Properties, 'Matcher') as matcher,
+                  json_extract_path_text(Properties, 'HealthCheckPath') as health_check_path,
+                  json_extract_path_text(Properties, 'Port') as port,
+                  json_extract_path_text(Properties, 'Targets') as targets,
+                  json_extract_path_text(Properties, 'HealthCheckEnabled') as health_check_enabled,
+                  json_extract_path_text(Properties, 'ProtocolVersion') as protocol_version,
+                  json_extract_path_text(Properties, 'UnhealthyThresholdCount') as unhealthy_threshold_count,
+                  json_extract_path_text(Properties, 'HealthCheckTimeoutSeconds') as health_check_timeout_seconds,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'VpcId') as vpc_id,
+                  json_extract_path_text(Properties, 'TargetGroupFullName') as target_group_full_name,
+                  json_extract_path_text(Properties, 'HealthyThresholdCount') as healthy_threshold_count,
+                  json_extract_path_text(Properties, 'HealthCheckProtocol') as health_check_protocol,
+                  json_extract_path_text(Properties, 'TargetGroupAttributes') as target_group_attributes,
+                  json_extract_path_text(Properties, 'TargetType') as target_type,
+                  json_extract_path_text(Properties, 'HealthCheckPort') as health_check_port,
+                  json_extract_path_text(Properties, 'TargetGroupArn') as target_group_arn,
+                  json_extract_path_text(Properties, 'Protocol') as protocol,
+                  json_extract_path_text(Properties, 'TargetGroupName') as target_group_name,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TargetGroup'
+                  AND data__Identifier = '<TargetGroupArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'TargetGroupArn') as target_group_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TargetGroup'
+                    AND region = 'us-east-1'
     trust_stores:
       name: trust_stores
       id: aws.elasticloadbalancingv2.trust_stores
@@ -2404,7 +2363,7 @@ components:
       x-cfn-type-name: AWS::ElasticLoadBalancingV2::TrustStore
       x-identifiers:
         - TrustStoreArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -2412,6 +2371,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__TrustStore&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::ElasticLoadBalancingV2::TrustStore"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -2438,52 +2409,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/trust_stores/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/trust_stores/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.TrustStoreArn') as trust_store_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TrustStore'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'TrustStoreArn') as trust_store_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TrustStore'
-                AND region = 'us-east-1'
-    trust_store:
-      name: trust_store
-      id: aws.elasticloadbalancingv2.trust_store
-      x-cfn-schema-name: TrustStore
-      x-cfn-type-name: AWS::ElasticLoadBalancingV2::TrustStore
-      x-identifiers:
-        - TrustStoreArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::ElasticLoadBalancingV2::TrustStore"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/trust_store/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/trust_stores/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2500,22 +2431,38 @@ components:
               AND data__Identifier = '<TrustStoreArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'CaCertificatesBundleS3Bucket') as ca_certificates_bundle_s3_bucket,
-                json_extract_path_text(Properties, 'CaCertificatesBundleS3Key') as ca_certificates_bundle_s3_key,
-                json_extract_path_text(Properties, 'CaCertificatesBundleS3ObjectVersion') as ca_certificates_bundle_s3_object_version,
-                json_extract_path_text(Properties, 'Status') as status,
-                json_extract_path_text(Properties, 'NumberOfCaCertificates') as number_of_ca_certificates,
-                json_extract_path_text(Properties, 'Tags') as tags,
-                json_extract_path_text(Properties, 'TrustStoreArn') as trust_store_arn
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TrustStore'
-                AND data__Identifier = '<TrustStoreArn>'
+                JSON_EXTRACT(Properties, '$.TrustStoreArn') as trust_store_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TrustStore'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'CaCertificatesBundleS3Bucket') as ca_certificates_bundle_s3_bucket,
+                  json_extract_path_text(Properties, 'CaCertificatesBundleS3Key') as ca_certificates_bundle_s3_key,
+                  json_extract_path_text(Properties, 'CaCertificatesBundleS3ObjectVersion') as ca_certificates_bundle_s3_object_version,
+                  json_extract_path_text(Properties, 'Status') as status,
+                  json_extract_path_text(Properties, 'NumberOfCaCertificates') as number_of_ca_certificates,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'TrustStoreArn') as trust_store_arn
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TrustStore'
+                  AND data__Identifier = '<TrustStoreArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'TrustStoreArn') as trust_store_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TrustStore'
+                    AND region = 'us-east-1'
     trust_store_revocations:
       name: trust_store_revocations
       id: aws.elasticloadbalancingv2.trust_store_revocations
@@ -2524,7 +2471,7 @@ components:
       x-identifiers:
         - RevocationId
         - TrustStoreArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -2558,42 +2505,11 @@ components:
           - $ref: '#/components/x-stackQL-resources/trust_store_revocations/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/trust_store_revocations/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.RevocationId') as revocation_id,
-              JSON_EXTRACT(Properties, '$.TrustStoreArn') as trust_store_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TrustStoreRevocation'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'RevocationId') as revocation_id,
-                json_extract_path_text(Properties, 'TrustStoreArn') as trust_store_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TrustStoreRevocation'
-                AND region = 'us-east-1'
-    trust_store_revocation:
-      name: trust_store_revocation
-      id: aws.elasticloadbalancingv2.trust_store_revocation
-      x-cfn-schema-name: TrustStoreRevocation
-      x-cfn-type-name: AWS::ElasticLoadBalancingV2::TrustStoreRevocation
-      x-identifiers:
-        - RevocationId
-        - TrustStoreArn
-      x-type: get
-      methods: {}
-      sqlVerbs:
         update: []
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -2606,18 +2522,36 @@ components:
               AND data__Identifier = '<RevocationId>|<TrustStoreArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'RevocationContents') as revocation_contents,
-                json_extract_path_text(Properties, 'TrustStoreArn') as trust_store_arn,
-                json_extract_path_text(Properties, 'RevocationId') as revocation_id,
-                json_extract_path_text(Properties, 'TrustStoreRevocations') as trust_store_revocations
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TrustStoreRevocation'
-                AND data__Identifier = '<RevocationId>|<TrustStoreArn>'
+                JSON_EXTRACT(Properties, '$.RevocationId') as revocation_id,
+                JSON_EXTRACT(Properties, '$.TrustStoreArn') as trust_store_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TrustStoreRevocation'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'RevocationContents') as revocation_contents,
+                  json_extract_path_text(Properties, 'TrustStoreArn') as trust_store_arn,
+                  json_extract_path_text(Properties, 'RevocationId') as revocation_id,
+                  json_extract_path_text(Properties, 'TrustStoreRevocations') as trust_store_revocations
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TrustStoreRevocation'
+                  AND data__Identifier = '<RevocationId>|<TrustStoreArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'RevocationId') as revocation_id,
+                    json_extract_path_text(Properties, 'TrustStoreArn') as trust_store_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::ElasticLoadBalancingV2::TrustStoreRevocation'
+                    AND region = 'us-east-1'
 paths:
   /?Action=CreateResource&Version=2021-09-30:
     parameters:

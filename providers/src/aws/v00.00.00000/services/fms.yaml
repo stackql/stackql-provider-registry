@@ -511,6 +511,100 @@ components:
       enum:
         - DISTRIBUTED
         - CENTRALIZED
+    NetworkAclEntry:
+      description: Network ACL entry.
+      type: object
+      properties:
+        CidrBlock:
+          description: CIDR block.
+          type: string
+          pattern: ^(([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+        Egress:
+          description: Whether the entry is an egress entry.
+          type: boolean
+        IcmpTypeCode:
+          description: ICMP type and code.
+          type: object
+          properties:
+            Code:
+              description: Code.
+              type: integer
+              minimum: 0
+              maximum: 255
+            Type:
+              description: Type.
+              type: integer
+              minimum: 0
+              maximum: 255
+          additionalProperties: false
+          required:
+            - Code
+            - Type
+        Ipv6CidrBlock:
+          type: string
+          description: IPv6 CIDR block.
+          pattern: >-
+            ^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))(/(1[0-2]|[0-9]))?$
+        PortRange:
+          type: object
+          description: Port range.
+          properties:
+            From:
+              description: From Port.
+              type: integer
+              minimum: 0
+              maximum: 65535
+            To:
+              description: To Port.
+              type: integer
+              minimum: 0
+              maximum: 65535
+          additionalProperties: false
+          required:
+            - From
+            - To
+        Protocol:
+          description: Protocol.
+          type: string
+          pattern: ^(tcp|udp|icmp|([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5]))$
+        RuleAction:
+          description: Rule Action.
+          type: string
+          enum:
+            - allow
+            - deny
+      additionalProperties: false
+      required:
+        - Egress
+        - Protocol
+        - RuleAction
+    NetworkAclEntryList:
+      description: NetworkAcl entry list.
+      type: array
+      items:
+        $ref: '#/components/schemas/NetworkAclEntry'
+      x-insertionOrder: true
+    NetworkAclEntrySet:
+      description: Network ACL entry set.
+      type: object
+      properties:
+        FirstEntries:
+          $ref: '#/components/schemas/NetworkAclEntryList'
+        ForceRemediateForFirstEntries:
+          type: boolean
+        LastEntries:
+          $ref: '#/components/schemas/NetworkAclEntryList'
+        ForceRemediateForLastEntries:
+          type: boolean
+      additionalProperties: false
+      required:
+        - ForceRemediateForFirstEntries
+        - ForceRemediateForLastEntries
+      anyOf:
+        - required:
+            - FirstEntries
+        - required:
+            - LastEntries
     ManagedServiceData:
       description: Firewall managed service data.
       type: string
@@ -530,6 +624,7 @@ components:
         - THIRD_PARTY_FIREWALL
         - DNS_FIREWALL
         - IMPORT_NETWORK_FIREWALL
+        - NETWORK_ACL_COMMON
     NetworkFirewallPolicy:
       description: Network firewall policy.
       type: object
@@ -548,6 +643,15 @@ components:
       additionalProperties: false
       required:
         - FirewallDeploymentModel
+    NetworkAclCommonPolicy:
+      description: Network ACL common policy.
+      type: object
+      properties:
+        NetworkAclEntrySet:
+          $ref: '#/components/schemas/NetworkAclEntrySet'
+      additionalProperties: false
+      required:
+        - NetworkAclEntrySet
     PolicyOption:
       description: Firewall policy option.
       type: object
@@ -556,12 +660,16 @@ components:
           $ref: '#/components/schemas/NetworkFirewallPolicy'
         ThirdPartyFirewallPolicy:
           $ref: '#/components/schemas/ThirdPartyFirewallPolicy'
+        NetworkAclCommonPolicy:
+          $ref: '#/components/schemas/NetworkAclCommonPolicy'
       additionalProperties: false
       oneOf:
         - required:
             - NetworkFirewallPolicy
         - required:
             - ThirdPartyFirewallPolicy
+        - required:
+            - NetworkAclCommonPolicy
     Policy:
       type: object
       properties:
@@ -929,7 +1037,7 @@ components:
       x-cfn-type-name: AWS::FMS::NotificationChannel
       x-identifiers:
         - SnsTopicArn
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -937,6 +1045,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__NotificationChannel&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::FMS::NotificationChannel"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -963,52 +1083,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/notification_channels/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/notification_channels/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.SnsTopicArn') as sns_topic_arn
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::FMS::NotificationChannel'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'SnsTopicArn') as sns_topic_arn
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::FMS::NotificationChannel'
-                AND region = 'us-east-1'
-    notification_channel:
-      name: notification_channel
-      id: aws.fms.notification_channel
-      x-cfn-schema-name: NotificationChannel
-      x-cfn-type-name: AWS::FMS::NotificationChannel
-      x-identifiers:
-        - SnsTopicArn
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::FMS::NotificationChannel"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/notification_channel/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/notification_channels/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -1019,16 +1099,32 @@ components:
               AND data__Identifier = '<SnsTopicArn>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'SnsRoleName') as sns_role_name,
-                json_extract_path_text(Properties, 'SnsTopicArn') as sns_topic_arn
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::FMS::NotificationChannel'
-                AND data__Identifier = '<SnsTopicArn>'
+                JSON_EXTRACT(Properties, '$.SnsTopicArn') as sns_topic_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::FMS::NotificationChannel'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'SnsRoleName') as sns_role_name,
+                  json_extract_path_text(Properties, 'SnsTopicArn') as sns_topic_arn
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::FMS::NotificationChannel'
+                  AND data__Identifier = '<SnsTopicArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'SnsTopicArn') as sns_topic_arn
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::FMS::NotificationChannel'
+                    AND region = 'us-east-1'
     policies:
       name: policies
       id: aws.fms.policies
@@ -1036,7 +1132,7 @@ components:
       x-cfn-type-name: AWS::FMS::Policy
       x-identifiers:
         - Id
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -1044,6 +1140,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Policy&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::FMS::Policy"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -1070,52 +1178,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/policies/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/policies/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.Id') as id
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::FMS::Policy'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'Id') as id
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::FMS::Policy'
-                AND region = 'us-east-1'
-    policy:
-      name: policy
-      id: aws.fms.policy
-      x-cfn-schema-name: Policy
-      x-cfn-type-name: AWS::FMS::Policy
-      x-identifiers:
-        - Id
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::FMS::Policy"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/policy/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/policies/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -1140,30 +1208,46 @@ components:
               AND data__Identifier = '<Id>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'ExcludeMap') as exclude_map,
-                json_extract_path_text(Properties, 'ExcludeResourceTags') as exclude_resource_tags,
-                json_extract_path_text(Properties, 'IncludeMap') as include_map,
-                json_extract_path_text(Properties, 'Id') as id,
-                json_extract_path_text(Properties, 'PolicyName') as policy_name,
-                json_extract_path_text(Properties, 'PolicyDescription') as policy_description,
-                json_extract_path_text(Properties, 'RemediationEnabled') as remediation_enabled,
-                json_extract_path_text(Properties, 'ResourceTags') as resource_tags,
-                json_extract_path_text(Properties, 'ResourceType') as resource_type,
-                json_extract_path_text(Properties, 'ResourceTypeList') as resource_type_list,
-                json_extract_path_text(Properties, 'ResourceSetIds') as resource_set_ids,
-                json_extract_path_text(Properties, 'SecurityServicePolicyData') as security_service_policy_data,
-                json_extract_path_text(Properties, 'Arn') as arn,
-                json_extract_path_text(Properties, 'DeleteAllPolicyResources') as delete_all_policy_resources,
-                json_extract_path_text(Properties, 'ResourcesCleanUp') as resources_clean_up,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::FMS::Policy'
-                AND data__Identifier = '<Id>'
+                JSON_EXTRACT(Properties, '$.Id') as id
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::FMS::Policy'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'ExcludeMap') as exclude_map,
+                  json_extract_path_text(Properties, 'ExcludeResourceTags') as exclude_resource_tags,
+                  json_extract_path_text(Properties, 'IncludeMap') as include_map,
+                  json_extract_path_text(Properties, 'Id') as id,
+                  json_extract_path_text(Properties, 'PolicyName') as policy_name,
+                  json_extract_path_text(Properties, 'PolicyDescription') as policy_description,
+                  json_extract_path_text(Properties, 'RemediationEnabled') as remediation_enabled,
+                  json_extract_path_text(Properties, 'ResourceTags') as resource_tags,
+                  json_extract_path_text(Properties, 'ResourceType') as resource_type,
+                  json_extract_path_text(Properties, 'ResourceTypeList') as resource_type_list,
+                  json_extract_path_text(Properties, 'ResourceSetIds') as resource_set_ids,
+                  json_extract_path_text(Properties, 'SecurityServicePolicyData') as security_service_policy_data,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'DeleteAllPolicyResources') as delete_all_policy_resources,
+                  json_extract_path_text(Properties, 'ResourcesCleanUp') as resources_clean_up,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::FMS::Policy'
+                  AND data__Identifier = '<Id>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'Id') as id
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::FMS::Policy'
+                    AND region = 'us-east-1'
     resource_sets:
       name: resource_sets
       id: aws.fms.resource_sets
@@ -1171,7 +1255,7 @@ components:
       x-cfn-type-name: AWS::FMS::ResourceSet
       x-identifiers:
         - Id
-      x-type: list
+      x-type: cloud_control
       methods:
         create_resource:
           config:
@@ -1179,6 +1263,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__ResourceSet&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::FMS::ResourceSet"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -1205,52 +1301,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/resource_sets/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/resource_sets/methods/delete_resource'
-      config:
-        views:
-          select:
-            predicate: sqlDialect == "sqlite3"
-            ddl: |-
-              SELECT
-              region,
-              JSON_EXTRACT(Properties, '$.Id') as id
-              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::FMS::ResourceSet'
-              AND region = 'us-east-1'
-            fallback:
-              predicate: sqlDialect == "postgres"
-              ddl: |-
-                SELECT
-                region,
-                json_extract_path_text(Properties, 'Id') as id
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::FMS::ResourceSet'
-                AND region = 'us-east-1'
-    resource_set:
-      name: resource_set
-      id: aws.fms.resource_set
-      x-cfn-schema-name: ResourceSet
-      x-cfn-type-name: AWS::FMS::ResourceSet
-      x-identifiers:
-        - Id
-      x-type: get
-      methods:
-        update_resource:
-          operation:
-            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
-          request:
-            mediaType: application/x-amz-json-1.0
-            base: |-
-              {
-                "TypeName": "AWS::FMS::ResourceSet"
-              }
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
         update:
-          - $ref: '#/components/x-stackQL-resources/resource_set/methods/update_resource'
+          - $ref: '#/components/x-stackQL-resources/resource_sets/methods/update_resource'
       config:
         views:
           select:
-            predicate: sqlDialect == "sqlite3"
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
             ddl: |-
               SELECT
               region,
@@ -1265,20 +1321,36 @@ components:
               AND data__Identifier = '<Id>'
               AND region = 'us-east-1'
             fallback:
-              predicate: sqlDialect == "postgres"
+              predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
                 region,
-                data__Identifier,
-                json_extract_path_text(Properties, 'Id') as id,
-                json_extract_path_text(Properties, 'Name') as name,
-                json_extract_path_text(Properties, 'Description') as description,
-                json_extract_path_text(Properties, 'ResourceTypeList') as resource_type_list,
-                json_extract_path_text(Properties, 'Resources') as resources,
-                json_extract_path_text(Properties, 'Tags') as tags
-                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::FMS::ResourceSet'
-                AND data__Identifier = '<Id>'
+                JSON_EXTRACT(Properties, '$.Id') as id
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::FMS::ResourceSet'
                 AND region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Id') as id,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'Description') as description,
+                  json_extract_path_text(Properties, 'ResourceTypeList') as resource_type_list,
+                  json_extract_path_text(Properties, 'Resources') as resources,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::FMS::ResourceSet'
+                  AND data__Identifier = '<Id>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    region,
+                    json_extract_path_text(Properties, 'Id') as id
+                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::FMS::ResourceSet'
+                    AND region = 'us-east-1'
 paths:
   /?Action=CreateResource&Version=2021-09-30:
     parameters:
