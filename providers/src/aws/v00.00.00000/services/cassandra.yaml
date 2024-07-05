@@ -998,10 +998,17 @@ components:
               predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
-                region,
-                JSON_EXTRACT(Properties, '$.KeyspaceName') as keyspace_name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Cassandra::Keyspace'
-                AND region = 'us-east-1'
+                detail.region,
+                JSON_EXTRACT(detail.Properties, '$.KeyspaceName') as keyspace_name,
+                JSON_EXTRACT(detail.Properties, '$.Tags') as tags,
+                JSON_EXTRACT(detail.Properties, '$.ReplicationSpecification') as replication_specification
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                WHERE listing.data__TypeName = 'AWS::Cassandra::Keyspace'
+                AND detail.data__TypeName = 'AWS::Cassandra::Keyspace'
+                AND listing.region = 'us-east-1'
               fallback:
                 predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
                 ddl: |-
@@ -1018,10 +1025,95 @@ components:
                   predicate: sqlDialect == "postgres"
                   ddl: |-
                     SELECT
-                    region,
-                    json_extract_path_text(Properties, 'KeyspaceName') as keyspace_name
-                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Cassandra::Keyspace'
-                    AND region = 'us-east-1'
+                    detail.region,
+                    json_extract_path_text(detail.Properties, 'KeyspaceName') as keyspace_name,
+                    json_extract_path_text(detail.Properties, 'Tags') as tags,
+                    json_extract_path_text(detail.Properties, 'ReplicationSpecification') as replication_specification
+                    FROM aws.cloud_control.resources listing
+                    INNER JOIN aws.cloud_control.resource detail
+                    ON detail.data__Identifier = listing.Identifier
+                    AND detail.region = listing.region
+                    WHERE listing.data__TypeName = 'AWS::Cassandra::Keyspace'
+                    AND detail.data__TypeName = 'AWS::Cassandra::Keyspace'
+                    AND listing.region = 'us-east-1'
+    keyspaces_list_only:
+      name: keyspaces_list_only
+      id: aws.cassandra.keyspaces_list_only
+      x-cfn-schema-name: Keyspace
+      x-cfn-type-name: AWS::Cassandra::Keyspace
+      x-identifiers:
+        - KeyspaceName
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.KeyspaceName') as keyspace_name
+              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Cassandra::Keyspace'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                json_extract_path_text(Properties, 'KeyspaceName') as keyspace_name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Cassandra::Keyspace'
+                AND region = 'us-east-1'
+    keyspace_tags:
+      name: keyspace_tags
+      id: aws.cassandra.keyspace_tags
+      x-cfn-schema-name: Keyspace
+      x-cfn-type-name: AWS::Cassandra::Keyspace
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              detail.region,
+              JSON_EXTRACT(json_each.value, '$.Key') as tag_key,
+              JSON_EXTRACT(json_each.value, '$.Value') as tag_value,
+              JSON_EXTRACT(detail.Properties, '$.KeyspaceName') as keyspace_name,
+              JSON_EXTRACT(detail.Properties, '$.ReplicationSpecification') as replication_specification
+              FROM aws.cloud_control.resources listing
+              INNER JOIN aws.cloud_control.resource detail
+              ON detail.data__Identifier = listing.Identifier
+              AND detail.region = listing.region
+              ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
+              WHERE listing.data__TypeName = 'AWS::Cassandra::Keyspace'
+              AND detail.data__TypeName = 'AWS::Cassandra::Keyspace'
+              AND listing.region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                detail.region,
+                json_extract_path_text(json_each.value, 'Key') as tag_key,
+                json_extract_path_text(json_each.value, 'Value') as tag_value,
+                json_extract_path_text(detail.Properties, 'KeyspaceName') as keyspace_name,
+                json_extract_path_text(detail.Properties, 'ReplicationSpecification') as replication_specification
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
+                WHERE listing.data__TypeName = 'AWS::Cassandra::Keyspace'
+                AND detail.data__TypeName = 'AWS::Cassandra::Keyspace'
+                AND listing.region = 'us-east-1'
     tables:
       name: tables
       id: aws.cassandra.tables
@@ -1106,11 +1198,27 @@ components:
               predicate: sqlDialect == "sqlite3"
               ddl: |-
                 SELECT
-                region,
-                JSON_EXTRACT(Properties, '$.KeyspaceName') as keyspace_name,
-                JSON_EXTRACT(Properties, '$.TableName') as table_name
-                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Cassandra::Table'
-                AND region = 'us-east-1'
+                detail.region,
+                JSON_EXTRACT(detail.Properties, '$.KeyspaceName') as keyspace_name,
+                JSON_EXTRACT(detail.Properties, '$.TableName') as table_name,
+                JSON_EXTRACT(detail.Properties, '$.RegularColumns') as regular_columns,
+                JSON_EXTRACT(detail.Properties, '$.PartitionKeyColumns') as partition_key_columns,
+                JSON_EXTRACT(detail.Properties, '$.ClusteringKeyColumns') as clustering_key_columns,
+                JSON_EXTRACT(detail.Properties, '$.BillingMode') as billing_mode,
+                JSON_EXTRACT(detail.Properties, '$.PointInTimeRecoveryEnabled') as point_in_time_recovery_enabled,
+                JSON_EXTRACT(detail.Properties, '$.ClientSideTimestampsEnabled') as client_side_timestamps_enabled,
+                JSON_EXTRACT(detail.Properties, '$.Tags') as tags,
+                JSON_EXTRACT(detail.Properties, '$.DefaultTimeToLive') as default_time_to_live,
+                JSON_EXTRACT(detail.Properties, '$.EncryptionSpecification') as encryption_specification,
+                JSON_EXTRACT(detail.Properties, '$.AutoScalingSpecifications') as auto_scaling_specifications,
+                JSON_EXTRACT(detail.Properties, '$.ReplicaSpecifications') as replica_specifications
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                WHERE listing.data__TypeName = 'AWS::Cassandra::Table'
+                AND detail.data__TypeName = 'AWS::Cassandra::Table'
+                AND listing.region = 'us-east-1'
               fallback:
                 predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
                 ddl: |-
@@ -1137,11 +1245,128 @@ components:
                   predicate: sqlDialect == "postgres"
                   ddl: |-
                     SELECT
-                    region,
-                    json_extract_path_text(Properties, 'KeyspaceName') as keyspace_name,
-                    json_extract_path_text(Properties, 'TableName') as table_name
-                    FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Cassandra::Table'
-                    AND region = 'us-east-1'
+                    detail.region,
+                    json_extract_path_text(detail.Properties, 'KeyspaceName') as keyspace_name,
+                    json_extract_path_text(detail.Properties, 'TableName') as table_name,
+                    json_extract_path_text(detail.Properties, 'RegularColumns') as regular_columns,
+                    json_extract_path_text(detail.Properties, 'PartitionKeyColumns') as partition_key_columns,
+                    json_extract_path_text(detail.Properties, 'ClusteringKeyColumns') as clustering_key_columns,
+                    json_extract_path_text(detail.Properties, 'BillingMode') as billing_mode,
+                    json_extract_path_text(detail.Properties, 'PointInTimeRecoveryEnabled') as point_in_time_recovery_enabled,
+                    json_extract_path_text(detail.Properties, 'ClientSideTimestampsEnabled') as client_side_timestamps_enabled,
+                    json_extract_path_text(detail.Properties, 'Tags') as tags,
+                    json_extract_path_text(detail.Properties, 'DefaultTimeToLive') as default_time_to_live,
+                    json_extract_path_text(detail.Properties, 'EncryptionSpecification') as encryption_specification,
+                    json_extract_path_text(detail.Properties, 'AutoScalingSpecifications') as auto_scaling_specifications,
+                    json_extract_path_text(detail.Properties, 'ReplicaSpecifications') as replica_specifications
+                    FROM aws.cloud_control.resources listing
+                    INNER JOIN aws.cloud_control.resource detail
+                    ON detail.data__Identifier = listing.Identifier
+                    AND detail.region = listing.region
+                    WHERE listing.data__TypeName = 'AWS::Cassandra::Table'
+                    AND detail.data__TypeName = 'AWS::Cassandra::Table'
+                    AND listing.region = 'us-east-1'
+    tables_list_only:
+      name: tables_list_only
+      id: aws.cassandra.tables_list_only
+      x-cfn-schema-name: Table
+      x-cfn-type-name: AWS::Cassandra::Table
+      x-identifiers:
+        - KeyspaceName
+        - TableName
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.KeyspaceName') as keyspace_name,
+              JSON_EXTRACT(Properties, '$.TableName') as table_name
+              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Cassandra::Table'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                json_extract_path_text(Properties, 'KeyspaceName') as keyspace_name,
+                json_extract_path_text(Properties, 'TableName') as table_name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Cassandra::Table'
+                AND region = 'us-east-1'
+    table_tags:
+      name: table_tags
+      id: aws.cassandra.table_tags
+      x-cfn-schema-name: Table
+      x-cfn-type-name: AWS::Cassandra::Table
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              detail.region,
+              JSON_EXTRACT(json_each.value, '$.Key') as tag_key,
+              JSON_EXTRACT(json_each.value, '$.Value') as tag_value,
+              JSON_EXTRACT(detail.Properties, '$.KeyspaceName') as keyspace_name,
+              JSON_EXTRACT(detail.Properties, '$.TableName') as table_name,
+              JSON_EXTRACT(detail.Properties, '$.RegularColumns') as regular_columns,
+              JSON_EXTRACT(detail.Properties, '$.PartitionKeyColumns') as partition_key_columns,
+              JSON_EXTRACT(detail.Properties, '$.ClusteringKeyColumns') as clustering_key_columns,
+              JSON_EXTRACT(detail.Properties, '$.BillingMode') as billing_mode,
+              JSON_EXTRACT(detail.Properties, '$.PointInTimeRecoveryEnabled') as point_in_time_recovery_enabled,
+              JSON_EXTRACT(detail.Properties, '$.ClientSideTimestampsEnabled') as client_side_timestamps_enabled,
+              JSON_EXTRACT(detail.Properties, '$.DefaultTimeToLive') as default_time_to_live,
+              JSON_EXTRACT(detail.Properties, '$.EncryptionSpecification') as encryption_specification,
+              JSON_EXTRACT(detail.Properties, '$.AutoScalingSpecifications') as auto_scaling_specifications,
+              JSON_EXTRACT(detail.Properties, '$.ReplicaSpecifications') as replica_specifications
+              FROM aws.cloud_control.resources listing
+              INNER JOIN aws.cloud_control.resource detail
+              ON detail.data__Identifier = listing.Identifier
+              AND detail.region = listing.region
+              ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
+              WHERE listing.data__TypeName = 'AWS::Cassandra::Table'
+              AND detail.data__TypeName = 'AWS::Cassandra::Table'
+              AND listing.region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                detail.region,
+                json_extract_path_text(json_each.value, 'Key') as tag_key,
+                json_extract_path_text(json_each.value, 'Value') as tag_value,
+                json_extract_path_text(detail.Properties, 'KeyspaceName') as keyspace_name,
+                json_extract_path_text(detail.Properties, 'TableName') as table_name,
+                json_extract_path_text(detail.Properties, 'RegularColumns') as regular_columns,
+                json_extract_path_text(detail.Properties, 'PartitionKeyColumns') as partition_key_columns,
+                json_extract_path_text(detail.Properties, 'ClusteringKeyColumns') as clustering_key_columns,
+                json_extract_path_text(detail.Properties, 'BillingMode') as billing_mode,
+                json_extract_path_text(detail.Properties, 'PointInTimeRecoveryEnabled') as point_in_time_recovery_enabled,
+                json_extract_path_text(detail.Properties, 'ClientSideTimestampsEnabled') as client_side_timestamps_enabled,
+                json_extract_path_text(detail.Properties, 'DefaultTimeToLive') as default_time_to_live,
+                json_extract_path_text(detail.Properties, 'EncryptionSpecification') as encryption_specification,
+                json_extract_path_text(detail.Properties, 'AutoScalingSpecifications') as auto_scaling_specifications,
+                json_extract_path_text(detail.Properties, 'ReplicaSpecifications') as replica_specifications
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
+                WHERE listing.data__TypeName = 'AWS::Cassandra::Table'
+                AND detail.data__TypeName = 'AWS::Cassandra::Table'
+                AND listing.region = 'us-east-1'
 paths:
   /?Action=CreateResource&Version=2021-09-30:
     parameters:
