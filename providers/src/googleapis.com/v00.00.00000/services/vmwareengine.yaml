@@ -9,8 +9,8 @@ info:
     The Google VMware Engine API lets you programmatically manage VMware
     environments.
   version: v1
-  x-discovery-doc-revision: '20240509'
-  x-generated-date: '2024-06-03'
+  x-discovery-doc-revision: '20240820'
+  x-generated-date: '2024-09-13'
 externalDocs:
   url: https://cloud.google.com/solutions/vmware-as-a-service
 servers:
@@ -404,10 +404,12 @@ components:
             - Unspecified appliance state. This is the default value.
             - The appliance is operational and can be used.
             - The appliance is being deployed.
+            - The appliance is being activated.
           enum:
             - STATE_UNSPECIFIED
             - ACTIVE
             - CREATING
+            - ACTIVATING
         fqdn:
           description: Fully qualified domain name of the appliance.
           type: string
@@ -548,6 +550,9 @@ components:
             cloud and it has to be the first one.
           readOnly: true
           type: boolean
+        autoscalingSettings:
+          description: Optional. Configuration of the autoscaling applied to this cluster.
+          $ref: '#/components/schemas/AutoscalingSettings'
         uid:
           description: Output only. System-generated unique identifier for the resource.
           readOnly: true
@@ -565,6 +570,106 @@ components:
             Optional. Configuration of a stretched cluster. Required for
             clusters that belong to a STRETCHED private cloud.
           $ref: '#/components/schemas/StretchedClusterConfig'
+    AutoscalingSettings:
+      id: AutoscalingSettings
+      description: >-
+        Autoscaling settings define the rules used by VMware Engine to
+        automatically scale-out and scale-in the clusters in a private cloud.
+      type: object
+      properties:
+        autoscalingPolicies:
+          description: >-
+            Required. The map with autoscaling policies applied to the cluster.
+            The key is the identifier of the policy. It must meet the following
+            requirements: * Only contains 1-63 alphanumeric characters and
+            hyphens * Begins with an alphabetical character * Ends with a
+            non-hyphen character * Not formatted as a UUID * Complies with [RFC
+            1034](https://datatracker.ietf.org/doc/html/rfc1034) (section 3.5)
+            Currently there map must contain only one element that describes the
+            autoscaling policy for compute nodes.
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/AutoscalingPolicy'
+        minClusterNodeCount:
+          description: >-
+            Optional. Minimum number of nodes of any type in a cluster. If not
+            specified the default limits apply.
+          type: integer
+          format: int32
+        maxClusterNodeCount:
+          description: >-
+            Optional. Maximum number of nodes of any type in a cluster. If not
+            specified the default limits apply.
+          type: integer
+          format: int32
+        coolDownPeriod:
+          description: >-
+            Optional. The minimum duration between consecutive autoscale
+            operations. It starts once addition or removal of nodes is fully
+            completed. Defaults to 30 minutes if not specified. Cool down period
+            must be in whole minutes (for example, 30, 31, 50, 180 minutes).
+          type: string
+          format: google-duration
+    AutoscalingPolicy:
+      id: AutoscalingPolicy
+      description: >-
+        Autoscaling policy describes the behavior of the autoscaling with
+        respect to the resource utilization. The scale-out operation is
+        initiated if the utilization exceeds ANY of the respective thresholds.
+        The scale-in operation is initiated if the utilization is below ALL of
+        the respective thresholds.
+      type: object
+      properties:
+        nodeTypeId:
+          description: >-
+            Required. The canonical identifier of the node type to add or
+            remove. Corresponds to the `NodeType`.
+          type: string
+        scaleOutSize:
+          description: >-
+            Required. Number of nodes to add to a cluster during a scale-out
+            operation. Must be divisible by 2 for stretched clusters. During a
+            scale-in operation only one node (or 2 for stretched clusters) are
+            removed in a single iteration.
+          type: integer
+          format: int32
+        cpuThresholds:
+          description: Optional. Utilization thresholds pertaining to CPU utilization.
+          $ref: '#/components/schemas/Thresholds'
+        grantedMemoryThresholds:
+          description: >-
+            Optional. Utilization thresholds pertaining to amount of granted
+            memory.
+          $ref: '#/components/schemas/Thresholds'
+        consumedMemoryThresholds:
+          description: >-
+            Optional. Utilization thresholds pertaining to amount of consumed
+            memory.
+          $ref: '#/components/schemas/Thresholds'
+        storageThresholds:
+          description: >-
+            Optional. Utilization thresholds pertaining to amount of consumed
+            storage.
+          $ref: '#/components/schemas/Thresholds'
+    Thresholds:
+      id: Thresholds
+      description: >-
+        Thresholds define the utilization of resources triggering scale-out and
+        scale-in operations.
+      type: object
+      properties:
+        scaleOut:
+          description: >-
+            Required. The utilization triggering the scale-out operation in
+            percent.
+          type: integer
+          format: int32
+        scaleIn:
+          description: >-
+            Required. The utilization triggering the scale-in operation in
+            percent.
+          type: integer
+          format: int32
     ListNodesResponse:
       id: ListNodesResponse
       description: Response message for VmwareEngine.ListNodes
@@ -1401,6 +1506,9 @@ components:
               Most third-party services require manual setup of reverse peering
               on the VPC network associated with the third-party service.
             - Peering connection used for connecting to Dell PowerScale Filers
+            - >-
+              Peering connection used for connecting to Google Cloud NetApp
+              Volumes.
           enum:
             - PEER_NETWORK_TYPE_UNSPECIFIED
             - STANDARD
@@ -1409,6 +1517,7 @@ components:
             - NETAPP_CLOUD_VOLUMES
             - THIRD_PARTY_SERVICE
             - DELL_POWERSCALE
+            - GOOGLE_CLOUD_NETAPP_VOLUMES
         uid:
           description: Output only. System-generated unique identifier for the resource.
           readOnly: true
@@ -2774,22 +2883,20 @@ components:
               #/components/x-stackQL-resources/dns_bind_permission/methods/get_dns_bind_permission
         insert: []
         update: []
+        replace: []
         delete: []
     locations:
       id: google.vmwareengine.locations
       name: locations
       title: Locations
       methods:
-        _list:
-          operation: &ref_1
+        list:
+          operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations/get'
-          response: &ref_2
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.locations
-        list:
-          operation: *ref_1
-          response: *ref_2
         get:
           operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}/get'
@@ -2802,23 +2909,21 @@ components:
           - $ref: '#/components/x-stackQL-resources/locations/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     operations:
       id: google.vmwareengine.operations
       name: operations
       title: Operations
       methods:
-        _list:
-          operation: &ref_3
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1operations/get
-          response: &ref_4
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.operations
-        list:
-          operation: *ref_3
-          response: *ref_4
         get:
           operation:
             $ref: >-
@@ -2839,6 +2944,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/operations/methods/list'
         insert: []
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/operations/methods/delete'
     private_clouds:
@@ -2846,17 +2952,14 @@ components:
       name: private_clouds
       title: Private_clouds
       methods:
-        _list:
-          operation: &ref_5
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1privateClouds/get
-          response: &ref_6
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.privateClouds
-        list:
-          operation: *ref_5
-          response: *ref_6
         create:
           operation:
             $ref: >-
@@ -2928,6 +3031,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/private_clouds/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/private_clouds/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/private_clouds/methods/delete'
     private_clouds_dns_forwarding:
@@ -2954,7 +3058,10 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/private_clouds_dns_forwarding/methods/get_dns_forwarding
         insert: []
-        update: []
+        update:
+          - $ref: >-
+              #/components/x-stackQL-resources/private_clouds_dns_forwarding/methods/update_dns_forwarding
+        replace: []
         delete: []
     private_clouds_iam_policies:
       id: google.vmwareengine.private_clouds_iam_policies
@@ -2968,17 +3075,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_7
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1privateClouds~1{privateCloudsId}:getIamPolicy/get
-          response: &ref_8
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_7
-          response: *ref_8
         test_iam_permissions:
           operation:
             $ref: >-
@@ -2992,23 +3096,23 @@ components:
               #/components/x-stackQL-resources/private_clouds_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/private_clouds_iam_policies/methods/set_iam_policy
         delete: []
     clusters:
       id: google.vmwareengine.clusters
       name: clusters
       title: Clusters
       methods:
-        _list:
-          operation: &ref_9
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1privateClouds~1{privateCloudsId}~1clusters/get
-          response: &ref_10
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.clusters
-        list:
-          operation: *ref_9
-          response: *ref_10
         create:
           operation:
             $ref: >-
@@ -3045,6 +3149,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/clusters/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/clusters/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/clusters/methods/delete'
     clusters_iam_policies:
@@ -3059,17 +3164,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_11
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1privateClouds~1{privateCloudsId}~1clusters~1{clustersId}:getIamPolicy/get
-          response: &ref_12
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_11
-          response: *ref_12
         test_iam_permissions:
           operation:
             $ref: >-
@@ -3083,23 +3185,23 @@ components:
               #/components/x-stackQL-resources/clusters_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/clusters_iam_policies/methods/set_iam_policy
         delete: []
     nodes:
       id: google.vmwareengine.nodes
       name: nodes
       title: Nodes
       methods:
-        _list:
-          operation: &ref_13
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1privateClouds~1{privateCloudsId}~1clusters~1{clustersId}~1nodes/get
-          response: &ref_14
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.nodes
-        list:
-          operation: *ref_13
-          response: *ref_14
         get:
           operation:
             $ref: >-
@@ -3113,23 +3215,21 @@ components:
           - $ref: '#/components/x-stackQL-resources/nodes/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     external_addresses:
       id: google.vmwareengine.external_addresses
       name: external_addresses
       title: External_addresses
       methods:
-        _list:
-          operation: &ref_15
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1privateClouds~1{privateCloudsId}~1externalAddresses/get
-          response: &ref_16
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.externalAddresses
-        list:
-          operation: *ref_15
-          response: *ref_16
         create:
           operation:
             $ref: >-
@@ -3166,6 +3266,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/external_addresses/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/external_addresses/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/external_addresses/methods/delete'
     subnets:
@@ -3173,17 +3274,14 @@ components:
       name: subnets
       title: Subnets
       methods:
-        _list:
-          operation: &ref_17
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1privateClouds~1{privateCloudsId}~1subnets/get
-          response: &ref_18
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.subnets
-        list:
-          operation: *ref_17
-          response: *ref_18
         get:
           operation:
             $ref: >-
@@ -3205,23 +3303,21 @@ components:
         insert: []
         update:
           - $ref: '#/components/x-stackQL-resources/subnets/methods/patch'
+        replace: []
         delete: []
     logging_servers:
       id: google.vmwareengine.logging_servers
       name: logging_servers
       title: Logging_servers
       methods:
-        _list:
-          operation: &ref_19
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1privateClouds~1{privateCloudsId}~1loggingServers/get
-          response: &ref_20
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.loggingServers
-        list:
-          operation: *ref_19
-          response: *ref_20
         create:
           operation:
             $ref: >-
@@ -3258,6 +3354,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/logging_servers/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/logging_servers/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/logging_servers/methods/delete'
     hcx_activation_keys:
@@ -3272,17 +3369,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_21
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1privateClouds~1{privateCloudsId}~1hcxActivationKeys/get
-          response: &ref_22
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.hcxActivationKeys
-        list:
-          operation: *ref_21
-          response: *ref_22
         get:
           operation:
             $ref: >-
@@ -3298,6 +3392,7 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/hcx_activation_keys/methods/create
         update: []
+        replace: []
         delete: []
     hcx_activation_keys_iam_policies:
       id: google.vmwareengine.hcx_activation_keys_iam_policies
@@ -3311,17 +3406,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_23
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1privateClouds~1{privateCloudsId}~1hcxActivationKeys~1{hcxActivationKeysId}:getIamPolicy/get
-          response: &ref_24
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_23
-          response: *ref_24
         test_iam_permissions:
           operation:
             $ref: >-
@@ -3335,23 +3427,23 @@ components:
               #/components/x-stackQL-resources/hcx_activation_keys_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/hcx_activation_keys_iam_policies/methods/set_iam_policy
         delete: []
     management_dns_zone_bindings:
       id: google.vmwareengine.management_dns_zone_bindings
       name: management_dns_zone_bindings
       title: Management_dns_zone_bindings
       methods:
-        _list:
-          operation: &ref_25
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1privateClouds~1{privateCloudsId}~1managementDnsZoneBindings/get
-          response: &ref_26
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.managementDnsZoneBindings
-        list:
-          operation: *ref_25
-          response: *ref_26
         create:
           operation:
             $ref: >-
@@ -3399,6 +3491,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/management_dns_zone_bindings/methods/patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/management_dns_zone_bindings/methods/delete
@@ -3415,9 +3508,12 @@ components:
             mediaType: application/json
             openAPIDocKey: '200'
       sqlVerbs:
-        select: []
+        select:
+          - $ref: >-
+              #/components/x-stackQL-resources/network_policies_external_addresses/methods/fetch_external_addresses
         insert: []
         update: []
+        replace: []
         delete: []
     network_policies:
       id: google.vmwareengine.network_policies
@@ -3445,17 +3541,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_27
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1networkPolicies/get
-          response: &ref_28
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.networkPolicies
-        list:
-          operation: *ref_27
-          response: *ref_28
         create:
           operation:
             $ref: >-
@@ -3471,6 +3564,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/network_policies/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/network_policies/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/network_policies/methods/delete'
     external_access_rules:
@@ -3478,17 +3572,14 @@ components:
       name: external_access_rules
       title: External_access_rules
       methods:
-        _list:
-          operation: &ref_29
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1networkPolicies~1{networkPoliciesId}~1externalAccessRules/get
-          response: &ref_30
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.externalAccessRules
-        list:
-          operation: *ref_29
-          response: *ref_30
         create:
           operation:
             $ref: >-
@@ -3528,6 +3619,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/external_access_rules/methods/patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/external_access_rules/methods/delete
@@ -3536,17 +3628,14 @@ components:
       name: node_types
       title: Node_types
       methods:
-        _list:
-          operation: &ref_31
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1nodeTypes/get
-          response: &ref_32
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.nodeTypes
-        list:
-          operation: *ref_31
-          response: *ref_32
         get:
           operation:
             $ref: >-
@@ -3560,6 +3649,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/node_types/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     network_peerings:
       id: google.vmwareengine.network_peerings
@@ -3587,17 +3677,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_33
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1networkPeerings/get
-          response: &ref_34
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.networkPeerings
-        list:
-          operation: *ref_33
-          response: *ref_34
         create:
           operation:
             $ref: >-
@@ -3613,6 +3700,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/network_peerings/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/network_peerings/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/network_peerings/methods/delete'
     peering_routes:
@@ -3620,23 +3708,20 @@ components:
       name: peering_routes
       title: Peering_routes
       methods:
-        _list:
-          operation: &ref_35
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1privateConnections~1{privateConnectionsId}~1peeringRoutes/get
-          response: &ref_36
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.peeringRoutes
-        list:
-          operation: *ref_35
-          response: *ref_36
       sqlVerbs:
         select:
           - $ref: '#/components/x-stackQL-resources/peering_routes/methods/list'
-          - $ref: '#/components/x-stackQL-resources/peering_routes/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     vmware_engine_networks:
       id: google.vmwareengine.vmware_engine_networks
@@ -3650,17 +3735,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_37
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1vmwareEngineNetworks/get
-          response: &ref_38
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.vmwareEngineNetworks
-        list:
-          operation: *ref_37
-          response: *ref_38
         patch:
           operation:
             $ref: >-
@@ -3694,6 +3776,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/vmware_engine_networks/methods/patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/vmware_engine_networks/methods/delete
@@ -3709,17 +3792,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_39
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1privateConnections/get
-          response: &ref_40
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.privateConnections
-        list:
-          operation: *ref_39
-          response: *ref_40
         get:
           operation:
             $ref: >-
@@ -3750,12 +3830,13 @@ components:
               #/components/x-stackQL-resources/private_connections/methods/create
         update:
           - $ref: '#/components/x-stackQL-resources/private_connections/methods/patch'
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/private_connections/methods/delete
 paths:
   /v1/projects/{projectsId}/locations/{locationsId}/dnsBindPermission:
-    parameters: &ref_41
+    parameters: &ref_1
       - $ref: '#/components/parameters/access_token'
       - $ref: '#/components/parameters/alt'
       - $ref: '#/components/parameters/callback'
@@ -3797,7 +3878,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Lists information about the supported locations for this service.
       operationId: vmwareengine.projects.locations.list
@@ -3833,7 +3914,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Gets information about a location.
       operationId: vmwareengine.projects.locations.get
@@ -3861,7 +3942,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: >-
         Lists operations that match the specified filter in the request. If the
@@ -3904,7 +3985,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: >-
         Gets the latest state of a long-running operation. Clients can use this
@@ -3975,7 +4056,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Lists `PrivateCloud` resources in a given project and location.
       operationId: vmwareengine.projects.locations.privateClouds.list
@@ -4069,7 +4150,7 @@ paths:
           schema:
             type: boolean
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Retrieves a `PrivateCloud` resource by its resource name.
       operationId: vmwareengine.projects.locations.privateClouds.get
@@ -4211,7 +4292,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}:undelete:
-    parameters: *ref_41
+    parameters: *ref_1
     post:
       description: >-
         Restores a private cloud that was previously scheduled for deletion by
@@ -4253,7 +4334,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}:showNsxCredentials:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Gets details of credentials for NSX appliance.
       operationId: vmwareengine.projects.locations.privateClouds.showNsxCredentials
@@ -4286,7 +4367,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}:showVcenterCredentials:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Gets details of credentials for Vcenter appliance.
       operationId: vmwareengine.projects.locations.privateClouds.showVcenterCredentials
@@ -4323,7 +4404,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}:resetNsxCredentials:
-    parameters: *ref_41
+    parameters: *ref_1
     post:
       description: Resets credentials of the NSX appliance.
       operationId: vmwareengine.projects.locations.privateClouds.resetNsxCredentials
@@ -4361,7 +4442,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}:resetVcenterCredentials:
-    parameters: *ref_41
+    parameters: *ref_1
     post:
       description: Resets credentials of the Vcenter appliance.
       operationId: vmwareengine.projects.locations.privateClouds.resetVcenterCredentials
@@ -4399,7 +4480,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/dnsForwarding:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Gets details of the `DnsForwarding` config.
       operationId: vmwareengine.projects.locations.privateClouds.getDnsForwarding
@@ -4479,7 +4560,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}:setIamPolicy:
-    parameters: *ref_41
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -4520,7 +4601,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}:getIamPolicy:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -4560,7 +4641,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}:testIamPermissions:
-    parameters: *ref_41
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -4603,7 +4684,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/clusters:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Lists `Cluster` resources in a given private cloud.
       operationId: vmwareengine.projects.locations.privateClouds.clusters.list
@@ -4705,7 +4786,7 @@ paths:
           schema:
             type: boolean
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/clusters/{clustersId}:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Retrieves a `Cluster` resource by its resource name.
       operationId: vmwareengine.projects.locations.privateClouds.clusters.get
@@ -4846,7 +4927,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/clusters/{clustersId}:setIamPolicy:
-    parameters: *ref_41
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -4892,7 +4973,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/clusters/{clustersId}:getIamPolicy:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -4937,7 +5018,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/clusters/{clustersId}:testIamPermissions:
-    parameters: *ref_41
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -4986,7 +5067,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/clusters/{clustersId}/nodes:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Lists nodes in a given cluster.
       operationId: vmwareengine.projects.locations.privateClouds.clusters.nodes.list
@@ -5033,7 +5114,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/clusters/{clustersId}/nodes/{nodesId}:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Gets details of a single node.
       operationId: vmwareengine.projects.locations.privateClouds.clusters.nodes.get
@@ -5076,7 +5157,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/externalAddresses:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: >-
         Lists external IP addresses assigned to VMware workload VMs in a given
@@ -5176,7 +5257,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/externalAddresses/{externalAddressesId}:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Gets details of a single external IP address.
       operationId: vmwareengine.projects.locations.privateClouds.externalAddresses.get
@@ -5312,7 +5393,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/subnets:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Lists subnets in a given private cloud.
       operationId: vmwareengine.projects.locations.privateClouds.subnets.list
@@ -5354,7 +5435,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/subnets/{subnetsId}:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Gets details of a single subnet.
       operationId: vmwareengine.projects.locations.privateClouds.subnets.get
@@ -5442,7 +5523,7 @@ paths:
             type: string
             format: google-fieldmask
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/loggingServers:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Lists logging servers configured for a given private cloud.
       operationId: vmwareengine.projects.locations.privateClouds.loggingServers.list
@@ -5536,7 +5617,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/loggingServers/{loggingServersId}:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Gets details of a logging server.
       operationId: vmwareengine.projects.locations.privateClouds.loggingServers.get
@@ -5666,7 +5747,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/hcxActivationKeys:
-    parameters: *ref_41
+    parameters: *ref_1
     post:
       description: Creates a new HCX activation key in a given private cloud.
       operationId: vmwareengine.projects.locations.privateClouds.hcxActivationKeys.create
@@ -5752,7 +5833,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/hcxActivationKeys/{hcxActivationKeysId}:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Retrieves a `HcxActivationKey` resource by its resource name.
       operationId: vmwareengine.projects.locations.privateClouds.hcxActivationKeys.get
@@ -5790,7 +5871,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/hcxActivationKeys/{hcxActivationKeysId}:setIamPolicy:
-    parameters: *ref_41
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -5837,7 +5918,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/hcxActivationKeys/{hcxActivationKeysId}:getIamPolicy:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -5883,7 +5964,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/hcxActivationKeys/{hcxActivationKeysId}:testIamPermissions:
-    parameters: *ref_41
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -5932,7 +6013,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/managementDnsZoneBindings:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: >-
         Lists Consumer VPCs bound to Management DNS Zone of a given private
@@ -6037,7 +6118,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/managementDnsZoneBindings/{managementDnsZoneBindingsId}:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Retrieves a 'ManagementDnsZoneBinding' resource by its resource name.
       operationId: >-
@@ -6173,7 +6254,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateClouds/{privateCloudsId}/managementDnsZoneBindings/{managementDnsZoneBindingsId}:repair:
-    parameters: *ref_41
+    parameters: *ref_1
     post:
       description: >-
         Retries to create a `ManagementDnsZoneBinding` resource that is in
@@ -6219,7 +6300,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/networkPolicies/{networkPoliciesId}:fetchExternalAddresses:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: >-
         Lists external IP addresses assigned to VMware workload VMs within the
@@ -6264,7 +6345,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/networkPolicies/{networkPoliciesId}:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Retrieves a `NetworkPolicy` resource by its resource name.
       operationId: vmwareengine.projects.locations.networkPolicies.get
@@ -6390,7 +6471,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/networkPolicies:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Lists `NetworkPolicy` resources in a specified project and location.
       operationId: vmwareengine.projects.locations.networkPolicies.list
@@ -6477,7 +6558,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/networkPolicies/{networkPoliciesId}/externalAccessRules:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Lists `ExternalAccessRule` resources in the specified network policy.
       operationId: vmwareengine.projects.locations.networkPolicies.externalAccessRules.list
@@ -6572,7 +6653,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/networkPolicies/{networkPoliciesId}/externalAccessRules/{externalAccessRulesId}:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Gets details of a single external access rule.
       operationId: vmwareengine.projects.locations.networkPolicies.externalAccessRules.get
@@ -6704,7 +6785,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/nodeTypes:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Lists node types
       operationId: vmwareengine.projects.locations.nodeTypes.list
@@ -6745,7 +6826,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/nodeTypes/{nodeTypesId}:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Gets details of a single `NodeType`.
       operationId: vmwareengine.projects.locations.nodeTypes.get
@@ -6778,7 +6859,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/networkPeerings/{networkPeeringsId}:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: >-
         Retrieves a `NetworkPeering` resource by its resource name. The resource
@@ -6902,7 +6983,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/networkPeerings:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: >-
         Lists `NetworkPeering` resources in a given project. NetworkPeering is a
@@ -6991,7 +7072,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/networkPeerings/{networkPeeringsId}/peeringRoutes:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: >-
         Lists the network peering routes exchanged over a peering connection.
@@ -7039,7 +7120,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/vmwareEngineNetworks:
-    parameters: *ref_41
+    parameters: *ref_1
     post:
       description: Creates a new VMware Engine network that can be used by a private cloud.
       operationId: vmwareengine.projects.locations.vmwareEngineNetworks.create
@@ -7123,7 +7204,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/vmwareEngineNetworks/{vmwareEngineNetworksId}:
-    parameters: *ref_41
+    parameters: *ref_1
     patch:
       description: >-
         Modifies a VMware Engine network resource. Only the following fields can
@@ -7251,7 +7332,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateConnections:
-    parameters: *ref_41
+    parameters: *ref_1
     post:
       description: >-
         Creates a new private connection that can be used for accessing private
@@ -7337,7 +7418,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateConnections/{privateConnectionsId}:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: >-
         Retrieves a `PrivateConnection` resource by its resource name. The
@@ -7459,7 +7540,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/privateConnections/{privateConnectionsId}/peeringRoutes:
-    parameters: *ref_41
+    parameters: *ref_1
     get:
       description: Lists the private connection routes exchanged over a peering connection.
       operationId: vmwareengine.projects.locations.privateConnections.peeringRoutes.list
@@ -7502,7 +7583,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/dnsBindPermission:grant:
-    parameters: *ref_41
+    parameters: *ref_1
     post:
       description: >-
         Grants the bind permission to the customer provided principal(user /
@@ -7539,7 +7620,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/dnsBindPermission:revoke:
-    parameters: *ref_41
+    parameters: *ref_1
     post:
       description: >-
         Revokes the bind permission from the customer provided principal(user /

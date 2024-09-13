@@ -7,8 +7,8 @@ info:
   title: Network Connectivity API
   description: This API enables connectivity with and between Google Cloud resources.
   version: v1
-  x-discovery-doc-revision: '20240523'
-  x-generated-date: '2024-06-03'
+  x-discovery-doc-revision: '20240807'
+  x-generated-date: '2024-09-13'
 externalDocs:
   url: >-
     https://cloud.google.com/network-connectivity/docs/reference/networkconnectivity/rest
@@ -297,11 +297,16 @@ components:
             - >-
               Service Connection Policy limit reached for this network and
               Service Class
+            - >-
+              The consumer instance project is not in
+              AllowedGoogleProducersResourceHierarchyLevels of the matching
+              ServiceConnectionPolicy.
           enum:
             - STATE_UNSPECIFIED
             - VALID
             - CONNECTION_POLICY_MISSING
             - POLICY_LIMIT_REACHED
+            - CONSUMER_INSTANCE_PROJECT_NOT_ALLOWLISTED
         producerInstanceId:
           description: Immutable. An immutable identifier for the producer instance.
           type: string
@@ -314,6 +319,15 @@ components:
           type: object
           additionalProperties:
             type: string
+        consumerInstanceProject:
+          description: >-
+            Required. The project ID or project number of the consumer project.
+            This project is the one that the consumer uses to interact with the
+            producer instance. From the perspective of a consumer who's created
+            a producer instance, this is the project of the producer instance.
+            Format: 'projects/' Eg. 'projects/consumer-project' or
+            'projects/1234'
+          type: string
     ConsumerPscConnection:
       id: ConsumerPscConnection
       description: PSC connection details on consumer side.
@@ -510,9 +524,9 @@ components:
             The service class identifier for which this ServiceConnectionPolicy
             is for. The service class identifier is a unique, symbolic
             representation of a ServiceClass. It is provided by the Service
-            Producer. Google services have a prefix of gcp. For example,
-            gcp-cloud-sql. 3rd party services do not. For example,
-            test-service-a3dfcx.
+            Producer. Google services have a prefix of gcp or google-cloud. For
+            example, gcp-memorystore-redis or google-cloud-sql. 3rd party
+            services do not. For example, test-service-a3dfcx.
           type: string
         infrastructure:
           description: >-
@@ -564,6 +578,45 @@ components:
           description: Optional. Max number of PSC connections for this policy.
           type: string
           format: int64
+        producerInstanceLocation:
+          description: >-
+            Required. ProducerInstanceLocation is used to specify which
+            authorization mechanism to use to determine which projects the
+            Producer instance can be within.
+          type: string
+          enumDescriptions:
+            - >-
+              Producer instance location is not specified. When this option is
+              chosen, then the PSC connections created by this
+              ServiceConnectionPolicy must be within the same project as the
+              Producer instance. This is the default ProducerInstanceLocation
+              value. To allow for PSC connections from this network to other
+              networks, use the CUSTOM_RESOURCE_HIERARCHY_LEVELS option.
+            - >-
+              Producer instance must be within one of the values provided in
+              allowed_google_producers_resource_hierarchy_level.
+          enum:
+            - PRODUCER_INSTANCE_LOCATION_UNSPECIFIED
+            - CUSTOM_RESOURCE_HIERARCHY_LEVELS
+        allowedGoogleProducersResourceHierarchyLevel:
+          description: >-
+            Optional. List of Projects, Folders, or Organizations from where the
+            Producer instance can be within. For example, a network
+            administrator can provide both 'organizations/foo' and
+            'projects/bar' as
+            allowed_google_producers_resource_hierarchy_levels. This allowlists
+            this network to connect with any Producer instance within the 'foo'
+            organization or the 'bar' project. By default,
+            allowed_google_producers_resource_hierarchy_level is empty. The
+            format for each allowed_google_producers_resource_hierarchy_level is
+            / where is one of 'projects', 'folders', or 'organizations' and is
+            either the ID or the number of the resource type. Format for each
+            allowed_google_producers_resource_hierarchy_level value: 'projects/'
+            or 'folders/' or 'organizations/' Eg. [projects/my-project-id,
+            projects/567, folders/891, organizations/123]
+          type: array
+          items:
+            type: string
     PscConnection:
       id: PscConnection
       description: Information about a specific Private Service Connect connection.
@@ -1249,6 +1302,14 @@ components:
           description: Output only. The VPC network where these VPN tunnels are located.
           readOnly: true
           type: string
+        includeImportRanges:
+          description: >-
+            Optional. IP ranges allowed to be included during import from
+            hub.(does not control transit connectivity) The only allowed value
+            for now is "ALL_IPV4_RANGES".
+          type: array
+          items:
+            type: string
     LinkedInterconnectAttachments:
       id: LinkedInterconnectAttachments
       description: >-
@@ -1275,6 +1336,14 @@ components:
             located.
           readOnly: true
           type: string
+        includeImportRanges:
+          description: >-
+            Optional. IP ranges allowed to be included during import from
+            hub.(does not control transit connectivity) The only allowed value
+            for now is "ALL_IPV4_RANGES".
+          type: array
+          items:
+            type: string
     LinkedRouterApplianceInstances:
       id: LinkedRouterApplianceInstances
       description: >-
@@ -1301,6 +1370,14 @@ components:
             are located.
           readOnly: true
           type: string
+        includeImportRanges:
+          description: >-
+            Optional. IP ranges allowed to be included during import from
+            hub.(does not control transit connectivity) The only allowed value
+            for now is "ALL_IPV4_RANGES".
+          type: array
+          items:
+            type: string
     RouterApplianceInstance:
       id: RouterApplianceInstance
       description: >-
@@ -1328,6 +1405,20 @@ components:
           description: >-
             Optional. IP ranges encompassing the subnets to be excluded from
             peering.
+          type: array
+          items:
+            type: string
+        includeExportRanges:
+          description: Optional. IP ranges allowed to be included from peering.
+          type: array
+          items:
+            type: string
+        producerVpcSpokes:
+          description: >-
+            Output only. The list of Producer VPC spokes that this VPC spoke is
+            a service consumer VPC spoke for. These producer VPCs are connected
+            through VPC peering to this spoke's backing VPC network.
+          readOnly: true
           type: array
           items:
             type: string
@@ -2874,16 +2965,13 @@ components:
       name: locations
       title: Locations
       methods:
-        _list:
-          operation: &ref_1
+        list:
+          operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations/get'
-          response: &ref_2
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.locations
-        list:
-          operation: *ref_1
-          response: *ref_2
         get:
           operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}/get'
@@ -2896,23 +2984,21 @@ components:
           - $ref: '#/components/x-stackQL-resources/locations/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     operations:
       id: google.networkconnectivity.operations
       name: operations
       title: Operations
       methods:
-        _list:
-          operation: &ref_3
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1operations/get
-          response: &ref_4
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.operations
-        list:
-          operation: *ref_3
-          response: *ref_4
         get:
           operation:
             $ref: >-
@@ -2940,6 +3026,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/operations/methods/list'
         insert: []
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/operations/methods/delete'
     service_connection_maps:
@@ -2947,17 +3034,14 @@ components:
       name: service_connection_maps
       title: Service_connection_maps
       methods:
-        _list:
-          operation: &ref_5
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1serviceConnectionMaps/get
-          response: &ref_6
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.serviceConnectionMaps
-        list:
-          operation: *ref_5
-          response: *ref_6
         create:
           operation:
             $ref: >-
@@ -2998,6 +3082,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/service_connection_maps/methods/patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/service_connection_maps/methods/delete
@@ -3013,17 +3098,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_7
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1serviceConnectionMaps~1{serviceConnectionMapsId}:getIamPolicy/get
-          response: &ref_8
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_7
-          response: *ref_8
         test_iam_permissions:
           operation:
             $ref: >-
@@ -3037,23 +3119,23 @@ components:
               #/components/x-stackQL-resources/service_connection_maps_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/service_connection_maps_iam_policies/methods/set_iam_policy
         delete: []
     service_connection_policies:
       id: google.networkconnectivity.service_connection_policies
       name: service_connection_policies
       title: Service_connection_policies
       methods:
-        _list:
-          operation: &ref_9
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1serviceConnectionPolicies/get
-          response: &ref_10
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.serviceConnectionPolicies
-        list:
-          operation: *ref_9
-          response: *ref_10
         create:
           operation:
             $ref: >-
@@ -3094,6 +3176,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/service_connection_policies/methods/patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/service_connection_policies/methods/delete
@@ -3109,17 +3192,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_11
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1serviceConnectionPolicies~1{serviceConnectionPoliciesId}:getIamPolicy/get
-          response: &ref_12
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_11
-          response: *ref_12
         test_iam_permissions:
           operation:
             $ref: >-
@@ -3133,23 +3213,23 @@ components:
               #/components/x-stackQL-resources/service_connection_policies_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/service_connection_policies_iam_policies/methods/set_iam_policy
         delete: []
     service_classes:
       id: google.networkconnectivity.service_classes
       name: service_classes
       title: Service_classes
       methods:
-        _list:
-          operation: &ref_13
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1serviceClasses/get
-          response: &ref_14
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.serviceClasses
-        list:
-          operation: *ref_13
-          response: *ref_14
         get:
           operation:
             $ref: >-
@@ -3178,6 +3258,7 @@ components:
         insert: []
         update:
           - $ref: '#/components/x-stackQL-resources/service_classes/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/service_classes/methods/delete'
     service_classes_iam_policies:
@@ -3192,17 +3273,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_15
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1serviceClasses~1{serviceClassesId}:getIamPolicy/get
-          response: &ref_16
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_15
-          response: *ref_16
         test_iam_permissions:
           operation:
             $ref: >-
@@ -3216,6 +3294,9 @@ components:
               #/components/x-stackQL-resources/service_classes_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/service_classes_iam_policies/methods/set_iam_policy
         delete: []
     service_connection_tokens:
       id: google.networkconnectivity.service_connection_tokens
@@ -3236,17 +3317,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_17
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1serviceConnectionTokens/get
-          response: &ref_18
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.serviceConnectionTokens
-        list:
-          operation: *ref_17
-          response: *ref_18
         create:
           operation:
             $ref: >-
@@ -3264,6 +3342,7 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/service_connection_tokens/methods/create
         update: []
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/service_connection_tokens/methods/delete
@@ -3272,16 +3351,13 @@ components:
       name: hubs
       title: Hubs
       methods:
-        _list:
-          operation: &ref_19
+        list:
+          operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1global~1hubs/get'
-          response: &ref_20
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.hubs
-        list:
-          operation: *ref_19
-          response: *ref_20
         create:
           operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1global~1hubs/post'
@@ -3331,6 +3407,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/hubs/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/hubs/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/hubs/methods/delete'
     spokes:
@@ -3338,28 +3415,22 @@ components:
       name: spokes
       title: Spokes
       methods:
-        _list_spokes:
-          operation: &ref_21
+        list_spokes:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1global~1hubs~1{hubsId}:listSpokes/get
-          response: &ref_22
-            mediaType: application/json
-            openAPIDocKey: '200'
-            objectKey: $.spokes
-        list_spokes:
-          operation: *ref_21
-          response: *ref_22
-        _list:
-          operation: &ref_23
-            $ref: >-
-              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1spokes/get
-          response: &ref_24
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.spokes
         list:
-          operation: *ref_23
-          response: *ref_24
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1spokes/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.spokes
         create:
           operation:
             $ref: >-
@@ -3397,6 +3468,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/spokes/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/spokes/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/spokes/methods/delete'
     hubs_iam_policies:
@@ -3411,17 +3483,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_25
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1global~1hubs~1{hubsId}:getIamPolicy/get
-          response: &ref_26
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_25
-          response: *ref_26
         test_iam_permissions:
           operation:
             $ref: >-
@@ -3435,6 +3504,9 @@ components:
               #/components/x-stackQL-resources/hubs_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/hubs_iam_policies/methods/set_iam_policy
         delete: []
     route_tables:
       id: google.networkconnectivity.route_tables
@@ -3448,23 +3520,21 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_27
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1global~1hubs~1{hubsId}~1routeTables/get
-          response: &ref_28
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.routeTables
-        list:
-          operation: *ref_27
-          response: *ref_28
       sqlVerbs:
         select:
           - $ref: '#/components/x-stackQL-resources/route_tables/methods/get'
           - $ref: '#/components/x-stackQL-resources/route_tables/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     routes:
       id: google.networkconnectivity.routes
@@ -3478,23 +3548,21 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_29
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1global~1hubs~1{hubsId}~1routeTables~1{routeTablesId}~1routes/get
-          response: &ref_30
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.routes
-        list:
-          operation: *ref_29
-          response: *ref_30
       sqlVerbs:
         select:
           - $ref: '#/components/x-stackQL-resources/routes/methods/get'
           - $ref: '#/components/x-stackQL-resources/routes/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     groups:
       id: google.networkconnectivity.groups
@@ -3515,17 +3583,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_31
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1global~1hubs~1{hubsId}~1groups/get
-          response: &ref_32
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.groups
-        list:
-          operation: *ref_31
-          response: *ref_32
       sqlVerbs:
         select:
           - $ref: '#/components/x-stackQL-resources/groups/methods/get'
@@ -3533,6 +3598,7 @@ components:
         insert: []
         update:
           - $ref: '#/components/x-stackQL-resources/groups/methods/patch'
+        replace: []
         delete: []
     groups_iam_policies:
       id: google.networkconnectivity.groups_iam_policies
@@ -3546,17 +3612,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_33
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1global~1hubs~1{hubsId}~1groups~1{groupsId}:getIamPolicy/get
-          response: &ref_34
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_33
-          response: *ref_34
         test_iam_permissions:
           operation:
             $ref: >-
@@ -3570,23 +3633,23 @@ components:
               #/components/x-stackQL-resources/groups_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/groups_iam_policies/methods/set_iam_policy
         delete: []
     policy_based_routes:
       id: google.networkconnectivity.policy_based_routes
       name: policy_based_routes
       title: Policy_based_routes
       methods:
-        _list:
-          operation: &ref_35
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1global~1policyBasedRoutes/get
-          response: &ref_36
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.policyBasedRoutes
-        list:
-          operation: *ref_35
-          response: *ref_36
         create:
           operation:
             $ref: >-
@@ -3616,6 +3679,7 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/policy_based_routes/methods/create
         update: []
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/policy_based_routes/methods/delete
@@ -3631,17 +3695,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_37
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1global~1policyBasedRoutes~1{policyBasedRoutesId}:getIamPolicy/get
-          response: &ref_38
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_37
-          response: *ref_38
         test_iam_permissions:
           operation:
             $ref: >-
@@ -3655,6 +3716,9 @@ components:
               #/components/x-stackQL-resources/policy_based_routes_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/policy_based_routes_iam_policies/methods/set_iam_policy
         delete: []
     spokes_iam_policies:
       id: google.networkconnectivity.spokes_iam_policies
@@ -3668,17 +3732,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_39
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1spokes~1{spokesId}:getIamPolicy/get
-          response: &ref_40
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_39
-          response: *ref_40
         test_iam_permissions:
           operation:
             $ref: >-
@@ -3692,23 +3753,23 @@ components:
               #/components/x-stackQL-resources/spokes_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/spokes_iam_policies/methods/set_iam_policy
         delete: []
     internal_ranges:
       id: google.networkconnectivity.internal_ranges
       name: internal_ranges
       title: Internal_ranges
       methods:
-        _list:
-          operation: &ref_41
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1internalRanges/get
-          response: &ref_42
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.internalRanges
-        list:
-          operation: *ref_41
-          response: *ref_42
         create:
           operation:
             $ref: >-
@@ -3745,6 +3806,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/internal_ranges/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/internal_ranges/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/internal_ranges/methods/delete'
     regional_endpoints:
@@ -3752,17 +3814,14 @@ components:
       name: regional_endpoints
       title: Regional_endpoints
       methods:
-        _list:
-          operation: &ref_43
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1regionalEndpoints/get
-          response: &ref_44
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.regionalEndpoints
-        list:
-          operation: *ref_43
-          response: *ref_44
         create:
           operation:
             $ref: >-
@@ -3791,11 +3850,12 @@ components:
         insert:
           - $ref: '#/components/x-stackQL-resources/regional_endpoints/methods/create'
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/regional_endpoints/methods/delete'
 paths:
   /v1/projects/{projectsId}/locations:
-    parameters: &ref_45
+    parameters: &ref_1
       - $ref: '#/components/parameters/access_token'
       - $ref: '#/components/parameters/alt'
       - $ref: '#/components/parameters/callback'
@@ -3842,7 +3902,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets information about a location.
       operationId: networkconnectivity.projects.locations.get
@@ -3870,7 +3930,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Lists operations that match the specified filter in the request. If the
@@ -3913,7 +3973,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Gets the latest state of a long-running operation. Clients can use this
@@ -3984,7 +4044,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:cancel:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Starts asynchronous cancellation on a long-running operation. The server
@@ -4031,7 +4091,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serviceConnectionMaps:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists ServiceConnectionMaps in a given project and location.
       operationId: networkconnectivity.projects.locations.serviceConnectionMaps.list
@@ -4115,7 +4175,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serviceConnectionMaps/{serviceConnectionMapsId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single ServiceConnectionMap.
       operationId: networkconnectivity.projects.locations.serviceConnectionMaps.get
@@ -4232,7 +4292,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serviceConnectionMaps/{serviceConnectionMapsId}:setIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -4274,7 +4334,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serviceConnectionMaps/{serviceConnectionMapsId}:getIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -4315,7 +4375,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/serviceConnectionMaps/{serviceConnectionMapsId}:testIamPermissions:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -4359,7 +4419,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serviceConnectionPolicies:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists ServiceConnectionPolicies in a given project and location.
       operationId: networkconnectivity.projects.locations.serviceConnectionPolicies.list
@@ -4443,7 +4503,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serviceConnectionPolicies/{serviceConnectionPoliciesId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single ServiceConnectionPolicy.
       operationId: networkconnectivity.projects.locations.serviceConnectionPolicies.get
@@ -4560,7 +4620,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serviceConnectionPolicies/{serviceConnectionPoliciesId}:setIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -4602,7 +4662,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serviceConnectionPolicies/{serviceConnectionPoliciesId}:getIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -4643,7 +4703,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/serviceConnectionPolicies/{serviceConnectionPoliciesId}:testIamPermissions:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -4687,7 +4747,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serviceClasses:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists ServiceClasses in a given project and location.
       operationId: networkconnectivity.projects.locations.serviceClasses.list
@@ -4732,7 +4792,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serviceClasses/{serviceClassesId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single ServiceClass.
       operationId: networkconnectivity.projects.locations.serviceClasses.get
@@ -4849,7 +4909,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serviceClasses/{serviceClassesId}:setIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -4890,7 +4950,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serviceClasses/{serviceClassesId}:getIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -4930,7 +4990,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/serviceClasses/{serviceClassesId}:testIamPermissions:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -4973,7 +5033,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serviceConnectionTokens/{serviceConnectionTokensId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single ServiceConnectionToken.
       operationId: networkconnectivity.projects.locations.serviceConnectionTokens.get
@@ -5045,7 +5105,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serviceConnectionTokens:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists ServiceConnectionTokens in a given project and location.
       operationId: networkconnectivity.projects.locations.serviceConnectionTokens.list
@@ -5129,7 +5189,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/hubs:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Lists the Network Connectivity Center hubs associated with a given
@@ -5205,7 +5265,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/hubs/{hubsId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details about a Network Connectivity Center hub.
       operationId: networkconnectivity.projects.locations.global.hubs.get
@@ -5305,7 +5365,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/hubs/{hubsId}:listSpokes:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Lists the Network Connectivity Center spokes associated with a specified
@@ -5361,7 +5421,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/hubs/{hubsId}:rejectSpoke:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Rejects a Network Connectivity Center spoke from being attached to a
@@ -5398,7 +5458,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/hubs/{hubsId}:acceptSpoke:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Accepts a proposal to attach a Network Connectivity Center spoke to a
@@ -5433,7 +5493,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/hubs/{hubsId}:setIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -5469,7 +5529,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/hubs/{hubsId}:getIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -5504,7 +5564,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/global/hubs/{hubsId}:testIamPermissions:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -5542,7 +5602,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/hubs/{hubsId}/routeTables/{routeTablesId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details about a Network Connectivity Center route table.
       operationId: networkconnectivity.projects.locations.global.hubs.routeTables.get
@@ -5575,7 +5635,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/hubs/{hubsId}/routeTables:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists route tables in a given hub.
       operationId: networkconnectivity.projects.locations.global.hubs.routeTables.list
@@ -5620,7 +5680,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/hubs/{hubsId}/routeTables/{routeTablesId}/routes/{routesId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details about the specified route.
       operationId: >-
@@ -5659,7 +5719,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/hubs/{hubsId}/routeTables/{routeTablesId}/routes:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists routes in a given route table.
       operationId: >-
@@ -5710,7 +5770,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/hubs/{hubsId}/groups/{groupsId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details about a Network Connectivity Center group.
       operationId: networkconnectivity.projects.locations.global.hubs.groups.get
@@ -5788,7 +5848,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/hubs/{hubsId}/groups:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists groups in a given hub.
       operationId: networkconnectivity.projects.locations.global.hubs.groups.list
@@ -5833,7 +5893,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/hubs/{hubsId}/groups/{groupsId}:setIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -5874,7 +5934,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/hubs/{hubsId}/groups/{groupsId}:getIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -5914,7 +5974,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/global/hubs/{hubsId}/groups/{groupsId}:testIamPermissions:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -5958,7 +6018,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/policyBasedRoutes:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists policy-based routes in a given project and location.
       operationId: networkconnectivity.projects.locations.global.policyBasedRoutes.list
@@ -6032,7 +6092,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/policyBasedRoutes/{policyBasedRoutesId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single policy-based route.
       operationId: networkconnectivity.projects.locations.global.policyBasedRoutes.get
@@ -6090,7 +6150,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/policyBasedRoutes/{policyBasedRoutesId}:setIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -6127,7 +6187,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/global/policyBasedRoutes/{policyBasedRoutesId}:getIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -6163,7 +6223,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/global/policyBasedRoutes/{policyBasedRoutesId}:testIamPermissions:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -6202,7 +6262,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/spokes:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Lists the Network Connectivity Center spokes in a specified project and
@@ -6288,7 +6348,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/spokes/{spokesId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details about a Network Connectivity Center spoke.
       operationId: networkconnectivity.projects.locations.spokes.get
@@ -6401,7 +6461,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/spokes/{spokesId}:setIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -6442,7 +6502,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/spokes/{spokesId}:getIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -6482,7 +6542,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/spokes/{spokesId}:testIamPermissions:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -6525,7 +6585,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/internalRanges:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists internal ranges in a given project and location.
       operationId: networkconnectivity.projects.locations.internalRanges.list
@@ -6609,7 +6669,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/internalRanges/{internalRangesId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single internal range.
       operationId: networkconnectivity.projects.locations.internalRanges.get
@@ -6722,7 +6782,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/regionalEndpoints:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists RegionalEndpoints in a given project and location.
       operationId: networkconnectivity.projects.locations.regionalEndpoints.list
@@ -6806,7 +6866,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/regionalEndpoints/{regionalEndpointsId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single RegionalEndpoint.
       operationId: networkconnectivity.projects.locations.regionalEndpoints.get

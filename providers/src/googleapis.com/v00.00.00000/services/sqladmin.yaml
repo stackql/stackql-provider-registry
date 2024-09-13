@@ -7,8 +7,8 @@ info:
   title: Cloud SQL Admin API
   description: API for Cloud SQL database instance management
   version: v1
-  x-discovery-doc-revision: '20240521'
-  x-generated-date: '2024-06-03'
+  x-discovery-doc-revision: '20240831'
+  x-generated-date: '2024-09-13'
 externalDocs:
   url: https://developers.google.com/cloud-sql/
 servers:
@@ -178,6 +178,7 @@ components:
             - >-
               Switches a primary instance to a replica. This operation runs as
               part of a switchover operation to the original primary instance.
+            - Updates the major version of a Cloud SQL instance.
           enumDeprecated:
             - false
             - false
@@ -212,6 +213,7 @@ components:
             - true
             - true
             - true
+            - false
             - false
             - false
             - false
@@ -270,6 +272,7 @@ components:
             - CLUSTER_MAINTENANCE
             - SELF_SERVICE_MAINTENANCE
             - SWITCHOVER_TO_REPLICA
+            - MAJOR_VERSION_UPGRADE
         importContext:
           description: The context for import operation, if applicable.
           $ref: '#/components/schemas/ImportContext'
@@ -513,6 +516,24 @@ components:
             parallel:
               description: Optional. Whether or not the import should be parallel.
               type: boolean
+            postgresImportOptions:
+              description: >-
+                Optional. Options for importing from a Cloud SQL for PostgreSQL
+                instance.
+              type: object
+              properties:
+                clean:
+                  description: >-
+                    Optional. The --clean flag for the pg_restore utility. This
+                    flag applies only if you enabled Cloud SQL to import files
+                    in parallel.
+                  type: boolean
+                ifExists:
+                  description: >-
+                    Optional. The --if-exists flag for the pg_restore utility.
+                    This flag applies only if you enabled Cloud SQL to import
+                    files in parallel.
+                  type: boolean
     ExportContext:
       id: ExportContext
       description: Database instance export context.
@@ -582,6 +603,21 @@ components:
             parallel:
               description: Optional. Whether or not the export should be parallel.
               type: boolean
+            postgresExportOptions:
+              description: Options for exporting from a Cloud SQL for PostgreSQL instance.
+              type: object
+              properties:
+                clean:
+                  description: >-
+                    Optional. Use this option to include DROP SQL statements.
+                    These statements are used to delete database objects before
+                    running the import operation.
+                  type: boolean
+                ifExists:
+                  description: >-
+                    Optional. Option to include an IF EXISTS SQL statement with
+                    each DROP statement produced by clean.
+                  type: boolean
         csvExportOptions:
           description: >-
             Options for exporting data as CSV. `MySQL` and `PostgreSQL`
@@ -667,6 +703,26 @@ components:
                 Whether or not the backup can be used as a differential base
                 copy_only backup can not be served as differential base
               type: boolean
+            exportLogStartTime:
+              description: >-
+                Optional. The begin timestamp when transaction log will be
+                included in the export operation. [RFC
+                3339](https://tools.ietf.org/html/rfc3339) format (for example,
+                `2023-10-01T16:19:00.094`) in UTC. When omitted, all available
+                logs from the beginning of retention period will be included.
+                Only applied to Cloud SQL for SQL Server.
+              type: string
+              format: google-datetime
+            exportLogEndTime:
+              description: >-
+                Optional. The end timestamp when transaction log will be
+                included in the export operation. [RFC
+                3339](https://tools.ietf.org/html/rfc3339) format (for example,
+                `2023-10-01T16:19:00.094`) in UTC. When omitted, all available
+                logs until current time will be included. Only applied to Cloud
+                SQL for SQL Server.
+              type: string
+              format: google-datetime
     BackupContext:
       id: BackupContext
       description: Backup context.
@@ -759,6 +815,13 @@ components:
             to the specified zone. If no zone is specified, clone to the same
             primary zone as the source instance. This field applies to all DB
             types.
+          type: string
+        preferredSecondaryZone:
+          description: >-
+            Optional. Copy clone and point-in-time recovery clone of a regional
+            instance in the specified zones. If not specified, clone to the same
+            secondary zone as the source instance. This value cannot be the same
+            as the preferred_zone field. This field applies to all DB types.
           type: string
     BinLogCoordinates:
       id: BinLogCoordinates
@@ -1007,6 +1070,7 @@ components:
             - The database version is PostgreSQL 14.
             - The database version is PostgreSQL 15.
             - The database version is PostgreSQL 16.
+            - The database version is PostgreSQL 17.
             - The database version is MySQL 8.
             - >-
               The database major version is MySQL 8.0 and the minor version is
@@ -1057,7 +1121,6 @@ components:
               The database major version is MySQL 8.0 and the minor version is
               40.
             - The database version is MySQL 8.4.
-            - The database version is MySQL 8.4 and the patch version is 0.
             - The database version is SQL Server 2019 Standard.
             - The database version is SQL Server 2019 Enterprise.
             - The database version is SQL Server 2019 Express.
@@ -1089,8 +1152,8 @@ components:
             - false
             - false
             - false
-            - true
             - false
+            - true
             - false
             - false
             - false
@@ -1129,6 +1192,7 @@ components:
             - POSTGRES_14
             - POSTGRES_15
             - POSTGRES_16
+            - POSTGRES_17
             - MYSQL_8_0
             - MYSQL_8_0_18
             - MYSQL_8_0_26
@@ -1147,7 +1211,6 @@ components:
             - MYSQL_8_0_39
             - MYSQL_8_0_40
             - MYSQL_8_4
-            - MYSQL_8_4_0
             - SQLSERVER_2019_STANDARD
             - SQLSERVER_2019_ENTERPRISE
             - SQLSERVER_2019_EXPRESS
@@ -1434,6 +1497,17 @@ components:
         geminiConfig:
           description: Gemini instance configuration.
           $ref: '#/components/schemas/GeminiInstanceConfig'
+        satisfiesPzi:
+          description: >-
+            Output only. This status indicates whether the instance satisfies
+            PZI. The status is reserved for future use.
+          readOnly: true
+          type: boolean
+        switchTransactionLogsToCloudStorageEnabled:
+          description: >-
+            Input only. Whether Cloud SQL is enabled to switch storing
+            point-in-time recovery log files from a data disk to Cloud Storage.
+          type: boolean
     Settings:
       id: Settings
       description: Database instance settings.
@@ -1699,6 +1773,12 @@ components:
             and insights to the AI. The default value is false. This applies
             only to Cloud SQL for PostgreSQL instances.
           type: boolean
+        enableDataplexIntegration:
+          description: >-
+            Optional. By default, Cloud SQL instances have schema extraction
+            disabled for Dataplex. When this parameter is set to true, schema
+            extraction for Dataplex on Cloud SQL instances is activated.
+          type: boolean
     IpConfiguration:
       id: IpConfiguration
       description: IP Management configuration.
@@ -1800,6 +1880,19 @@ components:
         pscConfig:
           description: PSC settings for this instance.
           $ref: '#/components/schemas/PscConfig'
+        serverCaMode:
+          description: Specify what type of CA is used for the server certificate.
+          type: string
+          enumDescriptions:
+            - CA mode is unknown.
+            - Google-managed self-signed internal CA.
+            - >-
+              Google-managed regional CA part of root CA hierarchy hosted on
+              Google Cloud's Certificate Authority Service (CAS).
+          enum:
+            - CA_MODE_UNSPECIFIED
+            - GOOGLE_MANAGED_INTERNAL_CA
+            - GOOGLE_MANAGED_CAS_CA
     AclEntry:
       id: AclEntry
       description: An entry for an Access Control list.
@@ -1898,34 +1991,38 @@ components:
       type: object
       properties:
         hour:
-          description: hour of day - 0 to 23.
+          description: Hour of day - 0 to 23. Specify in the UTC time zone.
           type: integer
           format: int32
         day:
-          description: day of week (1-7), starting on Monday.
+          description: >-
+            Day of week - `MONDAY`, `TUESDAY`, `WEDNESDAY`, `THURSDAY`,
+            `FRIDAY`, `SATURDAY`, or `SUNDAY`. Specify in the UTC time zone.
+            Returned in output as an integer, 1 to 7, where `1` equals Monday.
           type: integer
           format: int32
         updateTrack:
           description: >-
-            Maintenance timing setting: `canary` (Earlier) or `stable` (Later).
-            [Learn
-            more](https://cloud.google.com/sql/docs/mysql/instance-settings#maintenance-timing-2ndgen).
+            Maintenance timing settings: `canary`, `stable`, or `week5`. For
+            more information, see [About maintenance on Cloud SQL
+            instances](https://cloud.google.com/sql/docs/mysql/maintenance).
           type: string
           enumDescriptions:
             - This is an unknown maintenance timing preference.
             - >-
-              For instance update that requires a restart, this update track
-              indicates your instance prefer to restart for new version early in
-              maintenance window.
+              For an instance with a scheduled maintenance window, this
+              maintenance timing indicates that the maintenance update is
+              scheduled 7 to 14 days after the notification is sent out. Also
+              referred to as `Week 1` (Console) and `preview` (gcloud CLI).
             - >-
-              For instance update that requires a restart, this update track
-              indicates your instance prefer to let Cloud SQL choose the timing
-              of restart (within its Maintenance window, if applicable).
+              For an instance with a scheduled maintenance window, this
+              maintenance timing indicates that the maintenance update is
+              scheduled 15 to 21 days after the notification is sent out. Also
+              referred to as `Week 2` (Console) and `production` (gcloud CLI).
             - >-
-              For instance update that requires a restart, this update track
-              indicates your instance prefer to let Cloud SQL choose the timing
-              of restart (within its Maintenance window, if applicable) to be at
-              least 5 weeks after the notification.
+              For instance with a scheduled maintenance window, this maintenance
+              timing indicates that the maintenance update is scheduled 35 to 42
+              days after the notification is sent out.
           enum:
             - SQL_UPDATE_TRACK_UNSPECIFIED
             - canary
@@ -2604,6 +2701,31 @@ components:
         kind:
           description: This is always `sql#instancesListServerCas`.
           type: string
+    InstancesListServerCertificatesResponse:
+      id: InstancesListServerCertificatesResponse
+      description: Instances ListServerCertificates response.
+      type: object
+      properties:
+        caCerts:
+          description: List of server CA certificates for the instance.
+          type: array
+          items:
+            $ref: '#/components/schemas/SslCert'
+        serverCerts:
+          description: >-
+            List of server certificates for the instance, signed by the
+            corresponding CA from the `ca_certs` list.
+          type: array
+          items:
+            $ref: '#/components/schemas/SslCert'
+        activeVersion:
+          description: >-
+            The `sha1_fingerprint` of the active certificate from
+            `server_certs`.
+          type: string
+        kind:
+          description: This is always `sql#instancesListServerCertificates`.
+          type: string
     InstancesRestoreBackupRequest:
       id: InstancesRestoreBackupRequest
       description: Database instance restore backup request.
@@ -2653,6 +2775,30 @@ components:
             The fingerprint of the next version to be rotated to. If left
             unspecified, will be rotated to the most recently added server CA
             version.
+          type: string
+    InstancesRotateServerCertificateRequest:
+      id: InstancesRotateServerCertificateRequest
+      description: Rotate server certificate request.
+      type: object
+      properties:
+        rotateServerCertificateContext:
+          description: >-
+            Optional. Contains details about the rotate server certificate
+            operation.
+          $ref: '#/components/schemas/RotateServerCertificateContext'
+    RotateServerCertificateContext:
+      id: RotateServerCertificateContext
+      description: Instance rotate server certificate context.
+      type: object
+      properties:
+        kind:
+          description: Optional. This is always `sql#rotateServerCertificateContext`.
+          type: string
+        nextVersion:
+          description: >-
+            The fingerprint of the next version to be rotated to. If left
+            unspecified, will be rotated to the most recently added server
+            certificate version.
           type: string
     InstancesTruncateLogRequest:
       id: InstancesTruncateLogRequest
@@ -2869,7 +3015,8 @@ components:
             - SQL Server Agent is not running.
             - >-
               The table definition is not support due to missing primary key or
-              replica identity, applicable for postgres.
+              replica identity, applicable for postgres. Note that this is a
+              warning and won't block the migration.
             - The customer has a definer that will break EM setup.
             - SQL Server @@SERVERNAME does not match actual host name.
             - The primary instance has been setup and will fail the setup.
@@ -2924,6 +3071,36 @@ components:
               The data size of the source instance is greater than 1 TB, the
               number of cores of the replica instance is less than 8, and the
               memory of the replica is less than 32 GB.
+            - >-
+              The warning message indicates the unsupported extensions will not
+              be migrated to the destination.
+            - >-
+              The warning message indicates the pg_cron extension and settings
+              will not be migrated to the destination.
+            - >-
+              The error message indicates that pg_cron flags are enabled on the
+              destination which is not supported during the migration.
+            - >-
+              This error message indicates that the specified extensions are not
+              enabled on destination instance. For example, before you can
+              migrate data to the destination instance, you must enable the
+              PGAudit extension on the instance.
+            - >-
+              The source database has generated columns that can't be migrated.
+              Please change them to regular columns before migration.
+            - >-
+              The source database has users that aren't created in the replica.
+              First, create all users, which are in the pg_user_mappings table
+              of the source database, in the destination instance. Then, perform
+              the migration.
+            - >-
+              The selected objects include system objects that aren't supported
+              for migration.
+            - >-
+              The source database has tables with the FULL or NOTHING replica
+              identity. Before starting your migration, either remove the
+              identity or change it to DEFAULT. Note that this is an error and
+              will block the migration.
           enum:
             - SQL_EXTERNAL_SYNC_SETTING_ERROR_TYPE_UNSPECIFIED
             - CONNECTION_FAILURE
@@ -2970,6 +3147,14 @@ components:
             - PG_SYNC_PARALLEL_LEVEL
             - INSUFFICIENT_DISK_SIZE
             - INSUFFICIENT_MACHINE_TIER
+            - UNSUPPORTED_EXTENSIONS_NOT_MIGRATED
+            - EXTENSIONS_NOT_MIGRATED
+            - PG_CRON_FLAG_ENABLED_IN_REPLICA
+            - EXTENSIONS_NOT_ENABLED_IN_REPLICA
+            - UNSUPPORTED_COLUMNS
+            - USERS_NOT_CREATED_IN_REPLICA
+            - UNSUPPORTED_SYSTEM_OBJECTS
+            - UNSUPPORTED_TABLES_WITH_REPLICA_IDENTITY
         detail:
           description: Additional information about the error encountered.
           type: string
@@ -3221,6 +3406,11 @@ components:
             Backup time zone to prevent restores to an instance with a different
             time zone. Now relevant only for SQL Server.
           type: string
+        maxChargeableBytes:
+          description: Output only. The maximum chargeable bytes for the backup.
+          readOnly: true
+          type: string
+          format: int64
     BackupRunsListResponse:
       id: BackupRunsListResponse
       description: Backup run list results.
@@ -3295,6 +3485,7 @@ components:
             - The database version is PostgreSQL 14.
             - The database version is PostgreSQL 15.
             - The database version is PostgreSQL 16.
+            - The database version is PostgreSQL 17.
             - The database version is MySQL 8.
             - >-
               The database major version is MySQL 8.0 and the minor version is
@@ -3345,7 +3536,6 @@ components:
               The database major version is MySQL 8.0 and the minor version is
               40.
             - The database version is MySQL 8.4.
-            - The database version is MySQL 8.4 and the patch version is 0.
             - The database version is SQL Server 2019 Standard.
             - The database version is SQL Server 2019 Enterprise.
             - The database version is SQL Server 2019 Express.
@@ -3377,8 +3567,8 @@ components:
             - false
             - false
             - false
-            - true
             - false
+            - true
             - false
             - false
             - false
@@ -3417,6 +3607,7 @@ components:
             - POSTGRES_14
             - POSTGRES_15
             - POSTGRES_16
+            - POSTGRES_17
             - MYSQL_8_0
             - MYSQL_8_0_18
             - MYSQL_8_0_26
@@ -3435,7 +3626,6 @@ components:
             - MYSQL_8_0_39
             - MYSQL_8_0_40
             - MYSQL_8_4
-            - MYSQL_8_4_0
             - SQLSERVER_2019_STANDARD
             - SQLSERVER_2019_ENTERPRISE
             - SQLSERVER_2019_EXPRESS
@@ -3472,6 +3662,19 @@ components:
         dnsName:
           description: The dns name of the instance.
           type: string
+        serverCaMode:
+          description: Specify what type of CA is used for the server certificate.
+          type: string
+          enumDescriptions:
+            - CA mode is unknown.
+            - Google-managed self-signed internal CA.
+            - >-
+              Google-managed regional CA part of root CA hierarchy hosted on
+              Google Cloud's Certificate Authority Service (CAS).
+          enum:
+            - CA_MODE_UNSPECIFIED
+            - GOOGLE_MANAGED_INTERNAL_CA
+            - GOOGLE_MANAGED_CAS_CA
     GenerateEphemeralCertRequest:
       id: GenerateEphemeralCertRequest
       description: Ephemeral certificate creation request.
@@ -3648,6 +3851,7 @@ components:
               - The database version is PostgreSQL 14.
               - The database version is PostgreSQL 15.
               - The database version is PostgreSQL 16.
+              - The database version is PostgreSQL 17.
               - The database version is MySQL 8.
               - >-
                 The database major version is MySQL 8.0 and the minor version is
@@ -3698,7 +3902,6 @@ components:
                 The database major version is MySQL 8.0 and the minor version is
                 40.
               - The database version is MySQL 8.4.
-              - The database version is MySQL 8.4 and the patch version is 0.
               - The database version is SQL Server 2019 Standard.
               - The database version is SQL Server 2019 Enterprise.
               - The database version is SQL Server 2019 Express.
@@ -3730,8 +3933,8 @@ components:
               - false
               - false
               - false
-              - true
               - false
+              - true
               - false
               - false
               - false
@@ -3770,6 +3973,7 @@ components:
               - POSTGRES_14
               - POSTGRES_15
               - POSTGRES_16
+              - POSTGRES_17
               - MYSQL_8_0
               - MYSQL_8_0_18
               - MYSQL_8_0_26
@@ -3788,7 +3992,6 @@ components:
               - MYSQL_8_0_39
               - MYSQL_8_0_40
               - MYSQL_8_4
-              - MYSQL_8_4_0
               - SQLSERVER_2019_STANDARD
               - SQLSERVER_2019_ENTERPRISE
               - SQLSERVER_2019_EXPRESS
@@ -4002,9 +4205,11 @@ components:
             - The database's built-in user type.
             - Cloud IAM user.
             - Cloud IAM service account.
-            - Cloud IAM group non-login user.
-            - Cloud IAM group login user.
-            - Cloud IAM group login service account.
+            - Cloud IAM group. Not used for login.
+            - Read-only. Login for a user that belongs to the Cloud IAM group.
+            - >-
+              Read-only. Login for a service account that belongs to the Cloud
+              IAM group.
           enum:
             - BUILT_IN
             - CLOUD_IAM_USER
@@ -4233,8 +4438,31 @@ components:
             openAPIDocKey: '200'
       sqlVerbs:
         select: []
-        insert: []
+        insert:
+          - $ref: >-
+              #/components/x-stackQL-resources/instances_server_ca/methods/add_server_ca
         update: []
+        replace: []
+        delete: []
+    instances_server_certificate:
+      id: google.sqladmin.instances_server_certificate
+      name: instances_server_certificate
+      title: Instances_server_certificate
+      methods:
+        add_server_certificate:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{project}~1instances~1{instance}~1addServerCertificate/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select: []
+        insert:
+          - $ref: >-
+              #/components/x-stackQL-resources/instances_server_certificate/methods/add_server_certificate
+        update: []
+        replace: []
         delete: []
     instances:
       id: google.sqladmin.instances
@@ -4320,16 +4548,20 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_1
+        list:
+          operation:
             $ref: '#/paths/~1v1~1projects~1{project}~1instances/get'
-          response: &ref_2
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.warnings
-        list:
-          operation: *ref_1
-          response: *ref_2
+        list_server_certificates:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{project}~1instances~1{instance}~1listServerCertificates/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
         promote_replica:
           operation:
             $ref: >-
@@ -4369,6 +4601,13 @@ components:
           operation:
             $ref: >-
               #/paths/~1v1~1projects~1{project}~1instances~1{instance}~1rotateServerCa/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        rotate_server_certificate:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{project}~1instances~1{instance}~1rotateServerCertificate/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -4450,6 +4689,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/instances/methods/insert'
         update:
           - $ref: '#/components/x-stackQL-resources/instances/methods/patch'
+        replace:
           - $ref: '#/components/x-stackQL-resources/instances/methods/update'
         delete:
           - $ref: '#/components/x-stackQL-resources/instances/methods/delete'
@@ -4471,6 +4711,7 @@ components:
               #/components/x-stackQL-resources/instances_server_cas/methods/list_server_cas
         insert: []
         update: []
+        replace: []
         delete: []
     ssl_certs_ephemeral:
       id: google.sqladmin.ssl_certs_ephemeral
@@ -4490,6 +4731,7 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/ssl_certs_ephemeral/methods/create_ephemeral
         update: []
+        replace: []
         delete: []
     ssl_certs:
       id: google.sqladmin.ssl_certs
@@ -4531,6 +4773,7 @@ components:
         insert:
           - $ref: '#/components/x-stackQL-resources/ssl_certs/methods/insert'
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/ssl_certs/methods/delete'
     instances_disk_shrink_config:
@@ -4551,6 +4794,7 @@ components:
               #/components/x-stackQL-resources/instances_disk_shrink_config/methods/get_disk_shrink_config
         insert: []
         update: []
+        replace: []
         delete: []
     instances_latest_recovery_time:
       id: google.sqladmin.instances_latest_recovery_time
@@ -4570,6 +4814,7 @@ components:
               #/components/x-stackQL-resources/instances_latest_recovery_time/methods/get_latest_recovery_time
         insert: []
         update: []
+        replace: []
         delete: []
     backup_runs:
       id: google.sqladmin.backup_runs
@@ -4597,17 +4842,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_3
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{project}~1instances~1{instance}~1backupRuns/get
-          response: &ref_4
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.items
-        list:
-          operation: *ref_3
-          response: *ref_4
       sqlVerbs:
         select:
           - $ref: '#/components/x-stackQL-resources/backup_runs/methods/get'
@@ -4615,6 +4857,7 @@ components:
         insert:
           - $ref: '#/components/x-stackQL-resources/backup_runs/methods/insert'
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/backup_runs/methods/delete'
     connect:
@@ -4641,6 +4884,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/connect/methods/get'
         insert: []
         update: []
+        replace: []
         delete: []
     databases:
       id: google.sqladmin.databases
@@ -4697,6 +4941,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/databases/methods/insert'
         update:
           - $ref: '#/components/x-stackQL-resources/databases/methods/patch'
+        replace:
           - $ref: '#/components/x-stackQL-resources/databases/methods/update'
         delete:
           - $ref: '#/components/x-stackQL-resources/databases/methods/delete'
@@ -4716,6 +4961,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/flags/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     operations:
       id: google.sqladmin.operations
@@ -4728,16 +4974,13 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_5
+        list:
+          operation:
             $ref: '#/paths/~1v1~1projects~1{project}~1operations/get'
-          response: &ref_6
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.items
-        list:
-          operation: *ref_5
-          response: *ref_6
         cancel:
           operation:
             $ref: >-
@@ -4751,6 +4994,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/operations/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     tiers:
       id: google.sqladmin.tiers
@@ -4768,6 +5012,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/tiers/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     users:
       id: google.sqladmin.users
@@ -4788,17 +5033,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_7
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{project}~1instances~1{instance}~1users/get
-          response: &ref_8
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.items
-        list:
-          operation: *ref_7
-          response: *ref_8
         update:
           operation:
             $ref: >-
@@ -4819,13 +5061,14 @@ components:
           - $ref: '#/components/x-stackQL-resources/users/methods/list'
         insert:
           - $ref: '#/components/x-stackQL-resources/users/methods/insert'
-        update:
+        update: []
+        replace:
           - $ref: '#/components/x-stackQL-resources/users/methods/update'
         delete:
           - $ref: '#/components/x-stackQL-resources/users/methods/delete'
 paths:
   /v1/projects/{project}/instances/{instance}/addServerCa:
-    parameters: &ref_9
+    parameters: &ref_1
       - $ref: '#/components/parameters/access_token'
       - $ref: '#/components/parameters/alt'
       - $ref: '#/components/parameters/callback'
@@ -4843,7 +5086,9 @@ paths:
         instance. Required to prepare for a certificate rotation. If a CA
         version was previously added but never used in a certificate rotation,
         this operation replaces that version. There cannot be more than one CA
-        version waiting to be rotated in.
+        version waiting to be rotated in. For instances that have enabled
+        Certificate Authority Service (CAS) based server CA, please use
+        AddServerCertificate to add a new server certificate.
       operationId: sql.instances.addServerCa
       security:
         - Oauth2:
@@ -4872,8 +5117,47 @@ paths:
           required: true
           schema:
             type: string
+  /v1/projects/{project}/instances/{instance}/addServerCertificate:
+    parameters: *ref_1
+    post:
+      description: >-
+        Add a new trusted server certificate version for the specified instance
+        using Certificate Authority Service (CAS) server CA. Required to prepare
+        for a certificate rotation. If a server certificate version was
+        previously added but never used in a certificate rotation, this
+        operation replaces that version. There cannot be more than one
+        certificate version waiting to be rotated in. For instances not using
+        CAS server CA, please use AddServerCa instead.
+      operationId: sql.instances.addServerCertificate
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+        - Oauth2:
+            - https://www.googleapis.com/auth/sqlservice.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/sqlservice.admin
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: project
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instance
+          required: true
+          schema:
+            type: string
   /v1/projects/{project}/instances/{instance}/clone:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Creates a Cloud SQL instance as a clone of the source instance. Using
@@ -4912,7 +5196,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}:
-    parameters: *ref_9
+    parameters: *ref_1
     delete:
       description: Deletes a Cloud SQL instance.
       operationId: sql.instances.delete
@@ -5049,7 +5333,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/demoteMaster:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Demotes the stand-alone instance to be a Cloud SQL read replica for an
@@ -5088,7 +5372,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/demote:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Demotes an existing standalone instance to be a Cloud SQL read replica
@@ -5127,7 +5411,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/export:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Exports data from a Cloud SQL instance to a Cloud Storage bucket as a
@@ -5162,7 +5446,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/failover:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Initiates a manual failover of a high availability (HA) primary instance
@@ -5206,7 +5490,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/reencrypt:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: Reencrypt CMEK instance with latest key version.
       operationId: sql.instances.reencrypt
@@ -5243,7 +5527,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/import:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Imports data into a Cloud SQL instance from a SQL dump or CSV file in
@@ -5278,7 +5562,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: Creates a new Cloud SQL instance.
       operationId: sql.instances.insert
@@ -5348,7 +5632,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/listServerCas:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: >-
         Lists all of the trusted Certificate Authorities (CAs) for the specified
@@ -5384,8 +5668,45 @@ paths:
           required: true
           schema:
             type: string
+  /v1/projects/{project}/instances/{instance}/listServerCertificates:
+    parameters: *ref_1
+    get:
+      description: >-
+        Lists all versions of server certificates and certificate authorities
+        (CAs) for the specified instance. There can be up to three sets of certs
+        listed: the certificate that is currently in use, a future that has been
+        added but not yet used to sign a certificate, and a certificate that has
+        been rotated out.
+      operationId: sql.instances.ListServerCertificates
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+        - Oauth2:
+            - https://www.googleapis.com/auth/sqlservice.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/sqlservice.admin
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstancesListServerCertificatesResponse'
+      parameters:
+        - in: path
+          name: project
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instance
+          required: true
+          schema:
+            type: string
   /v1/projects/{project}/instances/{instance}/promoteReplica:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Promotes the read replica instance to be an independent Cloud SQL
@@ -5424,7 +5745,7 @@ paths:
           schema:
             type: boolean
   /v1/projects/{project}/instances/{instance}/switchover:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Switches over from the primary instance to the designated DR replica
@@ -5463,7 +5784,7 @@ paths:
             type: string
             format: google-duration
   /v1/projects/{project}/instances/{instance}/resetSslConfig:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Deletes all client certificates and generates a new server SSL
@@ -5497,7 +5818,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/restart:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: Restarts a Cloud SQL instance.
       operationId: sql.instances.restart
@@ -5529,7 +5850,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/restoreBackup:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Restores a backup of a Cloud SQL instance. Using this operation might
@@ -5568,11 +5889,14 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/rotateServerCa:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Rotates the server certificate to one signed by the Certificate
-        Authority (CA) version previously added with the addServerCA method.
+        Authority (CA) version previously added with the addServerCA method. For
+        instances that have enabled Certificate Authority Service (CAS) based
+        server CA, please use RotateServerCertificate to rotate the server
+        certificate.
       operationId: sql.instances.rotateServerCa
       requestBody:
         content:
@@ -5606,8 +5930,48 @@ paths:
           required: true
           schema:
             type: string
+  /v1/projects/{project}/instances/{instance}/rotateServerCertificate:
+    parameters: *ref_1
+    post:
+      description: >-
+        Rotates the server certificate version to one previously added with the
+        addServerCertificate method. For instances not using Certificate
+        Authority Service (CAS) server CA, please use RotateServerCa instead.
+      operationId: sql.instances.RotateServerCertificate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstancesRotateServerCertificateRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+        - Oauth2:
+            - https://www.googleapis.com/auth/sqlservice.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/sqlservice.admin
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: project
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instance
+          required: true
+          schema:
+            type: string
   /v1/projects/{project}/instances/{instance}/startReplica:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: Starts the replication in the read replica instance.
       operationId: sql.instances.startReplica
@@ -5639,7 +6003,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/stopReplica:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: Stops the replication in the read replica instance.
       operationId: sql.instances.stopReplica
@@ -5671,7 +6035,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/truncateLog:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: Truncate MySQL general and slow query log tables MySQL only.
       operationId: sql.instances.truncateLog
@@ -5708,7 +6072,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/acquireSsrsLease:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: Acquire a lease for the setup of SQL Server Reporting Services (SSRS).
       operationId: sql.instances.acquireSsrsLease
@@ -5745,7 +6109,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/releaseSsrsLease:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: Release a lease for the setup of SQL Server Reporting Services (SSRS).
       operationId: sql.instances.releaseSsrsLease
@@ -5777,7 +6141,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/createEphemeral:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Generates a short-lived X509 certificate containing the provided public
@@ -5818,7 +6182,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/sslCerts/{sha1Fingerprint}:
-    parameters: *ref_9
+    parameters: *ref_1
     delete:
       description: >-
         Deletes the SSL certificate. For First Generation instances, the
@@ -5895,7 +6259,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/sslCerts:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Creates an SSL certificate and returns it along with the private key and
@@ -5965,7 +6329,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/rescheduleMaintenance:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: Reschedules the maintenance on the given instance.
       operationId: sql.projects.instances.rescheduleMaintenance
@@ -6003,7 +6367,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/verifyExternalSyncSettings:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: Verify External primary instance external sync settings.
       operationId: sql.projects.instances.verifyExternalSyncSettings
@@ -6042,7 +6406,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/startExternalSync:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: Start External primary instance migration.
       operationId: sql.projects.instances.startExternalSync
@@ -6079,7 +6443,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/performDiskShrink:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: Perform Disk Shrink on primary instance.
       operationId: sql.projects.instances.performDiskShrink
@@ -6116,7 +6480,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/getDiskShrinkConfig:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: Get Disk Shrink Config for a given instance.
       operationId: sql.projects.instances.getDiskShrinkConfig
@@ -6148,7 +6512,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/resetReplicaSize:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: Reset Replica Size to primary instance disk size.
       operationId: sql.projects.instances.resetReplicaSize
@@ -6185,7 +6549,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/getLatestRecoveryTime:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: Get Latest Recovery Time for a given instance.
       operationId: sql.projects.instances.getLatestRecoveryTime
@@ -6217,7 +6581,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/backupRuns/{id}:
-    parameters: *ref_9
+    parameters: *ref_1
     delete:
       description: Deletes the backup taken by a backup run.
       operationId: sql.backupRuns.delete
@@ -6289,7 +6653,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/backupRuns:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: Creates a new backup run on demand.
       operationId: sql.backupRuns.insert
@@ -6368,7 +6732,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/connectSettings:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: Retrieves connect settings about a Cloud SQL instance.
       operationId: sql.connect.get
@@ -6405,7 +6769,7 @@ paths:
             type: string
             format: google-datetime
   /v1/projects/{project}/instances/{instance}:generateEphemeralCert:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Generates a short-lived X509 certificate containing the provided public
@@ -6446,7 +6810,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/databases/{database}:
-    parameters: *ref_9
+    parameters: *ref_1
     delete:
       description: Deletes a database from a Cloud SQL instance.
       operationId: sql.databases.delete
@@ -6604,7 +6968,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/databases:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Inserts a resource containing information about a database inside a
@@ -6674,7 +7038,7 @@ paths:
           schema:
             type: string
   /v1/flags:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: Lists all available database flags for Cloud SQL instances.
       operationId: sql.flags.list
@@ -6700,7 +7064,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/operations/{operation}:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: Retrieves an instance operation that has been performed on an instance.
       operationId: sql.operations.get
@@ -6732,7 +7096,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/operations:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: >-
         Lists all instance operations that have been performed on the given
@@ -6774,7 +7138,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/operations/{operation}/cancel:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: Cancels an instance operation that has been performed on an instance.
       operationId: sql.operations.cancel
@@ -6806,7 +7170,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/tiers:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: >-
         Lists all available machine types (tiers) for Cloud SQL, for example,
@@ -6836,7 +7200,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/users:
-    parameters: *ref_9
+    parameters: *ref_1
     delete:
       description: Deletes a user from a Cloud SQL instance.
       operationId: sql.users.delete
@@ -6984,7 +7348,7 @@ paths:
           schema:
             type: string
   /v1/projects/{project}/instances/{instance}/users/{name}:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: Retrieves a resource containing information about a user.
       operationId: sql.users.get

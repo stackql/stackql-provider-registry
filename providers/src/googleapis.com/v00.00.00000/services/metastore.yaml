@@ -9,8 +9,8 @@ info:
     The Dataproc Metastore API is used to manage the lifecycle and configuration
     of metastore services.
   version: v1
-  x-discovery-doc-revision: '20240516'
-  x-generated-date: '2024-06-03'
+  x-discovery-doc-revision: '20240818'
+  x-generated-date: '2024-09-13'
 externalDocs:
   url: https://cloud.google.com/dataproc-metastore/docs
 servers:
@@ -365,6 +365,8 @@ components:
             - >-
               The metastore service has encountered an error and cannot be used.
               The metastore service should be deleted.
+            - The Dataproc Metastore service 2 is being scaled up or down.
+            - The metastore service is processing a managed migration.
           enum:
             - STATE_UNSPECIFIED
             - CREATING
@@ -374,6 +376,8 @@ components:
             - UPDATING
             - DELETING
             - ERROR
+            - AUTOSCALING
+            - MIGRATING
         stateMessage:
           description: >-
             Output only. Additional information about the current state of the
@@ -885,6 +889,44 @@ components:
             increments of 1.0 for values greater than 1.0.
           type: number
           format: float
+        autoscalingConfig:
+          description: Optional. The autoscaling configuration.
+          $ref: '#/components/schemas/AutoscalingConfig'
+    AutoscalingConfig:
+      id: AutoscalingConfig
+      description: Represents the autoscaling configuration of a metastore service.
+      type: object
+      properties:
+        autoscalingFactor:
+          description: >-
+            Output only. The scaling factor of a service with autoscaling
+            enabled.
+          readOnly: true
+          type: number
+          format: float
+        autoscalingEnabled:
+          description: Optional. Whether or not autoscaling is enabled for this service.
+          type: boolean
+        limitConfig:
+          description: Optional. The LimitConfig of the service.
+          $ref: '#/components/schemas/LimitConfig'
+    LimitConfig:
+      id: LimitConfig
+      description: Represents the autoscaling limit configuration of a metastore service.
+      type: object
+      properties:
+        maxScalingFactor:
+          description: >-
+            Optional. The highest scaling factor that the service should be
+            autoscaled to.
+          type: number
+          format: float
+        minScalingFactor:
+          description: >-
+            Optional. The lowest scaling factor that the service should be
+            autoscaled to.
+          type: number
+          format: float
     ScheduledBackup:
       id: ScheduledBackup
       description: This specifies the configuration of scheduled backup.
@@ -1294,6 +1336,265 @@ components:
             mask
           type: object
           additionalProperties:
+            type: string
+    StartMigrationRequest:
+      id: StartMigrationRequest
+      description: Request message for DataprocMetastore.StartMigration.
+      type: object
+      properties:
+        migrationExecution:
+          description: Required. The configuration details for the migration.
+          $ref: '#/components/schemas/MigrationExecution'
+        requestId:
+          description: >-
+            Optional. A request ID. Specify a unique request ID to allow the
+            server to ignore the request if it has completed. The server will
+            ignore subsequent requests that provide a duplicate request ID for
+            at least 60 minutes after the first request.For example, if an
+            initial request times out, followed by another request with the same
+            request ID, the server ignores the second request to prevent the
+            creation of duplicate commitments.The request ID must be a valid
+            UUID
+            (https://en.wikipedia.org/wiki/Universally_unique_identifier#Format)
+            A zero UUID (00000000-0000-0000-0000-000000000000) is not supported.
+          type: string
+    MigrationExecution:
+      id: MigrationExecution
+      description: The details of a migration execution resource.
+      type: object
+      properties:
+        cloudSqlMigrationConfig:
+          description: >-
+            Configuration information specific to migrating from self-managed
+            hive metastore on Google Cloud using Cloud SQL as the backend
+            database to Dataproc Metastore.
+          $ref: '#/components/schemas/CloudSQLMigrationConfig'
+        name:
+          description: >-
+            Output only. The relative resource name of the migration execution,
+            in the following form:
+            projects/{project_number}/locations/{location_id}/services/{service_id}/migrationExecutions/{migration_execution_id}
+          readOnly: true
+          type: string
+        createTime:
+          description: Output only. The time when the migration execution was started.
+          readOnly: true
+          type: string
+          format: google-datetime
+        endTime:
+          description: Output only. The time when the migration execution finished.
+          readOnly: true
+          type: string
+          format: google-datetime
+        state:
+          description: Output only. The current state of the migration execution.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - The state of the migration execution is unknown.
+            - The migration execution is starting.
+            - The migration execution is running.
+            - The migration execution is in the process of being cancelled.
+            - The migration execution is awaiting user action.
+            - The migration execution has completed successfully.
+            - The migration execution has failed.
+            - The migration execution is cancelled.
+            - The migration execution is being deleted.
+          enum:
+            - STATE_UNSPECIFIED
+            - STARTING
+            - RUNNING
+            - CANCELLING
+            - AWAITING_USER_ACTION
+            - SUCCEEDED
+            - FAILED
+            - CANCELLED
+            - DELETING
+        phase:
+          description: Output only. The current phase of the migration execution.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - The phase of the migration execution is unknown.
+            - >-
+              Replication phase refers to the migration phase when Dataproc
+              Metastore is running a pipeline to replicate changes in the
+              customer database to its backend database. During this phase,
+              Dataproc Metastore uses the customer database as the hive
+              metastore backend database.
+            - >-
+              Cutover phase refers to the migration phase when Dataproc
+              Metastore switches to using its own backend database. Migration
+              enters this phase when customer is done migrating all their
+              clusters/workloads to Dataproc Metastore and triggers
+              CompleteMigration.
+          enum:
+            - PHASE_UNSPECIFIED
+            - REPLICATION
+            - CUTOVER
+        stateMessage:
+          description: >-
+            Output only. Additional information about the current state of the
+            migration execution.
+          readOnly: true
+          type: string
+    CloudSQLMigrationConfig:
+      id: CloudSQLMigrationConfig
+      description: >-
+        Configuration information for migrating from self-managed hive metastore
+        on Google Cloud using Cloud SQL as the backend database to Dataproc
+        Metastore.
+      type: object
+      properties:
+        cdcConfig:
+          description: >-
+            Required. Configuration information to start the Change Data Capture
+            (CDC) streams from customer database to backend database of Dataproc
+            Metastore. Dataproc Metastore switches to using its backend database
+            after the cutover phase of migration.
+          $ref: '#/components/schemas/CdcConfig'
+        cloudSqlConnectionConfig:
+          description: >-
+            Required. Configuration information to establish customer database
+            connection before the cutover phase of migration
+          $ref: '#/components/schemas/CloudSQLConnectionConfig'
+    CdcConfig:
+      id: CdcConfig
+      description: >-
+        Configuration information to start the Change Data Capture (CDC) streams
+        from customer database to backend database of Dataproc Metastore.
+      type: object
+      properties:
+        vpcNetwork:
+          description: >-
+            Required. Fully qualified name of the Cloud SQL instance's VPC
+            network or the shared VPC network that Datastream will peer to, in
+            the following format:
+            projects/{project_id}/locations/global/networks/{network_id}. More
+            context in
+            https://cloud.google.com/datastream/docs/network-connectivity-options#privateconnectivity
+          type: string
+        subnetIpRange:
+          description: Required. A /29 CIDR IP range for peering with datastream.
+          type: string
+        username:
+          description: >-
+            Required. The username that the Datastream service should use for
+            the MySQL connection.
+          type: string
+        password:
+          description: >-
+            Required. Input only. The password for the user that Datastream
+            service should use for the MySQL connection. This field is not
+            returned on request.
+          type: string
+        reverseProxySubnet:
+          description: >-
+            Required. The URL of the subnetwork resource to create the VM
+            instance hosting the reverse proxy in. More context in
+            https://cloud.google.com/datastream/docs/private-connectivity#reverse-csql-proxy
+            The subnetwork should reside in the network provided in the request
+            that Datastream will peer to and should be in the same region as
+            Datastream, in the following format.
+            projects/{project_id}/regions/{region_id}/subnetworks/{subnetwork_id}
+          type: string
+        bucket:
+          description: >-
+            Optional. The bucket to write the intermediate stream event data in.
+            The bucket name must be without any prefix like "gs://". See the
+            bucket naming requirements
+            (https://cloud.google.com/storage/docs/buckets#naming). This field
+            is optional. If not set, the Artifacts Cloud Storage bucket will be
+            used.
+          type: string
+        rootPath:
+          description: >-
+            Optional. The root path inside the Cloud Storage bucket. The stream
+            event data will be written to this path. The default value is
+            /migration.
+          type: string
+    CloudSQLConnectionConfig:
+      id: CloudSQLConnectionConfig
+      description: >-
+        Configuration information to establish customer database connection
+        before the cutover phase of migration
+      type: object
+      properties:
+        instanceConnectionName:
+          description: >-
+            Required. Cloud SQL database connection name
+            (project_id:region:instance_name)
+          type: string
+        ipAddress:
+          description: Required. The private IP address of the Cloud SQL instance.
+          type: string
+        port:
+          description: Required. The network port of the database.
+          type: integer
+          format: int32
+        hiveDatabaseName:
+          description: Required. The hive database name.
+          type: string
+        username:
+          description: >-
+            Required. The username that Dataproc Metastore service will use to
+            connect to the database.
+          type: string
+        password:
+          description: >-
+            Required. Input only. The password for the user that Dataproc
+            Metastore service will be using to connect to the database. This
+            field is not returned on request.
+          type: string
+        proxySubnet:
+          description: >-
+            Required. The relative resource name of the subnetwork to deploy the
+            SOCKS5 proxy service in. The subnetwork should reside in a network
+            through which the Cloud SQL instance is accessible. The resource
+            name should be in the format,
+            projects/{project_id}/regions/{region_id}/subnetworks/{subnetwork_id}
+          type: string
+        natSubnet:
+          description: >-
+            Required. The relative resource name of the subnetwork to be used
+            for Private Service Connect. Note that this cannot be a regular
+            subnet and is used only for NAT.
+            (https://cloud.google.com/vpc/docs/about-vpc-hosted-services#psc-subnets)
+            This subnet is used to publish the SOCKS5 proxy service. The subnet
+            size must be at least /29 and it should reside in a network through
+            which the Cloud SQL instance is accessible. The resource name should
+            be in the format,
+            projects/{project_id}/regions/{region_id}/subnetworks/{subnetwork_id}
+          type: string
+    CompleteMigrationRequest:
+      id: CompleteMigrationRequest
+      description: Request message for DataprocMetastore.CompleteMigration.
+      type: object
+      properties: {}
+    CancelMigrationRequest:
+      id: CancelMigrationRequest
+      description: Request message for DataprocMetastore.CancelMigration.
+      type: object
+      properties: {}
+    ListMigrationExecutionsResponse:
+      id: ListMigrationExecutionsResponse
+      description: Response message for DataprocMetastore.ListMigrationExecutions.
+      type: object
+      properties:
+        migrationExecutions:
+          description: The migration executions on the specified service.
+          type: array
+          items:
+            $ref: '#/components/schemas/MigrationExecution'
+        nextPageToken:
+          description: >-
+            A token that can be sent as page_token to retrieve the next page. If
+            this field is omitted, there are no subsequent pages.
+          type: string
+        unreachable:
+          description: Locations that could not be reached.
+          type: array
+          items:
             type: string
     ListLocationsResponse:
       id: ListLocationsResponse
@@ -1903,16 +2204,13 @@ components:
       name: locations
       title: Locations
       methods:
-        _list:
-          operation: &ref_1
+        list:
+          operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations/get'
-          response: &ref_2
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.locations
-        list:
-          operation: *ref_1
-          response: *ref_2
         get:
           operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}/get'
@@ -1925,23 +2223,21 @@ components:
           - $ref: '#/components/x-stackQL-resources/locations/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     operations:
       id: google.metastore.operations
       name: operations
       title: Operations
       methods:
-        _list:
-          operation: &ref_3
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1operations/get
-          response: &ref_4
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.operations
-        list:
-          operation: *ref_3
-          response: *ref_4
         get:
           operation:
             $ref: >-
@@ -1969,6 +2265,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/operations/methods/list'
         insert: []
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/operations/methods/delete'
     federations:
@@ -1976,17 +2273,14 @@ components:
       name: federations
       title: Federations
       methods:
-        _list:
-          operation: &ref_5
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1federations/get
-          response: &ref_6
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.federations
-        list:
-          operation: *ref_5
-          response: *ref_6
         create:
           operation:
             $ref: >-
@@ -2023,6 +2317,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/federations/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/federations/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/federations/methods/delete'
     federations_iam_policies:
@@ -2037,17 +2332,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_7
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1federations~1{federationsId}:getIamPolicy/get
-          response: &ref_8
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_7
-          response: *ref_8
         test_iam_permissions:
           operation:
             $ref: >-
@@ -2061,23 +2353,23 @@ components:
               #/components/x-stackQL-resources/federations_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/federations_iam_policies/methods/set_iam_policy
         delete: []
     services:
       id: google.metastore.services
       name: services
       title: Services
       methods:
-        _list:
-          operation: &ref_9
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1services/get
-          response: &ref_10
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.services
-        list:
-          operation: *ref_9
-          response: *ref_10
         create:
           operation:
             $ref: >-
@@ -2148,6 +2440,27 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        start_migration:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1services~1{servicesId}:startMigration/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        complete_migration:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1services~1{servicesId}:completeMigration/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        cancel_migration:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1services~1{servicesId}:cancelMigration/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
       sqlVerbs:
         select:
           - $ref: '#/components/x-stackQL-resources/services/methods/get'
@@ -2156,6 +2469,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/services/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/services/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/services/methods/delete'
     services_iam_policies:
@@ -2170,17 +2484,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_11
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1services~1{servicesId}:getIamPolicy/get
-          response: &ref_12
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_11
-          response: *ref_12
         test_iam_permissions:
           operation:
             $ref: >-
@@ -2194,23 +2505,23 @@ components:
               #/components/x-stackQL-resources/services_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/services_iam_policies/methods/set_iam_policy
         delete: []
     metadata_imports:
       id: google.metastore.metadata_imports
       name: metadata_imports
       title: Metadata_imports
       methods:
-        _list:
-          operation: &ref_13
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1services~1{servicesId}~1metadataImports/get
-          response: &ref_14
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.metadataImports
-        list:
-          operation: *ref_13
-          response: *ref_14
         create:
           operation:
             $ref: >-
@@ -2240,23 +2551,21 @@ components:
           - $ref: '#/components/x-stackQL-resources/metadata_imports/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/metadata_imports/methods/patch'
+        replace: []
         delete: []
     backups:
       id: google.metastore.backups
       name: backups
       title: Backups
       methods:
-        _list:
-          operation: &ref_15
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1services~1{servicesId}~1backups/get
-          response: &ref_16
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.backups
-        list:
-          operation: *ref_15
-          response: *ref_16
         create:
           operation:
             $ref: >-
@@ -2285,6 +2594,7 @@ components:
         insert:
           - $ref: '#/components/x-stackQL-resources/backups/methods/create'
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/backups/methods/delete'
     backups_iam_policies:
@@ -2299,24 +2609,61 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_17
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1services~1{servicesId}~1backups~1{backupsId}:getIamPolicy/get
-          response: &ref_18
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_17
-          response: *ref_18
       sqlVerbs:
         select:
           - $ref: >-
               #/components/x-stackQL-resources/backups_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/backups_iam_policies/methods/set_iam_policy
         delete: []
+    migration_executions:
+      id: google.metastore.migration_executions
+      name: migration_executions
+      title: Migration_executions
+      methods:
+        get:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1services~1{servicesId}~1migrationExecutions~1{migrationExecutionsId}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1services~1{servicesId}~1migrationExecutions~1{migrationExecutionsId}/delete
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        list:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1services~1{servicesId}~1migrationExecutions/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.migrationExecutions
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/migration_executions/methods/get'
+          - $ref: '#/components/x-stackQL-resources/migration_executions/methods/list'
+        insert: []
+        update: []
+        replace: []
+        delete:
+          - $ref: >-
+              #/components/x-stackQL-resources/migration_executions/methods/delete
     databases_iam_policies:
       id: google.metastore.databases_iam_policies
       name: databases_iam_policies
@@ -2329,23 +2676,23 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_19
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1services~1{servicesId}~1databases~1{databasesId}:getIamPolicy/get
-          response: &ref_20
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_19
-          response: *ref_20
       sqlVerbs:
         select:
           - $ref: >-
               #/components/x-stackQL-resources/databases_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/databases_iam_policies/methods/set_iam_policy
         delete: []
     tables_iam_policies:
       id: google.metastore.tables_iam_policies
@@ -2359,27 +2706,27 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_21
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1services~1{servicesId}~1databases~1{databasesId}~1tables~1{tablesId}:getIamPolicy/get
-          response: &ref_22
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_21
-          response: *ref_22
       sqlVerbs:
         select:
           - $ref: >-
               #/components/x-stackQL-resources/tables_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/tables_iam_policies/methods/set_iam_policy
         delete: []
 paths:
   /v1/projects/{projectsId}/locations:
-    parameters: &ref_23
+    parameters: &ref_1
       - $ref: '#/components/parameters/access_token'
       - $ref: '#/components/parameters/alt'
       - $ref: '#/components/parameters/callback'
@@ -2426,7 +2773,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets information about a location.
       operationId: metastore.projects.locations.get
@@ -2454,7 +2801,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: >-
         Lists operations that match the specified filter in the request. If the
@@ -2497,7 +2844,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: >-
         Gets the latest state of a long-running operation. Clients can use this
@@ -2568,7 +2915,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:cancel:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Starts asynchronous cancellation on a long-running operation. The server
@@ -2615,7 +2962,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/federations:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists federations in a project and location.
       operationId: metastore.projects.locations.federations.list
@@ -2699,7 +3046,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/federations/{federationsId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets the details of a single federation.
       operationId: metastore.projects.locations.federations.get
@@ -2812,7 +3159,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/federations/{federationsId}:setIamPolicy:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -2853,7 +3200,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/federations/{federationsId}:getIamPolicy:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -2893,7 +3240,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/federations/{federationsId}:testIamPermissions:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -2936,7 +3283,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists services in a project and location.
       operationId: metastore.projects.locations.services.list
@@ -3020,7 +3367,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets the details of a single service.
       operationId: metastore.projects.locations.services.get
@@ -3133,7 +3480,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}:exportMetadata:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Exports metadata from a service.
       operationId: metastore.projects.locations.services.exportMetadata
@@ -3171,7 +3518,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}:restore:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Restores a service from a backup.
       operationId: metastore.projects.locations.services.restore
@@ -3209,7 +3556,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}:queryMetadata:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Query Dataproc Metastore metadata.
       operationId: metastore.projects.locations.services.queryMetadata
@@ -3247,7 +3594,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}:moveTableToDatabase:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Move a table to another database.
       operationId: metastore.projects.locations.services.moveTableToDatabase
@@ -3285,7 +3632,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}:alterLocation:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Alter metadata resource location. The metadata resource can be a
@@ -3327,7 +3674,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}:alterTableProperties:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Alter metadata table properties.
       operationId: metastore.projects.locations.services.alterTableProperties
@@ -3364,8 +3711,125 @@ paths:
           required: true
           schema:
             type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}:startMigration:
+    parameters: *ref_1
+    post:
+      description: Starts the Managed Migration process.
+      operationId: metastore.projects.locations.services.startMigration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartMigrationRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: servicesId
+          required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}:completeMigration:
+    parameters: *ref_1
+    post:
+      description: >-
+        Completes the managed migration process. The Dataproc Metastore service
+        will switch to using its own backend database after successful
+        migration.
+      operationId: metastore.projects.locations.services.completeMigration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteMigrationRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: servicesId
+          required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}:cancelMigration:
+    parameters: *ref_1
+    post:
+      description: Cancels the ongoing Managed Migration process.
+      operationId: metastore.projects.locations.services.cancelMigration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelMigrationRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: servicesId
+          required: true
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}:setIamPolicy:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -3406,7 +3870,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}:getIamPolicy:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -3446,7 +3910,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}:testIamPermissions:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -3489,7 +3953,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}/metadataImports:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists imports in a service.
       operationId: metastore.projects.locations.services.metadataImports.list
@@ -3583,7 +4047,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}/metadataImports/{metadataImportsId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets details of a single import.
       operationId: metastore.projects.locations.services.metadataImports.get
@@ -3673,7 +4137,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}/backups:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists backups in a service.
       operationId: metastore.projects.locations.services.backups.list
@@ -3767,7 +4231,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}/backups/{backupsId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets details of a single backup.
       operationId: metastore.projects.locations.services.backups.get
@@ -3845,7 +4309,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}/backups/{backupsId}:setIamPolicy:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -3891,7 +4355,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}/backups/{backupsId}:getIamPolicy:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -3935,8 +4399,136 @@ paths:
           schema:
             type: integer
             format: int32
+  /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}/migrationExecutions/{migrationExecutionsId}:
+    parameters: *ref_1
+    get:
+      description: Gets details of a single migration execution.
+      operationId: metastore.projects.locations.services.migrationExecutions.get
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrationExecution'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: servicesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: migrationExecutionsId
+          required: true
+          schema:
+            type: string
+    delete:
+      description: Deletes a single migration execution.
+      operationId: metastore.projects.locations.services.migrationExecutions.delete
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: servicesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: migrationExecutionsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: requestId
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}/migrationExecutions:
+    parameters: *ref_1
+    get:
+      description: Lists migration executions on a service.
+      operationId: metastore.projects.locations.services.migrationExecutions.list
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMigrationExecutionsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: servicesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: filter
+          schema:
+            type: string
+        - in: query
+          name: orderBy
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}/databases/{databasesId}:setIamPolicy:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -3982,7 +4574,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}/databases/{databasesId}:getIamPolicy:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -4027,7 +4619,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}/databases/{databasesId}/tables/{tablesId}:setIamPolicy:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -4078,7 +4670,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/services/{servicesId}/databases/{databasesId}/tables/{tablesId}:getIamPolicy:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
