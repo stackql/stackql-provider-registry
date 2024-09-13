@@ -7,8 +7,8 @@ info:
   title: Cloud Translation API
   description: Integrates text translation into your website or application.
   version: v3
-  x-discovery-doc-revision: '20240301'
-  x-generated-date: '2024-06-03'
+  x-discovery-doc-revision: '20240903'
+  x-generated-date: '2024-09-13'
 externalDocs:
   url: https://cloud.google.com/translate/docs/quickstarts
 servers:
@@ -247,6 +247,8 @@ components:
             `projects/{project-number-or-id}/locations/{location-id}/models/{model-id}`
             - General (built-in) models:
             `projects/{project-number-or-id}/locations/{location-id}/models/general/nmt`,
+            - Translation LLM models:
+            `projects/{project-number-or-id}/locations/{location-id}/models/general/translation-llm`,
             For global (non-regionalized) requests, use `location-id` `global`.
             For example,
             `projects/{project-number-or-id}/locations/global/models/general/nmt`.
@@ -1136,8 +1138,8 @@ components:
       properties:
         name:
           description: >-
-            Required. The resource name of the entry. Format:
-            "projects/*/locations/*/glossaries/*/glossaryEntries/*"
+            Identifier. The resource name of the entry. Format:
+            `projects/*/locations/*/glossaries/*/glossaryEntries/*`
           type: string
         termsPair:
           description: Used for an unidirectional glossary.
@@ -1336,12 +1338,78 @@ components:
             `projects/{project}/locations/{location-id}/adaptiveMtDatasets/{dataset}`
           type: string
         content:
-          description: >-
-            Required. The content of the input in string format. For now only
-            one sentence per request is supported.
+          description: Required. The content of the input in string format.
           type: array
           items:
             type: string
+        referenceSentenceConfig:
+          description: Configuration for caller provided reference sentences.
+          $ref: '#/components/schemas/ReferenceSentenceConfig'
+        glossaryConfig:
+          description: >-
+            Optional. Glossary to be applied. The glossary must be within the
+            same region (have the same location-id) as the model, otherwise an
+            INVALID_ARGUMENT (400) error is returned.
+          $ref: '#/components/schemas/GlossaryConfig'
+    ReferenceSentenceConfig:
+      id: ReferenceSentenceConfig
+      description: Message of caller-provided reference configuration.
+      type: object
+      properties:
+        referenceSentencePairLists:
+          description: >-
+            Reference sentences pair lists. Each list will be used as the
+            references to translate the sentence under "content" field at the
+            corresponding index. Length of the list is required to be equal to
+            the length of "content" field.
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferenceSentencePairList'
+        sourceLanguageCode:
+          description: Source language code.
+          type: string
+        targetLanguageCode:
+          description: Target language code.
+          type: string
+    ReferenceSentencePairList:
+      id: ReferenceSentencePairList
+      description: A list of reference sentence pairs.
+      type: object
+      properties:
+        referenceSentencePairs:
+          description: Reference sentence pairs.
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferenceSentencePair'
+    ReferenceSentencePair:
+      id: ReferenceSentencePair
+      description: A pair of sentences used as reference in source and target languages.
+      type: object
+      properties:
+        sourceSentence:
+          description: Source sentence in the sentence pair.
+          type: string
+        targetSentence:
+          description: Target sentence in the sentence pair.
+          type: string
+    GlossaryConfig:
+      id: GlossaryConfig
+      description: >-
+        Configures which glossary is used for a specific target language and
+        defines options for applying that glossary.
+      type: object
+      properties:
+        glossary:
+          description: >-
+            Required. The `glossary` to be applied for this translation. The
+            format depends on the glossary: - User-provided custom glossary:
+            `projects/{project-number-or-id}/locations/{location-id}/glossaries/{glossary-id}`
+          type: string
+        ignoreCase:
+          description: >-
+            Optional. Indicates match is case insensitive. The default value is
+            `false` if missing.
+          type: boolean
     AdaptiveMtTranslateResponse:
       id: AdaptiveMtTranslateResponse
       description: An AdaptiveMtTranslate response.
@@ -1357,6 +1425,13 @@ components:
           description: Output only. The translation's language code.
           readOnly: true
           type: string
+        glossaryTranslations:
+          description: >-
+            Text translation response if a glossary is provided in the request.
+            This could be the same as 'translation' above if no terms apply.
+          type: array
+          items:
+            $ref: '#/components/schemas/AdaptiveMtTranslation'
     AdaptiveMtTranslation:
       id: AdaptiveMtTranslation
       description: An AdaptiveMt translation.
@@ -1577,7 +1652,7 @@ components:
         name:
           description: >-
             Output only. The resource name of the example, in form of
-            `projects/{project-number-or-id}/locations/{location_id}/datasets/{dataset_id}/examples/{example_id}'
+            `projects/{project-number-or-id}/locations/{location_id}/datasets/{dataset_id}/examples/{example_id}`
           readOnly: true
           type: string
         sourceText:
@@ -1778,6 +1853,7 @@ components:
         select: []
         insert: []
         update: []
+        replace: []
         delete: []
     supported_languages:
       id: google.translate.supported_languages
@@ -1805,22 +1881,20 @@ components:
               #/components/x-stackQL-resources/supported_languages/methods/projects_get_supported_languages
         insert: []
         update: []
+        replace: []
         delete: []
     locations:
       id: google.translate.locations
       name: locations
       title: Locations
       methods:
-        _projects_locations_list:
-          operation: &ref_1
+        projects_locations_list:
+          operation:
             $ref: '#/paths/~1v3~1projects~1{projectsId}~1locations/get'
-          response: &ref_2
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.locations
-        projects_locations_list:
-          operation: *ref_1
-          response: *ref_2
         projects_locations_get:
           operation:
             $ref: '#/paths/~1v3~1projects~1{projectsId}~1locations~1{locationsId}/get'
@@ -1884,23 +1958,21 @@ components:
               #/components/x-stackQL-resources/locations/methods/projects_locations_list
         insert: []
         update: []
+        replace: []
         delete: []
     operations:
       id: google.translate.operations
       name: operations
       title: Operations
       methods:
-        _projects_locations_operations_list:
-          operation: &ref_3
+        projects_locations_operations_list:
+          operation:
             $ref: >-
               #/paths/~1v3~1projects~1{projectsId}~1locations~1{locationsId}~1operations/get
-          response: &ref_4
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.operations
-        projects_locations_operations_list:
-          operation: *ref_3
-          response: *ref_4
         projects_locations_operations_get:
           operation:
             $ref: >-
@@ -1937,6 +2009,7 @@ components:
               #/components/x-stackQL-resources/operations/methods/projects_locations_operations_list
         insert: []
         update: []
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/operations/methods/projects_locations_operations_delete
@@ -1952,17 +2025,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_glossaries_list:
-          operation: &ref_5
+        projects_locations_glossaries_list:
+          operation:
             $ref: >-
               #/paths/~1v3~1projects~1{projectsId}~1locations~1{locationsId}~1glossaries/get
-          response: &ref_6
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.glossaries
-        projects_locations_glossaries_list:
-          operation: *ref_5
-          response: *ref_6
         projects_locations_glossaries_patch:
           operation:
             $ref: >-
@@ -1996,6 +2066,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/glossaries/methods/projects_locations_glossaries_patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/glossaries/methods/projects_locations_glossaries_delete
@@ -2025,17 +2096,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_glossaries_glossary_entries_list:
-          operation: &ref_7
+        projects_locations_glossaries_glossary_entries_list:
+          operation:
             $ref: >-
               #/paths/~1v3~1projects~1{projectsId}~1locations~1{locationsId}~1glossaries~1{glossariesId}~1glossaryEntries/get
-          response: &ref_8
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.glossaryEntries
-        projects_locations_glossaries_glossary_entries_list:
-          operation: *ref_7
-          response: *ref_8
         projects_locations_glossaries_glossary_entries_create:
           operation:
             $ref: >-
@@ -2055,6 +2123,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/glossary_entries/methods/projects_locations_glossaries_glossary_entries_patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/glossary_entries/methods/projects_locations_glossaries_glossary_entries_delete
@@ -2070,17 +2139,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_datasets_list:
-          operation: &ref_9
+        projects_locations_datasets_list:
+          operation:
             $ref: >-
               #/paths/~1v3~1projects~1{projectsId}~1locations~1{locationsId}~1datasets/get
-          response: &ref_10
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.datasets
-        projects_locations_datasets_list:
-          operation: *ref_9
-          response: *ref_10
         projects_locations_datasets_get:
           operation:
             $ref: >-
@@ -2119,6 +2185,7 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/datasets/methods/projects_locations_datasets_create
         update: []
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/datasets/methods/projects_locations_datasets_delete
@@ -2127,23 +2194,21 @@ components:
       name: examples
       title: Examples
       methods:
-        _projects_locations_datasets_examples_list:
-          operation: &ref_11
+        projects_locations_datasets_examples_list:
+          operation:
             $ref: >-
               #/paths/~1v3~1projects~1{projectsId}~1locations~1{locationsId}~1datasets~1{datasetsId}~1examples/get
-          response: &ref_12
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.examples
-        projects_locations_datasets_examples_list:
-          operation: *ref_11
-          response: *ref_12
       sqlVerbs:
         select:
           - $ref: >-
               #/components/x-stackQL-resources/examples/methods/projects_locations_datasets_examples_list
         insert: []
         update: []
+        replace: []
         delete: []
     adaptive_mt_datasets:
       id: google.translate.adaptive_mt_datasets
@@ -2157,17 +2222,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_adaptive_mt_datasets_list:
-          operation: &ref_13
+        projects_locations_adaptive_mt_datasets_list:
+          operation:
             $ref: >-
               #/paths/~1v3~1projects~1{projectsId}~1locations~1{locationsId}~1adaptiveMtDatasets/get
-          response: &ref_14
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.adaptiveMtDatasets
-        projects_locations_adaptive_mt_datasets_list:
-          operation: *ref_13
-          response: *ref_14
         projects_locations_adaptive_mt_datasets_delete:
           operation:
             $ref: >-
@@ -2199,6 +2261,7 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/adaptive_mt_datasets/methods/projects_locations_adaptive_mt_datasets_create
         update: []
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/adaptive_mt_datasets/methods/projects_locations_adaptive_mt_datasets_delete
@@ -2221,17 +2284,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_adaptive_mt_datasets_adaptive_mt_files_list:
-          operation: &ref_15
+        projects_locations_adaptive_mt_datasets_adaptive_mt_files_list:
+          operation:
             $ref: >-
               #/paths/~1v3~1projects~1{projectsId}~1locations~1{locationsId}~1adaptiveMtDatasets~1{adaptiveMtDatasetsId}~1adaptiveMtFiles/get
-          response: &ref_16
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.adaptiveMtFiles
-        projects_locations_adaptive_mt_datasets_adaptive_mt_files_list:
-          operation: *ref_15
-          response: *ref_16
       sqlVerbs:
         select:
           - $ref: >-
@@ -2240,6 +2300,7 @@ components:
               #/components/x-stackQL-resources/adaptive_mt_files/methods/projects_locations_adaptive_mt_datasets_adaptive_mt_files_list
         insert: []
         update: []
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/adaptive_mt_files/methods/projects_locations_adaptive_mt_datasets_adaptive_mt_files_delete
@@ -2248,28 +2309,22 @@ components:
       name: adaptive_mt_sentences
       title: Adaptive_mt_sentences
       methods:
-        _projects_locations_adaptive_mt_datasets_adaptive_mt_files_adaptive_mt_sentences_list:
-          operation: &ref_17
+        projects_locations_adaptive_mt_datasets_adaptive_mt_files_adaptive_mt_sentences_list:
+          operation:
             $ref: >-
               #/paths/~1v3~1projects~1{projectsId}~1locations~1{locationsId}~1adaptiveMtDatasets~1{adaptiveMtDatasetsId}~1adaptiveMtFiles~1{adaptiveMtFilesId}~1adaptiveMtSentences/get
-          response: &ref_18
-            mediaType: application/json
-            openAPIDocKey: '200'
-            objectKey: $.adaptiveMtSentences
-        projects_locations_adaptive_mt_datasets_adaptive_mt_files_adaptive_mt_sentences_list:
-          operation: *ref_17
-          response: *ref_18
-        _projects_locations_adaptive_mt_datasets_adaptive_mt_sentences_list:
-          operation: &ref_19
-            $ref: >-
-              #/paths/~1v3~1projects~1{projectsId}~1locations~1{locationsId}~1adaptiveMtDatasets~1{adaptiveMtDatasetsId}~1adaptiveMtSentences/get
-          response: &ref_20
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.adaptiveMtSentences
         projects_locations_adaptive_mt_datasets_adaptive_mt_sentences_list:
-          operation: *ref_19
-          response: *ref_20
+          operation:
+            $ref: >-
+              #/paths/~1v3~1projects~1{projectsId}~1locations~1{locationsId}~1adaptiveMtDatasets~1{adaptiveMtDatasetsId}~1adaptiveMtSentences/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.adaptiveMtSentences
       sqlVerbs:
         select:
           - $ref: >-
@@ -2278,6 +2333,7 @@ components:
               #/components/x-stackQL-resources/adaptive_mt_sentences/methods/projects_locations_adaptive_mt_datasets_adaptive_mt_sentences_list
         insert: []
         update: []
+        replace: []
         delete: []
     models:
       id: google.translate.models
@@ -2291,17 +2347,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_models_list:
-          operation: &ref_21
+        projects_locations_models_list:
+          operation:
             $ref: >-
               #/paths/~1v3~1projects~1{projectsId}~1locations~1{locationsId}~1models/get
-          response: &ref_22
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.models
-        projects_locations_models_list:
-          operation: *ref_21
-          response: *ref_22
         projects_locations_models_get:
           operation:
             $ref: >-
@@ -2326,12 +2379,13 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/models/methods/projects_locations_models_create
         update: []
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/models/methods/projects_locations_models_delete
 paths:
   /v3/projects/{projectsId}:translateText:
-    parameters: &ref_23
+    parameters: &ref_1
       - $ref: '#/components/parameters/access_token'
       - $ref: '#/components/parameters/alt'
       - $ref: '#/components/parameters/callback'
@@ -2374,7 +2428,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}:romanizeText:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Romanize input text written in non-Latin scripts to Latin text.
       operationId: translate.projects.romanizeText
@@ -2406,7 +2460,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}:detectLanguage:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Detects the language of text within a request.
       operationId: translate.projects.detectLanguage
@@ -2438,7 +2492,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/supportedLanguages:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Returns a list of supported languages for translation.
       operationId: translate.projects.getSupportedLanguages
@@ -2473,7 +2527,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists information about the supported locations for this service.
       operationId: translate.projects.locations.list
@@ -2513,7 +2567,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets information about a location.
       operationId: translate.projects.locations.get
@@ -2545,7 +2599,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}:translateText:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Translates input text and returns translated text.
       operationId: translate.projects.locations.translateText
@@ -2582,7 +2636,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}:romanizeText:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Romanize input text written in non-Latin scripts to Latin text.
       operationId: translate.projects.locations.romanizeText
@@ -2619,7 +2673,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}:detectLanguage:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Detects the language of text within a request.
       operationId: translate.projects.locations.detectLanguage
@@ -2656,7 +2710,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/supportedLanguages:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Returns a list of supported languages for translation.
       operationId: translate.projects.locations.getSupportedLanguages
@@ -2696,7 +2750,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}:translateDocument:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Translates documents in synchronous mode.
       operationId: translate.projects.locations.translateDocument
@@ -2733,7 +2787,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}:batchTranslateText:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Translates a large volume of text in asynchronous batch mode. This
@@ -2772,7 +2826,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}:batchTranslateDocument:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Translates a large volume of document in asynchronous batch mode. This
@@ -2811,7 +2865,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}:adaptiveMtTranslate:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Translate text using Adaptive MT.
       operationId: translate.projects.locations.adaptiveMtTranslate
@@ -2848,7 +2902,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/operations:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: >-
         Lists operations that match the specified filter in the request. If the
@@ -2895,7 +2949,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: >-
         Gets the latest state of a long-running operation. Clients can use this
@@ -2974,7 +3028,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:cancel:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Starts asynchronous cancellation on a long-running operation. The server
@@ -3025,7 +3079,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:wait:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Waits until the specified long-running operation is done or reaches at
@@ -3076,7 +3130,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/glossaries:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Creates a glossary and returns the long-running operation. Returns
@@ -3156,7 +3210,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/glossaries/{glossariesId}:
-    parameters: *ref_23
+    parameters: *ref_1
     patch:
       description: >-
         Updates a glossary. A LRO is used since the update can be async if the
@@ -3172,6 +3226,10 @@ paths:
             - https://www.googleapis.com/auth/cloud-platform
           Oauth2c:
             - https://www.googleapis.com/auth/cloud-platform
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-translation
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-translation
       responses:
         '200':
           description: Successful response
@@ -3273,7 +3331,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/glossaries/{glossariesId}/glossaryEntries/{glossaryEntriesId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets a single glossary entry by the given id.
       operationId: translate.projects.locations.glossaries.glossaryEntries.get
@@ -3400,7 +3458,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/glossaries/{glossariesId}/glossaryEntries:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: List the entries for the glossary.
       operationId: translate.projects.locations.glossaries.glossaryEntries.list
@@ -3486,7 +3544,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/datasets:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Creates a Dataset.
       operationId: translate.projects.locations.datasets.create
@@ -3562,7 +3620,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/datasets/{datasetsId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets a Dataset.
       operationId: translate.projects.locations.datasets.get
@@ -3634,7 +3692,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/datasets/{datasetsId}:importData:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Import sentence pairs into translation Dataset.
       operationId: translate.projects.locations.datasets.importData
@@ -3676,7 +3734,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/datasets/{datasetsId}:exportData:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Exports dataset's data to the provided output location.
       operationId: translate.projects.locations.datasets.exportData
@@ -3718,7 +3776,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/datasets/{datasetsId}/examples:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists sentence pairs in the dataset.
       operationId: translate.projects.locations.datasets.examples.list
@@ -3768,7 +3826,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/adaptiveMtDatasets:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Creates an Adaptive MT dataset.
       operationId: translate.projects.locations.adaptiveMtDatasets.create
@@ -3848,7 +3906,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/adaptiveMtDatasets/{adaptiveMtDatasetsId}:
-    parameters: *ref_23
+    parameters: *ref_1
     delete:
       description: >-
         Deletes an Adaptive MT dataset, including all its entries and associated
@@ -3922,7 +3980,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/adaptiveMtDatasets/{adaptiveMtDatasetsId}:importAdaptiveMtFile:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Imports an AdaptiveMtFile and adds all of its sentences into the
@@ -3966,7 +4024,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/adaptiveMtDatasets/{adaptiveMtDatasetsId}/adaptiveMtFiles/{adaptiveMtFilesId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets and AdaptiveMtFile
       operationId: translate.projects.locations.adaptiveMtDatasets.adaptiveMtFiles.get
@@ -4048,7 +4106,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/adaptiveMtDatasets/{adaptiveMtDatasetsId}/adaptiveMtFiles:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists all AdaptiveMtFiles associated to an AdaptiveMtDataset.
       operationId: translate.projects.locations.adaptiveMtDatasets.adaptiveMtFiles.list
@@ -4094,7 +4152,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/adaptiveMtDatasets/{adaptiveMtDatasetsId}/adaptiveMtFiles/{adaptiveMtFilesId}/adaptiveMtSentences:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists all AdaptiveMtSentences under a given file/dataset.
       operationId: >-
@@ -4146,7 +4204,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/adaptiveMtDatasets/{adaptiveMtDatasetsId}/adaptiveMtSentences:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists all AdaptiveMtSentences under a given file/dataset.
       operationId: translate.projects.locations.adaptiveMtDatasets.adaptiveMtSentences.list
@@ -4192,7 +4250,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/models:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Creates a Model.
       operationId: translate.projects.locations.models.create
@@ -4272,7 +4330,7 @@ paths:
           schema:
             type: string
   /v3/projects/{projectsId}/locations/{locationsId}/models/{modelsId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets a model.
       operationId: translate.projects.locations.models.get

@@ -7,8 +7,8 @@ info:
   title: Cloud Commerce Partner Procurement API
   description: Partner API for the Cloud Commerce Procurement Service.
   version: v1
-  x-discovery-doc-revision: '20240526'
-  x-generated-date: '2024-06-03'
+  x-discovery-doc-revision: '20240908'
+  x-generated-date: '2024-09-13'
 externalDocs:
   url: https://cloud.google.com/marketplace/docs/partners/
 servers:
@@ -34,78 +34,325 @@ components:
           tokenUrl: https://accounts.google.com/o/oauth2/token
           scopes: *ref_0
   schemas:
-    RejectAccountRequest:
-      type: object
-      properties:
-        reason:
-          description: >-
-            Free form text string explaining the rejection reason. Max allowed
-            length: 256 bytes. Longer strings will be truncated.
-          type: string
-        approvalName:
-          type: string
-          description: >-
-            The name of the approval being rejected. If absent and there is only
-            one approval possible, that approval will be rejected. If absent and
-            there are many approvals possible, the request will fail with a 400
-            Bad Request. Optional.
-      description: Request message for PartnerProcurementService.RejectAccount.
-      id: RejectAccountRequest
-    ApproveAccountRequest:
-      id: ApproveAccountRequest
-      type: object
-      properties:
-        approvalName:
-          type: string
-          description: >-
-            The name of the approval being approved. If absent and there is only
-            one approval possible, that approval will be granted. If absent and
-            there are many approvals possible, the request will fail with a 400
-            Bad Request. Optional.
-        reason:
-          type: string
-          description: >-
-            Free form text string explaining the approval reason. Optional. Max
-            allowed length: 256 bytes. Longer strings will be truncated.
-        properties:
-          description: >-
-            Set of properties that should be associated with the account.
-            Optional.
-          additionalProperties:
-            type: string
-          type: object
-      description: Request message for PartnerProcurementService.ApproveAccount.
-    ApproveEntitlementPlanChangeRequest:
-      description: >-
-        Request message for
-        [PartnerProcurementService.ApproveEntitlementPlanChange[].
-      id: ApproveEntitlementPlanChangeRequest
-      properties:
-        pendingPlanName:
-          description: Required. Name of the pending plan that is being approved.
-          type: string
-      type: object
     ResetAccountRequest:
       description: Request message for PartnerProcurementService.ResetAccount.
       properties: {}
       id: ResetAccountRequest
       type: object
+    Approval:
+      type: object
+      description: An approval for some action on an account.
+      id: Approval
+      properties:
+        state:
+          type: string
+          enumDescriptions:
+            - Sentinel value; do not use.
+            - >-
+              The approval is pending response from the provider. The approval
+              state can transition to Account.Approval.State.APPROVED or
+              Account.Approval.State.REJECTED.
+            - The approval has been granted by the provider.
+            - >-
+              The approval has been rejected by the provider. A provider may
+              choose to approve a previously rejected approval, so is it
+              possible to transition to Account.Approval.State.APPROVED.
+          description: Output only. The state of the approval.
+          enum:
+            - STATE_UNSPECIFIED
+            - PENDING
+            - APPROVED
+            - REJECTED
+        name:
+          type: string
+          description: Output only. The name of the approval.
+        updateTime:
+          description: Optional. The last update timestamp of the approval.
+          type: string
+          format: google-datetime
+        reason:
+          type: string
+          description: Output only. An explanation for the state of the approval.
     SuspendEntitlementRequest:
+      properties:
+        reason:
+          type: string
+          description: >-
+            A free-form reason string, explaining the reason for suspension
+            request.
       description: >-
         Request message for ParterProcurementService.SuspendEntitlement. This is
         not yet supported.
       type: object
-      properties:
-        reason:
-          description: >-
-            A free-form reason string, explaining the reason for suspension
-            request.
-          type: string
       id: SuspendEntitlementRequest
-    Entitlement:
+    ListAccountsResponse:
       properties:
-        state:
+        nextPageToken:
           type: string
+          description: The token for fetching the next page.
+        accounts:
+          description: The list of accounts in this response.
+          items:
+            $ref: '#/components/schemas/Account'
+          type: array
+      id: ListAccountsResponse
+      description: Response message for [PartnerProcurementService.ListAccounts[].
+      type: object
+    Account:
+      id: Account
+      description: >-
+        Represents an account that was established by the customer on the
+        service provider's system.
+      type: object
+      properties:
+        name:
+          type: string
+          description: >-
+            Output only. The resource name of the account. Account names have
+            the form `accounts/{account_id}`.
+        updateTime:
+          description: Output only. The last update timestamp.
+          format: google-datetime
+          type: string
+        inputProperties:
+          description: >-
+            Output only. The custom properties that were collected from the user
+            to create this account.
+          type: object
+          deprecated: true
+          additionalProperties:
+            type: any
+            description: Properties of the object.
+        state:
+          enumDescriptions:
+            - >-
+              Default state of the account. It's only set to this value when the
+              account is first created and has not been initialized.
+            - >-
+              The customer has requested the creation of the account resource,
+              and the provider notification message is dispatched. This state
+              has been deprecated, as accounts now immediately transition to
+              AccountState.ACCOUNT_ACTIVE.
+            - >-
+              The account is active and ready for use. The next possible states
+              are: - Account getting deleted: After the user invokes delete from
+              another API.
+          enum:
+            - ACCOUNT_STATE_UNSPECIFIED
+            - ACCOUNT_ACTIVATION_REQUESTED
+            - ACCOUNT_ACTIVE
+          description: >-
+            Output only. The state of the account. This is used to decide
+            whether the customer is in good standing with the provider and is
+            able to make purchases. An account might not be able to make a
+            purchase if the billing account is suspended, for example.
+          type: string
+        createTime:
+          type: string
+          format: google-datetime
+          description: Output only. The creation timestamp.
+        provider:
+          type: string
+          description: >-
+            Output only. The identifier of the service provider that this
+            account was created against. Each service provider is assigned a
+            unique provider value when they onboard with Cloud Commerce
+            platform.
+        approvals:
+          items:
+            $ref: '#/components/schemas/Approval'
+          type: array
+          description: >-
+            Output only. The approvals for this account. These approvals are
+            used to track actions that are permitted or have been completed by a
+            customer within the context of the provider. This might include a
+            sign up flow or a provisioning step, for example, that the provider
+            can admit to having happened.
+    Consumer:
+      type: object
+      id: Consumer
+      properties:
+        project:
+          type: string
+          description: A project name with format `projects/`.
+      description: A resource using (consuming) this entitlement.
+    ApproveEntitlementRequest:
+      description: Request message for [PartnerProcurementService.ApproveEntitlement[].
+      properties:
+        entitlementMigrated:
+          type: string
+          description: >-
+            Optional. The resource name of the entitlement that was migrated,
+            with the format
+            `providers/{provider_id}/entitlements/{entitlement_id}`. Should only
+            be sent when resources have been migrated from entitlement_migrated
+            to the new entitlement. Optional.
+        properties:
+          type: object
+          description: >-
+            Set of properties that should be associated with the entitlement.
+            Optional.
+          additionalProperties:
+            type: string
+          deprecated: true
+      type: object
+      id: ApproveEntitlementRequest
+    Entitlement:
+      description: Represents a procured product of a customer.
+      properties:
+        provider:
+          description: >-
+            Output only. The identifier of the service provider that this
+            entitlement was created against. Each service provider is assigned a
+            unique provider value when they onboard with Cloud Commerce
+            platform.
+          type: string
+        offer:
+          description: >-
+            Output only. The name of the offer that was procured. Field is empty
+            if order was not made using an offer. Format:
+            'projects/{project}/services/{service}/privateOffers/{offer-id}' OR
+            'projects/{project}/services/{service}/standardOffers/{offer-id}',
+            depending on whether the offer is private or public. The {service}
+            in the name is the listing service of the offer. It could be either
+            the product service that the offer is referencing, or a generic
+            private offer parent service. We recommend that you don't build your
+            integration to rely on the meaning of this {service} part.
+          type: string
+          readOnly: true
+        orderId:
+          description: >-
+            Output only. The order ID of this entitlement, without any `orders/`
+            resource name prefix.
+          readOnly: true
+          type: string
+        inputProperties:
+          deprecated: true
+          description: >-
+            Output only. The custom properties that were collected from the user
+            to create this entitlement.
+          additionalProperties:
+            type: any
+            description: Properties of the object.
+          type: object
+        subscriptionEndTime:
+          description: >-
+            Output only. End time for the subscription corresponding to this
+            entitlement.
+          format: google-datetime
+          type: string
+          readOnly: true
+        newPendingOffer:
+          readOnly: true
+          type: string
+          description: >-
+            Output only. The name of the offer the entitlement is switching to
+            upon a pending plan change. Only exists if the pending plan change
+            is moving to an offer. This field isn't populated for entitlements
+            which aren't active yet. Format:
+            'projects/{project}/services/{service}/privateOffers/{offer-id}' OR
+            'projects/{project}/services/{service}/standardOffers/{offer-id}',
+            depending on whether the offer is private or public. The {service}
+            in the name is the listing service of the offer. It could be either
+            the product service that the offer is referencing, or a generic
+            private offer parent service. We recommend that you don't build your
+            integration to rely on the meaning of this {service} part.
+        product:
+          deprecated: true
+          type: string
+          description: >-
+            Output only. The identifier of the entity that was purchased. This
+            may actually represent a product, quote, or offer. We strongly
+            recommend that you use the following more explicit fields:
+            productExternalName, quoteExternalName, or offer.
+        messageToUser:
+          description: >-
+            Provider-supplied message that is displayed to the end user.
+            Currently this is used to communicate progress and ETA for
+            provisioning. This field can be updated only when a user is waiting
+            for an action from the provider, i.e. entitlement state is
+            EntitlementState.ENTITLEMENT_ACTIVATION_REQUESTED or
+            EntitlementState.ENTITLEMENT_PENDING_PLAN_CHANGE_APPROVAL. This
+            field is cleared automatically when the entitlement state changes.
+          type: string
+        offerDuration:
+          description: >-
+            Output only. The offer duration of the current offer in ISO 8601
+            duration format. Field is empty if entitlement was not made using an
+            offer. If the offer was created with a specified end date instead of
+            a duration, this field is empty.
+          readOnly: true
+          type: string
+        createTime:
+          type: string
+          format: google-datetime
+          description: Output only. The creation timestamp.
+        offerEndTime:
+          readOnly: true
+          format: google-datetime
+          type: string
+          description: >-
+            Output only. End time for the Offer association corresponding to
+            this entitlement. The field is only populated if the entitlement is
+            currently associated with an Offer.
+        consumers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Consumer'
+          description: Output only. The resources using this entitlement, if applicable.
+        plan:
+          description: >-
+            Output only. The identifier of the plan that was procured. Required
+            if the product has plans.
+          type: string
+        entitlementBenefitIds:
+          description: >-
+            Output only. The entitlement benefit IDs associated with the
+            purchase.
+          readOnly: true
+          items:
+            type: string
+          type: array
+        account:
+          type: string
+          description: >-
+            Output only. The resource name of the account that this entitlement
+            is based on, if any.
+        usageReportingId:
+          type: string
+          description: >-
+            Output only. The consumerId to use when reporting usage through the
+            Service Control API. See the consumerId field at [Reporting
+            Metrics](https://cloud.google.com/service-control/reporting-metrics)
+            for more details. This field is present only if the product has
+            usage-based billing configured.
+        cancellationReason:
+          type: string
+          description: >-
+            Output only. The reason the entitlement was cancelled. If this
+            entitlement wasn't cancelled, this field is empty. Possible values
+            include "unknown", "expired", "user-cancelled", "account-closed",
+            "billing-disabled" (if the customer has manually disabled billing to
+            their resources), "user-aborted", and "migrated" (if the entitlement
+            has migrated across products). Values of this field are subject to
+            change, and we recommend that you don't build your technical
+            integration to rely on these fields.
+          readOnly: true
+        newOfferEndTime:
+          format: google-datetime
+          type: string
+          description: >-
+            Output only. The end time of the new offer. If the offer was created
+            with a term instead of a specified end date, this field is empty.
+            This field is populated even if the entitlement isn't active yet. If
+            there's no upcoming offer, the field is be empty.
+          readOnly: true
+        productExternalName:
+          type: string
+          readOnly: true
+          description: Output only. The identifier of the product that was procured.
+        state:
+          description: Output only. The state of the entitlement.
           enumDescriptions:
             - >-
               Default state of the entitlement. It's only set to this value when
@@ -168,7 +415,7 @@ components:
               violation of terms-of-service of the provider etc.). As such, any
               remediating action needs to be taken externally, before the
               entitlement can be activated. This is not yet supported.
-          description: Output only. The state of the entitlement.
+          type: string
           enum:
             - ENTITLEMENT_STATE_UNSPECIFIED
             - ENTITLEMENT_ACTIVATION_REQUESTED
@@ -178,318 +425,106 @@ components:
             - ENTITLEMENT_PENDING_PLAN_CHANGE
             - ENTITLEMENT_PENDING_PLAN_CHANGE_APPROVAL
             - ENTITLEMENT_SUSPENDED
-        newPendingPlan:
-          description: >-
-            Output only. The identifier of the pending new plan. Required if the
-            product has plans and the entitlement has a pending plan change.
-          type: string
-        cancellationReason:
-          readOnly: true
-          description: >-
-            Output only. The reason the entitlement was cancelled. If this
-            entitlement was not cancelled, this field will be empty. Possible
-            values include "unknown", "expired", "user-cancelled",
-            "account-closed", "billing-disabled" (if the customer has manually
-            disabled billing to their resources), "user-aborted", and "migrated"
-            (if the entitlement has migrated across products).
-          type: string
-        productExternalName:
-          description: Output only. The identifier of the product that was procured.
-          type: string
-          readOnly: true
-        usageReportingId:
-          type: string
-          description: >-
-            Output only. The consumerId to use when reporting usage through the
-            Service Control API. See the consumerId field at [Reporting
-            Metrics](https://cloud.google.com/service-control/reporting-metrics)
-            for more details. This field is present only if the product has
-            usage-based billing configured.
-        entitlementBenefitIds:
-          readOnly: true
-          items:
-            type: string
-          description: >-
-            Output only. The entitlement benefit IDs associated with the
-            purchase.
-          type: array
-        createTime:
-          description: Output only. The creation timestamp.
-          type: string
-          format: google-datetime
-        account:
-          type: string
-          description: >-
-            Output only. The resource name of the account that this entitlement
-            is based on, if any.
-        orderId:
-          description: >-
-            Output only. The order ID of this entitlement, without any `orders/`
-            resource name prefix.
-          readOnly: true
-          type: string
-        plan:
-          type: string
-          description: >-
-            Output only. The identifier of the plan that was procured. Required
-            if the product has plans.
-        updateTime:
-          format: google-datetime
-          description: Output only. The last update timestamp.
-          type: string
-        provider:
-          type: string
-          description: >-
-            Output only. The identifier of the service provider that this
-            entitlement was created against. Each service provider is assigned a
-            unique provider value when they onboard with Cloud Commerce
-            platform.
         newPendingOfferDuration:
+          type: string
           readOnly: true
           description: >-
-            Output only. The offer duration of the new offer in ISO 8601
-            duration format. This field is not populated for entitlements which
-            are not active yet, only for pending offer changes. If the offer was
-            created with a specified end date instead of a duration, this field
-            is empty.
-          type: string
-        offerDuration:
+            Output only. The duration of the new offer, in ISO 8601 duration
+            format. This field isn't populated for entitlements which aren't
+            active yet, only for pending offer changes. If the offer was created
+            with a specified end date instead of a duration, this field is
+            empty.
+        quoteExternalName:
+          description: >-
+            Output only. The identifier of the quote that was used to procure.
+            Empty if the order is not purchased using a quote.
           readOnly: true
           type: string
+        newOfferStartTime:
+          readOnly: true
           description: >-
-            Output only. The offer duration of the current offer in ISO 8601
-            duration format. Field is empty if entitlement was not made using an
-            offer. If the offer was created with a specified end date instead of
-            a duration, this field is empty.
+            Output only. The timestamp when the new offer becomes effective.
+            This field is populated even if the entitlement isn't active yet. If
+            there's no upcoming offer, the field is empty.
+          type: string
+          format: google-datetime
         name:
           description: >-
             Output only. The resource name of the entitlement. Entitlement names
             have the form
             `providers/{provider_id}/entitlements/{entitlement_id}`.
           type: string
-        product:
-          deprecated: true
+        newPendingPlan:
           description: >-
-            Output only. The identifier of the entity that was purchased. This
-            may actually represent a product, quote, or offer. We strongly
-            recommend that you use the following more explicit fields:
-            productExternalName, quoteExternalName, or offer.
+            Output only. The identifier of the pending new plan. Required if the
+            product has plans and the entitlement has a pending plan change.
           type: string
-        consumers:
-          items:
-            $ref: '#/components/schemas/Consumer'
-          type: array
-          description: Output only. The resources using this entitlement, if applicable.
-        newOfferEndTime:
-          description: >-
-            Output only. The end time of the new offer. If the offer was created
-            with a term instead of a specified end date, this field is empty.
-            This field will be populated even if the entitlement is not active
-            yet. If there is no upcoming offer, the field will be empty.
-          format: google-datetime
-          readOnly: true
-          type: string
-        offerEndTime:
-          readOnly: true
-          format: google-datetime
-          description: >-
-            Output only. End time for the Offer association corresponding to
-            this entitlement. The field is only populated if the entitlement is
-            currently associated with an Offer.
-          type: string
-        subscriptionEndTime:
-          description: >-
-            Output only. End time for the subscription corresponding to this
-            entitlement.
-          format: google-datetime
-          readOnly: true
-          type: string
-        inputProperties:
-          type: object
-          deprecated: true
-          additionalProperties:
-            type: any
-            description: Properties of the object.
-          description: >-
-            Output only. The custom properties that were collected from the user
-            to create this entitlement.
-        offer:
-          readOnly: true
-          description: >-
-            Output only. The name of the offer that was procured. Field is empty
-            if order was not made using an offer. Format:
-            'projects/{project}/services/{service}/privateOffers/{offer-id}' OR
-            'projects/{project}/services/{service}/standardOffers/{offer-id}',
-            depending on whether the offer is private or public. The {service}
-            in the name is the listing service of the offer. It could be either
-            the product service that the offer is referencing, or a generic
-            private offer parent service. We recommend that you don't build your
-            integration to rely on the meaning of this {service} part.
-          type: string
-        messageToUser:
-          type: string
-          description: >-
-            Provider-supplied message that is displayed to the end user.
-            Currently this is used to communicate progress and ETA for
-            provisioning. This field can be updated only when a user is waiting
-            for an action from the provider, i.e. entitlement state is
-            EntitlementState.ENTITLEMENT_ACTIVATION_REQUESTED or
-            EntitlementState.ENTITLEMENT_PENDING_PLAN_CHANGE_APPROVAL. This
-            field is cleared automatically when the entitlement state changes.
-        newOfferStartTime:
-          format: google-datetime
-          type: string
-          readOnly: true
-          description: >-
-            Output only. The timestamp when the new offer will become effective.
-            This field will be populated even if the entitlement is not active
-            yet. If there is no upcoming offer, the field will be empty.
-        quoteExternalName:
-          readOnly: true
-          type: string
-          description: >-
-            Output only. The identifier of the quote that was used to procure.
-            Empty if the order is not purchased using a quote.
-        newPendingOffer:
-          readOnly: true
-          description: >-
-            Output only. The name of the offer the entitlement is switching to
-            upon a pending plan change. Only exists if the pending plan change
-            is moving to an offer. This field is not populated for entitlements
-            which are not active yet. Format:
-            'projects/{project}/services/{service}/privateOffers/{offer-id}' OR
-            'projects/{project}/services/{service}/standardOffers/{offer-id}',
-            depending on whether the offer is private or public. The {service}
-            in the name is the listing service of the offer. It could be either
-            the product service that the offer is referencing, or a generic
-            private offer parent service. We recommend that you don't build your
-            integration to rely on the meaning of this {service} part.
-          type: string
-      description: Represents a procured product of a customer.
-      type: object
-      id: Entitlement
-    Approval:
-      type: object
-      id: Approval
-      properties:
-        name:
-          type: string
-          description: Output only. The name of the approval.
-        reason:
-          type: string
-          description: Output only. An explanation for the state of the approval.
-        updateTime:
-          description: Optional. The last update timestamp of the approval.
-          format: google-datetime
-          type: string
-        state:
-          type: string
-          enum:
-            - STATE_UNSPECIFIED
-            - PENDING
-            - APPROVED
-            - REJECTED
-          description: Output only. The state of the approval.
-          enumDescriptions:
-            - Sentinel value; do not use.
-            - >-
-              The approval is pending response from the provider. The approval
-              state can transition to Account.Approval.State.APPROVED or
-              Account.Approval.State.REJECTED.
-            - The approval has been granted by the provider.
-            - >-
-              The approval has been rejected by the provider. A provider may
-              choose to approve a previously rejected approval, so is it
-              possible to transition to Account.Approval.State.APPROVED.
-      description: An approval for some action on an account.
-    Account:
-      description: >-
-        Represents an account that was established by the customer on the
-        service provider's system.
-      type: object
-      id: Account
-      properties:
-        createTime:
-          description: Output only. The creation timestamp.
-          type: string
-          format: google-datetime
-        inputProperties:
-          additionalProperties:
-            description: Properties of the object.
-            type: any
-          description: >-
-            Output only. The custom properties that were collected from the user
-            to create this account.
-          type: object
-          deprecated: true
-        approvals:
-          description: >-
-            Output only. The approvals for this account. These approvals are
-            used to track actions that are permitted or have been completed by a
-            customer within the context of the provider. This might include a
-            sign up flow or a provisioning step, for example, that the provider
-            can admit to having happened.
-          type: array
-          items:
-            $ref: '#/components/schemas/Approval'
-        provider:
-          type: string
-          description: >-
-            Output only. The identifier of the service provider that this
-            account was created against. Each service provider is assigned a
-            unique provider value when they onboard with Cloud Commerce
-            platform.
-        state:
-          enumDescriptions:
-            - >-
-              Default state of the account. It's only set to this value when the
-              account is first created and has not been initialized.
-            - >-
-              The customer has requested the creation of the account resource,
-              and the provider notification message is dispatched. This state
-              has been deprecated, as accounts now immediately transition to
-              AccountState.ACCOUNT_ACTIVE.
-            - >-
-              The account is active and ready for use. The next possible states
-              are: - Account getting deleted: After the user invokes delete from
-              another API.
-          type: string
-          description: >-
-            Output only. The state of the account. This is used to decide
-            whether the customer is in good standing with the provider and is
-            able to make purchases. An account might not be able to make a
-            purchase if the billing account is suspended, for example.
-          enum:
-            - ACCOUNT_STATE_UNSPECIFIED
-            - ACCOUNT_ACTIVATION_REQUESTED
-            - ACCOUNT_ACTIVE
-        name:
-          type: string
-          description: >-
-            Output only. The resource name of the account. Account names have
-            the form `accounts/{account_id}`.
         updateTime:
           description: Output only. The last update timestamp.
           format: google-datetime
           type: string
+      type: object
+      id: Entitlement
+    Empty:
+      description: >-
+        A generic empty message that you can re-use to avoid defining duplicated
+        empty messages in your APIs. A typical example is to use it as the
+        request or the response type of an API method. For instance: service Foo
+        { rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty); }
+      properties: {}
+      id: Empty
+      type: object
     RejectEntitlementPlanChangeRequest:
+      id: RejectEntitlementPlanChangeRequest
+      type: object
       properties:
+        pendingPlanName:
+          description: Required. Name of the pending plan that is being rejected.
+          type: string
         reason:
+          type: string
           description: >-
             Free form text string explaining the rejection reason. Max allowed
             length: 256 bytes. Longer strings will be truncated.
-          type: string
-        pendingPlanName:
-          type: string
-          description: Required. Name of the pending plan that is being rejected.
-      type: object
       description: >-
         Request message for
         PartnerProcurementService.RejectEntitlementPlanChange.
-      id: RejectEntitlementPlanChangeRequest
+    RejectEntitlementRequest:
+      properties:
+        reason:
+          type: string
+          description: >-
+            Free form text string explaining the rejection reason. Max allowed
+            length: 256 bytes. Longer strings will be truncated.
+      description: Request message for PartnerProcurementService.RejectEntitlement.
+      type: object
+      id: RejectEntitlementRequest
+    ApproveAccountRequest:
+      type: object
+      description: Request message for PartnerProcurementService.ApproveAccount.
+      properties:
+        properties:
+          additionalProperties:
+            type: string
+          description: >-
+            Set of properties that should be associated with the account.
+            Optional.
+          type: object
+        approvalName:
+          description: >-
+            The name of the approval being approved. If absent and there is only
+            one approval possible, that approval will be granted. If absent and
+            there are many approvals possible, the request will fail with a 400
+            Bad Request. Optional.
+          type: string
+        reason:
+          type: string
+          description: >-
+            Free form text string explaining the approval reason. Optional. Max
+            allowed length: 256 bytes. Longer strings will be truncated.
+      id: ApproveAccountRequest
     ListEntitlementsResponse:
       type: object
-      description: Response message for PartnerProcurementService.ListEntitlements.
       properties:
         nextPageToken:
           description: The token for fetching the next page.
@@ -500,81 +535,51 @@ components:
             $ref: '#/components/schemas/Entitlement'
           description: The list of entitlements in this response.
       id: ListEntitlementsResponse
-    RejectEntitlementRequest:
+      description: Response message for PartnerProcurementService.ListEntitlements.
+    RejectAccountRequest:
+      description: Request message for PartnerProcurementService.RejectAccount.
       type: object
-      description: Request message for PartnerProcurementService.RejectEntitlement.
-      id: RejectEntitlementRequest
+      id: RejectAccountRequest
       properties:
         reason:
+          type: string
           description: >-
             Free form text string explaining the rejection reason. Max allowed
             length: 256 bytes. Longer strings will be truncated.
+        approvalName:
           type: string
-    Empty:
+          description: >-
+            The name of the approval being rejected. If absent and there is only
+            one approval possible, that approval will be rejected. If absent and
+            there are many approvals possible, the request will fail with a 400
+            Bad Request. Optional.
+    ApproveEntitlementPlanChangeRequest:
+      properties:
+        pendingPlanName:
+          type: string
+          description: Required. Name of the pending plan that's being approved.
       type: object
-      id: Empty
-      properties: {}
       description: >-
-        A generic empty message that you can re-use to avoid defining duplicated
-        empty messages in your APIs. A typical example is to use it as the
-        request or the response type of an API method. For instance: service Foo
-        { rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty); }
-    Consumer:
-      description: A resource using (consuming) this entitlement.
-      type: object
-      id: Consumer
-      properties:
-        project:
-          description: A project name with format `projects/`.
-          type: string
-    ListAccountsResponse:
-      id: ListAccountsResponse
-      description: Response message for [PartnerProcurementService.ListAccounts[].
-      type: object
-      properties:
-        accounts:
-          type: array
-          items:
-            $ref: '#/components/schemas/Account'
-          description: The list of accounts in this response.
-        nextPageToken:
-          type: string
-          description: The token for fetching the next page.
-    ApproveEntitlementRequest:
-      type: object
-      id: ApproveEntitlementRequest
-      properties:
-        entitlementMigrated:
-          type: string
-          description: >-
-            Optional. The resource name of the entitlement that was migrated,
-            with the format
-            `providers/{provider_id}/entitlements/{entitlement_id}`. Should only
-            be sent when resources have been migrated from entitlement_migrated
-            to the new entitlement. Optional.
-        properties:
-          deprecated: true
-          additionalProperties:
-            type: string
-          type: object
-          description: >-
-            Set of properties that should be associated with the entitlement.
-            Optional.
-      description: Request message for [PartnerProcurementService.ApproveEntitlement[].
+        Request message for
+        [PartnerProcurementService.ApproveEntitlementPlanChange[].
+      id: ApproveEntitlementPlanChangeRequest
   parameters:
-    _.xgafv:
-      description: V1 error format.
+    access_token:
+      description: OAuth access token.
       in: query
-      name: $.xgafv
+      name: access_token
       schema:
         type: string
-        enum:
-          - '1'
-          - '2'
-    uploadType:
-      description: Legacy upload protocol for media (e.g. "media", "multipart").
+    callback:
+      description: JSONP
       in: query
-      name: uploadType
+      name: callback
+      schema:
+        type: string
+    upload_protocol:
+      description: Upload protocol for media (e.g. "raw", "multipart").
+      in: query
+      name: upload_protocol
       schema:
         type: string
     key:
@@ -586,46 +591,12 @@ components:
       name: key
       schema:
         type: string
-    callback:
-      description: JSONP
-      in: query
-      name: callback
-      schema:
-        type: string
-    access_token:
-      description: OAuth access token.
-      in: query
-      name: access_token
-      schema:
-        type: string
     oauth_token:
       description: OAuth 2.0 token for the current user.
       in: query
       name: oauth_token
       schema:
         type: string
-    alt:
-      description: Data format for response.
-      in: query
-      name: alt
-      schema:
-        type: string
-        enum:
-          - json
-          - media
-          - proto
-    upload_protocol:
-      description: Upload protocol for media (e.g. "raw", "multipart").
-      in: query
-      name: upload_protocol
-      schema:
-        type: string
-    prettyPrint:
-      description: Returns response with indentations and line breaks.
-      in: query
-      name: prettyPrint
-      schema:
-        type: boolean
     quotaUser:
       description: >-
         Available to use for quota purposes for server-side applications. Can be
@@ -641,22 +612,127 @@ components:
       name: fields
       schema:
         type: string
+    alt:
+      description: Data format for response.
+      in: query
+      name: alt
+      schema:
+        type: string
+        enum:
+          - json
+          - media
+          - proto
+    uploadType:
+      description: Legacy upload protocol for media (e.g. "media", "multipart").
+      in: query
+      name: uploadType
+      schema:
+        type: string
+    prettyPrint:
+      description: Returns response with indentations and line breaks.
+      in: query
+      name: prettyPrint
+      schema:
+        type: boolean
+    _.xgafv:
+      description: V1 error format.
+      in: query
+      name: $.xgafv
+      schema:
+        type: string
+        enum:
+          - '1'
+          - '2'
   x-stackQL-resources:
+    entitlements:
+      id: google.cloudcommerceprocurement.entitlements
+      name: entitlements
+      title: Entitlements
+      methods:
+        reject:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1providers~1{providersId}~1entitlements~1{entitlementsId}:reject/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        get:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1providers~1{providersId}~1entitlements~1{entitlementsId}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        patch:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1providers~1{providersId}~1entitlements~1{entitlementsId}/patch
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        list:
+          operation:
+            $ref: '#/paths/~1v1~1providers~1{providersId}~1entitlements/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.entitlements
+        reject_plan_change:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1providers~1{providersId}~1entitlements~1{entitlementsId}:rejectPlanChange/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        approve:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1providers~1{providersId}~1entitlements~1{entitlementsId}:approve/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        suspend:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1providers~1{providersId}~1entitlements~1{entitlementsId}:suspend/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        approve_plan_change:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1providers~1{providersId}~1entitlements~1{entitlementsId}:approvePlanChange/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/entitlements/methods/get'
+          - $ref: '#/components/x-stackQL-resources/entitlements/methods/list'
+        insert: []
+        update:
+          - $ref: '#/components/x-stackQL-resources/entitlements/methods/patch'
+        replace: []
+        delete: []
     accounts:
       id: google.cloudcommerceprocurement.accounts
       name: accounts
       title: Accounts
       methods:
-        _list:
-          operation: &ref_1
+        reject:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1providers~1{providersId}~1accounts~1{accountsId}:reject/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        list:
+          operation:
             $ref: '#/paths/~1v1~1providers~1{providersId}~1accounts/get'
-          response: &ref_2
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.accounts
-        list:
-          operation: *ref_1
-          response: *ref_2
         approve:
           operation:
             $ref: >-
@@ -668,13 +744,6 @@ components:
           operation:
             $ref: >-
               #/paths/~1v1~1providers~1{providersId}~1accounts~1{accountsId}:reset/post
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        reject:
-          operation:
-            $ref: >-
-              #/paths/~1v1~1providers~1{providersId}~1accounts~1{accountsId}:reject/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -690,336 +759,34 @@ components:
           - $ref: '#/components/x-stackQL-resources/accounts/methods/list'
         insert: []
         update: []
-        delete: []
-    entitlements:
-      id: google.cloudcommerceprocurement.entitlements
-      name: entitlements
-      title: Entitlements
-      methods:
-        approve_plan_change:
-          operation:
-            $ref: >-
-              #/paths/~1v1~1providers~1{providersId}~1entitlements~1{entitlementsId}:approvePlanChange/post
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        reject_plan_change:
-          operation:
-            $ref: >-
-              #/paths/~1v1~1providers~1{providersId}~1entitlements~1{entitlementsId}:rejectPlanChange/post
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        suspend:
-          operation:
-            $ref: >-
-              #/paths/~1v1~1providers~1{providersId}~1entitlements~1{entitlementsId}:suspend/post
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        patch:
-          operation:
-            $ref: >-
-              #/paths/~1v1~1providers~1{providersId}~1entitlements~1{entitlementsId}/patch
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        get:
-          operation:
-            $ref: >-
-              #/paths/~1v1~1providers~1{providersId}~1entitlements~1{entitlementsId}/get
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        reject:
-          operation:
-            $ref: >-
-              #/paths/~1v1~1providers~1{providersId}~1entitlements~1{entitlementsId}:reject/post
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        _list:
-          operation: &ref_3
-            $ref: '#/paths/~1v1~1providers~1{providersId}~1entitlements/get'
-          response: &ref_4
-            mediaType: application/json
-            openAPIDocKey: '200'
-            objectKey: $.entitlements
-        list:
-          operation: *ref_3
-          response: *ref_4
-        approve:
-          operation:
-            $ref: >-
-              #/paths/~1v1~1providers~1{providersId}~1entitlements~1{entitlementsId}:approve/post
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
-        select:
-          - $ref: '#/components/x-stackQL-resources/entitlements/methods/get'
-          - $ref: '#/components/x-stackQL-resources/entitlements/methods/list'
-        insert: []
-        update:
-          - $ref: '#/components/x-stackQL-resources/entitlements/methods/patch'
+        replace: []
         delete: []
 paths:
-  /v1/providers/{providersId}/accounts:
-    parameters: &ref_5
-      - $ref: '#/components/parameters/_.xgafv'
-      - $ref: '#/components/parameters/uploadType'
-      - $ref: '#/components/parameters/key'
-      - $ref: '#/components/parameters/callback'
+  /v1/providers/{providersId}/entitlements/{entitlementsId}:reject:
+    parameters: &ref_1
       - $ref: '#/components/parameters/access_token'
-      - $ref: '#/components/parameters/oauth_token'
-      - $ref: '#/components/parameters/alt'
+      - $ref: '#/components/parameters/callback'
       - $ref: '#/components/parameters/upload_protocol'
-      - $ref: '#/components/parameters/prettyPrint'
+      - $ref: '#/components/parameters/key'
+      - $ref: '#/components/parameters/oauth_token'
       - $ref: '#/components/parameters/quotaUser'
       - $ref: '#/components/parameters/fields'
-    get:
-      description: Lists Accounts that the provider has access to.
-      operationId: cloudcommerceprocurement.providers.accounts.list
-      security:
-        - Oauth2:
-            - https://www.googleapis.com/auth/cloud-platform
-          Oauth2c:
-            - https://www.googleapis.com/auth/cloud-platform
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListAccountsResponse'
-      parameters:
-        - in: path
-          name: providersId
-          required: true
-          schema:
-            type: string
-        - in: query
-          name: pageSize
-          schema:
-            type: integer
-            format: int32
-        - in: query
-          name: pageToken
-          schema:
-            type: string
-  /v1/providers/{providersId}/accounts/{accountsId}:approve:
-    parameters: *ref_5
-    post:
-      description: Grants an approval on an Account.
-      operationId: cloudcommerceprocurement.providers.accounts.approve
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ApproveAccountRequest'
-      security:
-        - Oauth2:
-            - https://www.googleapis.com/auth/cloud-platform
-          Oauth2c:
-            - https://www.googleapis.com/auth/cloud-platform
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Empty'
-      parameters:
-        - in: path
-          name: providersId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: accountsId
-          required: true
-          schema:
-            type: string
-  /v1/providers/{providersId}/accounts/{accountsId}:reset:
-    parameters: *ref_5
+      - $ref: '#/components/parameters/alt'
+      - $ref: '#/components/parameters/uploadType'
+      - $ref: '#/components/parameters/prettyPrint'
+      - $ref: '#/components/parameters/_.xgafv'
     post:
       description: >-
-        Resets an Account and cancels all associated Entitlements. Partner can
-        only reset accounts they own rather than customer accounts.
-      operationId: cloudcommerceprocurement.providers.accounts.reset
+        Rejects an entitlement that is in the
+        EntitlementState.ENTITLEMENT_ACTIVATION_REQUESTED state. This method is
+        invoked by the provider to reject the creation of the entitlement
+        resource.
+      operationId: cloudcommerceprocurement.providers.entitlements.reject
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ResetAccountRequest'
-      security:
-        - Oauth2:
-            - https://www.googleapis.com/auth/cloud-platform
-          Oauth2c:
-            - https://www.googleapis.com/auth/cloud-platform
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Empty'
-      parameters:
-        - in: path
-          name: providersId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: accountsId
-          required: true
-          schema:
-            type: string
-  /v1/providers/{providersId}/accounts/{accountsId}:reject:
-    parameters: *ref_5
-    post:
-      description: Rejects an approval on an Account.
-      operationId: cloudcommerceprocurement.providers.accounts.reject
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RejectAccountRequest'
-      security:
-        - Oauth2:
-            - https://www.googleapis.com/auth/cloud-platform
-          Oauth2c:
-            - https://www.googleapis.com/auth/cloud-platform
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Empty'
-      parameters:
-        - in: path
-          name: providersId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: accountsId
-          required: true
-          schema:
-            type: string
-  /v1/providers/{providersId}/accounts/{accountsId}:
-    parameters: *ref_5
-    get:
-      description: Gets a requested Account resource.
-      operationId: cloudcommerceprocurement.providers.accounts.get
-      security:
-        - Oauth2:
-            - https://www.googleapis.com/auth/cloud-platform
-          Oauth2c:
-            - https://www.googleapis.com/auth/cloud-platform
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Account'
-      parameters:
-        - in: path
-          name: providersId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: accountsId
-          required: true
-          schema:
-            type: string
-  /v1/providers/{providersId}/entitlements/{entitlementsId}:approvePlanChange:
-    parameters: *ref_5
-    post:
-      description: >-
-        Approves an entitlement plan change that is in the
-        EntitlementState.ENTITLEMENT_PENDING_PLAN_CHANGE_APPROVAL state. This
-        method is invoked by the provider to approve the plan change on the
-        entitlement resource.
-      operationId: cloudcommerceprocurement.providers.entitlements.approvePlanChange
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ApproveEntitlementPlanChangeRequest'
-      security:
-        - Oauth2:
-            - https://www.googleapis.com/auth/cloud-platform
-          Oauth2c:
-            - https://www.googleapis.com/auth/cloud-platform
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Empty'
-      parameters:
-        - in: path
-          name: providersId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: entitlementsId
-          required: true
-          schema:
-            type: string
-  /v1/providers/{providersId}/entitlements/{entitlementsId}:rejectPlanChange:
-    parameters: *ref_5
-    post:
-      description: >-
-        Rejects an entitlement plan change that is in the
-        EntitlementState.ENTITLEMENT_PENDING_PLAN_CHANGE_APPROVAL state. This
-        method is invoked by the provider to reject the plan change on the
-        entitlement resource.
-      operationId: cloudcommerceprocurement.providers.entitlements.rejectPlanChange
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RejectEntitlementPlanChangeRequest'
-      security:
-        - Oauth2:
-            - https://www.googleapis.com/auth/cloud-platform
-          Oauth2c:
-            - https://www.googleapis.com/auth/cloud-platform
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Empty'
-      parameters:
-        - in: path
-          name: providersId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: entitlementsId
-          required: true
-          schema:
-            type: string
-  /v1/providers/{providersId}/entitlements/{entitlementsId}:suspend:
-    parameters: *ref_5
-    post:
-      description: Requests suspension of an active Entitlement. This is not yet supported.
-      operationId: cloudcommerceprocurement.providers.entitlements.suspend
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SuspendEntitlementRequest'
+              $ref: '#/components/schemas/RejectEntitlementRequest'
       security:
         - Oauth2:
             - https://www.googleapis.com/auth/cloud-platform
@@ -1044,7 +811,33 @@ paths:
           schema:
             type: string
   /v1/providers/{providersId}/entitlements/{entitlementsId}:
-    parameters: *ref_5
+    parameters: *ref_1
+    get:
+      description: Gets a requested Entitlement resource.
+      operationId: cloudcommerceprocurement.providers.entitlements.get
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entitlement'
+      parameters:
+        - in: path
+          name: providersId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: entitlementsId
+          required: true
+          schema:
+            type: string
     patch:
       description: Updates an existing Entitlement.
       operationId: cloudcommerceprocurement.providers.entitlements.patch
@@ -1081,9 +874,11 @@ paths:
           schema:
             type: string
             format: google-fieldmask
+  /v1/providers/{providersId}/entitlements:
+    parameters: *ref_1
     get:
-      description: Gets a requested Entitlement resource.
-      operationId: cloudcommerceprocurement.providers.entitlements.get
+      description: Lists Entitlements for which the provider has read access.
+      operationId: cloudcommerceprocurement.providers.entitlements.list
       security:
         - Oauth2:
             - https://www.googleapis.com/auth/cloud-platform
@@ -1095,32 +890,40 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Entitlement'
+                $ref: '#/components/schemas/ListEntitlementsResponse'
       parameters:
         - in: path
           name: providersId
           required: true
           schema:
             type: string
-        - in: path
-          name: entitlementsId
-          required: true
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: filter
           schema:
             type: string
-  /v1/providers/{providersId}/entitlements/{entitlementsId}:reject:
-    parameters: *ref_5
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+  /v1/providers/{providersId}/entitlements/{entitlementsId}:rejectPlanChange:
+    parameters: *ref_1
     post:
       description: >-
-        Rejects an entitlement that is in the
-        EntitlementState.ENTITLEMENT_ACTIVATION_REQUESTED state. This method is
-        invoked by the provider to reject the creation of the entitlement
-        resource.
-      operationId: cloudcommerceprocurement.providers.entitlements.reject
+        Rejects an entitlement plan change that is in the
+        EntitlementState.ENTITLEMENT_PENDING_PLAN_CHANGE_APPROVAL state. This
+        method is invoked by the provider to reject the plan change on the
+        entitlement resource.
+      operationId: cloudcommerceprocurement.providers.entitlements.rejectPlanChange
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RejectEntitlementRequest'
+              $ref: '#/components/schemas/RejectEntitlementPlanChangeRequest'
       security:
         - Oauth2:
             - https://www.googleapis.com/auth/cloud-platform
@@ -1144,44 +947,8 @@ paths:
           required: true
           schema:
             type: string
-  /v1/providers/{providersId}/entitlements:
-    parameters: *ref_5
-    get:
-      description: Lists Entitlements for which the provider has read access.
-      operationId: cloudcommerceprocurement.providers.entitlements.list
-      security:
-        - Oauth2:
-            - https://www.googleapis.com/auth/cloud-platform
-          Oauth2c:
-            - https://www.googleapis.com/auth/cloud-platform
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListEntitlementsResponse'
-      parameters:
-        - in: path
-          name: providersId
-          required: true
-          schema:
-            type: string
-        - in: query
-          name: filter
-          schema:
-            type: string
-        - in: query
-          name: pageToken
-          schema:
-            type: string
-        - in: query
-          name: pageSize
-          schema:
-            type: integer
-            format: int32
   /v1/providers/{providersId}/entitlements/{entitlementsId}:approve:
-    parameters: *ref_5
+    parameters: *ref_1
     post:
       description: >-
         Approves an entitlement that is in the
@@ -1214,6 +981,237 @@ paths:
             type: string
         - in: path
           name: entitlementsId
+          required: true
+          schema:
+            type: string
+  /v1/providers/{providersId}/entitlements/{entitlementsId}:suspend:
+    parameters: *ref_1
+    post:
+      description: Requests suspension of an active Entitlement. This is not yet supported.
+      operationId: cloudcommerceprocurement.providers.entitlements.suspend
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuspendEntitlementRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Empty'
+      parameters:
+        - in: path
+          name: providersId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: entitlementsId
+          required: true
+          schema:
+            type: string
+  /v1/providers/{providersId}/entitlements/{entitlementsId}:approvePlanChange:
+    parameters: *ref_1
+    post:
+      description: >-
+        Approves an entitlement plan change that is in the
+        EntitlementState.ENTITLEMENT_PENDING_PLAN_CHANGE_APPROVAL state. This
+        method is invoked by the provider to approve the plan change on the
+        entitlement resource.
+      operationId: cloudcommerceprocurement.providers.entitlements.approvePlanChange
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveEntitlementPlanChangeRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Empty'
+      parameters:
+        - in: path
+          name: providersId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: entitlementsId
+          required: true
+          schema:
+            type: string
+  /v1/providers/{providersId}/accounts/{accountsId}:reject:
+    parameters: *ref_1
+    post:
+      description: Rejects an approval on an Account.
+      operationId: cloudcommerceprocurement.providers.accounts.reject
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectAccountRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Empty'
+      parameters:
+        - in: path
+          name: providersId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: accountsId
+          required: true
+          schema:
+            type: string
+  /v1/providers/{providersId}/accounts:
+    parameters: *ref_1
+    get:
+      description: Lists Accounts that the provider has access to.
+      operationId: cloudcommerceprocurement.providers.accounts.list
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAccountsResponse'
+      parameters:
+        - in: path
+          name: providersId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+  /v1/providers/{providersId}/accounts/{accountsId}:approve:
+    parameters: *ref_1
+    post:
+      description: Grants an approval on an Account.
+      operationId: cloudcommerceprocurement.providers.accounts.approve
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveAccountRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Empty'
+      parameters:
+        - in: path
+          name: providersId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: accountsId
+          required: true
+          schema:
+            type: string
+  /v1/providers/{providersId}/accounts/{accountsId}:reset:
+    parameters: *ref_1
+    post:
+      description: >-
+        Resets an Account and cancels all associated Entitlements. Partner can
+        only reset accounts they own rather than customer accounts.
+      operationId: cloudcommerceprocurement.providers.accounts.reset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetAccountRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Empty'
+      parameters:
+        - in: path
+          name: providersId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: accountsId
+          required: true
+          schema:
+            type: string
+  /v1/providers/{providersId}/accounts/{accountsId}:
+    parameters: *ref_1
+    get:
+      description: Gets a requested Account resource.
+      operationId: cloudcommerceprocurement.providers.accounts.get
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+      parameters:
+        - in: path
+          name: providersId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: accountsId
           required: true
           schema:
             type: string

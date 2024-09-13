@@ -7,8 +7,8 @@ info:
   title: Google Cloud Memorystore for Redis API
   description: Creates and manages Redis instances on the Google Cloud Platform.
   version: v1
-  x-discovery-doc-revision: '20240524'
-  x-generated-date: '2024-06-03'
+  x-discovery-doc-revision: '20240904'
+  x-generated-date: '2024-09-13'
 externalDocs:
   url: https://cloud.google.com/memorystore/docs/redis/
 servers:
@@ -231,8 +231,8 @@ components:
       properties:
         name:
           description: >-
-            Required. Unique name of the resource in this scope including
-            project and location using the form:
+            Required. Identifier. Unique name of the resource in this scope
+            including project and location using the form:
             `projects/{project_id}/locations/{location_id}/clusters/{cluster_id}`
           type: string
         createTime:
@@ -302,7 +302,7 @@ components:
           type: integer
           format: int32
         shardCount:
-          description: Required. Number of shards for the Redis cluster.
+          description: Optional. Number of shards for the Redis cluster.
           type: integer
           format: int32
         pscConfigs:
@@ -371,11 +371,30 @@ components:
           readOnly: true
           type: number
           format: double
+        zoneDistributionConfig:
+          description: >-
+            Optional. This config will be used to determine how the customer
+            wants us to distribute cluster resources within the region.
+          $ref: '#/components/schemas/ZoneDistributionConfig'
+        crossClusterReplicationConfig:
+          description: Optional. Cross cluster replication config.
+          $ref: '#/components/schemas/CrossClusterReplicationConfig'
         deletionProtectionEnabled:
           description: >-
             Optional. The delete operation will fail when the value is set to
             true.
           type: boolean
+        maintenancePolicy:
+          description: >-
+            Optional. ClusterMaintenancePolicy determines when to allow or deny
+            updates.
+          $ref: '#/components/schemas/ClusterMaintenancePolicy'
+        maintenanceSchedule:
+          description: >-
+            Output only. ClusterMaintenanceSchedule Output only Published
+            maintenance schedule.
+          readOnly: true
+          $ref: '#/components/schemas/ClusterMaintenanceSchedule'
     PscConfig:
       id: PscConfig
       type: object
@@ -538,13 +557,256 @@ components:
               fsync every second. Fast enough, and you may lose 1 second of data
               if there is a disaster
             - >-
-              fsync every time new commands are appended to the AOF. It has the
-              best data loss protection at the cost of performance
+              fsync every time new write commands are appended to the AOF. It
+              has the best data loss protection at the cost of performance
           enum:
             - APPEND_FSYNC_UNSPECIFIED
             - 'NO'
             - EVERYSEC
             - ALWAYS
+    ZoneDistributionConfig:
+      id: ZoneDistributionConfig
+      description: Zone distribution config for allocation of cluster resources.
+      type: object
+      properties:
+        mode:
+          description: >-
+            Optional. The mode of zone distribution. Defaults to MULTI_ZONE,
+            when not specified.
+          type: string
+          enumDescriptions:
+            - 'Not Set. Default: MULTI_ZONE'
+            - >-
+              Distribute all resources across 3 zones picked at random, within
+              the region.
+            - >-
+              Distribute all resources in a single zone. The zone field must be
+              specified, when this mode is selected.
+          enum:
+            - ZONE_DISTRIBUTION_MODE_UNSPECIFIED
+            - MULTI_ZONE
+            - SINGLE_ZONE
+        zone:
+          description: >-
+            Optional. When SINGLE ZONE distribution is selected, zone field
+            would be used to allocate all resources in that zone. This is not
+            applicable to MULTI_ZONE, and would be ignored for MULTI_ZONE
+            clusters.
+          type: string
+    CrossClusterReplicationConfig:
+      id: CrossClusterReplicationConfig
+      description: Cross cluster replication config.
+      type: object
+      properties:
+        clusterRole:
+          description: The role of the cluster in cross cluster replication.
+          type: string
+          enumDescriptions:
+            - Cluster role is not set. The behavior is equivalent to NONE.
+            - >-
+              This cluster does not participate in cross cluster replication. It
+              is an independent cluster and does not replicate to or from any
+              other clusters.
+            - >-
+              A cluster that allows both reads and writes. Any data written to
+              this cluster is also replicated to the attached secondary
+              clusters.
+            - >-
+              A cluster that allows only reads and replicates data from a
+              primary cluster.
+          enum:
+            - CLUSTER_ROLE_UNSPECIFIED
+            - NONE
+            - PRIMARY
+            - SECONDARY
+        primaryCluster:
+          description: >-
+            Details of the primary cluster that is used as the replication
+            source for this secondary cluster. This field is only set for a
+            secondary cluster.
+          $ref: '#/components/schemas/RemoteCluster'
+        secondaryClusters:
+          description: >-
+            List of secondary clusters that are replicating from this primary
+            cluster. This field is only set for a primary cluster.
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteCluster'
+        updateTime:
+          description: >-
+            Output only. The last time cross cluster replication config was
+            updated.
+          readOnly: true
+          type: string
+          format: google-datetime
+        membership:
+          description: >-
+            Output only. An output only view of all the member clusters
+            participating in the cross cluster replication. This view will be
+            provided by every member cluster irrespective of its cluster
+            role(primary or secondary). A primary cluster can provide
+            information about all the secondary clusters replicating from it.
+            However, a secondary cluster only knows about the primary cluster
+            from which it is replicating. However, for scenarios, where the
+            primary cluster is unavailable(e.g. regional outage), a GetCluster
+            request can be sent to any other member cluster and this field will
+            list all the member clusters participating in cross cluster
+            replication.
+          readOnly: true
+          $ref: '#/components/schemas/Membership'
+    RemoteCluster:
+      id: RemoteCluster
+      description: >-
+        Details of the remote cluster associated with this cluster in a cross
+        cluster replication setup.
+      type: object
+      properties:
+        cluster:
+          description: >-
+            The full resource path of the remote cluster in the format:
+            projects//locations//clusters/
+          type: string
+        uid:
+          description: Output only. The unique identifier of the remote cluster.
+          readOnly: true
+          type: string
+    Membership:
+      id: Membership
+      description: >-
+        An output only view of all the member clusters participating in the
+        cross cluster replication.
+      type: object
+      properties:
+        primaryCluster:
+          description: >-
+            Output only. The primary cluster that acts as the source of
+            replication for the secondary clusters.
+          readOnly: true
+          $ref: '#/components/schemas/RemoteCluster'
+        secondaryClusters:
+          description: >-
+            Output only. The list of secondary clusters replicating from the
+            primary cluster.
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteCluster'
+    ClusterMaintenancePolicy:
+      id: ClusterMaintenancePolicy
+      description: Maintenance policy per cluster.
+      type: object
+      properties:
+        createTime:
+          description: >-
+            Output only. The time when the policy was created i.e. Maintenance
+            Window or Deny Period was assigned.
+          readOnly: true
+          type: string
+          format: google-datetime
+        updateTime:
+          description: >-
+            Output only. The time when the policy was updated i.e. Maintenance
+            Window or Deny Period was updated.
+          readOnly: true
+          type: string
+          format: google-datetime
+        weeklyMaintenanceWindow:
+          description: >-
+            Optional. Maintenance window that is applied to resources covered by
+            this policy. Minimum 1. For the current version, the maximum number
+            of weekly_maintenance_window is expected to be one.
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterWeeklyMaintenanceWindow'
+    ClusterWeeklyMaintenanceWindow:
+      id: ClusterWeeklyMaintenanceWindow
+      description: Time window specified for weekly operations.
+      type: object
+      properties:
+        day:
+          description: Allows to define schedule that runs specified day of the week.
+          type: string
+          enumDescriptions:
+            - The day of the week is unspecified.
+            - Monday
+            - Tuesday
+            - Wednesday
+            - Thursday
+            - Friday
+            - Saturday
+            - Sunday
+          enum:
+            - DAY_OF_WEEK_UNSPECIFIED
+            - MONDAY
+            - TUESDAY
+            - WEDNESDAY
+            - THURSDAY
+            - FRIDAY
+            - SATURDAY
+            - SUNDAY
+        startTime:
+          description: Start time of the window in UTC.
+          $ref: '#/components/schemas/TimeOfDay'
+        duration:
+          description: Duration of the time window.
+          type: string
+          format: google-duration
+    TimeOfDay:
+      id: TimeOfDay
+      description: >-
+        Represents a time of day. The date and time zone are either not
+        significant or are specified elsewhere. An API may choose to allow leap
+        seconds. Related types are google.type.Date and
+        `google.protobuf.Timestamp`.
+      type: object
+      properties:
+        hours:
+          description: >-
+            Hours of day in 24 hour format. Should be from 0 to 23. An API may
+            choose to allow the value "24:00:00" for scenarios like business
+            closing time.
+          type: integer
+          format: int32
+        minutes:
+          description: Minutes of hour of day. Must be from 0 to 59.
+          type: integer
+          format: int32
+        seconds:
+          description: >-
+            Seconds of minutes of the time. Must normally be from 0 to 59. An
+            API may allow the value 60 if it allows leap-seconds.
+          type: integer
+          format: int32
+        nanos:
+          description: Fractions of seconds in nanoseconds. Must be from 0 to 999,999,999.
+          type: integer
+          format: int32
+    ClusterMaintenanceSchedule:
+      id: ClusterMaintenanceSchedule
+      description: Upcoming maitenance schedule.
+      type: object
+      properties:
+        startTime:
+          description: >-
+            Output only. The start time of any upcoming scheduled maintenance
+            for this instance.
+          readOnly: true
+          type: string
+          format: google-datetime
+        endTime:
+          description: >-
+            Output only. The end time of any upcoming scheduled maintenance for
+            this instance.
+          readOnly: true
+          type: string
+          format: google-datetime
+        scheduleDeadlineTime:
+          description: >-
+            Output only. The deadline that the maintenance schedule start time
+            can not go beyond, including reschedule.
+          readOnly: true
+          type: string
+          format: google-datetime
     CertificateAuthority:
       id: CertificateAuthority
       description: Redis cluster certificate authority
@@ -578,6 +840,33 @@ components:
           type: array
           items:
             type: string
+    RescheduleClusterMaintenanceRequest:
+      id: RescheduleClusterMaintenanceRequest
+      description: Request for rescheduling a cluster maintenance.
+      type: object
+      properties:
+        rescheduleType:
+          description: >-
+            Required. If reschedule type is SPECIFIC_TIME, must set up
+            schedule_time as well.
+          type: string
+          enumDescriptions:
+            - Not set.
+            - If the user wants to schedule the maintenance to happen now.
+            - >-
+              If the user wants to reschedule the maintenance to a specific
+              time.
+          enum:
+            - RESCHEDULE_TYPE_UNSPECIFIED
+            - IMMEDIATE
+            - SPECIFIC_TIME
+        scheduleTime:
+          description: >-
+            Optional. Timestamp when the maintenance shall be rescheduled to if
+            reschedule_type=SPECIFIC_TIME, in RFC 3339 format, for example
+            `2012-11-15T16:19:00.094Z`.
+          type: string
+          format: google-datetime
     ListInstancesResponse:
       id: ListInstancesResponse
       description: Response for ListInstances.
@@ -1015,36 +1304,6 @@ components:
           readOnly: true
           type: string
           format: google-duration
-    TimeOfDay:
-      id: TimeOfDay
-      description: >-
-        Represents a time of day. The date and time zone are either not
-        significant or are specified elsewhere. An API may choose to allow leap
-        seconds. Related types are google.type.Date and
-        `google.protobuf.Timestamp`.
-      type: object
-      properties:
-        hours:
-          description: >-
-            Hours of day in 24 hour format. Should be from 0 to 23. An API may
-            choose to allow the value "24:00:00" for scenarios like business
-            closing time.
-          type: integer
-          format: int32
-        minutes:
-          description: Minutes of hour of day. Must be from 0 to 59.
-          type: integer
-          format: int32
-        seconds:
-          description: >-
-            Seconds of minutes of the time. Must normally be from 0 to 59. An
-            API may allow the value 60 if it allows leap-seconds.
-          type: integer
-          format: int32
-        nanos:
-          description: Fractions of seconds in nanoseconds. Must be from 0 to 999,999,999.
-          type: integer
-          format: int32
     MaintenanceSchedule:
       id: MaintenanceSchedule
       description: >-
@@ -1341,7 +1600,6 @@ components:
         recommendationSignalData:
           $ref: '#/components/schemas/DatabaseResourceRecommendationSignalData'
         observabilityMetricData:
-          description: More feed data would be added in subsequent CLs
           $ref: '#/components/schemas/ObservabilityMetricData'
     DatabaseResourceId:
       id: DatabaseResourceId
@@ -1389,12 +1647,15 @@ components:
             Required. The type of resource this ID is identifying. Ex
             redis.googleapis.com/Instance, redis.googleapis.com/Cluster,
             alloydb.googleapis.com/Cluster, alloydb.googleapis.com/Instance,
-            spanner.googleapis.com/Instance REQUIRED Please refer
+            spanner.googleapis.com/Instance, spanner.googleapis.com/Database,
+            firestore.googleapis.com/Database, sqladmin.googleapis.com/Instance,
+            bigtableadmin.googleapis.com/Cluster,
+            bigtableadmin.googleapis.com/Instance REQUIRED Please refer
             go/condor-common-datamodel
           type: string
     DatabaseResourceMetadata:
       id: DatabaseResourceMetadata
-      description: Common model for database resource instance metadata.
+      description: 'Common model for database resource instance metadata. Next ID: 21'
       type: object
       properties:
         id:
@@ -1537,6 +1798,9 @@ components:
         machineConfiguration:
           description: Machine configuration for this resource.
           $ref: '#/components/schemas/MachineConfiguration'
+        tagsSet:
+          description: Optional. Tags associated with this resources.
+          $ref: '#/components/schemas/Tags'
     Product:
       id: Product
       description: Product specification for Condor resources.
@@ -1561,6 +1825,7 @@ components:
             - >-
               Other refers to rest of other product type. This is to be when
               product type is known, but it is not present in this enum.
+            - Firestore product area in GCP.
           enumDeprecated:
             - false
             - false
@@ -1570,6 +1835,7 @@ components:
             - false
             - false
             - true
+            - false
             - false
             - false
             - false
@@ -1585,6 +1851,7 @@ components:
             - PRODUCT_TYPE_MEMORYSTORE
             - PRODUCT_TYPE_BIGTABLE
             - PRODUCT_TYPE_OTHER
+            - PRODUCT_TYPE_FIRESTORE
         engine:
           description: The specific engine that the underlying database is running.
           type: string
@@ -1605,6 +1872,8 @@ components:
             - >-
               Other refers to rest of other database engine. This is to be when
               engine is known, but it is not present in this enum.
+            - Firestore with native mode.
+            - Firestore with datastore mode.
           enumDeprecated:
             - false
             - false
@@ -1615,6 +1884,8 @@ components:
             - true
             - false
             - true
+            - false
+            - false
             - false
             - false
             - false
@@ -1635,6 +1906,8 @@ components:
             - ENGINE_MEMORYSTORE_FOR_REDIS
             - ENGINE_MEMORYSTORE_FOR_REDIS_CLUSTER
             - ENGINE_OTHER
+            - ENGINE_FIRESTORE_WITH_NATIVE_MODE
+            - ENGINE_FIRESTORE_WITH_DATASTORE_MODE
         version:
           description: >-
             Version of the underlying database engine. Example values: For
@@ -1673,6 +1946,12 @@ components:
           description: >-
             Checks for resources that are configured to have redundancy, and
             ongoing replication across regions
+          type: boolean
+        automaticFailoverRoutingConfigured:
+          description: >-
+            Checks for existence of (multi-cluster) routing configuration that
+            allows automatic failover to a different zone/region in case of an
+            outage. Applicable to Bigtable resources.
           type: boolean
     BackupConfiguration:
       id: BackupConfiguration
@@ -1783,29 +2062,36 @@ components:
     CustomMetadataData:
       id: CustomMetadataData
       description: >-
-        Any custom metadata associated with the resource. i.e. A spanner
+        Any custom metadata associated with the resource. e.g. A spanner
         instance can have multiple databases with its own unique metadata.
         Information for these individual databases can be captured in custom
         metadata data
       type: object
       properties:
-        databaseMetadata:
+        internalResourceMetadata:
+          description: >-
+            Metadata for individual internal resources in an instance. e.g.
+            spanner instance can have multiple databases with unique
+            configuration.
           type: array
           items:
-            $ref: '#/components/schemas/DatabaseMetadata'
-    DatabaseMetadata:
-      id: DatabaseMetadata
+            $ref: '#/components/schemas/InternalResourceMetadata'
+    InternalResourceMetadata:
+      id: InternalResourceMetadata
       description: >-
-        Metadata for individual databases created in an instance. i.e. spanner
+        Metadata for individual internal resources in an instance. e.g. spanner
         instance can have multiple databases with unique configuration settings.
+        Similarly bigtable can have multiple clusters within same bigtable
+        instance.
       type: object
       properties:
         resourceId:
           $ref: '#/components/schemas/DatabaseResourceId'
         resourceName:
           description: >-
-            Required. Database name. Resource name to follow CAIS resource_name
-            format as noted here go/condor-common-datamodel
+            Required. internal resource name for spanner this will be database
+            name
+            e.g."spanner.googleapis.com/projects/123/abc/instances/inst1/databases/db1"
           type: string
         product:
           $ref: '#/components/schemas/Product'
@@ -1878,6 +2164,19 @@ components:
             validations again after bug fix.
           type: string
           format: int64
+    Tags:
+      id: Tags
+      description: >-
+        Message type for storing tags. Tags provide a way to create annotations
+        for resources, and in some cases conditionally allow or deny policies
+        based on whether a resource has a specific tag.
+      type: object
+      properties:
+        tags:
+          description: The Tag key/value mappings.
+          type: object
+          additionalProperties:
+            type: string
     DatabaseResourceHealthSignalData:
       id: DatabaseResourceHealthSignalData
       description: Common model for database resource health signal data.
@@ -1987,6 +2286,33 @@ components:
             - MISCONFIGURATION
             - OBSERVATION
             - ERROR
+        signalSeverity:
+          description: The severity of the signal, such as if it's a HIGH or LOW severity.
+          type: string
+          enumDescriptions:
+            - >-
+              This value is used for findings when a source doesn't write a
+              severity value.
+            - >-
+              A critical vulnerability is easily discoverable by an external
+              actor, exploitable.
+            - >-
+              A high risk vulnerability can be easily discovered and exploited
+              in combination with other vulnerabilities.
+            - >-
+              A medium risk vulnerability could be used by an actor to gain
+              access to resources or privileges that enable them to eventually
+              gain access and the ability to execute arbitrary code or
+              exfiltrate data.
+            - >-
+              A low risk vulnerability hampers a security organization's ability
+              to detect vulnerabilities or active threats in their deployment.
+          enum:
+            - SIGNAL_SEVERITY_UNSPECIFIED
+            - CRITICAL
+            - HIGH
+            - MEDIUM
+            - LOW
         compliance:
           description: >-
             Industry standards associated with this signal; if this signal is an
@@ -2772,7 +3098,7 @@ components:
           description: Required. Type of metric like CPU, Memory, etc.
           type: string
           enumDescriptions:
-            - ''
+            - Unspecified metric type.
             - >-
               CPU utilization for a resource. The value is a fraction between
               0.0 and 1.0 (may momentarily exceed 1.0 in some cases).
@@ -2780,20 +3106,32 @@ components:
               Memory utilization for a resource. The value is a fraction between
               0.0 and 1.0 (may momentarily exceed 1.0 in some cases).
             - Number of network connections for a resource.
+            - >-
+              Storage utilization for a resource. The value is a fraction
+              between 0.0 and 1.0 (may momentarily exceed 1.0 in some cases).
+            - Sotrage used by a resource.
           enum:
             - METRIC_TYPE_UNSPECIFIED
             - CPU_UTILIZATION
             - MEMORY_UTILIZATION
             - NETWORK_CONNECTIONS
+            - STORAGE_UTILIZATION
+            - STORAGE_USED_BYTES
         aggregationType:
           description: Required. Type of aggregation performed on the metric.
           type: string
           enumDescriptions:
             - Unspecified aggregation type.
-            - Maximum aggregation type.
+            - PEAK aggregation type.
+            - P99 aggregation type.
+            - P95 aggregation type.
+            - current aggregation type.
           enum:
             - AGGREGATION_TYPE_UNSPECIFIED
-            - MAXIMUM
+            - PEAK
+            - P99
+            - P95
+            - CURRENT
         value:
           description: Required. Value of the metric type.
           $ref: '#/components/schemas/TypedValue'
@@ -2809,15 +3147,340 @@ components:
       type: object
       properties:
         doubleValue:
+          description: For double value
           type: number
           format: double
         int64Value:
+          description: For integer value
           type: string
           format: int64
         stringValue:
+          description: For string value
           type: string
         boolValue:
+          description: For boolean value
           type: boolean
+    AssetLocation:
+      id: AssetLocation
+      description: >-
+        Provides the mapping of a cloud asset to a direct physical location or
+        to a proxy that defines the location on its behalf.
+      type: object
+      properties:
+        expected:
+          description: >-
+            Defines the customer expectation around ZI/ZS for this asset and
+            ZI/ZS state of the region at the time of asset creation.
+          $ref: '#/components/schemas/IsolationExpectations'
+        locationData:
+          description: Contains all kinds of physical location definitions for this asset.
+          type: array
+          items:
+            $ref: '#/components/schemas/LocationData'
+        parentAsset:
+          description: >-
+            Defines parents assets if any in order to allow later generation of
+            child_asset_location data via child assets.
+          type: array
+          items:
+            $ref: '#/components/schemas/CloudAsset'
+        extraParameters:
+          description: Defines extra parameters required for specific asset types.
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtraParameter'
+        ccfeRmsPath:
+          description: >-
+            Spanner path of the CCFE RMS database. It is only applicable for
+            CCFE tenants that use CCFE RMS for storing resource metadata.
+          type: string
+    IsolationExpectations:
+      id: IsolationExpectations
+      type: object
+      properties:
+        zoneIsolation:
+          description: >-
+            Deprecated: use zi_org_policy, zi_region_policy and zi_region_state
+            instead for setting ZI expectations as per
+            go/zicy-publish-physical-location.
+          deprecated: true
+          type: string
+          enumDescriptions:
+            - ''
+            - To be used if tracking is not available
+            - ''
+            - ''
+            - ''
+          enum:
+            - ZI_UNSPECIFIED
+            - ZI_UNKNOWN
+            - ZI_NOT_REQUIRED
+            - ZI_PREFERRED
+            - ZI_REQUIRED
+        zoneSeparation:
+          description: >-
+            Deprecated: use zs_org_policy, and zs_region_stateinstead for
+            setting Zs expectations as per go/zicy-publish-physical-location.
+          deprecated: true
+          type: string
+          enumDescriptions:
+            - ''
+            - To be used if tracking is not available
+            - ''
+            - ''
+          enum:
+            - ZS_UNSPECIFIED
+            - ZS_UNKNOWN
+            - ZS_NOT_REQUIRED
+            - ZS_REQUIRED
+        zsOrgPolicy:
+          type: string
+          enumDescriptions:
+            - ''
+            - To be used if tracking is not available
+            - ''
+            - ''
+          enum:
+            - ZS_UNSPECIFIED
+            - ZS_UNKNOWN
+            - ZS_NOT_REQUIRED
+            - ZS_REQUIRED
+        zsRegionState:
+          type: string
+          enumDescriptions:
+            - ''
+            - To be used if tracking of the asset ZS-bit is not available
+            - ''
+            - ''
+          enum:
+            - ZS_REGION_UNSPECIFIED
+            - ZS_REGION_UNKNOWN
+            - ZS_REGION_NOT_ENABLED
+            - ZS_REGION_ENABLED
+        ziOrgPolicy:
+          type: string
+          enumDescriptions:
+            - ''
+            - To be used if tracking is not available
+            - ''
+            - ''
+            - ''
+          enum:
+            - ZI_UNSPECIFIED
+            - ZI_UNKNOWN
+            - ZI_NOT_REQUIRED
+            - ZI_PREFERRED
+            - ZI_REQUIRED
+        ziRegionPolicy:
+          type: string
+          enumDescriptions:
+            - ''
+            - To be used if tracking is not available
+            - ''
+            - ''
+            - ''
+          enum:
+            - ZI_REGION_POLICY_UNSPECIFIED
+            - ZI_REGION_POLICY_UNKNOWN
+            - ZI_REGION_POLICY_NOT_SET
+            - ZI_REGION_POLICY_FAIL_OPEN
+            - ZI_REGION_POLICY_FAIL_CLOSED
+        ziRegionState:
+          type: string
+          enumDescriptions:
+            - ''
+            - To be used if tracking is not available
+            - ''
+            - ''
+          enum:
+            - ZI_REGION_UNSPECIFIED
+            - ZI_REGION_UNKNOWN
+            - ZI_REGION_NOT_ENABLED
+            - ZI_REGION_ENABLED
+        requirementOverride:
+          description: >-
+            Explicit overrides for ZI and ZS requirements to be used for
+            resources that should be excluded from ZI/ZS verification logic.
+          $ref: '#/components/schemas/RequirementOverride'
+    RequirementOverride:
+      id: RequirementOverride
+      type: object
+      properties:
+        ziOverride:
+          type: string
+          enumDescriptions:
+            - ''
+            - To be used if tracking is not available
+            - ''
+            - ''
+            - ''
+          enum:
+            - ZI_UNSPECIFIED
+            - ZI_UNKNOWN
+            - ZI_NOT_REQUIRED
+            - ZI_PREFERRED
+            - ZI_REQUIRED
+        zsOverride:
+          type: string
+          enumDescriptions:
+            - ''
+            - To be used if tracking is not available
+            - ''
+            - ''
+          enum:
+            - ZS_UNSPECIFIED
+            - ZS_UNKNOWN
+            - ZS_NOT_REQUIRED
+            - ZS_REQUIRED
+    LocationData:
+      id: LocationData
+      type: object
+      properties:
+        directLocation:
+          $ref: '#/components/schemas/DirectLocationAssignment'
+        spannerLocation:
+          $ref: '#/components/schemas/SpannerLocation'
+        childAssetLocation:
+          $ref: '#/components/schemas/CloudAssetComposition'
+        gcpProjectProxy:
+          $ref: '#/components/schemas/TenantProjectProxy'
+        blobstoreLocation:
+          $ref: '#/components/schemas/BlobstoreLocation'
+        placerLocation:
+          $ref: '#/components/schemas/PlacerLocation'
+    DirectLocationAssignment:
+      id: DirectLocationAssignment
+      type: object
+      properties:
+        location:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocationAssignment'
+    LocationAssignment:
+      id: LocationAssignment
+      type: object
+      properties:
+        location:
+          type: string
+        locationType:
+          type: string
+          enumDescriptions:
+            - ''
+            - '1-10: Physical failure domains.'
+            - ''
+            - '11-20: Logical failure domains.'
+            - ''
+            - ''
+            - ''
+            - ''
+            - ''
+          enum:
+            - UNSPECIFIED
+            - CLUSTER
+            - POP
+            - CLOUD_ZONE
+            - CLOUD_REGION
+            - MULTI_REGION_GEO
+            - MULTI_REGION_JURISDICTION
+            - GLOBAL
+            - OTHER
+    SpannerLocation:
+      id: SpannerLocation
+      type: object
+      properties:
+        dbName:
+          description: Set of databases used by the resource in format /span//
+          type: array
+          items:
+            type: string
+        backupName:
+          description: >-
+            Set of backups used by the resource with name in the same format as
+            what is available at http://table/spanner_automon.backup_metadata
+          type: array
+          items:
+            type: string
+    CloudAssetComposition:
+      id: CloudAssetComposition
+      type: object
+      properties:
+        childAsset:
+          type: array
+          items:
+            $ref: '#/components/schemas/CloudAsset'
+    CloudAsset:
+      id: CloudAsset
+      type: object
+      properties:
+        assetType:
+          type: string
+        assetName:
+          type: string
+    TenantProjectProxy:
+      id: TenantProjectProxy
+      type: object
+      properties:
+        projectNumbers:
+          type: array
+          items:
+            type: string
+    BlobstoreLocation:
+      id: BlobstoreLocation
+      description: >-
+        Policy ID that identified data placement in Blobstore as per
+        go/blobstore-user-guide#data-metadata-placement-and-failure-domains
+      type: object
+      properties:
+        policyId:
+          type: array
+          items:
+            type: string
+    PlacerLocation:
+      id: PlacerLocation
+      description: >-
+        Message describing that the location of the customer resource is tied to
+        placer allocations
+      type: object
+      properties:
+        placerConfig:
+          description: >-
+            Directory with a config related to it in placer (e.g.
+            "/placer/prod/home/my-root/my-dir")
+          type: string
+    ExtraParameter:
+      id: ExtraParameter
+      description: Defines parameters that should only be used for specific asset types.
+      type: object
+      properties:
+        regionalMigDistributionPolicy:
+          description: >-
+            Details about zones used by regional
+            compute.googleapis.com/InstanceGroupManager to create instances.
+          $ref: '#/components/schemas/RegionalMigDistributionPolicy'
+    RegionalMigDistributionPolicy:
+      id: RegionalMigDistributionPolicy
+      description: >-
+        To be used for specifying the intended distribution of regional
+        compute.googleapis.com/InstanceGroupManager instances
+      type: object
+      properties:
+        zones:
+          description: Cloud zones used by regional MIG to create instances.
+          type: array
+          items:
+            $ref: '#/components/schemas/ZoneConfiguration'
+        targetShape:
+          description: >-
+            The shape in which the group converges around distribution of
+            resources. Instance of proto2 enum
+          type: integer
+          format: int32
+    ZoneConfiguration:
+      id: ZoneConfiguration
+      type: object
+      properties:
+        zone:
+          type: string
     OperationMetadata:
       id: OperationMetadata
       description: Pre-defined metadata fields.
@@ -2999,16 +3662,13 @@ components:
       name: locations
       title: Locations
       methods:
-        _list:
-          operation: &ref_1
+        list:
+          operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations/get'
-          response: &ref_2
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.locations
-        list:
-          operation: *ref_1
-          response: *ref_2
         get:
           operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}/get'
@@ -3021,23 +3681,21 @@ components:
           - $ref: '#/components/x-stackQL-resources/locations/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     operations:
       id: google.redis.operations
       name: operations
       title: Operations
       methods:
-        _list:
-          operation: &ref_3
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1operations/get
-          response: &ref_4
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.operations
-        list:
-          operation: *ref_3
-          response: *ref_4
         get:
           operation:
             $ref: >-
@@ -3065,6 +3723,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/operations/methods/list'
         insert: []
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/operations/methods/delete'
     clusters:
@@ -3072,17 +3731,14 @@ components:
       name: clusters
       title: Clusters
       methods:
-        _list:
-          operation: &ref_5
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1clusters/get
-          response: &ref_6
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.clusters
-        list:
-          operation: *ref_5
-          response: *ref_6
         create:
           operation:
             $ref: >-
@@ -3111,6 +3767,13 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        reschedule_cluster_maintenance:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1clusters~1{clustersId}:rescheduleClusterMaintenance/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
       sqlVerbs:
         select:
           - $ref: '#/components/x-stackQL-resources/clusters/methods/get'
@@ -3119,6 +3782,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/clusters/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/clusters/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/clusters/methods/delete'
     clusters_certificate_authority:
@@ -3139,23 +3803,21 @@ components:
               #/components/x-stackQL-resources/clusters_certificate_authority/methods/get_certificate_authority
         insert: []
         update: []
+        replace: []
         delete: []
     instances:
       id: google.redis.instances
       name: instances
       title: Instances
       methods:
-        _list:
-          operation: &ref_7
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1instances/get
-          response: &ref_8
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.instances
-        list:
-          operation: *ref_7
-          response: *ref_8
         create:
           operation:
             $ref: >-
@@ -3227,6 +3889,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/instances/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/instances/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/instances/methods/delete'
     instances_auth_string:
@@ -3247,10 +3910,11 @@ components:
               #/components/x-stackQL-resources/instances_auth_string/methods/get_auth_string
         insert: []
         update: []
+        replace: []
         delete: []
 paths:
   /v1/projects/{projectsId}/locations:
-    parameters: &ref_9
+    parameters: &ref_1
       - $ref: '#/components/parameters/access_token'
       - $ref: '#/components/parameters/alt'
       - $ref: '#/components/parameters/callback'
@@ -3297,7 +3961,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: Gets information about a location.
       operationId: redis.projects.locations.get
@@ -3325,7 +3989,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: >-
         Lists operations that match the specified filter in the request. If the
@@ -3368,7 +4032,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: >-
         Gets the latest state of a long-running operation. Clients can use this
@@ -3439,7 +4103,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:cancel:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Starts asynchronous cancellation on a long-running operation. The server
@@ -3481,7 +4145,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/clusters:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: >-
         Lists all Redis clusters owned by a project in either the specified
@@ -3569,7 +4233,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/clusters/{clustersId}:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: Gets the details of a specific Redis cluster.
       operationId: redis.projects.locations.clusters.get
@@ -3688,7 +4352,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/clusters/{clustersId}/certificateAuthority:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: Gets the details of certificate authority information for Redis cluster.
       operationId: redis.projects.locations.clusters.getCertificateAuthority
@@ -3720,8 +4384,46 @@ paths:
           required: true
           schema:
             type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/clusters/{clustersId}:rescheduleClusterMaintenance:
+    parameters: *ref_1
+    post:
+      description: Reschedules upcoming maintenance event.
+      operationId: redis.projects.locations.clusters.rescheduleClusterMaintenance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RescheduleClusterMaintenanceRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: clustersId
+          required: true
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}/instances:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: >-
         Lists all Redis instances owned by a project in either the specified
@@ -3807,7 +4509,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/instances/{instancesId}:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: Gets the details of a specific Redis instance.
       operationId: redis.projects.locations.instances.get
@@ -3918,7 +4620,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/instances/{instancesId}/authString:
-    parameters: *ref_9
+    parameters: *ref_1
     get:
       description: >-
         Gets the AUTH string for a Redis instance. If AUTH is not enabled for
@@ -3954,7 +4656,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/instances/{instancesId}:upgrade:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Upgrades Redis instance to the newer Redis version specified in the
@@ -3994,7 +4696,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/instances/{instancesId}:import:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Import a Redis RDB snapshot file from Cloud Storage into a Redis
@@ -4038,7 +4740,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/instances/{instancesId}:export:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Export Redis instance data into a Redis RDB format file in Cloud
@@ -4080,7 +4782,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/instances/{instancesId}:failover:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Initiates a failover of the primary node to current replica node for a
@@ -4120,7 +4822,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/instances/{instancesId}:rescheduleMaintenance:
-    parameters: *ref_9
+    parameters: *ref_1
     post:
       description: >-
         Reschedule maintenance for a given instance in a given project and

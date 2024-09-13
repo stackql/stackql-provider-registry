@@ -9,8 +9,8 @@ info:
     Allows administrators to create managed developer environments in the
     cloud. 
   version: v1
-  x-discovery-doc-revision: '20240520'
-  x-generated-date: '2024-06-03'
+  x-discovery-doc-revision: '20240821'
+  x-generated-date: '2024-09-13'
 externalDocs:
   url: https://cloud.google.com/workstations
 servers:
@@ -462,6 +462,19 @@ components:
             updates.
           type: string
           format: google-duration
+        maxUsableWorkstations:
+          description: >-
+            Optional. Maximum number of workstations under this config a user
+            can have `workstations.workstation.use` permission on. Only enforced
+            on CreateWorkstation API calls on the user issuing the API request.
+            Can be overridden by: - granting a user
+            workstations.workstationConfigs.exemptMaxUsableWorkstationLimit
+            permission, or - having a user with that permission create a
+            workstation and granting another user `workstations.workstation.use`
+            permission on that workstation. If not specified defaults to 0 which
+            indicates unlimited.
+          type: integer
+          format: int32
         host:
           description: Optional. Runtime host for the workstation.
           $ref: '#/components/schemas/Host'
@@ -535,10 +548,16 @@ components:
         enableAuditAgent:
           description: >-
             Optional. Whether to enable Linux `auditd` logging on the
-            workstation. When enabled, a service account must also be specified
-            that has `logging.buckets.write` permission on the project.
-            Operating system audit logging is distinct from [Cloud Audit
-            Logs](https://cloud.google.com/workstations/docs/audit-logging).
+            workstation. When enabled, a service_account must also be specified
+            that has `roles/logging.logWriter` and
+            `roles/monitoring.metricWriter` on the project. Operating system
+            audit logging is distinct from [Cloud Audit
+            Logs](https://cloud.google.com/workstations/docs/audit-logging) and
+            [Container output
+            logging](http://cloud/workstations/docs/container-output-logging#overview).
+            Operating system audit logs are available in the [Cloud
+            Logging](https://cloud.google.com/logging/docs) console by querying:
+            resource.type="gce_instance" log_name:"/logs/linux-auditd"
           type: boolean
         disableTcpConnections:
           description: >-
@@ -548,6 +567,23 @@ components:
             which prevents the usage of services that require plain TCP
             connections, such as SSH. When enabled, all communication must occur
             over HTTPS or WSS.
+          type: boolean
+        allowedPorts:
+          description: >-
+            Optional. A list of PortRanges specifying single ports or ranges of
+            ports that are externally accessible in the workstation. Allowed
+            ports must be one of 22, 80, or within range 1024-65535. If not
+            specified defaults to ports 22, 80, and ports 1024-65535.
+          type: array
+          items:
+            $ref: '#/components/schemas/PortRange'
+        grantWorkstationAdminRoleOnCreate:
+          description: >-
+            Optional. Grant creator of a workstation
+            `roles/workstations.policyAdmin` role along with
+            `roles/workstations.user` role on the workstation created by them.
+            This allows workstation users to share access to either their entire
+            workstation, or individual ports. Defaults to false.
           type: boolean
     Host:
       id: Host
@@ -635,10 +671,11 @@ components:
           description: >-
             Optional. Whether to enable nested virtualization on Cloud
             Workstations VMs created using this workstation configuration.
-            Nested virtualization lets you run virtual machine (VM) instances
-            inside your workstation. Before enabling nested virtualization,
-            consider the following important considerations. Cloud Workstations
-            instances are subject to the [same restrictions as Compute Engine
+            Defaults to false. Nested virtualization lets you run virtual
+            machine (VM) instances inside your workstation. Before enabling
+            nested virtualization, consider the following important
+            considerations. Cloud Workstations instances are subject to the
+            [same restrictions as Compute Engine
             instances](https://cloud.google.com/compute/docs/instances/nested-virtualization/overview#restrictions):
             * **Organization policy**: projects, folders, or organizations may
             be restricted from creating nested VMs if the **Disable VM nested
@@ -651,15 +688,7 @@ components:
             possibly greater than a 10% decrease for workloads that are
             input/output bound. * **Machine Type**: nested virtualization can
             only be enabled on workstation configurations that specify a
-            machine_type in the N1 or N2 machine series. * **GPUs**: nested
-            virtualization may not be enabled on workstation configurations with
-            accelerators. * **Operating System**: Because [Container-Optimized
-            OS](https://cloud.google.com/compute/docs/images/os-details#container-optimized_os_cos)
-            does not support nested virtualization, when nested virtualization
-            is enabled, the underlying Compute Engine VM instances boot from an
-            [Ubuntu
-            LTS](https://cloud.google.com/compute/docs/images/os-details#ubuntu_lts)
-            image.
+            machine_type in the N1 or N2 machine series.
           type: boolean
         shieldedInstanceConfig:
           description: Optional. A set of Compute Engine Shielded instance options.
@@ -683,6 +712,16 @@ components:
         disableSsh:
           description: Optional. Whether to disable SSH access to the VM.
           type: boolean
+        vmTags:
+          description: >-
+            Optional. Resource manager tags to be bound to this instance. Tag
+            keys and values have the same definition as [resource manager
+            tags](https://cloud.google.com/resource-manager/docs/tags/tags-overview).
+            Keys must be in the format `tagKeys/{tag_key_id}`, and values are in
+            the format `tagValues/456`.
+          type: object
+          additionalProperties:
+            type: string
     GceShieldedInstanceConfig:
       id: GceShieldedInstanceConfig
       description: A set of Compute Engine Shielded instance options.
@@ -908,6 +947,25 @@ components:
           type: string
         port:
           description: Optional. Port to which the request should be sent.
+          type: integer
+          format: int32
+    PortRange:
+      id: PortRange
+      description: >-
+        A PortRange defines a range of ports. Both first and last are inclusive.
+        To specify a single port, both first and last should be the same.
+      type: object
+      properties:
+        first:
+          description: >-
+            Required. Starting port number for the current range of ports. Valid
+            ports are 22, 80, and ports within the range 1024-65535.
+          type: integer
+          format: int32
+        last:
+          description: >-
+            Required. Ending port number for the current range of ports. Valid
+            ports are 22, 80, and ports within the range 1024-65535.
           type: integer
           format: int32
     ListWorkstationConfigsResponse:
@@ -1151,6 +1209,15 @@ components:
             will be set to a default value of 1 hour.
           type: string
           format: google-duration
+        port:
+          description: >-
+            Optional. Port for which the access token should be generated. If
+            specified, the generated access token grants access only to the
+            specified port of the workstation. If specified, values must be
+            within the range [1 - 65535]. If not specified, the generated access
+            token grants access to all ports of the workstation.
+          type: integer
+          format: int32
     GenerateAccessTokenResponse:
       id: GenerateAccessTokenResponse
       description: Response message for GenerateAccessToken.
@@ -1623,16 +1690,13 @@ components:
       name: locations
       title: Locations
       methods:
-        _list:
-          operation: &ref_1
+        list:
+          operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations/get'
-          response: &ref_2
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.locations
-        list:
-          operation: *ref_1
-          response: *ref_2
         get:
           operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}/get'
@@ -1645,23 +1709,21 @@ components:
           - $ref: '#/components/x-stackQL-resources/locations/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     operations:
       id: google.workstations.operations
       name: operations
       title: Operations
       methods:
-        _list:
-          operation: &ref_3
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1operations/get
-          response: &ref_4
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.operations
-        list:
-          operation: *ref_3
-          response: *ref_4
         get:
           operation:
             $ref: >-
@@ -1689,6 +1751,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/operations/methods/list'
         insert: []
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/operations/methods/delete'
     workstation_clusters:
@@ -1717,17 +1780,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_5
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1workstationClusters/get
-          response: &ref_6
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.workstationClusters
-        list:
-          operation: *ref_5
-          response: *ref_6
         create:
           operation:
             $ref: >-
@@ -1745,6 +1805,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/workstation_clusters/methods/patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/workstation_clusters/methods/delete
@@ -1774,17 +1835,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_7
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1workstationClusters~1{workstationClustersId}~1workstationConfigs/get
-          response: &ref_8
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.workstationConfigs
-        list:
-          operation: *ref_7
-          response: *ref_8
         create:
           operation:
             $ref: >-
@@ -1801,6 +1859,7 @@ components:
               #/components/x-stackQL-resources/workstation_configs/methods/create
         update:
           - $ref: '#/components/x-stackQL-resources/workstation_configs/methods/patch'
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/workstation_configs/methods/delete
@@ -1809,23 +1868,21 @@ components:
       name: workstation_configs_usable
       title: Workstation_configs_usable
       methods:
-        _list_usable:
-          operation: &ref_9
+        list_usable:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1workstationClusters~1{workstationClustersId}~1workstationConfigs:listUsable/get
-          response: &ref_10
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.workstationConfigs
-        list_usable:
-          operation: *ref_9
-          response: *ref_10
       sqlVerbs:
         select:
           - $ref: >-
               #/components/x-stackQL-resources/workstation_configs_usable/methods/list_usable
         insert: []
         update: []
+        replace: []
         delete: []
     workstation_configs_iam_policies:
       id: google.workstations.workstation_configs_iam_policies
@@ -1839,17 +1896,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_11
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1workstationClusters~1{workstationClustersId}~1workstationConfigs~1{workstationConfigsId}:getIamPolicy/get
-          response: &ref_12
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_11
-          response: *ref_12
         test_iam_permissions:
           operation:
             $ref: >-
@@ -1863,6 +1917,9 @@ components:
               #/components/x-stackQL-resources/workstation_configs_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/workstation_configs_iam_policies/methods/set_iam_policy
         delete: []
     workstations:
       id: google.workstations.workstations
@@ -1890,17 +1947,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_13
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1workstationClusters~1{workstationClustersId}~1workstationConfigs~1{workstationConfigsId}~1workstations/get
-          response: &ref_14
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.workstations
-        list:
-          operation: *ref_13
-          response: *ref_14
         create:
           operation:
             $ref: >-
@@ -1937,6 +1991,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/workstations/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/workstations/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/workstations/methods/delete'
     workstations_usable:
@@ -1944,23 +1999,21 @@ components:
       name: workstations_usable
       title: Workstations_usable
       methods:
-        _list_usable:
-          operation: &ref_15
+        list_usable:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1workstationClusters~1{workstationClustersId}~1workstationConfigs~1{workstationConfigsId}~1workstations:listUsable/get
-          response: &ref_16
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.workstations
-        list_usable:
-          operation: *ref_15
-          response: *ref_16
       sqlVerbs:
         select:
           - $ref: >-
               #/components/x-stackQL-resources/workstations_usable/methods/list_usable
         insert: []
         update: []
+        replace: []
         delete: []
     workstations_iam_policies:
       id: google.workstations.workstations_iam_policies
@@ -1974,17 +2027,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_17
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1workstationClusters~1{workstationClustersId}~1workstationConfigs~1{workstationConfigsId}~1workstations~1{workstationsId}:getIamPolicy/get
-          response: &ref_18
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_17
-          response: *ref_18
         test_iam_permissions:
           operation:
             $ref: >-
@@ -1998,10 +2048,13 @@ components:
               #/components/x-stackQL-resources/workstations_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/workstations_iam_policies/methods/set_iam_policy
         delete: []
 paths:
   /v1/projects/{projectsId}/locations:
-    parameters: &ref_19
+    parameters: &ref_1
       - $ref: '#/components/parameters/access_token'
       - $ref: '#/components/parameters/alt'
       - $ref: '#/components/parameters/callback'
@@ -2048,7 +2101,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}:
-    parameters: *ref_19
+    parameters: *ref_1
     get:
       description: Gets information about a location.
       operationId: workstations.projects.locations.get
@@ -2076,7 +2129,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations:
-    parameters: *ref_19
+    parameters: *ref_1
     get:
       description: >-
         Lists operations that match the specified filter in the request. If the
@@ -2119,7 +2172,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:
-    parameters: *ref_19
+    parameters: *ref_1
     get:
       description: >-
         Gets the latest state of a long-running operation. Clients can use this
@@ -2190,7 +2243,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:cancel:
-    parameters: *ref_19
+    parameters: *ref_1
     post:
       description: >-
         Starts asynchronous cancellation on a long-running operation. The server
@@ -2237,7 +2290,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workstationClusters/{workstationClustersId}:
-    parameters: *ref_19
+    parameters: *ref_1
     get:
       description: Returns the requested workstation cluster.
       operationId: workstations.projects.locations.workstationClusters.get
@@ -2362,7 +2415,7 @@ paths:
           schema:
             type: boolean
   /v1/projects/{projectsId}/locations/{locationsId}/workstationClusters:
-    parameters: *ref_19
+    parameters: *ref_1
     get:
       description: Returns all workstation clusters in the specified location.
       operationId: workstations.projects.locations.workstationClusters.list
@@ -2438,7 +2491,7 @@ paths:
           schema:
             type: boolean
   /v1/projects/{projectsId}/locations/{locationsId}/workstationClusters/{workstationClustersId}/workstationConfigs/{workstationConfigsId}:
-    parameters: *ref_19
+    parameters: *ref_1
     get:
       description: Returns the requested workstation configuration.
       operationId: >-
@@ -2581,7 +2634,7 @@ paths:
           schema:
             type: boolean
   /v1/projects/{projectsId}/locations/{locationsId}/workstationClusters/{workstationClustersId}/workstationConfigs:
-    parameters: *ref_19
+    parameters: *ref_1
     get:
       description: Returns all workstation configurations in the specified cluster.
       operationId: >-
@@ -2669,7 +2722,7 @@ paths:
           schema:
             type: boolean
   /v1/projects/{projectsId}/locations/{locationsId}/workstationClusters/{workstationClustersId}/workstationConfigs:listUsable:
-    parameters: *ref_19
+    parameters: *ref_1
     get:
       description: >-
         Returns all workstation configurations in the specified cluster on which
@@ -2714,7 +2767,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workstationClusters/{workstationClustersId}/workstationConfigs/{workstationConfigsId}:setIamPolicy:
-    parameters: *ref_19
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -2761,7 +2814,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workstationClusters/{workstationClustersId}/workstationConfigs/{workstationConfigsId}:getIamPolicy:
-    parameters: *ref_19
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -2807,7 +2860,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/workstationClusters/{workstationClustersId}/workstationConfigs/{workstationConfigsId}:testIamPermissions:
-    parameters: *ref_19
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -2856,7 +2909,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workstationClusters/{workstationClustersId}/workstationConfigs/{workstationConfigsId}/workstations/{workstationsId}:
-    parameters: *ref_19
+    parameters: *ref_1
     get:
       description: Returns the requested workstation.
       operationId: >-
@@ -3010,7 +3063,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workstationClusters/{workstationClustersId}/workstationConfigs/{workstationConfigsId}/workstations:
-    parameters: *ref_19
+    parameters: *ref_1
     get:
       description: Returns all Workstations using the specified workstation configuration.
       operationId: >-
@@ -3108,7 +3161,7 @@ paths:
           schema:
             type: boolean
   /v1/projects/{projectsId}/locations/{locationsId}/workstationClusters/{workstationClustersId}/workstationConfigs/{workstationConfigsId}/workstations:listUsable:
-    parameters: *ref_19
+    parameters: *ref_1
     get:
       description: >-
         Returns all workstations using the specified workstation configuration
@@ -3158,7 +3211,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workstationClusters/{workstationClustersId}/workstationConfigs/{workstationConfigsId}/workstations/{workstationsId}:start:
-    parameters: *ref_19
+    parameters: *ref_1
     post:
       description: Starts running a workstation so that users can connect to it.
       operationId: >-
@@ -3207,7 +3260,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workstationClusters/{workstationClustersId}/workstationConfigs/{workstationConfigsId}/workstations/{workstationsId}:stop:
-    parameters: *ref_19
+    parameters: *ref_1
     post:
       description: Stops running a workstation, reducing costs.
       operationId: >-
@@ -3256,7 +3309,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workstationClusters/{workstationClustersId}/workstationConfigs/{workstationConfigsId}/workstations/{workstationsId}:generateAccessToken:
-    parameters: *ref_19
+    parameters: *ref_1
     post:
       description: >-
         Returns a short-lived credential that can be used to send authenticated
@@ -3307,7 +3360,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workstationClusters/{workstationClustersId}/workstationConfigs/{workstationConfigsId}/workstations/{workstationsId}:setIamPolicy:
-    parameters: *ref_19
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -3359,7 +3412,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workstationClusters/{workstationClustersId}/workstationConfigs/{workstationConfigsId}/workstations/{workstationsId}:getIamPolicy:
-    parameters: *ref_19
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -3410,7 +3463,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/workstationClusters/{workstationClustersId}/workstationConfigs/{workstationConfigsId}/workstations/{workstationsId}:testIamPermissions:
-    parameters: *ref_19
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the

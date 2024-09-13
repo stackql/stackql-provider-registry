@@ -7,8 +7,8 @@ info:
   title: Network Security API
   description: ''
   version: v1
-  x-discovery-doc-revision: '20240510'
-  x-generated-date: '2024-06-03'
+  x-discovery-doc-revision: '20240828'
+  x-generated-date: '2024-09-13'
 externalDocs:
   url: https://cloud.google.com/networking
 servers:
@@ -220,6 +220,21 @@ components:
           description: Output only. Server-defined fully-qualified URL for this resource.
           readOnly: true
           type: string
+        purpose:
+          description: Optional. List of supported purposes of the Address Group.
+          type: array
+          items:
+            type: string
+            enumDescriptions:
+              - Default value. Should never happen.
+              - >-
+                Address Group is distributed to VMC, and is usable in Firewall
+                Policies and other systems that rely on VMC.
+              - Address Group is usable in Cloud Armor.
+            enum:
+              - PURPOSE_UNSPECIFIED
+              - DEFAULT
+              - CLOUD_ARMOR
     AddAddressGroupItemsRequest:
       id: AddAddressGroupItemsRequest
       description: Request used by the AddAddressGroupItems method.
@@ -491,12 +506,14 @@ components:
             - Active and ready for traffic.
             - Being deleted.
             - Down or in an error state.
+            - The GCP project that housed the association has been deleted.
           enum:
             - STATE_UNSPECIFIED
             - CREATING
             - ACTIVE
             - DELETING
             - INACTIVE
+            - ORPHAN
         network:
           description: Required. The URL of the network that is being associated.
           type: string
@@ -730,11 +747,11 @@ components:
         authenticate incoming requests. This resource itself does not affect
         configuration unless it is attached to a target HTTPS proxy or endpoint
         config selector resource. ServerTlsPolicy in the form accepted by
-        external HTTPS load balancers can be attached only to TargetHttpsProxy
-        with an `EXTERNAL` or `EXTERNAL_MANAGED` load balancing scheme. Traffic
-        Director compatible ServerTlsPolicies can be attached to EndpointPolicy
-        and TargetHttpsProxy with Traffic Director `INTERNAL_SELF_MANAGED` load
-        balancing scheme.
+        Application Load Balancers can be attached only to TargetHttpsProxy with
+        an `EXTERNAL`, `EXTERNAL_MANAGED` or `INTERNAL_MANAGED` load balancing
+        scheme. Traffic Director compatible ServerTlsPolicies can be attached to
+        EndpointPolicy and TargetHttpsProxy with Traffic Director
+        `INTERNAL_SELF_MANAGED` load balancing scheme.
       type: object
       properties:
         name:
@@ -764,10 +781,10 @@ components:
         allowOpen:
           description: >-
             This field applies only for Traffic Director policies. It is must be
-            set to false for external HTTPS load balancer policies. Determines
-            if server allows plaintext connections. If set to true, server
-            allows plain text connections. By default, it is set to false. This
-            setting is not exclusive of other encryption modes. For example, if
+            set to false for Application Load Balancer policies. Determines if
+            server allows plaintext connections. If set to true, server allows
+            plain text connections. By default, it is set to false. This setting
+            is not exclusive of other encryption modes. For example, if
             `allow_open` and `mtls_policy` are set, server allows both plain
             text and mTLS connections. See documentation of other encryption
             modes to confirm compatibility. Consider using it if you wish to
@@ -776,21 +793,21 @@ components:
           type: boolean
         serverCertificate:
           description: >-
-            Optional if policy is to be used with Traffic Director. For external
-            HTTPS load balancer must be empty. Defines a mechanism to provision
-            server identity (public and private keys). Cannot be combined with
-            `allow_open` as a permissive mode that allows both plain text and
-            TLS is not supported.
+            Optional if policy is to be used with Traffic Director. For
+            Application Load Balancers must be empty. Defines a mechanism to
+            provision server identity (public and private keys). Cannot be
+            combined with `allow_open` as a permissive mode that allows both
+            plain text and TLS is not supported.
           $ref: '#/components/schemas/GoogleCloudNetworksecurityV1CertificateProvider'
         mtlsPolicy:
           description: >-
-            This field is required if the policy is used with external HTTPS
-            load balancers. This field can be empty for Traffic Director.
-            Defines a mechanism to provision peer validation certificates for
-            peer to peer authentication (Mutual TLS - mTLS). If not specified,
-            client certificate will not be requested. The connection is treated
-            as TLS and not mTLS. If `allow_open` and `mtls_policy` are set,
-            server allows both plain text and mTLS connections.
+            This field is required if the policy is used with Application Load
+            Balancers. This field can be empty for Traffic Director. Defines a
+            mechanism to provision peer validation certificates for peer to peer
+            authentication (Mutual TLS - mTLS). If not specified, client
+            certificate will not be requested. The connection is treated as TLS
+            and not mTLS. If `allow_open` and `mtls_policy` are set, server
+            allows both plain text and mTLS connections.
           $ref: '#/components/schemas/MTLSPolicy'
     GoogleCloudNetworksecurityV1CertificateProvider:
       id: GoogleCloudNetworksecurityV1CertificateProvider
@@ -847,8 +864,8 @@ components:
             When the client presents an invalid certificate or no certificate to
             the load balancer, the `client_validation_mode` specifies how the
             client connection is handled. Required if the policy is to be used
-            with the external HTTPS load balancing. For Traffic Director it must
-            be empty.
+            with the Application Load Balancers. For Traffic Director it must be
+            empty.
           type: string
           enumDescriptions:
             - Not allowed.
@@ -872,9 +889,9 @@ components:
         clientValidationCa:
           description: >-
             Required if the policy is to be used with Traffic Director. For
-            external HTTPS load balancers it must be empty. Defines the
-            mechanism to obtain the Certificate Authority certificate to
-            validate the client certificate.
+            Application Load Balancers it must be empty. Defines the mechanism
+            to obtain the Certificate Authority certificate to validate the
+            client certificate.
           type: array
           items:
             $ref: '#/components/schemas/ValidationCA'
@@ -883,7 +900,7 @@ components:
             Reference to the TrustConfig from certificatemanager.googleapis.com
             namespace. If specified, the chain validation will be performed
             against certificates configured in the given TrustConfig. Allowed
-            only if the policy is to be used with external HTTPS load balancers.
+            only if the policy is to be used with Application Load Balancers.
           type: string
     ValidationCA:
       id: ValidationCA
@@ -1326,7 +1343,7 @@ components:
       id: SecurityProfileGroup
       description: >-
         SecurityProfileGroup is a resource that defines the behavior for various
-        ProfileTypes. Next ID: 9
+        ProfileTypes. Next ID: 11
       type: object
       properties:
         name:
@@ -1364,8 +1381,8 @@ components:
             type: string
         threatPreventionProfile:
           description: >-
-            Optional. Reference to a SecurityProfile with the threat prevention
-            configuration for the SecurityProfileGroup.
+            Optional. Reference to a SecurityProfile with the ThreatPrevention
+            configuration.
           type: string
     ListSecurityProfilesResponse:
       id: ListSecurityProfilesResponse
@@ -1388,7 +1405,7 @@ components:
       id: SecurityProfile
       description: >-
         SecurityProfile is a resource that defines the behavior for one of many
-        ProfileTypes. Next ID: 10
+        ProfileTypes. Next ID: 12
       type: object
       properties:
         threatPreventionProfile:
@@ -2090,16 +2107,13 @@ components:
       name: locations
       title: Locations
       methods:
-        _projects_locations_list:
-          operation: &ref_1
+        projects_locations_list:
+          operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations/get'
-          response: &ref_2
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.locations
-        projects_locations_list:
-          operation: *ref_1
-          response: *ref_2
         projects_locations_get:
           operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}/get'
@@ -2114,23 +2128,21 @@ components:
               #/components/x-stackQL-resources/locations/methods/projects_locations_list
         insert: []
         update: []
+        replace: []
         delete: []
     operations:
       id: google.networksecurity.operations
       name: operations
       title: Operations
       methods:
-        _projects_locations_operations_list:
-          operation: &ref_3
+        projects_locations_operations_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1operations/get
-          response: &ref_4
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.operations
-        projects_locations_operations_list:
-          operation: *ref_3
-          response: *ref_4
         projects_locations_operations_get:
           operation:
             $ref: >-
@@ -2152,17 +2164,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _organizations_locations_operations_list:
-          operation: &ref_5
+        organizations_locations_operations_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1organizations~1{organizationsId}~1locations~1{locationsId}~1operations/get
-          response: &ref_6
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.operations
-        organizations_locations_operations_list:
-          operation: *ref_5
-          response: *ref_6
         organizations_locations_operations_get:
           operation:
             $ref: >-
@@ -2196,6 +2205,7 @@ components:
               #/components/x-stackQL-resources/operations/methods/organizations_locations_operations_list
         insert: []
         update: []
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/operations/methods/projects_locations_operations_delete
@@ -2206,17 +2216,14 @@ components:
       name: address_groups
       title: Address_groups
       methods:
-        _projects_locations_address_groups_list:
-          operation: &ref_7
+        projects_locations_address_groups_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1addressGroups/get
-          response: &ref_8
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.addressGroups
-        projects_locations_address_groups_list:
-          operation: *ref_7
-          response: *ref_8
         projects_locations_address_groups_create:
           operation:
             $ref: >-
@@ -2252,17 +2259,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _organizations_locations_address_groups_list:
-          operation: &ref_9
+        organizations_locations_address_groups_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1organizations~1{organizationsId}~1locations~1{locationsId}~1addressGroups/get
-          response: &ref_10
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.addressGroups
-        organizations_locations_address_groups_list:
-          operation: *ref_9
-          response: *ref_10
         organizations_locations_address_groups_create:
           operation:
             $ref: >-
@@ -2318,6 +2322,7 @@ components:
               #/components/x-stackQL-resources/address_groups/methods/projects_locations_address_groups_patch
           - $ref: >-
               #/components/x-stackQL-resources/address_groups/methods/organizations_locations_address_groups_patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/address_groups/methods/projects_locations_address_groups_delete
@@ -2358,36 +2363,39 @@ components:
             openAPIDocKey: '200'
       sqlVerbs:
         select: []
-        insert: []
+        insert:
+          - $ref: >-
+              #/components/x-stackQL-resources/address_groups_items/methods/projects_locations_address_groups_add_items
+          - $ref: >-
+              #/components/x-stackQL-resources/address_groups_items/methods/organizations_locations_address_groups_add_items
         update: []
-        delete: []
+        replace: []
+        delete:
+          - $ref: >-
+              #/components/x-stackQL-resources/address_groups_items/methods/projects_locations_address_groups_remove_items
+          - $ref: >-
+              #/components/x-stackQL-resources/address_groups_items/methods/organizations_locations_address_groups_remove_items
     address_groups_references:
       id: google.networksecurity.address_groups_references
       name: address_groups_references
       title: Address_groups_references
       methods:
-        _projects_locations_address_groups_list_references:
-          operation: &ref_11
+        projects_locations_address_groups_list_references:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1addressGroups~1{addressGroupsId}:listReferences/get
-          response: &ref_12
-            mediaType: application/json
-            openAPIDocKey: '200'
-            objectKey: $.addressGroupReferences
-        projects_locations_address_groups_list_references:
-          operation: *ref_11
-          response: *ref_12
-        _organizations_locations_address_groups_list_references:
-          operation: &ref_13
-            $ref: >-
-              #/paths/~1v1~1organizations~1{organizationsId}~1locations~1{locationsId}~1addressGroups~1{addressGroupsId}:listReferences/get
-          response: &ref_14
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.addressGroupReferences
         organizations_locations_address_groups_list_references:
-          operation: *ref_13
-          response: *ref_14
+          operation:
+            $ref: >-
+              #/paths/~1v1~1organizations~1{organizationsId}~1locations~1{locationsId}~1addressGroups~1{addressGroupsId}:listReferences/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.addressGroupReferences
       sqlVerbs:
         select:
           - $ref: >-
@@ -2396,6 +2404,7 @@ components:
               #/components/x-stackQL-resources/address_groups_references/methods/organizations_locations_address_groups_list_references
         insert: []
         update: []
+        replace: []
         delete: []
     address_groups_iam_policies:
       id: google.networksecurity.address_groups_iam_policies
@@ -2409,17 +2418,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_address_groups_get_iam_policy:
-          operation: &ref_15
+        projects_locations_address_groups_get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1addressGroups~1{addressGroupsId}:getIamPolicy/get
-          response: &ref_16
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        projects_locations_address_groups_get_iam_policy:
-          operation: *ref_15
-          response: *ref_16
         projects_locations_address_groups_test_iam_permissions:
           operation:
             $ref: >-
@@ -2433,23 +2439,23 @@ components:
               #/components/x-stackQL-resources/address_groups_iam_policies/methods/projects_locations_address_groups_get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/address_groups_iam_policies/methods/projects_locations_address_groups_set_iam_policy
         delete: []
     firewall_endpoint_associations:
       id: google.networksecurity.firewall_endpoint_associations
       name: firewall_endpoint_associations
       title: Firewall_endpoint_associations
       methods:
-        _projects_locations_firewall_endpoint_associations_list:
-          operation: &ref_17
+        projects_locations_firewall_endpoint_associations_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1firewallEndpointAssociations/get
-          response: &ref_18
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.firewallEndpointAssociations
-        projects_locations_firewall_endpoint_associations_list:
-          operation: *ref_17
-          response: *ref_18
         projects_locations_firewall_endpoint_associations_create:
           operation:
             $ref: >-
@@ -2490,6 +2496,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/firewall_endpoint_associations/methods/projects_locations_firewall_endpoint_associations_patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/firewall_endpoint_associations/methods/projects_locations_firewall_endpoint_associations_delete
@@ -2498,17 +2505,14 @@ components:
       name: authorization_policies
       title: Authorization_policies
       methods:
-        _projects_locations_authorization_policies_list:
-          operation: &ref_19
+        projects_locations_authorization_policies_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1authorizationPolicies/get
-          response: &ref_20
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.authorizationPolicies
-        projects_locations_authorization_policies_list:
-          operation: *ref_19
-          response: *ref_20
         projects_locations_authorization_policies_create:
           operation:
             $ref: >-
@@ -2549,6 +2553,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/authorization_policies/methods/projects_locations_authorization_policies_patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/authorization_policies/methods/projects_locations_authorization_policies_delete
@@ -2564,17 +2569,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_authorization_policies_get_iam_policy:
-          operation: &ref_21
+        projects_locations_authorization_policies_get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1authorizationPolicies~1{authorizationPoliciesId}:getIamPolicy/get
-          response: &ref_22
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        projects_locations_authorization_policies_get_iam_policy:
-          operation: *ref_21
-          response: *ref_22
         projects_locations_authorization_policies_test_iam_permissions:
           operation:
             $ref: >-
@@ -2588,23 +2590,23 @@ components:
               #/components/x-stackQL-resources/authorization_policies_iam_policies/methods/projects_locations_authorization_policies_get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/authorization_policies_iam_policies/methods/projects_locations_authorization_policies_set_iam_policy
         delete: []
     server_tls_policies:
       id: google.networksecurity.server_tls_policies
       name: server_tls_policies
       title: Server_tls_policies
       methods:
-        _projects_locations_server_tls_policies_list:
-          operation: &ref_23
+        projects_locations_server_tls_policies_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1serverTlsPolicies/get
-          response: &ref_24
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.serverTlsPolicies
-        projects_locations_server_tls_policies_list:
-          operation: *ref_23
-          response: *ref_24
         projects_locations_server_tls_policies_create:
           operation:
             $ref: >-
@@ -2645,6 +2647,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/server_tls_policies/methods/projects_locations_server_tls_policies_patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/server_tls_policies/methods/projects_locations_server_tls_policies_delete
@@ -2660,17 +2663,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_server_tls_policies_get_iam_policy:
-          operation: &ref_25
+        projects_locations_server_tls_policies_get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1serverTlsPolicies~1{serverTlsPoliciesId}:getIamPolicy/get
-          response: &ref_26
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        projects_locations_server_tls_policies_get_iam_policy:
-          operation: *ref_25
-          response: *ref_26
         projects_locations_server_tls_policies_test_iam_permissions:
           operation:
             $ref: >-
@@ -2684,23 +2684,23 @@ components:
               #/components/x-stackQL-resources/server_tls_policies_iam_policies/methods/projects_locations_server_tls_policies_get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/server_tls_policies_iam_policies/methods/projects_locations_server_tls_policies_set_iam_policy
         delete: []
     client_tls_policies:
       id: google.networksecurity.client_tls_policies
       name: client_tls_policies
       title: Client_tls_policies
       methods:
-        _projects_locations_client_tls_policies_list:
-          operation: &ref_27
+        projects_locations_client_tls_policies_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1clientTlsPolicies/get
-          response: &ref_28
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.clientTlsPolicies
-        projects_locations_client_tls_policies_list:
-          operation: *ref_27
-          response: *ref_28
         projects_locations_client_tls_policies_create:
           operation:
             $ref: >-
@@ -2741,6 +2741,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/client_tls_policies/methods/projects_locations_client_tls_policies_patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/client_tls_policies/methods/projects_locations_client_tls_policies_delete
@@ -2756,17 +2757,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_client_tls_policies_get_iam_policy:
-          operation: &ref_29
+        projects_locations_client_tls_policies_get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1clientTlsPolicies~1{clientTlsPoliciesId}:getIamPolicy/get
-          response: &ref_30
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        projects_locations_client_tls_policies_get_iam_policy:
-          operation: *ref_29
-          response: *ref_30
         projects_locations_client_tls_policies_test_iam_permissions:
           operation:
             $ref: >-
@@ -2780,23 +2778,23 @@ components:
               #/components/x-stackQL-resources/client_tls_policies_iam_policies/methods/projects_locations_client_tls_policies_get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/client_tls_policies_iam_policies/methods/projects_locations_client_tls_policies_set_iam_policy
         delete: []
     gateway_security_policies:
       id: google.networksecurity.gateway_security_policies
       name: gateway_security_policies
       title: Gateway_security_policies
       methods:
-        _projects_locations_gateway_security_policies_list:
-          operation: &ref_31
+        projects_locations_gateway_security_policies_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1gatewaySecurityPolicies/get
-          response: &ref_32
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.gatewaySecurityPolicies
-        projects_locations_gateway_security_policies_list:
-          operation: *ref_31
-          response: *ref_32
         projects_locations_gateway_security_policies_create:
           operation:
             $ref: >-
@@ -2837,6 +2835,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/gateway_security_policies/methods/projects_locations_gateway_security_policies_patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/gateway_security_policies/methods/projects_locations_gateway_security_policies_delete
@@ -2845,17 +2844,14 @@ components:
       name: rules
       title: Rules
       methods:
-        _projects_locations_gateway_security_policies_rules_list:
-          operation: &ref_33
+        projects_locations_gateway_security_policies_rules_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1gatewaySecurityPolicies~1{gatewaySecurityPoliciesId}~1rules/get
-          response: &ref_34
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.gatewaySecurityPolicyRules
-        projects_locations_gateway_security_policies_rules_list:
-          operation: *ref_33
-          response: *ref_34
         projects_locations_gateway_security_policies_rules_create:
           operation:
             $ref: >-
@@ -2896,6 +2892,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/rules/methods/projects_locations_gateway_security_policies_rules_patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/rules/methods/projects_locations_gateway_security_policies_rules_delete
@@ -2904,17 +2901,14 @@ components:
       name: url_lists
       title: Url_lists
       methods:
-        _projects_locations_url_lists_list:
-          operation: &ref_35
+        projects_locations_url_lists_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1urlLists/get
-          response: &ref_36
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.urlLists
-        projects_locations_url_lists_list:
-          operation: *ref_35
-          response: *ref_36
         projects_locations_url_lists_create:
           operation:
             $ref: >-
@@ -2955,6 +2949,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/url_lists/methods/projects_locations_url_lists_patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/url_lists/methods/projects_locations_url_lists_delete
@@ -2963,17 +2958,14 @@ components:
       name: tls_inspection_policies
       title: Tls_inspection_policies
       methods:
-        _projects_locations_tls_inspection_policies_list:
-          operation: &ref_37
+        projects_locations_tls_inspection_policies_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1tlsInspectionPolicies/get
-          response: &ref_38
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.tlsInspectionPolicies
-        projects_locations_tls_inspection_policies_list:
-          operation: *ref_37
-          response: *ref_38
         projects_locations_tls_inspection_policies_create:
           operation:
             $ref: >-
@@ -3014,25 +3006,60 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/tls_inspection_policies/methods/projects_locations_tls_inspection_policies_patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/tls_inspection_policies/methods/projects_locations_tls_inspection_policies_delete
+    authz_policies_iam_policies:
+      id: google.networksecurity.authz_policies_iam_policies
+      name: authz_policies_iam_policies
+      title: Authz_policies_iam_policies
+      methods:
+        projects_locations_authz_policies_set_iam_policy:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1authzPolicies~1{authzPoliciesId}:setIamPolicy/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        projects_locations_authz_policies_get_iam_policy:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1authzPolicies~1{authzPoliciesId}:getIamPolicy/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.bindings
+        projects_locations_authz_policies_test_iam_permissions:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1authzPolicies~1{authzPoliciesId}:testIamPermissions/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: >-
+              #/components/x-stackQL-resources/authz_policies_iam_policies/methods/projects_locations_authz_policies_get_iam_policy
+        insert: []
+        update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/authz_policies_iam_policies/methods/projects_locations_authz_policies_set_iam_policy
+        delete: []
     firewall_endpoints:
       id: google.networksecurity.firewall_endpoints
       name: firewall_endpoints
       title: Firewall_endpoints
       methods:
-        _organizations_locations_firewall_endpoints_list:
-          operation: &ref_39
+        organizations_locations_firewall_endpoints_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1organizations~1{organizationsId}~1locations~1{locationsId}~1firewallEndpoints/get
-          response: &ref_40
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.firewallEndpoints
-        organizations_locations_firewall_endpoints_list:
-          operation: *ref_39
-          response: *ref_40
         organizations_locations_firewall_endpoints_create:
           operation:
             $ref: >-
@@ -3073,6 +3100,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/firewall_endpoints/methods/organizations_locations_firewall_endpoints_patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/firewall_endpoints/methods/organizations_locations_firewall_endpoints_delete
@@ -3081,17 +3109,14 @@ components:
       name: security_profile_groups
       title: Security_profile_groups
       methods:
-        _organizations_locations_security_profile_groups_list:
-          operation: &ref_41
+        organizations_locations_security_profile_groups_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1organizations~1{organizationsId}~1locations~1{locationsId}~1securityProfileGroups/get
-          response: &ref_42
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.securityProfileGroups
-        organizations_locations_security_profile_groups_list:
-          operation: *ref_41
-          response: *ref_42
         organizations_locations_security_profile_groups_create:
           operation:
             $ref: >-
@@ -3132,6 +3157,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/security_profile_groups/methods/organizations_locations_security_profile_groups_patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/security_profile_groups/methods/organizations_locations_security_profile_groups_delete
@@ -3140,17 +3166,14 @@ components:
       name: security_profiles
       title: Security_profiles
       methods:
-        _organizations_locations_security_profiles_list:
-          operation: &ref_43
+        organizations_locations_security_profiles_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1organizations~1{organizationsId}~1locations~1{locationsId}~1securityProfiles/get
-          response: &ref_44
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.securityProfiles
-        organizations_locations_security_profiles_list:
-          operation: *ref_43
-          response: *ref_44
         organizations_locations_security_profiles_create:
           operation:
             $ref: >-
@@ -3191,12 +3214,13 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/security_profiles/methods/organizations_locations_security_profiles_patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/security_profiles/methods/organizations_locations_security_profiles_delete
 paths:
   /v1/projects/{projectsId}/locations:
-    parameters: &ref_45
+    parameters: &ref_1
       - $ref: '#/components/parameters/access_token'
       - $ref: '#/components/parameters/alt'
       - $ref: '#/components/parameters/callback'
@@ -3243,7 +3267,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets information about a location.
       operationId: networksecurity.projects.locations.get
@@ -3271,7 +3295,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Lists operations that match the specified filter in the request. If the
@@ -3314,7 +3338,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Gets the latest state of a long-running operation. Clients can use this
@@ -3385,7 +3409,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:cancel:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Starts asynchronous cancellation on a long-running operation. The server
@@ -3432,7 +3456,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/addressGroups:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists address groups in a given project and location.
       operationId: networksecurity.projects.locations.addressGroups.list
@@ -3508,7 +3532,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/addressGroups/{addressGroupsId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single address group.
       operationId: networksecurity.projects.locations.addressGroups.get
@@ -3621,7 +3645,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/addressGroups/{addressGroupsId}:addItems:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: Adds items to an address group.
       operationId: networksecurity.projects.locations.addressGroups.addItems
@@ -3659,7 +3683,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/addressGroups/{addressGroupsId}:removeItems:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: Removes items from an address group.
       operationId: networksecurity.projects.locations.addressGroups.removeItems
@@ -3697,7 +3721,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/addressGroups/{addressGroupsId}:cloneItems:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: Clones items from one address group to another.
       operationId: networksecurity.projects.locations.addressGroups.cloneItems
@@ -3735,7 +3759,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/addressGroups/{addressGroupsId}:listReferences:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists references of an address group.
       operationId: networksecurity.projects.locations.addressGroups.listReferences
@@ -3777,7 +3801,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/addressGroups/{addressGroupsId}:setIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -3818,7 +3842,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/addressGroups/{addressGroupsId}:getIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -3858,7 +3882,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/addressGroups/{addressGroupsId}:testIamPermissions:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -3901,7 +3925,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/firewallEndpointAssociations:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists Associations in a given project and location.
       operationId: networksecurity.projects.locations.firewallEndpointAssociations.list
@@ -3987,7 +4011,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/firewallEndpointAssociations/{firewallEndpointAssociationsId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single FirewallEndpointAssociation.
       operationId: networksecurity.projects.locations.firewallEndpointAssociations.get
@@ -4100,7 +4124,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/authorizationPolicies:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists AuthorizationPolicies in a given project and location.
       operationId: networksecurity.projects.locations.authorizationPolicies.list
@@ -4172,7 +4196,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/authorizationPolicies/{authorizationPoliciesId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single AuthorizationPolicy.
       operationId: networksecurity.projects.locations.authorizationPolicies.get
@@ -4277,7 +4301,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/authorizationPolicies/{authorizationPoliciesId}:setIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -4318,7 +4342,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/authorizationPolicies/{authorizationPoliciesId}:getIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -4358,7 +4382,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/authorizationPolicies/{authorizationPoliciesId}:testIamPermissions:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -4402,7 +4426,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serverTlsPolicies:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists ServerTlsPolicies in a given project and location.
       operationId: networksecurity.projects.locations.serverTlsPolicies.list
@@ -4474,7 +4498,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serverTlsPolicies/{serverTlsPoliciesId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single ServerTlsPolicy.
       operationId: networksecurity.projects.locations.serverTlsPolicies.get
@@ -4579,7 +4603,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serverTlsPolicies/{serverTlsPoliciesId}:setIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -4620,7 +4644,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serverTlsPolicies/{serverTlsPoliciesId}:getIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -4660,7 +4684,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/serverTlsPolicies/{serverTlsPoliciesId}:testIamPermissions:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -4703,7 +4727,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/clientTlsPolicies:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists ClientTlsPolicies in a given project and location.
       operationId: networksecurity.projects.locations.clientTlsPolicies.list
@@ -4775,7 +4799,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/clientTlsPolicies/{clientTlsPoliciesId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single ClientTlsPolicy.
       operationId: networksecurity.projects.locations.clientTlsPolicies.get
@@ -4880,7 +4904,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/clientTlsPolicies/{clientTlsPoliciesId}:setIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -4921,7 +4945,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/clientTlsPolicies/{clientTlsPoliciesId}:getIamPolicy:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -4961,7 +4985,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/clientTlsPolicies/{clientTlsPoliciesId}:testIamPermissions:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -5004,7 +5028,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/gatewaySecurityPolicies:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists GatewaySecurityPolicies in a given project and location.
       operationId: networksecurity.projects.locations.gatewaySecurityPolicies.list
@@ -5076,7 +5100,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/gatewaySecurityPolicies/{gatewaySecurityPoliciesId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single GatewaySecurityPolicy.
       operationId: networksecurity.projects.locations.gatewaySecurityPolicies.get
@@ -5181,7 +5205,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/gatewaySecurityPolicies/{gatewaySecurityPoliciesId}/rules:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists GatewaySecurityPolicyRules in a given project and location.
       operationId: networksecurity.projects.locations.gatewaySecurityPolicies.rules.list
@@ -5263,7 +5287,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/gatewaySecurityPolicies/{gatewaySecurityPoliciesId}/rules/{rulesId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single GatewaySecurityPolicyRule.
       operationId: networksecurity.projects.locations.gatewaySecurityPolicies.rules.get
@@ -5383,7 +5407,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/urlLists:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists UrlLists in a given project and location.
       operationId: networksecurity.projects.locations.urlLists.list
@@ -5455,7 +5479,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/urlLists/{urlListsId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single UrlList.
       operationId: networksecurity.projects.locations.urlLists.get
@@ -5560,7 +5584,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/tlsInspectionPolicies:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists TlsInspectionPolicies in a given project and location.
       operationId: networksecurity.projects.locations.tlsInspectionPolicies.list
@@ -5632,7 +5656,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/tlsInspectionPolicies/{tlsInspectionPoliciesId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single TlsInspectionPolicy.
       operationId: networksecurity.projects.locations.tlsInspectionPolicies.get
@@ -5740,8 +5764,132 @@ paths:
           name: force
           schema:
             type: boolean
+  /v1/projects/{projectsId}/locations/{locationsId}/authzPolicies/{authzPoliciesId}:setIamPolicy:
+    parameters: *ref_1
+    post:
+      description: >-
+        Sets the access control policy on the specified resource. Replaces any
+        existing policy. Can return `NOT_FOUND`, `INVALID_ARGUMENT`, and
+        `PERMISSION_DENIED` errors.
+      operationId: networksecurity.projects.locations.authzPolicies.setIamPolicy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleIamV1SetIamPolicyRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleIamV1Policy'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: authzPoliciesId
+          required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/authzPolicies/{authzPoliciesId}:getIamPolicy:
+    parameters: *ref_1
+    get:
+      description: >-
+        Gets the access control policy for a resource. Returns an empty policy
+        if the resource exists and does not have a policy set.
+      operationId: networksecurity.projects.locations.authzPolicies.getIamPolicy
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleIamV1Policy'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: authzPoliciesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: options.requestedPolicyVersion
+          schema:
+            type: integer
+            format: int32
+  /v1/projects/{projectsId}/locations/{locationsId}/authzPolicies/{authzPoliciesId}:testIamPermissions:
+    parameters: *ref_1
+    post:
+      description: >-
+        Returns permissions that a caller has on the specified resource. If the
+        resource does not exist, this will return an empty set of permissions,
+        not a `NOT_FOUND` error. Note: This operation is designed to be used for
+        building permission-aware UIs and command-line tools, not for
+        authorization checking. This operation may "fail open" without warning.
+      operationId: networksecurity.projects.locations.authzPolicies.testIamPermissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleIamV1TestIamPermissionsRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleIamV1TestIamPermissionsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: authzPoliciesId
+          required: true
+          schema:
+            type: string
   /v1/organizations/{organizationsId}/locations/{locationsId}/operations:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Lists operations that match the specified filter in the request. If the
@@ -5784,7 +5932,7 @@ paths:
           schema:
             type: string
   /v1/organizations/{organizationsId}/locations/{locationsId}/operations/{operationsId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: >-
         Gets the latest state of a long-running operation. Clients can use this
@@ -5855,7 +6003,7 @@ paths:
           schema:
             type: string
   /v1/organizations/{organizationsId}/locations/{locationsId}/operations/{operationsId}:cancel:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: >-
         Starts asynchronous cancellation on a long-running operation. The server
@@ -5902,7 +6050,7 @@ paths:
           schema:
             type: string
   /v1/organizations/{organizationsId}/locations/{locationsId}/addressGroups:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists address groups in a given project and location.
       operationId: networksecurity.organizations.locations.addressGroups.list
@@ -5978,7 +6126,7 @@ paths:
           schema:
             type: string
   /v1/organizations/{organizationsId}/locations/{locationsId}/addressGroups/{addressGroupsId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single address group.
       operationId: networksecurity.organizations.locations.addressGroups.get
@@ -6091,7 +6239,7 @@ paths:
           schema:
             type: string
   /v1/organizations/{organizationsId}/locations/{locationsId}/addressGroups/{addressGroupsId}:addItems:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: Adds items to an address group.
       operationId: networksecurity.organizations.locations.addressGroups.addItems
@@ -6129,7 +6277,7 @@ paths:
           schema:
             type: string
   /v1/organizations/{organizationsId}/locations/{locationsId}/addressGroups/{addressGroupsId}:removeItems:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: Removes items from an address group.
       operationId: networksecurity.organizations.locations.addressGroups.removeItems
@@ -6167,7 +6315,7 @@ paths:
           schema:
             type: string
   /v1/organizations/{organizationsId}/locations/{locationsId}/addressGroups/{addressGroupsId}:cloneItems:
-    parameters: *ref_45
+    parameters: *ref_1
     post:
       description: Clones items from one address group to another.
       operationId: networksecurity.organizations.locations.addressGroups.cloneItems
@@ -6205,7 +6353,7 @@ paths:
           schema:
             type: string
   /v1/organizations/{organizationsId}/locations/{locationsId}/addressGroups/{addressGroupsId}:listReferences:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists references of an address group.
       operationId: networksecurity.organizations.locations.addressGroups.listReferences
@@ -6247,7 +6395,7 @@ paths:
           schema:
             type: string
   /v1/organizations/{organizationsId}/locations/{locationsId}/firewallEndpoints:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists FirewallEndpoints in a given project and location.
       operationId: networksecurity.organizations.locations.firewallEndpoints.list
@@ -6331,7 +6479,7 @@ paths:
           schema:
             type: string
   /v1/organizations/{organizationsId}/locations/{locationsId}/firewallEndpoints/{firewallEndpointsId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single Endpoint.
       operationId: networksecurity.organizations.locations.firewallEndpoints.get
@@ -6444,7 +6592,7 @@ paths:
           schema:
             type: string
   /v1/organizations/{organizationsId}/locations/{locationsId}/securityProfileGroups:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists SecurityProfileGroups in a given organization and location.
       operationId: networksecurity.organizations.locations.securityProfileGroups.list
@@ -6516,7 +6664,7 @@ paths:
           schema:
             type: string
   /v1/organizations/{organizationsId}/locations/{locationsId}/securityProfileGroups/{securityProfileGroupsId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single SecurityProfileGroup.
       operationId: networksecurity.organizations.locations.securityProfileGroups.get
@@ -6625,7 +6773,7 @@ paths:
           schema:
             type: string
   /v1/organizations/{organizationsId}/locations/{locationsId}/securityProfiles:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Lists SecurityProfiles in a given organization and location.
       operationId: networksecurity.organizations.locations.securityProfiles.list
@@ -6697,7 +6845,7 @@ paths:
           schema:
             type: string
   /v1/organizations/{organizationsId}/locations/{locationsId}/securityProfiles/{securityProfilesId}:
-    parameters: *ref_45
+    parameters: *ref_1
     get:
       description: Gets details of a single SecurityProfile.
       operationId: networksecurity.organizations.locations.securityProfiles.get
