@@ -7,8 +7,8 @@ info:
   title: Cloud Identity-Aware Proxy API
   description: Controls access to cloud applications running on Google Cloud Platform.
   version: v1
-  x-discovery-doc-revision: '20240527'
-  x-generated-date: '2024-06-03'
+  x-discovery-doc-revision: '20240909'
+  x-generated-date: '2024-09-13'
 externalDocs:
   url: https://cloud.google.com/iap
 servers:
@@ -354,8 +354,8 @@ components:
           $ref: '#/components/schemas/OAuthSettings'
         policyDelegationSettings:
           description: >-
-            Optional. Settings to configure Policy delegation for apps hosted in
-            tenant projects. INTERNAL_ONLY.
+            Optional. Settings to allow google-internal teams to use IAP for
+            apps hosted in a tenant project.
           $ref: '#/components/schemas/PolicyDelegationSettings'
         reauthSettings:
           description: Optional. Settings to configure reauthentication policies in IAP.
@@ -553,6 +553,84 @@ components:
           additionalProperties:
             type: any
             description: Properties of the object. Contains field @type with type URL.
+        nextStateOfTags:
+          description: >-
+            Used for calculating the next state of tags on the resource being
+            passed for Custom Org Policy enforcement. NOTE: Only one of the tags
+            representations (i.e. numeric or namespaced) should be populated.
+            The input tags will be converted to the same representation before
+            the calculation. This behavior intentionally may differ from other
+            tags related fields in CheckPolicy request, which may require both
+            formats to be passed in. IMPORTANT: If tags are unchanged, this
+            field should not be set.
+          $ref: '#/components/schemas/NextStateOfTags'
+    NextStateOfTags:
+      id: NextStateOfTags
+      description: >-
+        Used for calculating the next state of tags on the resource being passed
+        for the CheckCustomConstraints RPC call. The detail evaluation of each
+        field is described in go/op-create-update-time-tags and
+        go/tags-in-orgpolicy-requests.
+      type: object
+      properties:
+        tagsFullState:
+          $ref: '#/components/schemas/TagsFullState'
+        tagsPartialState:
+          $ref: '#/components/schemas/TagsPartialState'
+        tagsFullStateForChildResource:
+          $ref: '#/components/schemas/TagsFullStateForChildResource'
+    TagsFullState:
+      id: TagsFullState
+      type: object
+      properties:
+        tags:
+          description: >-
+            If TagsFullState is initialized, the values in this field fully
+            represent all the tags in the next state (the current tag values are
+            not used). If tags.size() == 0, the next state of tags would be no
+            tags for evaluation purposes. Only one type of tags reference
+            (numeric or namespace) is required to be passed.
+          type: object
+          additionalProperties:
+            type: string
+    TagsPartialState:
+      id: TagsPartialState
+      type: object
+      properties:
+        tagsToUpsert:
+          description: >-
+            Tags that’ll be updated or added to the current state of tags for
+            evaluation purposes. If a key exists in both "tags_to_upsert" and
+            "tag_keys_to_remove", the one in "tag_keys_to_remove" is ignored.
+            Only one type of tags reference (numeric or namespace) is required
+            to be passed.
+          type: object
+          additionalProperties:
+            type: string
+        tagKeysToRemove:
+          description: >-
+            Keys of the tags that should be removed for evaluation purposes.
+            IMPORTANT: Currently only numeric references are supported. Once
+            support for namespace references is added, both the tag references
+            (numeric and namespace) will be removed.
+          type: array
+          items:
+            type: string
+    TagsFullStateForChildResource:
+      id: TagsFullStateForChildResource
+      type: object
+      properties:
+        tags:
+          description: >-
+            If TagsFullStateForChildResource is initialized, the values in this
+            field represent all the tags in the next state for the child
+            resource. Only one type of tags reference (numeric or namespace) is
+            required to be passed. IMPORTANT: This field should only be used
+            when the target resource IAM policy name is UNKNOWN and the
+            resource's parent IAM policy name is being passed in the request.
+          type: object
+          additionalProperties:
+            type: string
     PolicyName:
       id: PolicyName
       description: >-
@@ -588,7 +666,7 @@ components:
       type: object
       properties:
         method:
-          description: Reauth method requested.
+          description: Optional. Reauth method requested.
           type: string
           enumDescriptions:
             - Reauthentication disabled.
@@ -1011,16 +1089,13 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_1
+        get_iam_policy:
+          operation:
             $ref: '#/paths/~1v1~1{v1Id}:getIamPolicy/post'
-          response: &ref_2
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_1
-          response: *ref_2
         test_iam_permissions:
           operation:
             $ref: '#/paths/~1v1~1{v1Id}:testIamPermissions/post'
@@ -1033,6 +1108,9 @@ components:
               #/components/x-stackQL-resources/iap_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/iap_iam_policies/methods/set_iam_policy
         delete: []
     iap_iap_settings:
       id: google.iap.iap_iap_settings
@@ -1056,7 +1134,10 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/iap_iap_settings/methods/get_iap_settings
         insert: []
-        update: []
+        update:
+          - $ref: >-
+              #/components/x-stackQL-resources/iap_iap_settings/methods/update_iap_settings
+        replace: []
         delete: []
     iap:
       id: google.iap.iap
@@ -1073,23 +1154,21 @@ components:
         select: []
         insert: []
         update: []
+        replace: []
         delete: []
     dest_groups:
       id: google.iap.dest_groups
       name: dest_groups
       title: Dest_groups
       methods:
-        _list:
-          operation: &ref_3
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1iap_tunnel~1locations~1{locationsId}~1destGroups/get
-          response: &ref_4
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.tunnelDestGroups
-        list:
-          operation: *ref_3
-          response: *ref_4
         create:
           operation:
             $ref: >-
@@ -1126,6 +1205,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/dest_groups/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/dest_groups/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/dest_groups/methods/delete'
     brands:
@@ -1158,6 +1238,7 @@ components:
         insert:
           - $ref: '#/components/x-stackQL-resources/brands/methods/create'
         update: []
+        replace: []
         delete: []
     identity_aware_proxy_clients:
       id: google.iap.identity_aware_proxy_clients
@@ -1171,17 +1252,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_5
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1brands~1{brandsId}~1identityAwareProxyClients/get
-          response: &ref_6
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.identityAwareProxyClients
-        list:
-          operation: *ref_5
-          response: *ref_6
         get:
           operation:
             $ref: >-
@@ -1213,12 +1291,13 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/identity_aware_proxy_clients/methods/create
         update: []
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/identity_aware_proxy_clients/methods/delete
 paths:
   /v1/{v1Id}:setIamPolicy:
-    parameters: &ref_7
+    parameters: &ref_1
       - $ref: '#/components/parameters/access_token'
       - $ref: '#/components/parameters/alt'
       - $ref: '#/components/parameters/callback'
@@ -1261,7 +1340,7 @@ paths:
           schema:
             type: string
   /v1/{v1Id}:getIamPolicy:
-    parameters: *ref_7
+    parameters: *ref_1
     post:
       description: >-
         Gets the access control policy for an Identity-Aware Proxy protected
@@ -1293,7 +1372,7 @@ paths:
           schema:
             type: string
   /v1/{v1Id}:testIamPermissions:
-    parameters: *ref_7
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the Identity-Aware Proxy
@@ -1325,7 +1404,7 @@ paths:
           schema:
             type: string
   /v1/{v1Id}:iapSettings:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: Gets the IAP settings on a particular IAP protected resource.
       operationId: iap.getIapSettings
@@ -1381,7 +1460,7 @@ paths:
             type: string
             format: google-fieldmask
   /v1/{v1Id}:validateAttributeExpression:
-    parameters: *ref_7
+    parameters: *ref_1
     post:
       description: Validates that a given CEL expression conforms to IAP restrictions.
       operationId: iap.validateAttributeExpression
@@ -1408,7 +1487,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/iap_tunnel/locations/{locationsId}/destGroups:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: >-
         Lists the existing TunnelDestGroups. To group across all locations, use
@@ -1483,7 +1562,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/iap_tunnel/locations/{locationsId}/destGroups/{destGroupsId}:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: Retrieves an existing TunnelDestGroup.
       operationId: iap.projects.iap_tunnel.locations.destGroups.get
@@ -1588,7 +1667,7 @@ paths:
             type: string
             format: google-fieldmask
   /v1/projects/{projectsId}/brands:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: Lists the existing brands for the project.
       operationId: iap.projects.brands.list
@@ -1645,7 +1724,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/brands/{brandsId}:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: Retrieves the OAuth brand of the project.
       operationId: iap.projects.brands.get
@@ -1673,7 +1752,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/brands/{brandsId}/identityAwareProxyClients:
-    parameters: *ref_7
+    parameters: *ref_1
     post:
       description: >-
         Creates an Identity Aware Proxy (IAP) OAuth client. The client is owned
@@ -1744,7 +1823,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/brands/{brandsId}/identityAwareProxyClients/{identityAwareProxyClientsId}:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: >-
         Retrieves an Identity Aware Proxy (IAP) OAuth client. Requires that the
@@ -1813,7 +1892,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/brands/{brandsId}/identityAwareProxyClients/{identityAwareProxyClientsId}:resetSecret:
-    parameters: *ref_7
+    parameters: *ref_1
     post:
       description: >-
         Resets an Identity Aware Proxy (IAP) OAuth client secret. Useful if the

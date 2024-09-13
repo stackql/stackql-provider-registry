@@ -7,8 +7,8 @@ info:
   title: Workflow Executions API
   description: Execute workflows created with Workflows API.
   version: v1
-  x-discovery-doc-revision: '20240528'
-  x-generated-date: '2024-06-03'
+  x-discovery-doc-revision: '20240827'
+  x-generated-date: '2024-09-13'
 externalDocs:
   url: https://cloud.google.com/workflows
 servers:
@@ -197,11 +197,13 @@ components:
             - The step entry is in progress.
             - The step entry finished successfully.
             - The step entry failed with an error.
+            - The step entry is cancelled.
           enum:
             - STATE_UNSPECIFIED
             - STATE_IN_PROGRESS
             - STATE_SUCCEEDED
             - STATE_FAILED
+            - STATE_CANCELLED
         exception:
           description: Output only. The exception thrown by the step entry.
           readOnly: true
@@ -219,6 +221,10 @@ components:
           description: Output only. The StepEntryMetadata associated to this step.
           readOnly: true
           $ref: '#/components/schemas/StepEntryMetadata'
+        variableData:
+          description: Output only. The VariableData associated to this step.
+          readOnly: true
+          $ref: '#/components/schemas/VariableData'
     Exception:
       id: Exception
       description: Exception describes why the step entry failed.
@@ -294,6 +300,16 @@ components:
             the step's progress.
           type: string
           format: int64
+    VariableData:
+      id: VariableData
+      description: VariableData contains the variable data for this step.
+      type: object
+      properties:
+        variables:
+          description: Variables that are associated with this step.
+          type: object
+          additionalProperties:
+            type: any
     ListExecutionsResponse:
       id: ListExecutionsResponse
       description: Response for the ListExecutions method.
@@ -438,6 +454,23 @@ components:
             the concurrency quota is exhausted. The backlog execution starts
             when the concurrency quota becomes available.
           type: boolean
+        executionHistoryLevel:
+          description: >-
+            Optional. Describes the level of the execution history feature to
+            apply to this execution. If not specified, the level of the
+            execution history feature will be determined by its workflow's
+            execution history level. If the value is different from its
+            workflow's value, it will override the workflow's execution history
+            level for this exeuction.
+          type: string
+          enumDescriptions:
+            - The default/unset value.
+            - Enable execution history basic feature for this execution.
+            - Enable execution history detailed feature for this execution.
+          enum:
+            - EXECUTION_HISTORY_LEVEL_UNSPECIFIED
+            - EXECUTION_HISTORY_BASIC
+            - EXECUTION_HISTORY_DETAILED
     Error:
       id: Error
       description: Error describes why the execution was abnormally terminated.
@@ -644,6 +677,20 @@ components:
             the same `ordering_key` value. For more information, see [ordering
             messages](https://cloud.google.com/pubsub/docs/ordering).
           type: string
+    DeleteExecutionHistoryRequest:
+      id: DeleteExecutionHistoryRequest
+      description: Request for the DeleteExecutionHistory method.
+      type: object
+      properties: {}
+    Empty:
+      id: Empty
+      description: >-
+        A generic empty message that you can re-use to avoid defining duplicated
+        empty messages in your APIs. A typical example is to use it as the
+        request or the response type of an API method. For instance: service Foo
+        { rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty); }
+      type: object
+      properties: {}
   parameters:
     access_token:
       description: OAuth access token.
@@ -741,23 +788,21 @@ components:
         select: []
         insert: []
         update: []
+        replace: []
         delete: []
     executions:
       id: google.workflowexecutions.executions
       name: executions
       title: Executions
       methods:
-        _list:
-          operation: &ref_1
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1workflows~1{workflowsId}~1executions/get
-          response: &ref_2
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.executions
-        list:
-          operation: *ref_1
-          response: *ref_2
         create:
           operation:
             $ref: >-
@@ -793,45 +838,61 @@ components:
         insert:
           - $ref: '#/components/x-stackQL-resources/executions/methods/create'
         update: []
+        replace: []
         delete: []
+    executions_execution_history:
+      id: google.workflowexecutions.executions_execution_history
+      name: executions_execution_history
+      title: Executions_execution_history
+      methods:
+        delete_execution_history:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1workflows~1{workflowsId}~1executions~1{executionsId}:deleteExecutionHistory/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select: []
+        insert: []
+        update: []
+        replace: []
+        delete:
+          - $ref: >-
+              #/components/x-stackQL-resources/executions_execution_history/methods/delete_execution_history
     callbacks:
       id: google.workflowexecutions.callbacks
       name: callbacks
       title: Callbacks
       methods:
-        _list:
-          operation: &ref_3
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1workflows~1{workflowsId}~1executions~1{executionsId}~1callbacks/get
-          response: &ref_4
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.callbacks
-        list:
-          operation: *ref_3
-          response: *ref_4
       sqlVerbs:
         select:
           - $ref: '#/components/x-stackQL-resources/callbacks/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     step_entries:
       id: google.workflowexecutions.step_entries
       name: step_entries
       title: Step_entries
       methods:
-        _list:
-          operation: &ref_5
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1workflows~1{workflowsId}~1executions~1{executionsId}~1stepEntries/get
-          response: &ref_6
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.stepEntries
-        list:
-          operation: *ref_5
-          response: *ref_6
         get:
           operation:
             $ref: >-
@@ -845,10 +906,11 @@ components:
           - $ref: '#/components/x-stackQL-resources/step_entries/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
 paths:
   /v1/projects/{projectsId}/locations/{locationsId}/workflows/{workflowsId}:triggerPubsubExecution:
-    parameters: &ref_7
+    parameters: &ref_1
       - $ref: '#/components/parameters/access_token'
       - $ref: '#/components/parameters/alt'
       - $ref: '#/components/parameters/callback'
@@ -899,7 +961,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workflows/{workflowsId}/executions:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: >-
         Returns a list of executions which belong to the workflow with the given
@@ -994,7 +1056,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workflows/{workflowsId}/executions/{executionsId}:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: Returns an execution of the given name.
       operationId: workflowexecutions.projects.locations.workflows.executions.get
@@ -1036,7 +1098,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workflows/{workflowsId}/executions/{executionsId}:cancel:
-    parameters: *ref_7
+    parameters: *ref_1
     post:
       description: Cancels an execution of the given name.
       operationId: workflowexecutions.projects.locations.workflows.executions.cancel
@@ -1079,7 +1141,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workflows/{workflowsId}/executions/{executionsId}:exportData:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: >-
         Returns all metadata stored about an execution, excluding most data that
@@ -1118,8 +1180,52 @@ paths:
           required: true
           schema:
             type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/workflows/{workflowsId}/executions/{executionsId}:deleteExecutionHistory:
+    parameters: *ref_1
+    post:
+      description: Deletes all step entries for an execution.
+      operationId: >-
+        workflowexecutions.projects.locations.workflows.executions.deleteExecutionHistory
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteExecutionHistoryRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Empty'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: workflowsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: executionsId
+          required: true
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workflows/{workflowsId}/executions/{executionsId}/callbacks:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: >-
         Returns a list of active callbacks that belong to the execution with the
@@ -1169,7 +1275,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workflows/{workflowsId}/executions/{executionsId}/stepEntries:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: >-
         Lists step entries for the corresponding workflow execution. Returned
@@ -1231,8 +1337,12 @@ paths:
           name: orderBy
           schema:
             type: string
+        - in: query
+          name: view
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workflows/{workflowsId}/executions/{executionsId}/stepEntries/{stepEntriesId}:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: Gets a step entry.
       operationId: >-
@@ -1273,5 +1383,9 @@ paths:
         - in: path
           name: stepEntriesId
           required: true
+          schema:
+            type: string
+        - in: query
+          name: view
           schema:
             type: string

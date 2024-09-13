@@ -7,8 +7,8 @@ info:
   title: Contact Center AI Platform API
   description: ''
   version: v1alpha1
-  x-discovery-doc-revision: '20240531'
-  x-generated-date: '2024-06-03'
+  x-discovery-doc-revision: '20240904'
+  x-generated-date: '2024-09-13'
 externalDocs:
   url: https://cloud.google.com/solutions/contact-center-ai-platform
 servers:
@@ -262,13 +262,7 @@ components:
             (`ContactCenter`).
           type: string
         privateComponents:
-          description: >-
-            Output only. A list of UJET components that should be privately
-            accessed. This field is set by reading settings from the data plane.
-            For more information about the format of the component please refer
-            to go/ccaip-vpc-sc-org-policy. This field is must be fully populated
-            only for Create/Update resource operations. The main use case for
-            this field is OrgPolicy checks via CPE.
+          description: Output only. TODO(b/283407860) Deprecate this field.
           readOnly: true
           type: array
           items:
@@ -530,6 +524,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Component'
+        pscSetting:
+          description: Private service connect settings.
+          $ref: '#/components/schemas/PscSetting'
     Component:
       id: Component
       description: >-
@@ -541,27 +538,31 @@ components:
         name:
           description: Name of the component.
           type: string
-        serviceAttachments:
-          description: Associated service attachments.
+        serviceAttachmentNames:
+          description: >-
+            Associated service attachments. The service attachment names that
+            will be used for sending private traffic to the CCAIP tenant
+            project. Example service attachment name:
+            "projects/${TENANT_PROJECT_ID}/regions/${REGION}/serviceAttachments/ingress-default".
           type: array
           items:
-            $ref: '#/components/schemas/ServiceAttachment'
-    ServiceAttachment:
-      id: ServiceAttachment
-      description: Container for the VPC-SC networking configurations.
+            type: string
+    PscSetting:
+      id: PscSetting
+      description: Private service connect settings.
       type: object
       properties:
-        name:
-          description: >-
-            The service attachment name that will be used for sending private
-            traffic to the CCAIP tenant project. Example:
-            "projects/${TENANT_PROJECT_ID}/regions/${REGION}/serviceAttachments/ingress-default".
-          type: string
-        allowedProjectIds:
+        allowedConsumerProjectIds:
           description: >-
             The list of project ids that are allowed to send traffic to the
             service attachment. This field should be filled only for the ingress
-            service attachments.
+            components.
+          type: array
+          items:
+            type: string
+        producerProjectIds:
+          description: Output only. The CCAIP tenant project ids.
+          readOnly: true
           type: array
           items:
             type: string
@@ -583,8 +584,8 @@ components:
       id: Critical
       description: >-
         Instances in this Channel will receive updates after all instances in
-        `Critical` were updated + 2 days. They also will only be updated outside
-        of their peak hours.
+        `Normal` were updated. They also will only be updated outside of their
+        peak hours.
       type: object
       properties:
         peakHours:
@@ -960,16 +961,13 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _list:
-          operation: &ref_1
+        list:
+          operation:
             $ref: '#/paths/~1v1alpha1~1projects~1{projectsId}~1locations/get'
-          response: &ref_2
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.locations
-        list:
-          operation: *ref_1
-          response: *ref_2
         get:
           operation:
             $ref: >-
@@ -979,27 +977,27 @@ components:
             openAPIDocKey: '200'
       sqlVerbs:
         select:
+          - $ref: >-
+              #/components/x-stackQL-resources/locations/methods/query_contact_center_quota
           - $ref: '#/components/x-stackQL-resources/locations/methods/get'
           - $ref: '#/components/x-stackQL-resources/locations/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     operations:
       id: google.contactcenteraiplatform.operations
       name: operations
       title: Operations
       methods:
-        _list:
-          operation: &ref_3
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1alpha1~1projects~1{projectsId}~1locations~1{locationsId}~1operations/get
-          response: &ref_4
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.operations
-        list:
-          operation: *ref_3
-          response: *ref_4
         get:
           operation:
             $ref: >-
@@ -1027,6 +1025,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/operations/methods/list'
         insert: []
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/operations/methods/delete'
     contact_centers:
@@ -1034,17 +1033,14 @@ components:
       name: contact_centers
       title: Contact_centers
       methods:
-        _list:
-          operation: &ref_5
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1alpha1~1projects~1{projectsId}~1locations~1{locationsId}~1contactCenters/get
-          response: &ref_6
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.contactCenters
-        list:
-          operation: *ref_5
-          response: *ref_6
         create:
           operation:
             $ref: >-
@@ -1081,11 +1077,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/contact_centers/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/contact_centers/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/contact_centers/methods/delete'
 paths:
   /v1alpha1/projects/{projectsId}/locations/{locationsId}:queryContactCenterQuota:
-    parameters: &ref_7
+    parameters: &ref_1
       - $ref: '#/components/parameters/access_token'
       - $ref: '#/components/parameters/alt'
       - $ref: '#/components/parameters/callback'
@@ -1126,7 +1123,7 @@ paths:
           schema:
             type: string
   /v1alpha1/projects/{projectsId}/locations:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: Lists information about the supported locations for this service.
       operationId: contactcenteraiplatform.projects.locations.list
@@ -1162,7 +1159,7 @@ paths:
           schema:
             type: string
   /v1alpha1/projects/{projectsId}/locations/{locationsId}:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: Gets information about a location.
       operationId: contactcenteraiplatform.projects.locations.get
@@ -1190,7 +1187,7 @@ paths:
           schema:
             type: string
   /v1alpha1/projects/{projectsId}/locations/{locationsId}/operations:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: >-
         Lists operations that match the specified filter in the request. If the
@@ -1233,7 +1230,7 @@ paths:
           schema:
             type: string
   /v1alpha1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: >-
         Gets the latest state of a long-running operation. Clients can use this
@@ -1304,7 +1301,7 @@ paths:
           schema:
             type: string
   /v1alpha1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:cancel:
-    parameters: *ref_7
+    parameters: *ref_1
     post:
       description: >-
         Starts asynchronous cancellation on a long-running operation. The server
@@ -1351,7 +1348,7 @@ paths:
           schema:
             type: string
   /v1alpha1/projects/{projectsId}/locations/{locationsId}/contactCenters:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: Lists ContactCenters in a given project and location.
       operationId: contactcenteraiplatform.projects.locations.contactCenters.list
@@ -1435,7 +1432,7 @@ paths:
           schema:
             type: string
   /v1alpha1/projects/{projectsId}/locations/{locationsId}/contactCenters/{contactCentersId}:
-    parameters: *ref_7
+    parameters: *ref_1
     get:
       description: Gets details of a single ContactCenter.
       operationId: contactcenteraiplatform.projects.locations.contactCenters.get

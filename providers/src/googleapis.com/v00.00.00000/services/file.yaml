@@ -9,8 +9,8 @@ info:
     The Cloud Filestore API is used for creating and managing cloud file
     servers.
   version: v1
-  x-discovery-doc-revision: '20240511'
-  x-generated-date: '2024-06-03'
+  x-discovery-doc-revision: '20240905'
+  x-generated-date: '2024-09-13'
 externalDocs:
   url: https://cloud.google.com/filestore/
 servers:
@@ -212,6 +212,7 @@ components:
             - The instance is in the process of becoming suspended.
             - The instance is in the process of becoming active.
             - The instance is reverting to a snapshot.
+            - The replica instance is being promoted.
           enum:
             - STATE_UNSPECIFIED
             - CREATING
@@ -224,6 +225,7 @@ components:
             - SUSPENDING
             - RESUMING
             - REVERTING
+            - PROMOTING
         statusMessage:
           description: >-
             Output only. Additional information about the instance state, if
@@ -324,8 +326,54 @@ components:
               - SUSPENSION_REASON_UNSPECIFIED
               - KMS_KEY_ISSUE
         replication:
-          description: Optional. Replicaition configuration.
+          description: Optional. Replication configuration.
           $ref: '#/components/schemas/Replication'
+        tags:
+          description: >-
+            Optional. Input only. Immutable. Tag key-value pairs are bound to
+            this resource. For example: "123/environment": "production",
+            "123/costCenter": "marketing"
+          type: object
+          additionalProperties:
+            type: string
+        protocol:
+          description: >-
+            Immutable. The protocol indicates the access protocol for all shares
+            in the instance. This field is immutable and it cannot be changed
+            after the instance has been created. Default value: `NFS_V3`.
+          type: string
+          enumDescriptions:
+            - >-
+              FILE_PROTOCOL_UNSPECIFIED serves a "not set" default value when a
+              FileProtocol is a separate field in a message.
+            - NFS 3.0.
+            - NFS 4.1.
+          enum:
+            - FILE_PROTOCOL_UNSPECIFIED
+            - NFS_V3
+            - NFS_V4_1
+        configurablePerformanceEnabled:
+          description: >-
+            Output only. Indicates whether this instance's performance is
+            configurable. If enabled, adjust it using the 'performance_config'
+            field.
+          readOnly: true
+          type: boolean
+        performanceConfig:
+          description: Optional. Used to configure performance.
+          $ref: '#/components/schemas/PerformanceConfig'
+        performanceLimits:
+          description: Output only. Used for getting performance limits.
+          readOnly: true
+          $ref: '#/components/schemas/PerformanceLimits'
+        deletionProtectionEnabled:
+          description: >-
+            Optional. Indicates whether the instance is protected against
+            deletion.
+          type: boolean
+        deletionProtectionReason:
+          description: Optional. The reason for enabling deletion protection.
+          type: string
     FileShareConfig:
       id: FileShareConfig
       description: File share configuration for the instance.
@@ -498,10 +546,10 @@ components:
           enumDescriptions:
             - Role not set.
             - >-
-              The instance is a Active replication member, functions as the
+              The instance is the `ACTIVE` replication member, functions as the
               replication source instance.
             - >-
-              The instance is a Standby replication member, functions as the
+              The instance is the `STANDBY` replication member, functions as the
               replication destination instance.
           enum:
             - ROLE_UNSPECIFIED
@@ -509,8 +557,8 @@ components:
             - STANDBY
         replicas:
           description: >-
-            Optional. Replicas configuration on the instance. For now, only a
-            single replica config is supported.
+            Optional. Replication configuration for the replica instance
+            associated with this instance. Only a single replica is supported.
           type: array
           items:
             $ref: '#/components/schemas/ReplicaConfig'
@@ -562,6 +610,87 @@ components:
           readOnly: true
           type: string
           format: google-datetime
+    PerformanceConfig:
+      id: PerformanceConfig
+      description: >-
+        Used for setting the performance configuration. If the user doesn't
+        specify PerformanceConfig, automatically provision the default
+        performance settings as described in
+        https://cloud.google.com/filestore/docs/performance. Larger instances
+        will be linearly set to more IOPS. If the instance's capacity is
+        increased or decreased, its performance will be automatically adjusted
+        upwards or downwards accordingly (respectively).
+      type: object
+      properties:
+        fixedIops:
+          description: >-
+            Choose a fixed provisioned IOPS value for the instance, which will
+            remain constant regardless of instance capacity. Value must be a
+            multiple of 1000. If the chosen value is outside the supported range
+            for the instance's capacity during instance creation, instance
+            creation will fail with an `InvalidArgument` error. Similarly, if an
+            instance capacity update would result in a value outside the
+            supported range, the update will fail with an `InvalidArgument`
+            error.
+          $ref: '#/components/schemas/FixedIOPS'
+        iopsPerTb:
+          description: >-
+            Provision IOPS dynamically based on the capacity of the instance.
+            Provisioned read IOPS will be calculated by multiplying the capacity
+            of the instance in TiB by the `iops_per_tb` value. For example, for
+            a 2 TiB instance with an `iops_per_tb` value of 17000 the
+            provisioned read IOPS will be 34000. If the calculated value is
+            outside the supported range for the instance's capacity during
+            instance creation, instance creation will fail with an
+            `InvalidArgument` error. Similarly, if an instance capacity update
+            would result in a value outside the supported range, the update will
+            fail with an `InvalidArgument` error.
+          $ref: '#/components/schemas/IOPSPerTB'
+    FixedIOPS:
+      id: FixedIOPS
+      description: Fixed IOPS (input/output operations per second) parameters.
+      type: object
+      properties:
+        maxReadIops:
+          description: Required. Maximum raw read IOPS.
+          type: string
+          format: int64
+    IOPSPerTB:
+      id: IOPSPerTB
+      description: IOPS per TB. Filestore defines TB as 1024^4 bytes (TiB).
+      type: object
+      properties:
+        maxReadIopsPerTb:
+          description: Required. Maximum read IOPS per TiB.
+          type: string
+          format: int64
+    PerformanceLimits:
+      id: PerformanceLimits
+      description: >-
+        The enforced performance limits, calculated from the instance's
+        performance configuration.
+      type: object
+      properties:
+        maxReadIops:
+          description: Output only. The max read IOPS.
+          readOnly: true
+          type: string
+          format: int64
+        maxWriteIops:
+          description: Output only. The max write IOPS.
+          readOnly: true
+          type: string
+          format: int64
+        maxReadThroughputBps:
+          description: Output only. The max read throughput in bytes per second.
+          readOnly: true
+          type: string
+          format: int64
+        maxWriteThroughputBps:
+          description: Output only. The max write throughput in bytes per second.
+          readOnly: true
+          type: string
+          format: int64
     RestoreInstanceRequest:
       id: RestoreInstanceRequest
       description: >-
@@ -655,6 +784,14 @@ components:
           readOnly: true
           type: string
           format: int64
+        tags:
+          description: >-
+            Optional. Input only. Immutable. Tag key-value pairs are bound to
+            this resource. For example: "123/environment": "production",
+            "123/costCenter": "marketing"
+          type: object
+          additionalProperties:
+            type: string
     ListBackupsResponse:
       id: ListBackupsResponse
       description: ListBackupsResponse is the result of ListBackupsRequest.
@@ -815,6 +952,35 @@ components:
         kmsKey:
           description: Immutable. KMS key name used for data encryption.
           type: string
+        tags:
+          description: >-
+            Optional. Input only. Immutable. Tag key-value pairs are bound to
+            this resource. For example: "123/environment": "production",
+            "123/costCenter": "marketing"
+          type: object
+          additionalProperties:
+            type: string
+        fileSystemProtocol:
+          description: >-
+            Output only. The file system protocol of the source Filestore
+            instance that this backup is created from.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - >-
+              FILE_PROTOCOL_UNSPECIFIED serves a "not set" default value when a
+              FileProtocol is a separate field in a message.
+            - NFS 3.0.
+            - NFS 4.1.
+          enum:
+            - FILE_PROTOCOL_UNSPECIFIED
+            - NFS_V3
+            - NFS_V4_1
+    PromoteReplicaRequest:
+      id: PromoteReplicaRequest
+      description: PromoteReplicaRequest promotes a Filestore standby instance (replica).
+      type: object
+      properties: {}
     ListLocationsResponse:
       id: ListLocationsResponse
       description: The response message for Locations.ListLocations.
@@ -1612,16 +1778,13 @@ components:
       name: locations
       title: Locations
       methods:
-        _list:
-          operation: &ref_1
+        list:
+          operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations/get'
-          response: &ref_2
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.locations
-        list:
-          operation: *ref_1
-          response: *ref_2
         get:
           operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}/get'
@@ -1634,23 +1797,21 @@ components:
           - $ref: '#/components/x-stackQL-resources/locations/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     operations:
       id: google.file.operations
       name: operations
       title: Operations
       methods:
-        _list:
-          operation: &ref_3
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1operations/get
-          response: &ref_4
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.operations
-        list:
-          operation: *ref_3
-          response: *ref_4
         get:
           operation:
             $ref: >-
@@ -1678,6 +1839,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/operations/methods/list'
         insert: []
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/operations/methods/delete'
     instances:
@@ -1685,17 +1847,14 @@ components:
       name: instances
       title: Instances
       methods:
-        _list:
-          operation: &ref_5
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1instances/get
-          response: &ref_6
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.instances
-        list:
-          operation: *ref_5
-          response: *ref_6
         create:
           operation:
             $ref: >-
@@ -1738,6 +1897,13 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        promote_replica:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1instances~1{instancesId}:promoteReplica/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
       sqlVerbs:
         select:
           - $ref: '#/components/x-stackQL-resources/instances/methods/get'
@@ -1746,6 +1912,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/instances/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/instances/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/instances/methods/delete'
     snapshots:
@@ -1753,17 +1920,14 @@ components:
       name: snapshots
       title: Snapshots
       methods:
-        _list:
-          operation: &ref_7
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1instances~1{instancesId}~1snapshots/get
-          response: &ref_8
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.snapshots
-        list:
-          operation: *ref_7
-          response: *ref_8
         create:
           operation:
             $ref: >-
@@ -1800,6 +1964,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/snapshots/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/snapshots/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/snapshots/methods/delete'
     backups:
@@ -1807,17 +1972,14 @@ components:
       name: backups
       title: Backups
       methods:
-        _list:
-          operation: &ref_9
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1backups/get
-          response: &ref_10
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.backups
-        list:
-          operation: *ref_9
-          response: *ref_10
         create:
           operation:
             $ref: >-
@@ -1854,11 +2016,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/backups/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/backups/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/backups/methods/delete'
 paths:
   /v1/projects/{projectsId}/locations:
-    parameters: &ref_11
+    parameters: &ref_1
       - $ref: '#/components/parameters/access_token'
       - $ref: '#/components/parameters/alt'
       - $ref: '#/components/parameters/callback'
@@ -1909,7 +2072,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}:
-    parameters: *ref_11
+    parameters: *ref_1
     get:
       description: Gets information about a location.
       operationId: file.projects.locations.get
@@ -1937,7 +2100,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations:
-    parameters: *ref_11
+    parameters: *ref_1
     get:
       description: >-
         Lists operations that match the specified filter in the request. If the
@@ -1980,7 +2143,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:
-    parameters: *ref_11
+    parameters: *ref_1
     get:
       description: >-
         Gets the latest state of a long-running operation. Clients can use this
@@ -2051,7 +2214,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:cancel:
-    parameters: *ref_11
+    parameters: *ref_1
     post:
       description: >-
         Starts asynchronous cancellation on a long-running operation. The server
@@ -2098,7 +2261,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/instances:
-    parameters: *ref_11
+    parameters: *ref_1
     get:
       description: >-
         Lists all instances in a project for either a specified location or for
@@ -2184,7 +2347,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/instances/{instancesId}:
-    parameters: *ref_11
+    parameters: *ref_1
     get:
       description: Gets the details of a specific instance.
       operationId: file.projects.locations.instances.get
@@ -2293,7 +2456,7 @@ paths:
           schema:
             type: boolean
   /v1/projects/{projectsId}/locations/{locationsId}/instances/{instancesId}:restore:
-    parameters: *ref_11
+    parameters: *ref_1
     post:
       description: >-
         Restores an existing instance's file share from a backup. The capacity
@@ -2335,7 +2498,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/instances/{instancesId}:revert:
-    parameters: *ref_11
+    parameters: *ref_1
     post:
       description: Revert an existing instance's file system to a specified snapshot.
       operationId: file.projects.locations.instances.revert
@@ -2372,8 +2535,46 @@ paths:
           required: true
           schema:
             type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/instances/{instancesId}:promoteReplica:
+    parameters: *ref_1
+    post:
+      description: Promote the standby instance (replica).
+      operationId: file.projects.locations.instances.promoteReplica
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromoteReplicaRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}/instances/{instancesId}/snapshots:
-    parameters: *ref_11
+    parameters: *ref_1
     get:
       description: >-
         Lists all snapshots in a project for either a specified location or for
@@ -2465,7 +2666,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/instances/{instancesId}/snapshots/{snapshotsId}:
-    parameters: *ref_11
+    parameters: *ref_1
     get:
       description: Gets the details of a specific snapshot.
       operationId: file.projects.locations.instances.snapshots.get
@@ -2585,7 +2786,7 @@ paths:
             type: string
             format: google-fieldmask
   /v1/projects/{projectsId}/locations/{locationsId}/backups:
-    parameters: *ref_11
+    parameters: *ref_1
     get:
       description: >-
         Lists all backups in a project for either a specified location or for
@@ -2667,7 +2868,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/backups/{backupsId}:
-    parameters: *ref_11
+    parameters: *ref_1
     get:
       description: Gets the details of a specific backup.
       operationId: file.projects.locations.backups.get

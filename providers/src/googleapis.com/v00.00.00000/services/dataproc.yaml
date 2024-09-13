@@ -7,8 +7,8 @@ info:
   title: Cloud Dataproc API
   description: Manages Hadoop-based clusters and jobs on Google Cloud Platform.
   version: v1
-  x-discovery-doc-revision: '20240525'
-  x-generated-date: '2024-06-03'
+  x-discovery-doc-revision: '20240830'
+  x-generated-date: '2024-09-13'
 externalDocs:
   url: https://cloud.google.com/dataproc/
 servers:
@@ -795,6 +795,14 @@ components:
         repositoryConfig:
           description: Optional. Dependency repository configuration.
           $ref: '#/components/schemas/RepositoryConfig'
+        autotuningConfig:
+          description: Optional. Autotuning configuration of the workload.
+          $ref: '#/components/schemas/AutotuningConfig'
+        cohort:
+          description: >-
+            Optional. Cohort identifier. Identifies families of the workloads
+            having the same shape, e.g. daily ETL jobs.
+          type: string
     RepositoryConfig:
       id: RepositoryConfig
       description: Configuration for dependency repositories
@@ -811,6 +819,26 @@ components:
         pypiRepository:
           description: Optional. PyPi repository address
           type: string
+    AutotuningConfig:
+      id: AutotuningConfig
+      description: Autotuning configuration of the workload.
+      type: object
+      properties:
+        scenarios:
+          description: Optional. Scenarios for which tunings are applied.
+          type: array
+          items:
+            type: string
+            enumDescriptions:
+              - Default value.
+              - Scaling recommendations such as initialExecutors.
+              - Adding hints for potential relation broadcasts.
+              - Memory management for workloads.
+            enum:
+              - SCENARIO_UNSPECIFIED
+              - SCALING
+              - BROADCAST_HASH_JOIN
+              - MEMORY
     EnvironmentConfig:
       id: EnvironmentConfig
       description: Environment configuration for a workload.
@@ -1250,9 +1278,9 @@ components:
             type: string
         tags:
           description: >-
-            The Compute Engine tags to add to all instances (see Tagging
+            The Compute Engine network tags to add to all instances (see Tagging
             instances
-            (https://cloud.google.com/compute/docs/label-or-tag-resources#tags)).
+            (https://cloud.google.com/vpc/docs/add-remove-network-tags)).
           type: array
           items:
             type: string
@@ -1551,6 +1579,22 @@ components:
             (Non-Volatile Memory Express). See local SSD performance
             (https://cloud.google.com/compute/docs/disks/local-ssd#performance).
           type: string
+        bootDiskProvisionedIops:
+          description: >-
+            Optional. Indicates how many IOPS to provision for the disk. This
+            sets the number of I/O operations per second that the disk can
+            handle. Note: This field is only supported if boot_disk_type is
+            hyperdisk-balanced.
+          type: string
+          format: int64
+        bootDiskProvisionedThroughput:
+          description: >-
+            Optional. Indicates how much throughput to provision for the disk.
+            This sets the number of throughput mb per second that the disk can
+            handle. Values must be greater than or equal to 1. Note: This field
+            is only supported if boot_disk_type is hyperdisk-balanced.
+          type: string
+          format: int64
     ManagedGroupConfig:
       id: ManagedGroupConfig
       description: Specifies the resources used to actively manage an instance group.
@@ -1683,7 +1727,7 @@ components:
           description: >-
             Optional. The version of software inside the cluster. It must be one
             of the supported Dataproc Versions
-            (https://cloud.google.com/dataproc/docs/concepts/versioning/dataproc-versions#supported_dataproc_versions),
+            (https://cloud.google.com/dataproc/docs/concepts/versioning/dataproc-versions#supported-dataproc-image-versions),
             such as "1.2" (including a subminor version, such as "1.2.29"), or
             the "preview" version
             (https://cloud.google.com/dataproc/docs/concepts/versioning/dataproc-versions#other_versions).
@@ -1713,9 +1757,11 @@ components:
                 Unspecified component. Specifying this will cause Cluster
                 creation to fail.
               - >-
-                The Anaconda python distribution. The Anaconda component is not
-                supported in the Dataproc 2.0 image. The 2.0 image is
-                pre-installed with Miniconda.
+                The Anaconda component is no longer supported or applicable to
+                supported Dataproc on Compute Engine image versions
+                (https://cloud.google.com/dataproc/docs/concepts/versioning/dataproc-version-clusters#supported-dataproc-image-versions).
+                It cannot be activated on clusters created with supported
+                Dataproc on Compute Engine image versions.
               - Docker
               - The Druid query engine. (alpha)
               - Flink
@@ -3684,6 +3730,9 @@ components:
         jupyterSession:
           description: Optional. Jupyter session config.
           $ref: '#/components/schemas/JupyterConfig'
+        sparkConnectSession:
+          description: Optional. Spark connect session config.
+          $ref: '#/components/schemas/SparkConnectConfig'
         runtimeInfo:
           description: Output only. Runtime information about session execution.
           readOnly: true
@@ -3776,6 +3825,11 @@ components:
         displayName:
           description: Optional. Display name, shown in the Jupyter kernelspec card.
           type: string
+    SparkConnectConfig:
+      id: SparkConnectConfig
+      description: Spark connect configuration for an interactive session.
+      type: object
+      properties: {}
     SessionStateHistory:
       id: SessionStateHistory
       description: Historical state information.
@@ -3864,6 +3918,9 @@ components:
         jupyterSession:
           description: Optional. Jupyter session config.
           $ref: '#/components/schemas/JupyterConfig'
+        sparkConnectSession:
+          description: Optional. Spark connect session config.
+          $ref: '#/components/schemas/SparkConnectConfig'
         creator:
           description: Output only. The email address of the user who created the template.
           readOnly: true
@@ -4959,6 +5016,8 @@ components:
             - Resize node group operation type.
             - Repair node group operation type.
             - Update node group label operation type.
+            - Start node group operation type.
+            - Stop node group operation type.
           enum:
             - NODE_GROUP_OPERATION_TYPE_UNSPECIFIED
             - CREATE
@@ -4967,6 +5026,8 @@ components:
             - RESIZE
             - REPAIR
             - UPDATE_LABELS
+            - START
+            - STOP
         description:
           description: Output only. Short description of operation.
           readOnly: true
@@ -5239,17 +5300,14 @@ components:
       name: operations
       title: Operations
       methods:
-        _projects_regions_operations_list:
-          operation: &ref_1
+        projects_regions_operations_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1regions~1{regionsId}~1operations/get
-          response: &ref_2
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.operations
-        projects_regions_operations_list:
-          operation: *ref_1
-          response: *ref_2
         projects_regions_operations_get:
           operation:
             $ref: >-
@@ -5271,17 +5329,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_operations_list:
-          operation: &ref_3
+        projects_locations_operations_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1operations/get
-          response: &ref_4
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.operations
-        projects_locations_operations_list:
-          operation: *ref_3
-          response: *ref_4
         projects_locations_operations_get:
           operation:
             $ref: >-
@@ -5315,6 +5370,7 @@ components:
               #/components/x-stackQL-resources/operations/methods/projects_locations_operations_list
         insert: []
         update: []
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/operations/methods/projects_regions_operations_delete
@@ -5332,17 +5388,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_regions_operations_get_iam_policy:
-          operation: &ref_5
+        projects_regions_operations_get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1regions~1{regionsId}~1operations~1{operationsId}:getIamPolicy/post
-          response: &ref_6
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        projects_regions_operations_get_iam_policy:
-          operation: *ref_5
-          response: *ref_6
         projects_regions_operations_test_iam_permissions:
           operation:
             $ref: >-
@@ -5356,6 +5409,9 @@ components:
               #/components/x-stackQL-resources/operations_iam_policies/methods/projects_regions_operations_get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/operations_iam_policies/methods/projects_regions_operations_set_iam_policy
         delete: []
     autoscaling_policies:
       id: google.dataproc.autoscaling_policies
@@ -5369,17 +5425,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_regions_autoscaling_policies_list:
-          operation: &ref_7
+        projects_regions_autoscaling_policies_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1regions~1{regionsId}~1autoscalingPolicies/get
-          response: &ref_8
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.policies
-        projects_regions_autoscaling_policies_list:
-          operation: *ref_7
-          response: *ref_8
         projects_regions_autoscaling_policies_update:
           operation:
             $ref: >-
@@ -5408,17 +5461,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_autoscaling_policies_list:
-          operation: &ref_9
+        projects_locations_autoscaling_policies_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1autoscalingPolicies/get
-          response: &ref_10
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.policies
-        projects_locations_autoscaling_policies_list:
-          operation: *ref_9
-          response: *ref_10
         projects_locations_autoscaling_policies_update:
           operation:
             $ref: >-
@@ -5455,7 +5505,8 @@ components:
               #/components/x-stackQL-resources/autoscaling_policies/methods/projects_regions_autoscaling_policies_create
           - $ref: >-
               #/components/x-stackQL-resources/autoscaling_policies/methods/projects_locations_autoscaling_policies_create
-        update:
+        update: []
+        replace:
           - $ref: >-
               #/components/x-stackQL-resources/autoscaling_policies/methods/projects_regions_autoscaling_policies_update
           - $ref: >-
@@ -5477,17 +5528,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_regions_autoscaling_policies_get_iam_policy:
-          operation: &ref_11
+        projects_regions_autoscaling_policies_get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1regions~1{regionsId}~1autoscalingPolicies~1{autoscalingPoliciesId}:getIamPolicy/post
-          response: &ref_12
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        projects_regions_autoscaling_policies_get_iam_policy:
-          operation: *ref_11
-          response: *ref_12
         projects_regions_autoscaling_policies_test_iam_permissions:
           operation:
             $ref: >-
@@ -5502,17 +5550,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_autoscaling_policies_get_iam_policy:
-          operation: &ref_13
+        projects_locations_autoscaling_policies_get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1autoscalingPolicies~1{autoscalingPoliciesId}:getIamPolicy/post
-          response: &ref_14
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        projects_locations_autoscaling_policies_get_iam_policy:
-          operation: *ref_13
-          response: *ref_14
         projects_locations_autoscaling_policies_test_iam_permissions:
           operation:
             $ref: >-
@@ -5528,6 +5573,11 @@ components:
               #/components/x-stackQL-resources/autoscaling_policies_iam_policies/methods/projects_locations_autoscaling_policies_get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/autoscaling_policies_iam_policies/methods/projects_regions_autoscaling_policies_set_iam_policy
+          - $ref: >-
+              #/components/x-stackQL-resources/autoscaling_policies_iam_policies/methods/projects_locations_autoscaling_policies_set_iam_policy
         delete: []
     clusters:
       id: google.dataproc.clusters
@@ -5541,17 +5591,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_regions_clusters_list:
-          operation: &ref_15
+        projects_regions_clusters_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectId}~1regions~1{region}~1clusters/get
-          response: &ref_16
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.clusters
-        projects_regions_clusters_list:
-          operation: *ref_15
-          response: *ref_16
         projects_regions_clusters_patch:
           operation:
             $ref: >-
@@ -5620,6 +5667,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/clusters/methods/projects_regions_clusters_patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/clusters/methods/projects_regions_clusters_delete
@@ -5635,17 +5683,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_regions_clusters_get_iam_policy:
-          operation: &ref_17
+        projects_regions_clusters_get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1regions~1{regionsId}~1clusters~1{clustersId}:getIamPolicy/post
-          response: &ref_18
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        projects_regions_clusters_get_iam_policy:
-          operation: *ref_17
-          response: *ref_18
         projects_regions_clusters_test_iam_permissions:
           operation:
             $ref: >-
@@ -5659,6 +5704,9 @@ components:
               #/components/x-stackQL-resources/clusters_iam_policies/methods/projects_regions_clusters_get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/clusters_iam_policies/methods/projects_regions_clusters_set_iam_policy
         delete: []
     node_groups:
       id: google.dataproc.node_groups
@@ -5701,6 +5749,7 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/node_groups/methods/projects_regions_clusters_node_groups_create
         update: []
+        replace: []
         delete: []
     jobs:
       id: google.dataproc.jobs
@@ -5742,16 +5791,13 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_regions_jobs_list:
-          operation: &ref_19
+        projects_regions_jobs_list:
+          operation:
             $ref: '#/paths/~1v1~1projects~1{projectId}~1regions~1{region}~1jobs/get'
-          response: &ref_20
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.jobs
-        projects_regions_jobs_list:
-          operation: *ref_19
-          response: *ref_20
         projects_regions_jobs_cancel:
           operation:
             $ref: >-
@@ -5769,6 +5815,7 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/jobs/methods/projects_regions_jobs_patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/jobs/methods/projects_regions_jobs_delete
@@ -5784,17 +5831,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_regions_jobs_get_iam_policy:
-          operation: &ref_21
+        projects_regions_jobs_get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1regions~1{regionsId}~1jobs~1{jobsId}:getIamPolicy/post
-          response: &ref_22
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        projects_regions_jobs_get_iam_policy:
-          operation: *ref_21
-          response: *ref_22
         projects_regions_jobs_test_iam_permissions:
           operation:
             $ref: >-
@@ -5808,6 +5852,9 @@ components:
               #/components/x-stackQL-resources/jobs_iam_policies/methods/projects_regions_jobs_get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/jobs_iam_policies/methods/projects_regions_jobs_set_iam_policy
         delete: []
     workflow_templates:
       id: google.dataproc.workflow_templates
@@ -5821,17 +5868,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_regions_workflow_templates_list:
-          operation: &ref_23
+        projects_regions_workflow_templates_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1regions~1{regionsId}~1workflowTemplates/get
-          response: &ref_24
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.templates
-        projects_regions_workflow_templates_list:
-          operation: *ref_23
-          response: *ref_24
         projects_regions_workflow_templates_get:
           operation:
             $ref: >-
@@ -5874,17 +5918,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_workflow_templates_list:
-          operation: &ref_25
+        projects_locations_workflow_templates_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1workflowTemplates/get
-          response: &ref_26
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.templates
-        projects_locations_workflow_templates_list:
-          operation: *ref_25
-          response: *ref_26
         projects_locations_workflow_templates_get:
           operation:
             $ref: >-
@@ -5935,7 +5976,8 @@ components:
               #/components/x-stackQL-resources/workflow_templates/methods/projects_regions_workflow_templates_create
           - $ref: >-
               #/components/x-stackQL-resources/workflow_templates/methods/projects_locations_workflow_templates_create
-        update:
+        update: []
+        replace:
           - $ref: >-
               #/components/x-stackQL-resources/workflow_templates/methods/projects_regions_workflow_templates_update
           - $ref: >-
@@ -5957,17 +5999,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_regions_workflow_templates_get_iam_policy:
-          operation: &ref_27
+        projects_regions_workflow_templates_get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1regions~1{regionsId}~1workflowTemplates~1{workflowTemplatesId}:getIamPolicy/post
-          response: &ref_28
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        projects_regions_workflow_templates_get_iam_policy:
-          operation: *ref_27
-          response: *ref_28
         projects_regions_workflow_templates_test_iam_permissions:
           operation:
             $ref: >-
@@ -5982,17 +6021,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_workflow_templates_get_iam_policy:
-          operation: &ref_29
+        projects_locations_workflow_templates_get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1workflowTemplates~1{workflowTemplatesId}:getIamPolicy/post
-          response: &ref_30
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        projects_locations_workflow_templates_get_iam_policy:
-          operation: *ref_29
-          response: *ref_30
         projects_locations_workflow_templates_test_iam_permissions:
           operation:
             $ref: >-
@@ -6008,6 +6044,11 @@ components:
               #/components/x-stackQL-resources/workflow_templates_iam_policies/methods/projects_locations_workflow_templates_get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/workflow_templates_iam_policies/methods/projects_regions_workflow_templates_set_iam_policy
+          - $ref: >-
+              #/components/x-stackQL-resources/workflow_templates_iam_policies/methods/projects_locations_workflow_templates_set_iam_policy
         delete: []
     batches:
       id: google.dataproc.batches
@@ -6028,17 +6069,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_batches_list:
-          operation: &ref_31
+        projects_locations_batches_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1batches/get
-          response: &ref_32
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.batches
-        projects_locations_batches_list:
-          operation: *ref_31
-          response: *ref_32
         projects_locations_batches_get:
           operation:
             $ref: >-
@@ -6063,6 +6101,7 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/batches/methods/projects_locations_batches_create
         update: []
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/batches/methods/projects_locations_batches_delete
@@ -6078,17 +6117,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_sessions_list:
-          operation: &ref_33
+        projects_locations_sessions_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1sessions/get
-          response: &ref_34
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.sessions
-        projects_locations_sessions_list:
-          operation: *ref_33
-          response: *ref_34
         projects_locations_sessions_get:
           operation:
             $ref: >-
@@ -6120,6 +6156,7 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/sessions/methods/projects_locations_sessions_create
         update: []
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/sessions/methods/projects_locations_sessions_delete
@@ -6135,17 +6172,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _projects_locations_session_templates_list:
-          operation: &ref_35
+        projects_locations_session_templates_list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1sessionTemplates/get
-          response: &ref_36
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.sessionTemplates
-        projects_locations_session_templates_list:
-          operation: *ref_35
-          response: *ref_36
         projects_locations_session_templates_patch:
           operation:
             $ref: >-
@@ -6179,12 +6213,13 @@ components:
         update:
           - $ref: >-
               #/components/x-stackQL-resources/session_templates/methods/projects_locations_session_templates_patch
+        replace: []
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/session_templates/methods/projects_locations_session_templates_delete
 paths:
   /v1/projects/{projectsId}/regions/{regionsId}/operations:
-    parameters: &ref_37
+    parameters: &ref_1
       - $ref: '#/components/parameters/access_token'
       - $ref: '#/components/parameters/alt'
       - $ref: '#/components/parameters/callback'
@@ -6238,7 +6273,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/operations/{operationsId}:
-    parameters: *ref_37
+    parameters: *ref_1
     get:
       description: >-
         Gets the latest state of a long-running operation. Clients can use this
@@ -6309,7 +6344,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/operations/{operationsId}:cancel:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Starts asynchronous cancellation on a long-running operation. The server
@@ -6351,7 +6386,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/operations/{operationsId}:setIamPolicy:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -6392,7 +6427,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/operations/{operationsId}:getIamPolicy:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -6432,7 +6467,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/operations/{operationsId}:testIamPermissions:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -6475,7 +6510,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/autoscalingPolicies:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: Creates new autoscaling policy.
       operationId: dataproc.projects.regions.autoscalingPolicies.create
@@ -6543,7 +6578,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/autoscalingPolicies/{autoscalingPoliciesId}:
-    parameters: *ref_37
+    parameters: *ref_1
     put:
       description: >-
         Updates (replaces) autoscaling policy.Disabled check for update_mask,
@@ -6647,7 +6682,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/autoscalingPolicies/{autoscalingPoliciesId}:setIamPolicy:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -6688,7 +6723,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/autoscalingPolicies/{autoscalingPoliciesId}:getIamPolicy:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -6728,7 +6763,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/autoscalingPolicies/{autoscalingPoliciesId}:testIamPermissions:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -6771,7 +6806,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectId}/regions/{region}/clusters:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Creates a cluster in a project. The returned Operation.metadata will be
@@ -6854,7 +6889,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}:
-    parameters: *ref_37
+    parameters: *ref_1
     patch:
       description: >-
         Updates a cluster in a project. The returned Operation.metadata will be
@@ -6988,7 +7023,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}:stop:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: Stops a cluster in a project.
       operationId: dataproc.projects.regions.clusters.stop
@@ -7026,7 +7061,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}:start:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: Starts a cluster in a project.
       operationId: dataproc.projects.regions.clusters.start
@@ -7064,7 +7099,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}:repair:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: Repairs a cluster.
       operationId: dataproc.projects.regions.clusters.repair
@@ -7102,7 +7137,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectId}/regions/{region}/clusters/{clusterName}:diagnose:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Gets cluster diagnostic information. The returned Operation.metadata
@@ -7146,7 +7181,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/clusters/{clustersId}:injectCredentials:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Inject encrypted credentials into all of the VMs in a cluster.The target
@@ -7187,7 +7222,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/clusters/{clustersId}:setIamPolicy:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -7228,7 +7263,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/clusters/{clustersId}:getIamPolicy:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -7268,7 +7303,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/clusters/{clustersId}:testIamPermissions:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -7311,7 +7346,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/clusters/{clustersId}/nodeGroups:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Creates a node group in a cluster. The returned Operation.metadata is
@@ -7364,7 +7399,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/clusters/{clustersId}/nodeGroups/{nodeGroupsId}:resize:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Resizes a node group in a cluster. The returned Operation.metadata is
@@ -7410,7 +7445,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/clusters/{clustersId}/nodeGroups/{nodeGroupsId}:repair:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: Repair nodes in a node group.
       operationId: dataproc.projects.regions.clusters.nodeGroups.repair
@@ -7453,7 +7488,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/clusters/{clustersId}/nodeGroups/{nodeGroupsId}:
-    parameters: *ref_37
+    parameters: *ref_1
     get:
       description: Gets the resource representation for a node group in a cluster.
       operationId: dataproc.projects.regions.clusters.nodeGroups.get
@@ -7491,7 +7526,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectId}/regions/{region}/jobs:submit:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: Submits a job to a cluster.
       operationId: dataproc.projects.regions.jobs.submit
@@ -7524,7 +7559,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectId}/regions/{region}/jobs:submitAsOperation:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: Submits job to a cluster.
       operationId: dataproc.projects.regions.jobs.submitAsOperation
@@ -7557,7 +7592,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectId}/regions/{region}/jobs/{jobId}:
-    parameters: *ref_37
+    parameters: *ref_1
     get:
       description: Gets the resource representation for a job in a project.
       operationId: dataproc.projects.regions.jobs.get
@@ -7664,7 +7699,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectId}/regions/{region}/jobs:
-    parameters: *ref_37
+    parameters: *ref_1
     get:
       description: Lists regions/{region}/jobs in a project.
       operationId: dataproc.projects.regions.jobs.list
@@ -7713,7 +7748,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectId}/regions/{region}/jobs/{jobId}:cancel:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Starts a job cancellation request. To access the job resource after
@@ -7756,7 +7791,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/jobs/{jobsId}:setIamPolicy:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -7797,7 +7832,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/jobs/{jobsId}:getIamPolicy:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -7837,7 +7872,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/jobs/{jobsId}:testIamPermissions:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -7880,7 +7915,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/workflowTemplates:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: Creates new workflow template.
       operationId: dataproc.projects.regions.workflowTemplates.create
@@ -7948,7 +7983,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/workflowTemplates/{workflowTemplatesId}:
-    parameters: *ref_37
+    parameters: *ref_1
     get:
       description: >-
         Retrieves the latest workflow template.Can retrieve previously
@@ -8062,7 +8097,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/regions/{regionsId}/workflowTemplates/{workflowTemplatesId}:instantiate:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Instantiates a template and begins execution.The returned Operation can
@@ -8110,7 +8145,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/workflowTemplates:instantiateInline:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Instantiates a template and begins execution.This method is equivalent
@@ -8159,7 +8194,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/workflowTemplates/{workflowTemplatesId}:setIamPolicy:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -8200,7 +8235,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/workflowTemplates/{workflowTemplatesId}:getIamPolicy:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -8240,7 +8275,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/regions/{regionsId}/workflowTemplates/{workflowTemplatesId}:testIamPermissions:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -8283,7 +8318,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations:
-    parameters: *ref_37
+    parameters: *ref_1
     get:
       description: >-
         Lists operations that match the specified filter in the request. If the
@@ -8326,7 +8361,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:
-    parameters: *ref_37
+    parameters: *ref_1
     get:
       description: >-
         Gets the latest state of a long-running operation. Clients can use this
@@ -8397,7 +8432,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:cancel:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Starts asynchronous cancellation on a long-running operation. The server
@@ -8439,7 +8474,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/batches/{batchesId}:analyze:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: Analyze a Batch for possible recommendations and insights.
       operationId: dataproc.projects.locations.batches.analyze
@@ -8477,7 +8512,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/batches:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: Creates a batch workload that executes asynchronously.
       operationId: dataproc.projects.locations.batches.create
@@ -8561,7 +8596,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/batches/{batchesId}:
-    parameters: *ref_37
+    parameters: *ref_1
     get:
       description: Gets the batch workload resource representation.
       operationId: dataproc.projects.locations.batches.get
@@ -8628,7 +8663,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/autoscalingPolicies:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: Creates new autoscaling policy.
       operationId: dataproc.projects.locations.autoscalingPolicies.create
@@ -8696,7 +8731,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/autoscalingPolicies/{autoscalingPoliciesId}:
-    parameters: *ref_37
+    parameters: *ref_1
     put:
       description: >-
         Updates (replaces) autoscaling policy.Disabled check for update_mask,
@@ -8800,7 +8835,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/autoscalingPolicies/{autoscalingPoliciesId}:setIamPolicy:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -8841,7 +8876,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/autoscalingPolicies/{autoscalingPoliciesId}:getIamPolicy:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -8881,7 +8916,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/autoscalingPolicies/{autoscalingPoliciesId}:testIamPermissions:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the
@@ -8924,7 +8959,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/sessions:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: Create an interactive session asynchronously.
       operationId: dataproc.projects.locations.sessions.create
@@ -9004,7 +9039,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/sessions/{sessionsId}:
-    parameters: *ref_37
+    parameters: *ref_1
     get:
       description: Gets the resource representation for an interactive session.
       operationId: dataproc.projects.locations.sessions.get
@@ -9074,7 +9109,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/sessions/{sessionsId}:terminate:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: Terminates the interactive session.
       operationId: dataproc.projects.locations.sessions.terminate
@@ -9112,7 +9147,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/sessionTemplates:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: Create a session template synchronously.
       operationId: dataproc.projects.locations.sessionTemplates.create
@@ -9184,7 +9219,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/sessionTemplates/{sessionTemplatesId}:
-    parameters: *ref_37
+    parameters: *ref_1
     patch:
       description: Updates the session template synchronously.
       operationId: dataproc.projects.locations.sessionTemplates.patch
@@ -9284,7 +9319,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workflowTemplates:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: Creates new workflow template.
       operationId: dataproc.projects.locations.workflowTemplates.create
@@ -9352,7 +9387,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workflowTemplates/{workflowTemplatesId}:
-    parameters: *ref_37
+    parameters: *ref_1
     get:
       description: >-
         Retrieves the latest workflow template.Can retrieve previously
@@ -9466,7 +9501,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/workflowTemplates/{workflowTemplatesId}:instantiate:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Instantiates a template and begins execution.The returned Operation can
@@ -9514,7 +9549,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workflowTemplates:instantiateInline:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Instantiates a template and begins execution.This method is equivalent
@@ -9563,7 +9598,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workflowTemplates/{workflowTemplatesId}:setIamPolicy:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
@@ -9604,7 +9639,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workflowTemplates/{workflowTemplatesId}:getIamPolicy:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Gets the access control policy for a resource. Returns an empty policy
@@ -9644,7 +9679,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/workflowTemplates/{workflowTemplatesId}:testIamPermissions:
-    parameters: *ref_37
+    parameters: *ref_1
     post:
       description: >-
         Returns permissions that a caller has on the specified resource. If the

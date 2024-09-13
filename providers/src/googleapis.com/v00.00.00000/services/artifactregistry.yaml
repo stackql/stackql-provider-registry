@@ -9,8 +9,8 @@ info:
     Store and manage build artifacts in a scalable and integrated service built
     on Google infrastructure.
   version: v1
-  x-discovery-doc-revision: '20240520'
-  x-generated-date: '2024-06-03'
+  x-discovery-doc-revision: '20240903'
+  x-generated-date: '2024-09-13'
 externalDocs:
   url: https://cloud.google.com/artifacts/docs/
 servers:
@@ -460,10 +460,10 @@ components:
         packageId:
           description: >-
             The ID of the package of the generic artifact. If the package does
-            not exist, a new package will be created. The `package_id` must
-            start with a letter, end with a letter or number, only contain
-            letters, numbers, hyphens and periods i.e. [a-z0-9-.], and cannot
-            exceed 256 characters.
+            not exist, a new package will be created. The `package_id` should
+            start and end with a letter or number, only contain letters,
+            numbers, hyphens, underscores, and periods, and not exceed 256
+            characters.
           type: string
         versionId:
           description: >-
@@ -786,6 +786,12 @@ components:
         yumRepository:
           description: Specific settings for a Yum remote repository.
           $ref: '#/components/schemas/YumRepository'
+        commonRepository:
+          description: >-
+            Common remote repository settings. Used as the RR upstream URL
+            instead of Predefined and Custom remote repositories. UI and Gcloud
+            will map all the new remote repositories to this field.
+          $ref: '#/components/schemas/CommonRemoteRepository'
         description:
           description: The description of the remote source.
           type: string
@@ -1031,6 +1037,14 @@ components:
           description: >-
             An http/https uri reference to the upstream remote repository, for
             ex: "https://my.yum.registry/".
+          type: string
+    CommonRemoteRepository:
+      id: CommonRemoteRepository
+      description: Common remote repository settings type.
+      type: object
+      properties:
+        uri:
+          description: Required. A common public repository base for Remote Repository.
           type: string
     UpstreamCredentials:
       id: UpstreamCredentials
@@ -1667,11 +1681,15 @@ components:
               Redirection is enabled, and has been finalized so cannot be
               reverted.
             - Redirection is enabled and missing images are copied from GCR
+            - >-
+              Redirection is partially enabled and missing images are copied
+              from GCR
           enumDeprecated:
             - false
             - false
             - false
             - true
+            - false
             - false
           enum:
             - REDIRECTION_STATE_UNSPECIFIED
@@ -1679,6 +1697,13 @@ components:
             - REDIRECTION_FROM_GCR_IO_ENABLED
             - REDIRECTION_FROM_GCR_IO_FINALIZED
             - REDIRECTION_FROM_GCR_IO_ENABLED_AND_COPYING
+            - REDIRECTION_FROM_GCR_IO_PARTIAL_AND_COPYING
+        pullPercent:
+          description: >-
+            The percentage of pull traffic to redirect from GCR to AR when using
+            partial redirection.
+          type: integer
+          format: int32
     VPCSCConfig:
       id: VPCSCConfig
       description: The Artifact Registry VPC SC config that apply to a Project.
@@ -2088,6 +2113,11 @@ components:
           type: array
           items:
             type: string
+    PromoteArtifactMetadata:
+      id: PromoteArtifactMetadata
+      description: The metadata for promote artifact long running operation.
+      type: object
+      properties: {}
   parameters:
     access_token:
       description: OAuth access token.
@@ -2191,7 +2221,10 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/project_settings/methods/get_project_settings
         insert: []
-        update: []
+        update:
+          - $ref: >-
+              #/components/x-stackQL-resources/project_settings/methods/update_project_settings
+        replace: []
         delete: []
     vpcsc_config:
       id: google.artifactregistry.vpcsc_config
@@ -2217,23 +2250,23 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/vpcsc_config/methods/get_vpcsc_config
         insert: []
-        update: []
+        update:
+          - $ref: >-
+              #/components/x-stackQL-resources/vpcsc_config/methods/update_vpcsc_config
+        replace: []
         delete: []
     locations:
       id: google.artifactregistry.locations
       name: locations
       title: Locations
       methods:
-        _list:
-          operation: &ref_1
+        list:
+          operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations/get'
-          response: &ref_2
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.locations
-        list:
-          operation: *ref_1
-          response: *ref_2
         get:
           operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}/get'
@@ -2246,6 +2279,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/locations/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     operations:
       id: google.artifactregistry.operations
@@ -2264,23 +2298,21 @@ components:
           - $ref: '#/components/x-stackQL-resources/operations/methods/get'
         insert: []
         update: []
+        replace: []
         delete: []
     repositories:
       id: google.artifactregistry.repositories
       name: repositories
       title: Repositories
       methods:
-        _list:
-          operation: &ref_3
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories/get
-          response: &ref_4
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.repositories
-        list:
-          operation: *ref_3
-          response: *ref_4
         create:
           operation:
             $ref: >-
@@ -2317,6 +2349,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/repositories/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/repositories/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/repositories/methods/delete'
     repositories_iam_policies:
@@ -2331,17 +2364,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        _get_iam_policy:
-          operation: &ref_5
+        get_iam_policy:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}:getIamPolicy/get
-          response: &ref_6
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        get_iam_policy:
-          operation: *ref_5
-          response: *ref_6
         test_iam_permissions:
           operation:
             $ref: >-
@@ -2355,23 +2385,23 @@ components:
               #/components/x-stackQL-resources/repositories_iam_policies/methods/get_iam_policy
         insert: []
         update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/repositories_iam_policies/methods/set_iam_policy
         delete: []
     docker_images:
       id: google.artifactregistry.docker_images
       name: docker_images
       title: Docker_images
       methods:
-        _list:
-          operation: &ref_7
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1dockerImages/get
-          response: &ref_8
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.dockerImages
-        list:
-          operation: *ref_7
-          response: *ref_8
         get:
           operation:
             $ref: >-
@@ -2385,23 +2415,21 @@ components:
           - $ref: '#/components/x-stackQL-resources/docker_images/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     maven_artifacts:
       id: google.artifactregistry.maven_artifacts
       name: maven_artifacts
       title: Maven_artifacts
       methods:
-        _list:
-          operation: &ref_9
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1mavenArtifacts/get
-          response: &ref_10
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.mavenArtifacts
-        list:
-          operation: *ref_9
-          response: *ref_10
         get:
           operation:
             $ref: >-
@@ -2415,23 +2443,21 @@ components:
           - $ref: '#/components/x-stackQL-resources/maven_artifacts/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     npm_packages:
       id: google.artifactregistry.npm_packages
       name: npm_packages
       title: Npm_packages
       methods:
-        _list:
-          operation: &ref_11
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1npmPackages/get
-          response: &ref_12
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.npmPackages
-        list:
-          operation: *ref_11
-          response: *ref_12
         get:
           operation:
             $ref: >-
@@ -2445,23 +2471,21 @@ components:
           - $ref: '#/components/x-stackQL-resources/npm_packages/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     python_packages:
       id: google.artifactregistry.python_packages
       name: python_packages
       title: Python_packages
       methods:
-        _list:
-          operation: &ref_13
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1pythonPackages/get
-          response: &ref_14
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.pythonPackages
-        list:
-          operation: *ref_13
-          response: *ref_14
         get:
           operation:
             $ref: >-
@@ -2475,6 +2499,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/python_packages/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     apt_artifacts:
       id: google.artifactregistry.apt_artifacts
@@ -2499,6 +2524,7 @@ components:
         select: []
         insert: []
         update: []
+        replace: []
         delete: []
     yum_artifacts:
       id: google.artifactregistry.yum_artifacts
@@ -2523,6 +2549,7 @@ components:
         select: []
         insert: []
         update: []
+        replace: []
         delete: []
     googet_artifacts:
       id: google.artifactregistry.googet_artifacts
@@ -2547,6 +2574,7 @@ components:
         select: []
         insert: []
         update: []
+        replace: []
         delete: []
     generic_artifacts:
       id: google.artifactregistry.generic_artifacts
@@ -2564,6 +2592,7 @@ components:
         select: []
         insert: []
         update: []
+        replace: []
         delete: []
     kfp_artifacts:
       id: google.artifactregistry.kfp_artifacts
@@ -2581,6 +2610,7 @@ components:
         select: []
         insert: []
         update: []
+        replace: []
         delete: []
     go_modules:
       id: google.artifactregistry.go_modules
@@ -2598,23 +2628,21 @@ components:
         select: []
         insert: []
         update: []
+        replace: []
         delete: []
     packages:
       id: google.artifactregistry.packages
       name: packages
       title: Packages
       methods:
-        _list:
-          operation: &ref_15
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1packages/get
-          response: &ref_16
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.packages
-        list:
-          operation: *ref_15
-          response: *ref_16
         get:
           operation:
             $ref: >-
@@ -2643,6 +2671,7 @@ components:
         insert: []
         update:
           - $ref: '#/components/x-stackQL-resources/packages/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/packages/methods/delete'
     versions:
@@ -2650,17 +2679,14 @@ components:
       name: versions
       title: Versions
       methods:
-        _list:
-          operation: &ref_17
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1packages~1{packagesId}~1versions/get
-          response: &ref_18
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.versions
-        list:
-          operation: *ref_17
-          response: *ref_18
         get:
           operation:
             $ref: >-
@@ -2688,24 +2714,23 @@ components:
           - $ref: '#/components/x-stackQL-resources/versions/methods/list'
         insert: []
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/versions/methods/delete'
+          - $ref: '#/components/x-stackQL-resources/versions/methods/batch_delete'
     tags:
       id: google.artifactregistry.tags
       name: tags
       title: Tags
       methods:
-        _list:
-          operation: &ref_19
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1packages~1{packagesId}~1tags/get
-          response: &ref_20
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.tags
-        list:
-          operation: *ref_19
-          response: *ref_20
         create:
           operation:
             $ref: >-
@@ -2742,6 +2767,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/tags/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/tags/methods/patch'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/tags/methods/delete'
     files:
@@ -2749,17 +2775,14 @@ components:
       name: files
       title: Files
       methods:
-        _list:
-          operation: &ref_21
+        list:
+          operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1files/get
-          response: &ref_22
+          response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.files
-        list:
-          operation: *ref_21
-          response: *ref_22
         get:
           operation:
             $ref: >-
@@ -2787,11 +2810,12 @@ components:
           - $ref: '#/components/x-stackQL-resources/files/methods/list'
         insert: []
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/files/methods/delete'
 paths:
   /v1/projects/{projectsId}/projectSettings:
-    parameters: &ref_23
+    parameters: &ref_1
       - $ref: '#/components/parameters/access_token'
       - $ref: '#/components/parameters/alt'
       - $ref: '#/components/parameters/callback'
@@ -2860,7 +2884,7 @@ paths:
             type: string
             format: google-fieldmask
   /v1/projects/{projectsId}/locations/{locationsId}/vpcscConfig:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Retrieves the VPCSC Config for the Project.
       operationId: artifactregistry.projects.locations.getVpcscConfig
@@ -2928,7 +2952,7 @@ paths:
             type: string
             format: google-fieldmask
   /v1/projects/{projectsId}/locations:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists information about the supported locations for this service.
       operationId: artifactregistry.projects.locations.list
@@ -2968,7 +2992,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets information about a location.
       operationId: artifactregistry.projects.locations.get
@@ -3000,7 +3024,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: >-
         Gets the latest state of a long-running operation. Clients can use this
@@ -3040,7 +3064,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists repositories.
       operationId: artifactregistry.projects.locations.repositories.list
@@ -3078,6 +3102,14 @@ paths:
             format: int32
         - in: query
           name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: filter
+          schema:
+            type: string
+        - in: query
+          name: orderBy
           schema:
             type: string
     post:
@@ -3119,7 +3151,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets a repository.
       operationId: artifactregistry.projects.locations.repositories.get
@@ -3231,7 +3263,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}:setIamPolicy:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Updates the IAM policy for a given resource.
       operationId: artifactregistry.projects.locations.repositories.setIamPolicy
@@ -3269,7 +3301,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}:getIamPolicy:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets the IAM policy for a given resource.
       operationId: artifactregistry.projects.locations.repositories.getIamPolicy
@@ -3311,7 +3343,7 @@ paths:
             type: integer
             format: int32
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}:testIamPermissions:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: Tests if the caller has a list of permissions on a resource.
       operationId: artifactregistry.projects.locations.repositories.testIamPermissions
@@ -3353,7 +3385,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/dockerImages:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists docker images.
       operationId: artifactregistry.projects.locations.repositories.dockerImages.list
@@ -3403,7 +3435,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/dockerImages/{dockerImagesId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets a docker image.
       operationId: artifactregistry.projects.locations.repositories.dockerImages.get
@@ -3445,7 +3477,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/mavenArtifacts:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists maven artifacts.
       operationId: artifactregistry.projects.locations.repositories.mavenArtifacts.list
@@ -3491,7 +3523,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/mavenArtifacts/{mavenArtifactsId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets a maven artifact.
       operationId: artifactregistry.projects.locations.repositories.mavenArtifacts.get
@@ -3533,7 +3565,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/npmPackages:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists npm packages.
       operationId: artifactregistry.projects.locations.repositories.npmPackages.list
@@ -3579,7 +3611,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/npmPackages/{npmPackagesId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets a npm package.
       operationId: artifactregistry.projects.locations.repositories.npmPackages.get
@@ -3621,7 +3653,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/pythonPackages:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists python packages.
       operationId: artifactregistry.projects.locations.repositories.pythonPackages.list
@@ -3667,7 +3699,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/pythonPackages/{pythonPackagesId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets a python package.
       operationId: artifactregistry.projects.locations.repositories.pythonPackages.get
@@ -3709,7 +3741,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/aptArtifacts:import:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Imports Apt artifacts. The returned Operation will complete once the
@@ -3751,7 +3783,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/aptArtifacts:create:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Directly uploads an Apt artifact. The returned Operation will complete
@@ -3793,7 +3825,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/yumArtifacts:import:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Imports Yum (RPM) artifacts. The returned Operation will complete once
@@ -3835,7 +3867,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/yumArtifacts:create:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Directly uploads a Yum artifact. The returned Operation will complete
@@ -3877,7 +3909,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/googetArtifacts:import:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Imports GooGet artifacts. The returned Operation will complete once the
@@ -3919,7 +3951,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/googetArtifacts:create:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Directly uploads a GooGet artifact. The returned Operation will complete
@@ -3961,7 +3993,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/genericArtifacts:create:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Directly uploads a Generic artifact. The returned operation will
@@ -4004,7 +4036,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/kfpArtifacts:create:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Directly uploads a KFP artifact. The returned Operation will complete
@@ -4046,7 +4078,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/goModules:create:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Directly uploads a Go module. The returned Operation will complete once
@@ -4087,7 +4119,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/packages:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists packages.
       operationId: artifactregistry.projects.locations.repositories.packages.list
@@ -4132,8 +4164,16 @@ paths:
           name: pageToken
           schema:
             type: string
+        - in: query
+          name: filter
+          schema:
+            type: string
+        - in: query
+          name: orderBy
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/packages/{packagesId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets a package.
       operationId: artifactregistry.projects.locations.repositories.packages.get
@@ -4259,7 +4299,7 @@ paths:
             type: string
             format: google-fieldmask
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/packages/{packagesId}/versions:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists versions.
       operationId: artifactregistry.projects.locations.repositories.packages.versions.list
@@ -4317,8 +4357,12 @@ paths:
           name: orderBy
           schema:
             type: string
+        - in: query
+          name: filter
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/packages/{packagesId}/versions/{versionsId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets a version
       operationId: artifactregistry.projects.locations.repositories.packages.versions.get
@@ -4417,7 +4461,7 @@ paths:
           schema:
             type: boolean
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/packages/{packagesId}/versions:batchDelete:
-    parameters: *ref_23
+    parameters: *ref_1
     post:
       description: >-
         Deletes multiple versions across a repository. The returned operation
@@ -4463,7 +4507,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/packages/{packagesId}/tags:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists tags.
       operationId: artifactregistry.projects.locations.repositories.packages.tags.list
@@ -4563,7 +4607,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/packages/{packagesId}/tags/{tagsId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets a tag.
       operationId: artifactregistry.projects.locations.repositories.packages.tags.get
@@ -4702,7 +4746,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/files:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Lists files.
       operationId: artifactregistry.projects.locations.repositories.files.list
@@ -4756,7 +4800,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/files/{filesId}:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Gets a file.
       operationId: artifactregistry.projects.locations.repositories.files.get
@@ -4837,7 +4881,7 @@ paths:
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/files/{filesId}:download:
-    parameters: *ref_23
+    parameters: *ref_1
     get:
       description: Download a file.
       operationId: artifactregistry.projects.locations.repositories.files.download
