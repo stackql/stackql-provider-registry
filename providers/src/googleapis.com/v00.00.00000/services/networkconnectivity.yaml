@@ -7,8 +7,8 @@ info:
   title: Network Connectivity API
   description: This API enables connectivity with and between Google Cloud resources.
   version: v1
-  x-discovery-doc-revision: '20240807'
-  x-generated-date: '2024-09-13'
+  x-discovery-doc-revision: '20240911'
+  x-generated-date: '2024-09-19'
 externalDocs:
   url: >-
     https://cloud.google.com/network-connectivity/docs/reference/networkconnectivity/rest
@@ -308,7 +308,10 @@ components:
             - POLICY_LIMIT_REACHED
             - CONSUMER_INSTANCE_PROJECT_NOT_ALLOWLISTED
         producerInstanceId:
-          description: Immutable. An immutable identifier for the producer instance.
+          description: >-
+            Immutable. Deprecated. Use producer_instance_metadata instead. An
+            immutable identifier for the producer instance.
+          deprecated: true
           type: string
         serviceAttachmentIpAddressMap:
           description: >-
@@ -328,6 +331,11 @@ components:
             Format: 'projects/' Eg. 'projects/consumer-project' or
             'projects/1234'
           type: string
+        producerInstanceMetadata:
+          description: Immutable. An immutable map for the producer instance metadata.
+          type: object
+          additionalProperties:
+            type: string
     ConsumerPscConnection:
       id: ConsumerPscConnection
       description: PSC connection details on consumer side.
@@ -343,7 +351,10 @@ components:
           type: string
           enumDescriptions:
             - An invalid state as the default case.
-            - The connection is fully established and ready to use.
+            - >-
+              The connection has been created successfully. However, for the
+              up-to-date connection status, please use the service attachment's
+              "ConnectedEndpoint.status" as the source of truth.
             - >-
               The connection is not functional since some resources on the
               connection fail to be created.
@@ -381,6 +392,7 @@ components:
           description: >-
             The error type indicates whether the error is consumer facing,
             producer facing or system internal.
+          deprecated: true
           type: string
           enumDescriptions:
             - An invalid error type as the default case.
@@ -417,8 +429,16 @@ components:
           readOnly: true
           type: string
         producerInstanceId:
-          description: Immutable. An immutable identifier for the producer instance.
+          description: >-
+            Immutable. Deprecated. Use producer_instance_metadata instead. An
+            immutable identifier for the producer instance.
+          deprecated: true
           type: string
+        producerInstanceMetadata:
+          description: Immutable. An immutable map for the producer instance metadata.
+          type: object
+          additionalProperties:
+            type: string
     GoogleRpcErrorInfo:
       id: GoogleRpcErrorInfo
       description: >-
@@ -497,12 +517,12 @@ components:
             See: https://google.aip.dev/122#fields-representing-resource-names
           type: string
         createTime:
-          description: Output only. Time when the ServiceConnectionMap was created.
+          description: Output only. Time when the ServiceConnectionPolicy was created.
           readOnly: true
           type: string
           format: google-datetime
         updateTime:
-          description: Output only. Time when the ServiceConnectionMap was updated.
+          description: Output only. Time when the ServiceConnectionPolicy was updated.
           readOnly: true
           type: string
           format: google-datetime
@@ -627,7 +647,10 @@ components:
           type: string
           enumDescriptions:
             - An invalid state as the default case.
-            - The connection is fully established and ready to use.
+            - >-
+              The connection has been created successfully. However, for the
+              up-to-date connection status, please use the created forwarding
+              rule's "PscConnectionStatus" as the source of truth.
             - >-
               The connection is not functional since some resources on the
               connection fail to be created.
@@ -651,6 +674,7 @@ components:
           description: >-
             The error type indicates whether the error is consumer facing,
             producer facing or system internal.
+          deprecated: true
           type: string
           enumDescriptions:
             - An invalid error type as the default case.
@@ -663,7 +687,9 @@ components:
             - ERROR_CONSUMER_SIDE
             - ERROR_PRODUCER_SIDE
         error:
-          description: The most recent error during operating this connection.
+          description: >-
+            The most recent error during operating this connection. Deprecated,
+            please use error_info instead.
           deprecated: true
           $ref: '#/components/schemas/GoogleRpcStatus'
         gceOperation:
@@ -688,7 +714,22 @@ components:
           readOnly: true
           type: string
         producerInstanceId:
-          description: Immutable. An immutable identifier for the producer instance.
+          description: >-
+            Immutable. Deprecated. Use producer_instance_metadata instead. An
+            immutable identifier for the producer instance.
+          deprecated: true
+          type: string
+        producerInstanceMetadata:
+          description: Immutable. An immutable map for the producer instance metadata.
+          type: object
+          additionalProperties:
+            type: string
+        serviceClass:
+          description: >-
+            Output only. [Output only] The service class associated with this
+            PSC Connection. The value is derived from the SCPolicy and matches
+            the service class name provided by the customer.
+          readOnly: true
           type: string
     ListServiceClassesResponse:
       id: ListServiceClassesResponse
@@ -1985,7 +2026,11 @@ components:
           description: A description of this resource.
           type: string
         ipCidrRange:
-          description: The IP range that this internal range defines.
+          description: >-
+            The IP range that this internal range defines. NOTE: IPv6 ranges are
+            limited to usage=EXTERNAL_TO_VPC and peering=FOR_SELF. NOTE: For
+            IPv6 Ranges this field is compulsory, i.e. the address range must be
+            specified explicitly.
           type: string
         network:
           description: >-
@@ -2014,10 +2059,16 @@ components:
               resources and are meant to block out address ranges for various
               use cases, like for example, usage on-prem, with dynamic route
               announcements via interconnect.
+            - >-
+              Ranges created FOR_MIGRATION can be used to lock a CIDR range
+              between a source and target subnet. If usage is set to
+              FOR_MIGRATION the peering value has to be set to FOR_SELF or
+              default to FOR_SELF when unset.
           enum:
             - USAGE_UNSPECIFIED
             - FOR_VPC
             - EXTERNAL_TO_VPC
+            - FOR_MIGRATION
         peering:
           description: The type of peering set for this internal range.
           type: string
@@ -2052,11 +2103,14 @@ components:
             - NOT_SHARED
         prefixLength:
           description: >-
-            An alternate to ip_cidr_range. Can be set when trying to create a
-            reservation that automatically finds a free range of the given size.
-            If both ip_cidr_range and prefix_length are set, there is an error
-            if the range sizes do not match. Can also be used during updates to
-            change the range size.
+            An alternate to ip_cidr_range. Can be set when trying to create an
+            IPv4 reservation that automatically finds a free range of the given
+            size. If both ip_cidr_range and prefix_length are set, there is an
+            error if the range sizes do not match. Can also be used during
+            updates to change the range size. NOTE: For IPv6 this field only
+            works if ip_cidr_range is set as well, and both fields must match.
+            In other words, with IPv6 this field only works as a redundant
+            parameter.
           type: integer
           format: int32
         targetCidrRange:
@@ -2100,6 +2154,28 @@ components:
               - OVERLAP_UNSPECIFIED
               - OVERLAP_ROUTE_RANGE
               - OVERLAP_EXISTING_SUBNET_RANGE
+        migration:
+          description: Optional. Should be present if usage is set to FOR_MIGRATION.
+          $ref: '#/components/schemas/Migration'
+    Migration:
+      id: Migration
+      description: Specification for migration with source and target resource names.
+      type: object
+      properties:
+        source:
+          description: >-
+            Immutable. Resource path as an URI of the source resource, for
+            example a subnet. The project for the source resource should match
+            the project for the InternalRange. An example:
+            /projects/{project}/regions/{region}/subnetworks/{subnet}
+          type: string
+        target:
+          description: >-
+            Immutable. Resource path of the target resource. The target project
+            can be different, as in the cases when migrating to peer networks.
+            The resource For example:
+            /projects/{project}/regions/{region}/subnetworks/{subnet}
+          type: string
     ListPolicyBasedRoutesResponse:
       id: ListPolicyBasedRoutesResponse
       description: Response for PolicyBasedRouting.ListPolicyBasedRoutes method.
