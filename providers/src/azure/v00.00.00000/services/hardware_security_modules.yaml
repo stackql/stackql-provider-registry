@@ -8,7 +8,7 @@ info:
     name: StackQL Studios
     url: https://stackql.io/
     email: info@stackql.io
-  version: 2024-06-15-stackql-generated
+  version: 2024-09-27-stackql-generated
 security:
   - azure_auth:
       - user_impersonation
@@ -26,12 +26,12 @@ components:
     cloudHsmClusterName:
       name: cloudHsmClusterName
       in: path
-      description: The name of the Cloud HSM Cluster within the specified resource group. Cloud HSM Cluster names must be between 3 and 24 characters in length.
+      description: The name of the Cloud HSM Cluster within the specified resource group. Cloud HSM Cluster names must be between 3 and 23 characters in length.
       required: true
       x-ms-parameter-location: method
       schema:
-        pattern: ^[a-zA-Z0-9-]{3,24}$
-        maxLength: 24
+        pattern: ^[a-zA-Z0-9-]{3,23}$
+        maxLength: 23
         minLength: 3
         type: string
     peConnectionName:
@@ -41,9 +41,26 @@ components:
       required: true
       x-ms-parameter-location: method
       schema:
-        pattern: ^[a-zA-Z0-9-]{3,24}$
         maxLength: 24
         minLength: 3
+        pattern: ^[a-zA-Z0-9-]{3,24}$
+        type: string
+    backupRestoreJobId:
+      name: jobId
+      in: path
+      description: The id returned as part of the backup request
+      required: true
+      x-ms-parameter-location: method
+      schema:
+        type: string
+    DedicatedHsmName:
+      name: name
+      in: path
+      description: Name of the dedicated Hsm
+      required: true
+      x-ms-parameter-location: method
+      schema:
+        pattern: ^[a-zA-Z0-9-]{3,24}$
         type: string
     SubscriptionIdParameter:
       name: subscriptionId
@@ -56,9 +73,10 @@ components:
     ApiVersionParameter:
       name: api-version
       in: query
-      description: Client Api Version.
+      description: The API version to use for this operation.
       required: true
       schema:
+        minLength: 1
         type: string
     ResourceGroupNameParameter:
       name: resourceGroupName
@@ -69,32 +87,6 @@ components:
       schema:
         minLength: 1
         maxLength: 90
-        type: string
-    OperationIdParameter:
-      name: operationId
-      in: path
-      description: The ID of an ongoing async operation.
-      required: true
-      x-ms-parameter-location: method
-      schema:
-        minLength: 1
-        type: string
-    LocationParameter:
-      name: location
-      in: path
-      description: The name of the Azure region.
-      required: true
-      x-ms-parameter-location: method
-      schema:
-        minLength: 1
-        type: string
-    PrivateEndpointConnectionName:
-      name: privateEndpointConnectionName
-      in: path
-      description: The name of the private endpoint connection associated with the Azure resource.
-      required: true
-      x-ms-parameter-location: method
-      schema:
         type: string
     ManagementGroupNameParameter:
       name: managementGroupName
@@ -125,6 +117,24 @@ components:
       schema:
         format: uuid
         type: string
+    OperationIdParameter:
+      name: operationId
+      in: path
+      description: The ID of an ongoing async operation.
+      required: true
+      x-ms-parameter-location: method
+      schema:
+        minLength: 1
+        type: string
+    LocationParameter:
+      name: location
+      in: path
+      description: The name of the Azure region.
+      required: true
+      x-ms-parameter-location: method
+      schema:
+        minLength: 1
+        type: string
     If-Match:
       name: ifMatch
       in: header
@@ -141,6 +151,14 @@ components:
       x-ms-parameter-location: method
       schema:
         type: string
+    PrivateEndpointConnectionName:
+      name: privateEndpointConnectionName
+      in: path
+      description: The name of the private endpoint connection associated with the Azure resource.
+      required: true
+      x-ms-parameter-location: method
+      schema:
+        type: string
   schemas:
     CloudHsmProperties:
       type: object
@@ -151,7 +169,7 @@ components:
           description: FQDN of the Cloud HSM
         state:
           type: string
-          description: The Cloud HSM State
+          description: 'The Cloud HSM State. Values are: Deploying, ConfiguringSlb, Starting, Starting, Failed, Failed, Deleting, DeletingSlbEntry, InitialProvisioning, Updating'
         stateMessage:
           type: string
           description: The Cloud HSM State message
@@ -162,21 +180,27 @@ components:
           x-ms-client-flatten: true
           $ref: '#/components/schemas/CloudHsmClusterProperties'
           description: Properties of the Cloud HSM Cluster
+        identity:
+          $ref: '#/components/schemas/ManagedServiceIdentity'
         sku:
           $ref: '#/components/schemas/CloudHsmClusterSku'
           description: SKU details
-        identity:
-          $ref: '#/components/schemas/ManagedServiceIdentity'
+          x-ms-mutability:
+            - create
+            - read
       type: object
     CloudHsmClusterResource:
       description: Cloud HSM Cluster Resource
       x-ms-azure-resource: true
       properties:
+        identity:
+          $ref: '#/components/schemas/ManagedServiceIdentity'
         sku:
           $ref: '#/components/schemas/CloudHsmClusterSku'
           description: SKU details
-        identity:
-          $ref: '#/components/schemas/ManagedServiceIdentity'
+          x-ms-mutability:
+            - create
+            - read
         tags:
           type: object
           additionalProperties:
@@ -195,9 +219,54 @@ components:
       type: object
     CloudHsmClusterProperties:
       properties:
+        activationState:
+          type: string
+          description: State of security domain activation
+          readOnly: true
+          enum:
+            - NotDefined
+            - NotActivated
+            - Active
+            - Failed
+            - Unknown
+          x-ms-enum:
+            name: ActivationState
+            modelAsString: true
+        autoGeneratedDomainNameLabelScope:
+          type: string
+          description: The Cloud HSM Cluster's auto-generated Domain Name Label Scope
+          enum:
+            - TenantReuse
+            - SubscriptionReuse
+            - ResourceGroupReuse
+            - NoReuse
+          x-ms-enum:
+            name: AutoGeneratedDomainNameLabelScope
+            modelAsString: true
+        fipsApprovedMode:
+          type: boolean
+          default: 'false'
+          description: 'False: Non-FIPS Mode with single-factor authentication. True: FIPS Approved Mode with single-factor authentication'
+        hsms:
+          type: array
+          readOnly: true
+          description: An array of Cloud HSM Cluster's HSMs
+          x-ms-identifiers:
+            - fqdn
+          items:
+            $ref: '#/components/schemas/CloudHsmProperties'
+        privateEndpointConnections:
+          type: array
+          readOnly: true
+          description: List of private endpoint connection resources
+          x-ms-identifiers:
+            - name
+          items:
+            $ref: '#/components/schemas/PrivateEndpointConnection'
         provisioningState:
           type: string
           description: The Cloud HSM Cluster's provisioningState
+          readOnly: true
           enum:
             - Provisioning
             - Succeeded
@@ -207,40 +276,21 @@ components:
           x-ms-enum:
             name: ProvisioningState
             modelAsString: true
-        autoGeneratedDomainNameLabelScope:
-          type: string
-          description: The Cloud HSM Cluster's auto-generated Domain Name Label Scope
-        securityDomain:
-          $ref: '#/components/schemas/CloudHsmClusterSecurityDomainProperties'
-        hsms:
-          type: array
-          description: An array of Cloud HSM Cluster's HSMs
-          x-ms-identifiers:
-            - fqdn
-          items:
-            $ref: '#/components/schemas/CloudHsmProperties'
         publicNetworkAccess:
           type: string
           description: The Cloud HSM Cluster public network access
-        privateEndpointConnections:
-          type: array
-          description: List of private endpoint connection resources
-          x-ms-identifiers:
-            - name
-          items:
-            $ref: '#/components/schemas/PrivateEndpointConnection'
+          enum:
+            - Disabled
+          x-ms-enum:
+            name: PublicNetworkAccess
+            modelAsString: true
         statusMessage:
           type: string
           description: Cloud HSM Cluster status message
           readOnly: true
-        restoreProperties:
-          $ref: '#/components/schemas/RestoreProperties'
-        backupProperties:
-          $ref: '#/components/schemas/BackupProperties'
       description: Properties of a Cloud HSM Cluster.
       type: object
     CloudHsmClusterPatchParameters:
-      description: Patchable properties of the Cloud HSM Cluster
       properties:
         tags:
           type: object
@@ -248,30 +298,10 @@ components:
           additionalProperties:
             type: string
             description: The Cloud HSM Cluster's tag's additional properties
-        sku:
-          $ref: '#/components/schemas/CloudHsmClusterSku'
-          description: SKU details
         identity:
           $ref: '#/components/schemas/ManagedServiceIdentity'
-        properties:
-          x-ms-client-flatten: true
-          type: object
-          description: Properties of the Cloud HSM Cluster
-          properties:
-            backupProperties:
-              $ref: '#/components/schemas/BackupProperties'
+      description: Patchable properties of the Cloud HSM Cluster
       type: object
-    CloudHsmClusterSecurityDomainProperties:
-      type: object
-      description: Security domain properties information for Cloud HSM cluster
-      properties:
-        fipsState:
-          format: int32
-          type: integer
-          description: FIPS state information for security domain
-        activationStatus:
-          type: string
-          description: status of security domain activation
     CloudHsmClusterSku:
       type: object
       description: Cloud Hsm Cluster SKU information
@@ -301,50 +331,6 @@ components:
           format: int32
           type: integer
           description: Sku capacity
-    BackupProperties:
-      type: object
-      description: Cloud Hsm Cluster backup information
-      properties:
-        azureStorageResourceUri:
-          type: string
-          description: Azure storage Resource Uri
-        lastBackupDateTime:
-          type: string
-          format: date-time
-          readOnly: true
-          description: Last Date Time that Customer Enabled Backup was taken
-        lastBackupStatus:
-          type: string
-          readOnly: true
-          description: Status of last backup
-    RestoreProperties:
-      type: object
-      description: Cloud Hsm Cluster restore information
-      properties:
-        foldername:
-          type: string
-          description: Directory name in Azure Storage Blob where the backup is stored
-        azureStorageResourceUri:
-          type: string
-          description: Azure Blob storage container Uri
-    CloudHsmClusterError:
-      properties:
-        error:
-          $ref: '#/components/schemas/CHsmError'
-      description: The Cloud HSM Cluster error details
-      type: object
-    CHsmError:
-      properties:
-        code:
-          type: string
-          readOnly: true
-          description: The error code.
-        message:
-          type: string
-          readOnly: true
-          description: The error message.
-      type: object
-      description: Error details
     CloudHsmClusterListResult:
       properties:
         value:
@@ -424,6 +410,481 @@ components:
           items:
             $ref: '#/components/schemas/PrivateEndpointConnection'
       description: List of private endpoint connections associated with the specified resource.
+    BackupRequestProperties:
+      description: Backup properties
+      properties:
+        azureStorageBlobContainerUri:
+          type: string
+          description: The Azure blob storage container Uri which contains the backup
+          format: uri
+        token:
+          type: string
+          description: The SAS token pointing to an Azure blob storage container. This property is reserved for Azure Backup Service.
+          x-ms-secret: true
+      type: object
+    RestoreRequestProperties:
+      description: Cloud Hsm Cluster restore information
+      required:
+        - backupId
+      properties:
+        backupId:
+          type: string
+          description: An autogenerated unique string ID for labeling the backup. It contains both a UUID and a date timestamp.
+        azureStorageBlobContainerUri:
+          type: string
+          description: The Azure blob storage container Uri which contains the backup
+          format: uri
+        token:
+          type: string
+          description: The SAS token pointing to an Azure blob storage container. This property is reserved for Azure Backup Service.
+          x-ms-secret: true
+      type: object
+    BackupRestoreRequestBaseProperties:
+      type: object
+      description: Backup and Restore Common properties
+      properties:
+        azureStorageBlobContainerUri:
+          type: string
+          description: The Azure blob storage container Uri which contains the backup
+          format: uri
+        token:
+          type: string
+          description: The SAS token pointing to an Azure blob storage container. This property is reserved for Azure Backup Service.
+          x-ms-secret: true
+      required:
+        - azureStorageBlobContainerUri
+    BackupResult:
+      description: Backup operation Result
+      properties:
+        properties:
+          x-ms-client-flatten: true
+          $ref: '#/components/schemas/BackupResultProperties'
+          description: Properties of the Cloud HSM Cluster
+      type: object
+    BackupResultProperties:
+      description: Properties of the Cloud HSM Cluster
+      properties:
+        azureStorageBlobContainerUri:
+          type: string
+          description: The Azure blob storage container Uri which contains the backup
+          format: uri
+        backupId:
+          type: string
+          description: The ID of the backup.
+        status:
+          type: string
+          description: Status of the backup/restore operation
+          readOnly: true
+          enum:
+            - InProgress
+            - Succeeded
+            - Failed
+            - Cancelled
+          x-ms-enum:
+            name: BackupRestoreOperationStatus
+            modelAsString: true
+        statusDetails:
+          type: string
+          description: The status details of backup/restore operation
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+          description: Error encountered, if any, during the backup/restore operation.
+        startTime:
+          type: string
+          format: date-time
+          readOnly: true
+          description: The start time of the backup/restore operation in UTC
+        endTime:
+          type: string
+          format: date-time
+          readOnly: true
+          description: The end time of the backup/restore operation in UTC
+          nullable: true
+        jobId:
+          type: string
+          description: Identifier for the backup/restore operation.
+      type: object
+    RestoreResult:
+      description: Restore operation properties
+      x-ms-client-flatten: true
+      properties:
+        properties:
+          $ref: '#/components/schemas/BackupRestoreBaseResultProperties'
+      type: object
+    BackupRestoreBaseResultProperties:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Status of the backup/restore operation
+          readOnly: true
+          enum:
+            - InProgress
+            - Succeeded
+            - Failed
+            - Cancelled
+          x-ms-enum:
+            name: BackupRestoreOperationStatus
+            modelAsString: true
+        statusDetails:
+          type: string
+          description: The status details of backup/restore operation
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+          description: Error encountered, if any, during the backup/restore operation.
+        startTime:
+          type: string
+          format: date-time
+          readOnly: true
+          description: The start time of the backup/restore operation in UTC
+        endTime:
+          type: string
+          format: date-time
+          readOnly: true
+          description: The end time of the backup/restore operation in UTC
+          nullable: true
+        jobId:
+          type: string
+          description: Identifier for the backup/restore operation.
+      description: Backup and Restore operation common properties
+    UserAssignedIdentities:
+      title: User-Assigned Identities
+      description: 'The set of user assigned identities associated with the resource. The userAssignedIdentities dictionary keys will be ARM resource ids in the form: ''/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{identityName}. The dictionary values can be empty objects ({}) in requests.'
+      additionalProperties:
+        $ref: '#/components/schemas/UserAssignedIdentity'
+        nullable: true
+        x-nullable: true
+      properties: {}
+      type: object
+    UserAssignedIdentity:
+      type: object
+      description: User assigned identity properties
+      properties:
+        principalId:
+          description: The principal ID of the assigned identity.
+          format: uuid
+          type: string
+          readOnly: true
+        clientId:
+          description: The client ID of the assigned identity.
+          format: uuid
+          type: string
+          readOnly: true
+    ManagedServiceIdentityType:
+      description: Type of managed service identity (where both SystemAssigned and UserAssigned types are allowed).
+      enum:
+        - None
+        - SystemAssigned
+        - UserAssigned
+        - SystemAssigned,UserAssigned
+      type: string
+      x-ms-enum:
+        name: ManagedServiceIdentityType
+        modelAsString: true
+    ManagedServiceIdentity:
+      description: Managed service identity (system assigned and/or user assigned identities)
+      type: object
+      properties:
+        principalId:
+          readOnly: true
+          format: uuid
+          type: string
+          description: The service principal ID of the system assigned identity. This property will only be provided for a system assigned identity.
+        tenantId:
+          readOnly: true
+          format: uuid
+          type: string
+          description: The tenant ID of the system assigned identity. This property will only be provided for a system assigned identity.
+        type:
+          $ref: '#/components/schemas/ManagedServiceIdentityType'
+        userAssignedIdentities:
+          description: 'The set of user assigned identities associated with the resource. The userAssignedIdentities dictionary keys will be ARM resource ids in the form: ''/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{identityName}. The dictionary values can be empty objects ({}) in requests.'
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/UserAssignedIdentity'
+            nullable: true
+            x-nullable: true
+      required:
+        - type
+    SystemAssignedServiceIdentityType:
+      description: Type of managed service identity (either system assigned, or none).
+      enum:
+        - None
+        - SystemAssigned
+      type: string
+      x-ms-enum:
+        name: SystemAssignedServiceIdentityType
+        modelAsString: true
+    SystemAssignedServiceIdentity:
+      description: Managed service identity (either system assigned, or none)
+      type: object
+      properties:
+        principalId:
+          readOnly: true
+          format: uuid
+          type: string
+          description: The service principal ID of the system assigned identity. This property will only be provided for a system assigned identity.
+        tenantId:
+          readOnly: true
+          format: uuid
+          type: string
+          description: The tenant ID of the system assigned identity. This property will only be provided for a system assigned identity.
+        type:
+          $ref: '#/components/schemas/SystemAssignedServiceIdentityType'
+      required:
+        - type
+    ApiEntityReference:
+      properties:
+        resourceId:
+          type: string
+          description: The Azure resource id in the form of /subscriptions/{SubscriptionId}/resourceGroups/{ResourceGroupName}/...
+          format: arm-id
+      description: The API entity reference.
+      type: object
+    NetworkInterface:
+      properties:
+        resourceId:
+          readOnly: true
+          type: string
+          description: The Azure resource id in the form of /subscriptions/{SubscriptionId}/resourceGroups/{ResourceGroupName}/...
+          format: arm-id
+        privateIpAddress:
+          type: string
+          description: Private Ip address of the interface
+      description: The network interface definition.
+      type: object
+    NetworkProfile:
+      properties:
+        subnet:
+          $ref: '#/components/schemas/ApiEntityReference'
+          description: Specifies the identifier of the subnet.
+        networkInterfaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetworkInterface'
+          description: Specifies the list of resource Ids for the network interfaces associated with the dedicated HSM.
+          x-ms-identifiers: []
+      description: The network profile definition.
+      type: object
+    Sku:
+      description: The resource model definition representing SKU
+      type: object
+      properties:
+        name:
+          type: string
+          description: The name of the SKU. E.g. P3. It is typically a letter+number code
+        tier:
+          $ref: '#/components/schemas/SkuTier'
+        size:
+          type: string
+          description: 'The SKU size. When the name field is the combination of tier and some other value, this would be the standalone code. '
+        family:
+          type: string
+          description: If the service has different generations of hardware, for the same SKU, then that can be captured here.
+        capacity:
+          type: integer
+          format: int32
+          description: If the SKU supports scale out/in then the capacity integer should be included. If scale out/in is not possible for the resource this may be omitted.
+      required:
+        - name
+    DedicatedHsmProperties:
+      properties:
+        networkProfile:
+          $ref: '#/components/schemas/NetworkProfile'
+          description: Specifies the network interfaces of the dedicated hsm.
+        managementNetworkProfile:
+          $ref: '#/components/schemas/NetworkProfile'
+          description: Specifies the management network interfaces of the dedicated hsm.
+        stampId:
+          type: string
+          description: This field will be used when RP does not support Availability zones.
+        statusMessage:
+          readOnly: true
+          type: string
+          description: Resource Status Message.
+        provisioningState:
+          readOnly: true
+          type: string
+          description: Provisioning state.
+          enum:
+            - Succeeded
+            - Provisioning
+            - Allocating
+            - Connecting
+            - Failed
+            - CheckingQuota
+            - Deleting
+          x-ms-enum:
+            name: JsonWebKeyType
+            modelAsString: true
+            values:
+              - value: Succeeded
+                description: The dedicated HSM has been fully provisioned.
+              - value: Provisioning
+                description: The dedicated HSM is currently being provisioned.
+              - value: Allocating
+                description: A device is currently being allocated for the dedicated HSM resource.
+              - value: Connecting
+                description: The dedicated HSM is being connected to the virtual network.
+              - value: Failed
+                description: Provisioning of the dedicated HSM has failed.
+              - value: CheckingQuota
+                description: Validating the subscription has sufficient quota to allocate a dedicated HSM device.
+              - value: Deleting
+                description: The dedicated HSM is currently being deleted.
+      description: Properties of the dedicated hsm
+      type: object
+    DedicatedHsm:
+      required:
+        - location
+        - sku
+        - properties
+      description: Resource information with extended details.
+      properties:
+        sku:
+          $ref: '#/components/schemas/Sku'
+          description: SKU details
+        zones:
+          type: array
+          items:
+            type: string
+          description: The Dedicated Hsm zones.
+        properties:
+          x-ms-client-flatten: true
+          $ref: '#/components/schemas/DedicatedHsmProperties'
+          description: Properties of the dedicated HSM
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+          x-ms-mutability:
+            - read
+            - create
+            - update
+          description: Resource tags.
+        location:
+          type: string
+          x-ms-mutability:
+            - read
+            - create
+          description: The geo-location where the resource lives
+      type: object
+    DedicatedHsmPatchParameters:
+      properties:
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+          description: Resource tags
+      description: Patchable properties of the dedicated HSM
+      type: object
+    DedicatedHsmListResult:
+      properties:
+        value:
+          type: array
+          items:
+            $ref: '#/components/schemas/DedicatedHsm'
+          description: The list of dedicated HSMs.
+        nextLink:
+          type: string
+          description: The URL to get the next set of dedicated hsms.
+      description: List of dedicated HSMs
+      type: object
+    DedicatedHsmError:
+      properties:
+        error:
+          description: The error detail of the operation if any.
+          readOnly: true
+          $ref: '#/components/schemas/Error'
+      description: The error exception.
+      type: object
+    Error:
+      properties:
+        code:
+          type: string
+          readOnly: true
+          description: The error code.
+        message:
+          type: string
+          readOnly: true
+          description: The error message.
+        innererror:
+          description: Contains more specific error that narrows down the cause. May be null.
+          x-ms-client-name: innerError
+          readOnly: true
+          $ref: '#/components/schemas/Error'
+      description: The key vault server error.
+      type: object
+    IdentityType:
+      type: string
+      description: The type of identity.
+      enum:
+        - User
+        - Application
+        - ManagedIdentity
+        - Key
+      x-ms-enum:
+        name: identityType
+        modelAsString: true
+    OutboundEnvironmentEndpointCollection:
+      description: Collection of OutboundEnvironmentEndpoint
+      required:
+        - value
+      type: object
+      properties:
+        value:
+          description: Collection of resources.
+          type: array
+          items:
+            $ref: '#/components/schemas/OutboundEnvironmentEndpoint'
+          x-ms-identifiers: []
+        nextLink:
+          description: Link to next page of resources.
+          type: string
+          readOnly: true
+    OutboundEnvironmentEndpoint:
+      description: Egress endpoints which dedicated hsm service connects to for common purpose.
+      type: object
+      properties:
+        category:
+          description: The category of endpoints accessed by the dedicated hsm service, e.g. azure-resource-management, apiserver, etc.
+          type: string
+        endpoints:
+          description: The endpoints that dedicated hsm service connects to
+          type: array
+          items:
+            $ref: '#/components/schemas/EndpointDependency'
+          x-ms-identifiers: []
+    EndpointDependency:
+      description: A domain name that dedicated hsm services are reaching at.
+      type: object
+      properties:
+        domainName:
+          description: The domain name of the dependency.
+          type: string
+        endpointDetails:
+          description: The Ports and Protocols used when connecting to domainName.
+          type: array
+          items:
+            $ref: '#/components/schemas/EndpointDetail'
+          x-ms-identifiers: []
+    EndpointDetail:
+      description: Connect information from the dedicated hsm service to a single endpoint.
+      type: object
+      properties:
+        ipAddress:
+          description: An IP Address that Domain Name currently resolves to.
+          type: string
+        port:
+          format: int32
+          description: The port an endpoint is connected to.
+          type: integer
+        protocol:
+          description: The protocol used for connection
+          type: string
+        description:
+          description: Description of the detail
+          type: string
     Resource:
       title: Resource
       description: Common fields that are returned in the response for all Azure Resource Manager resources
@@ -593,61 +1054,6 @@ components:
         name: SkuTier
         modelAsString: false
       description: This field is required to be implemented by the Resource Provider if the service has more than one tier, but is not required on a PUT.
-    Sku:
-      type: object
-      description: SKU of the dedicated HSM
-      properties:
-        name:
-          type: string
-          description: SKU of the dedicated HSM
-          enum:
-            - SafeNet Luna Network HSM A790
-            - payShield10K_LMK1_CPS60
-            - payShield10K_LMK1_CPS250
-            - payShield10K_LMK1_CPS2500
-            - payShield10K_LMK2_CPS60
-            - payShield10K_LMK2_CPS250
-            - payShield10K_LMK2_CPS2500
-          x-ms-enum:
-            name: SkuName
-            modelAsString: true
-            values:
-              - value: SafeNet Luna Network HSM A790
-                description: The dedicated HSM is a Safenet Luna Network HSM A790 device.
-              - value: payShield10K_LMK1_CPS60
-                description: The dedicated HSM is a payShield 10K, model PS10-D, 10Gb Ethernet Hardware Platform device with 1 local master key which supports up to 60 calls per second.
-              - value: payShield10K_LMK1_CPS250
-                description: The dedicated HSM is a payShield 10K, model PS10-D, 10Gb Ethernet Hardware Platform device with 1 local master key which supports up to 250 calls per second.
-              - value: payShield10K_LMK1_CPS2500
-                description: The dedicated HSM is a payShield 10K, model PS10-D, 10Gb Ethernet Hardware Platform device with 1 local master key which supports up to 2500 calls per second.
-              - value: payShield10K_LMK2_CPS60
-                description: The dedicated HSM is a payShield 10K, model PS10-D, 10Gb Ethernet Hardware Platform device with 2 local master keys which supports up to 60 calls per second.
-              - value: payShield10K_LMK2_CPS250
-                description: The dedicated HSM is a payShield 10K, model PS10-D, 10Gb Ethernet Hardware Platform device with 2 local master keys which supports up to 250 calls per second.
-              - value: payShield10K_LMK2_CPS2500
-                description: The dedicated HSM is a payShield 10K, model PS10-D, 10Gb Ethernet Hardware Platform device with 2 local master keys which supports up to 2500 calls per second.
-    Identity:
-      description: Identity for the resource.
-      type: object
-      properties:
-        principalId:
-          readOnly: true
-          type: string
-          format: uuid
-          description: The principal ID of resource identity. The value must be an UUID.
-        tenantId:
-          readOnly: true
-          type: string
-          format: uuid
-          description: The tenant ID of resource. The value must be an UUID.
-        type:
-          type: string
-          description: The identity type.
-          enum:
-            - SystemAssigned
-          x-ms-enum:
-            name: ResourceIdentityType
-            modelAsString: false
     Plan:
       type: object
       properties:
@@ -949,87 +1355,28 @@ components:
         message:
           description: Detailed reason why the given name is available.
           type: string
-    UserAssignedIdentities:
-      title: User-Assigned Identities
-      description: 'The set of user assigned identities associated with the resource. The userAssignedIdentities dictionary keys will be ARM resource ids in the form: ''/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{identityName}. The dictionary values can be empty objects ({}) in requests.'
-      additionalProperties:
-        $ref: '#/components/schemas/UserAssignedIdentity'
-        nullable: true
-        x-nullable: true
-      properties: {}
-      type: object
-    UserAssignedIdentity:
-      type: object
-      description: User assigned identity properties
-      properties:
-        principalId:
-          description: The principal ID of the assigned identity.
-          format: uuid
-          type: string
-          readOnly: true
-        clientId:
-          description: The client ID of the assigned identity.
-          format: uuid
-          type: string
-          readOnly: true
-    ManagedServiceIdentityType:
-      description: Type of managed service identity (where both SystemAssigned and UserAssigned types are allowed).
-      enum:
-        - None
-        - SystemAssigned
-        - UserAssigned
-        - SystemAssigned,UserAssigned
-      type: string
-      x-ms-enum:
-        name: ManagedServiceIdentityType
-        modelAsString: true
-    ManagedServiceIdentity:
-      description: Managed service identity (system assigned and/or user assigned identities)
+    Identity:
+      description: Identity for the resource.
       type: object
       properties:
         principalId:
           readOnly: true
-          format: uuid
           type: string
-          description: The service principal ID of the system assigned identity. This property will only be provided for a system assigned identity.
+          format: uuid
+          description: The principal ID of resource identity. The value must be an UUID.
         tenantId:
           readOnly: true
-          format: uuid
           type: string
-          description: The tenant ID of the system assigned identity. This property will only be provided for a system assigned identity.
+          format: uuid
+          description: The tenant ID of resource. The value must be an UUID.
         type:
-          $ref: '#/components/schemas/ManagedServiceIdentityType'
-        userAssignedIdentities:
-          $ref: '#/components/schemas/UserAssignedIdentities'
-      required:
-        - type
-    SystemAssignedServiceIdentityType:
-      description: Type of managed service identity (either system assigned, or none).
-      enum:
-        - None
-        - SystemAssigned
-      type: string
-      x-ms-enum:
-        name: SystemAssignedServiceIdentityType
-        modelAsString: true
-    SystemAssignedServiceIdentity:
-      description: Managed service identity (either system assigned, or none)
-      type: object
-      properties:
-        principalId:
-          readOnly: true
-          format: uuid
           type: string
-          description: The service principal ID of the system assigned identity. This property will only be provided for a system assigned identity.
-        tenantId:
-          readOnly: true
-          format: uuid
-          type: string
-          description: The tenant ID of the system assigned identity. This property will only be provided for a system assigned identity.
-        type:
-          $ref: '#/components/schemas/SystemAssignedServiceIdentityType'
-      required:
-        - type
+          description: The identity type.
+          enum:
+            - SystemAssigned
+          x-ms-enum:
+            name: ResourceIdentityType
+            modelAsString: false
     PrivateEndpoint:
       type: object
       properties:
@@ -1114,361 +1461,6 @@ components:
           items:
             $ref: '#/components/schemas/PrivateLinkResource'
       description: A list of private link resources.
-    DedicatedHsmOperation:
-      description: REST API operation
-      type: object
-      properties:
-        name:
-          description: The name of the Dedicated HSM Resource Provider Operation.
-          type: string
-        isDataAction:
-          description: Gets or sets a value indicating whether it is a data plane action
-          type: boolean
-          readOnly: true
-        origin:
-          description: The origin of the operation
-          type: string
-        display:
-          properties:
-            provider:
-              description: The Resource Provider of the operation
-              type: string
-            resource:
-              description: Resource on which the operation is performed.
-              type: string
-            operation:
-              description: 'Operation type: Read, write, delete, etc.'
-              type: string
-            description:
-              description: The object that represents the operation.
-              type: string
-          description: The display string.
-          type: object
-    DedicatedHsmOperationListResult:
-      type: object
-      description: Result of the request to list Dedicated HSM Provider operations. It contains a list of operations.
-      properties:
-        value:
-          type: array
-          items:
-            $ref: '#/components/schemas/DedicatedHsmOperation'
-          x-ms-identifiers:
-            - name
-          description: List of Dedicated HSM Resource Provider operations.
-    ApiEntityReference:
-      properties:
-        id:
-          type: string
-          description: The ARM resource id in the form of /subscriptions/{SubscriptionId}/resourceGroups/{ResourceGroupName}/...
-      description: The API entity reference.
-      type: object
-    NetworkInterface:
-      properties:
-        id:
-          readOnly: true
-          type: string
-          description: The ARM resource id in the form of /subscriptions/{SubscriptionId}/resourceGroups/{ResourceGroupName}/...
-        privateIpAddress:
-          type: string
-          description: Private Ip address of the interface
-      description: The network interface definition.
-      type: object
-    NetworkProfile:
-      properties:
-        subnet:
-          $ref: '#/components/schemas/ApiEntityReference'
-          description: Specifies the identifier of the subnet.
-        networkInterfaces:
-          type: array
-          items:
-            $ref: '#/components/schemas/NetworkInterface'
-          description: Specifies the list of resource Ids for the network interfaces associated with the dedicated HSM.
-      description: The network profile definition.
-      type: object
-    DedicatedHsmProperties:
-      properties:
-        networkProfile:
-          $ref: '#/components/schemas/NetworkProfile'
-          description: Specifies the network interfaces of the dedicated hsm.
-        managementNetworkProfile:
-          $ref: '#/components/schemas/NetworkProfile'
-          description: Specifies the management network interfaces of the dedicated hsm.
-        stampId:
-          type: string
-          description: This field will be used when RP does not support Availability zones.
-        statusMessage:
-          readOnly: true
-          type: string
-          description: Resource Status Message.
-        provisioningState:
-          readOnly: true
-          type: string
-          description: Provisioning state.
-          enum:
-            - Succeeded
-            - Provisioning
-            - Allocating
-            - Connecting
-            - Failed
-            - CheckingQuota
-            - Deleting
-          x-ms-enum:
-            name: JsonWebKeyType
-            modelAsString: true
-            values:
-              - value: Succeeded
-                description: The dedicated HSM has been full provisioned.
-              - value: Provisioning
-                description: The dedicated HSM is currently being provisioned.
-              - value: Allocating
-                description: A device is currently being allocated for the dedicated HSM resource.
-              - value: Connecting
-                description: The dedicated HSM is being connected to the virtual network.
-              - value: Failed
-                description: Provisioning of the dedicated HSM has failed.
-              - value: CheckingQuota
-                description: Validating the subscription has sufficient quota to allocate a dedicated HSM device.
-              - value: Deleting
-                description: The dedicated HSM is currently being deleted.
-      description: Properties of the dedicated hsm
-      type: object
-    DedicatedHsm:
-      required:
-        - location
-        - sku
-        - properties
-      description: Resource information with extended details.
-      properties:
-        systemData:
-          description: Metadata pertaining to creation and last modification of the resource
-          $ref: '#/components/schemas/SystemData'
-        properties:
-          x-ms-client-flatten: true
-          $ref: '#/components/schemas/DedicatedHsmProperties'
-          description: Properties of the dedicated HSM
-        id:
-          readOnly: true
-          type: string
-          description: The Azure Resource Manager resource ID for the dedicated HSM.
-        name:
-          readOnly: true
-          type: string
-          description: The name of the dedicated HSM.
-        type:
-          readOnly: true
-          type: string
-          description: The resource type of the dedicated HSM.
-        location:
-          type: string
-          description: The supported Azure location where the dedicated HSM should be created.
-          x-ms-mutability:
-            - create
-            - read
-        sku:
-          $ref: '#/components/schemas/Sku'
-          description: SKU details
-        zones:
-          type: array
-          items:
-            type: string
-          description: The Dedicated Hsm zones.
-        tags:
-          type: object
-          additionalProperties:
-            type: string
-          description: Resource tags
-      type: object
-    DedicatedHsmPatchParameters:
-      properties:
-        tags:
-          type: object
-          additionalProperties:
-            type: string
-          description: Resource tags
-      description: Patchable properties of the dedicated HSM
-      type: object
-    DedicatedHsmListResult:
-      properties:
-        value:
-          type: array
-          items:
-            $ref: '#/components/schemas/DedicatedHsm'
-          description: The list of dedicated HSMs.
-        nextLink:
-          type: string
-          description: The URL to get the next set of dedicated hsms.
-      description: List of dedicated HSMs
-      type: object
-    ResourceListResult:
-      properties:
-        value:
-          type: array
-          items:
-            $ref: '#/components/schemas/DedicatedHsmResource'
-          description: The list of dedicated HSM resources.
-        nextLink:
-          type: string
-          description: The URL to get the next set of dedicated HSM resources.
-      description: List of dedicated HSM resources.
-      type: object
-    DedicatedHsmError:
-      properties:
-        error:
-          description: The error detail of the operation if any.
-          readOnly: true
-          $ref: '#/components/schemas/Error'
-      description: The error exception.
-      type: object
-    Error:
-      properties:
-        code:
-          type: string
-          readOnly: true
-          description: The error code.
-        message:
-          type: string
-          readOnly: true
-          description: The error message.
-        innererror:
-          description: Contains more specific error that narrows down the cause. May be null.
-          x-ms-client-name: innerError
-          readOnly: true
-          $ref: '#/components/schemas/Error'
-      description: The key vault server error.
-      type: object
-    DedicatedHsmResource:
-      type: object
-      properties:
-        id:
-          readOnly: true
-          type: string
-          description: The Azure Resource Manager resource ID for the dedicated HSM.
-        name:
-          readOnly: true
-          type: string
-          description: The name of the dedicated HSM.
-        type:
-          readOnly: true
-          type: string
-          description: The resource type of the dedicated HSM.
-        location:
-          type: string
-          description: The supported Azure location where the dedicated HSM should be created.
-          x-ms-mutability:
-            - create
-            - read
-        sku:
-          $ref: '#/components/schemas/Sku'
-          description: SKU details
-        zones:
-          type: array
-          items:
-            type: string
-          description: The Dedicated Hsm zones.
-        tags:
-          type: object
-          additionalProperties:
-            type: string
-          description: Resource tags
-      description: Dedicated HSM resource
-      required:
-        - location
-      x-ms-azure-resource: true
-    SystemData:
-      description: Metadata pertaining to creation and last modification of dedicated hsm resource.
-      type: object
-      readOnly: true
-      properties:
-        createdBy:
-          type: string
-          description: The identity that created dedicated hsm resource.
-        createdByType:
-          description: The type of identity that created dedicated hsm resource.
-          $ref: '#/components/schemas/IdentityType'
-        createdAt:
-          type: string
-          format: date-time
-          description: The timestamp of dedicated hsm resource creation (UTC).
-        lastModifiedBy:
-          type: string
-          description: The identity that last modified dedicated hsm resource.
-        lastModifiedByType:
-          description: The type of identity that last modified dedicated hsm resource.
-          $ref: '#/components/schemas/IdentityType'
-        lastModifiedAt:
-          type: string
-          format: date-time
-          description: The timestamp of dedicated hsm resource last modification (UTC).
-    IdentityType:
-      type: string
-      description: The type of identity.
-      enum:
-        - User
-        - Application
-        - ManagedIdentity
-        - Key
-      x-ms-enum:
-        name: identityType
-        modelAsString: true
-    OutboundEnvironmentEndpointCollection:
-      description: Collection of OutboundEnvironmentEndpoint
-      required:
-        - value
-      type: object
-      properties:
-        value:
-          description: Collection of resources.
-          type: array
-          items:
-            $ref: '#/components/schemas/OutboundEnvironmentEndpoint'
-          x-ms-identifiers: []
-        nextLink:
-          description: Link to next page of resources.
-          type: string
-          readOnly: true
-    OutboundEnvironmentEndpoint:
-      description: Egress endpoints which dedicated hsm service connects to for common purpose.
-      type: object
-      properties:
-        category:
-          description: The category of endpoints accessed by the dedicated hsm service, e.g. azure-resource-management, apiserver, etc.
-          type: string
-        endpoints:
-          description: The endpoints that dedicated hsm service connects to
-          type: array
-          items:
-            $ref: '#/components/schemas/EndpointDependency'
-          x-ms-identifiers: []
-    EndpointDependency:
-      description: A domain name that dedicated hsm services are reaching at.
-      type: object
-      properties:
-        domainName:
-          description: The domain name of the dependency.
-          type: string
-        endpointDetails:
-          description: The Ports and Protocols used when connecting to domainName.
-          type: array
-          items:
-            $ref: '#/components/schemas/EndpointDetail'
-          x-ms-identifiers: []
-    EndpointDetail:
-      description: Connect information from the dedicated hsm service to a single endpoint.
-      type: object
-      properties:
-        ipAddress:
-          description: An IP Address that Domain Name currently resolves to.
-          type: string
-        port:
-          format: int32
-          description: The port an endpoint is connected to.
-          type: integer
-        protocol:
-          description: The protocol used for connection
-          type: string
-        description:
-          description: Description of the detail
-          type: string
   x-stackQL-resources:
     cloud_hsm_clusters:
       id: azure.hardware_security_modules.cloud_hsm_clusters
@@ -1477,42 +1469,66 @@ components:
       methods:
         create_or_update:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1?api-version=2023-12-10-preview/put'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1?api-version=2024-06-30-preview/put'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         update:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1?api-version=2023-12-10-preview/patch'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1?api-version=2024-06-30-preview/patch'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         get:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1?api-version=2023-12-10-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1?api-version=2024-06-30-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         delete:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1?api-version=2023-12-10-preview/delete'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1?api-version=2024-06-30-preview/delete'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         list_by_resource_group:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1?api-version=2023-12-10-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1?api-version=2024-06-30-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.value
         list_by_subscription:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1?api-version=2023-12-10-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1?api-version=2024-06-30-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.value
+        validate_backup_properties:
+          operation:
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1validateBackupProperties~1?api-version=2024-06-30-preview/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        backup:
+          operation:
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1backup~1?api-version=2024-06-30-preview/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        validate_restore_properties:
+          operation:
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1validateRestoreProperties~1?api-version=2024-06-30-preview/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        restore:
+          operation:
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1restore~1?api-version=2024-06-30-preview/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
       sqlVerbs:
         select:
           - $ref: '#/components/x-stackQL-resources/cloud_hsm_clusters/methods/get'
@@ -1521,6 +1537,7 @@ components:
         insert:
           - $ref: '#/components/x-stackQL-resources/cloud_hsm_clusters/methods/create_or_update'
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/cloud_hsm_clusters/methods/delete'
     cloud_hsm_cluster_private_link_resources:
@@ -1530,7 +1547,7 @@ components:
       methods:
         list_by_cloud_hsm_cluster:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1privateLinkResources~1?api-version=2023-12-10-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1privateLinkResources~1?api-version=2024-06-30-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1540,6 +1557,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/cloud_hsm_cluster_private_link_resources/methods/list_by_cloud_hsm_cluster'
         insert: []
         update: []
+        replace: []
         delete: []
     cloud_hsm_cluster_private_endpoint_connections:
       id: azure.hardware_security_modules.cloud_hsm_cluster_private_endpoint_connections
@@ -1548,19 +1566,19 @@ components:
       methods:
         create:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1privateEndpointConnections~1{peConnectionName}~1?api-version=2023-12-10-preview/put'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1privateEndpointConnections~1{peConnectionName}~1?api-version=2024-06-30-preview/put'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         delete:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1privateEndpointConnections~1{peConnectionName}~1?api-version=2023-12-10-preview/delete'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1privateEndpointConnections~1{peConnectionName}~1?api-version=2024-06-30-preview/delete'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         get:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1privateEndpointConnections~1{peConnectionName}~1?api-version=2023-12-10-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1privateEndpointConnections~1{peConnectionName}~1?api-version=2024-06-30-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1570,6 +1588,7 @@ components:
         insert:
           - $ref: '#/components/x-stackQL-resources/cloud_hsm_cluster_private_endpoint_connections/methods/create'
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/cloud_hsm_cluster_private_endpoint_connections/methods/delete'
     private_endpoint_connections:
@@ -1579,7 +1598,7 @@ components:
       methods:
         list_by_cloud_hsm_cluster:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1privateEndpointConnections~1?api-version=2023-12-10-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1privateEndpointConnections~1?api-version=2024-06-30-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1589,24 +1608,43 @@ components:
           - $ref: '#/components/x-stackQL-resources/private_endpoint_connections/methods/list_by_cloud_hsm_cluster'
         insert: []
         update: []
+        replace: []
         delete: []
-    operations:
-      id: azure.hardware_security_modules.operations
-      name: operations
-      title: operations
+    cloud_hsm_cluster_backup_status:
+      id: azure.hardware_security_modules.cloud_hsm_cluster_backup_status
+      name: cloud_hsm_cluster_backup_status
+      title: cloud_hsm_cluster_backup_status
       methods:
-        list:
+        get:
           operation:
-            $ref: '#/paths/~1providers~1Microsoft.HardwareSecurityModules~1operations~1?api-version=2021-11-30/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1backupOperationStatus~1{jobId}~1?api-version=2024-06-30-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-            objectKey: $.value
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/operations/methods/list'
+          - $ref: '#/components/x-stackQL-resources/cloud_hsm_cluster_backup_status/methods/get'
         insert: []
         update: []
+        replace: []
+        delete: []
+    cloud_hsm_cluster_restore_status:
+      id: azure.hardware_security_modules.cloud_hsm_cluster_restore_status
+      name: cloud_hsm_cluster_restore_status
+      title: cloud_hsm_cluster_restore_status
+      methods:
+        get:
+          operation:
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1cloudHsmClusters~1{cloudHsmClusterName}~1restoreOperationStatus~1{jobId}~1?api-version=2024-06-30-preview/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/cloud_hsm_cluster_restore_status/methods/get'
+        insert: []
+        update: []
+        replace: []
         delete: []
     dedicated_hsm:
       id: azure.hardware_security_modules.dedicated_hsm
@@ -1615,38 +1653,38 @@ components:
       methods:
         create_or_update:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1dedicatedHSMs~1{name}~1?api-version=2021-11-30/put'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1dedicatedHSMs~1{name}~1?api-version=2024-06-30-preview/put'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         update:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1dedicatedHSMs~1{name}~1?api-version=2021-11-30/patch'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1dedicatedHSMs~1{name}~1?api-version=2024-06-30-preview/patch'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         delete:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1dedicatedHSMs~1{name}~1?api-version=2021-11-30/delete'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1dedicatedHSMs~1{name}~1?api-version=2024-06-30-preview/delete'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         get:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1dedicatedHSMs~1{name}~1?api-version=2021-11-30/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1dedicatedHSMs~1{name}~1?api-version=2024-06-30-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         list_by_resource_group:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1dedicatedHSMs~1?api-version=2021-11-30/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1dedicatedHSMs~1?api-version=2024-06-30-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.value
         list_by_subscription:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Microsoft.HardwareSecurityModules~1dedicatedHSMs~1?api-version=2021-11-30/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Microsoft.HardwareSecurityModules~1dedicatedHSMs~1?api-version=2024-06-30-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1659,6 +1697,7 @@ components:
         insert:
           - $ref: '#/components/x-stackQL-resources/dedicated_hsm/methods/create_or_update'
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/dedicated_hsm/methods/delete'
     dedicated_hsm_outbound_network_dependencies_endpoints:
@@ -1668,7 +1707,7 @@ components:
       methods:
         list:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1dedicatedHSMs~1{name}~1outboundNetworkDependenciesEndpoints~1?api-version=2021-11-30/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.HardwareSecurityModules~1dedicatedHSMs~1{name}~1outboundNetworkDependenciesEndpoints~1?api-version=2024-06-30-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1678,12 +1717,235 @@ components:
           - $ref: '#/components/x-stackQL-resources/dedicated_hsm_outbound_network_dependencies_endpoints/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
+    operations:
+      id: azure.hardware_security_modules.operations
+      name: operations
+      title: operations
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1providers~1Microsoft.HardwareSecurityModules~1operations~1?api-version=2024-06-30-preview/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.value
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/operations/methods/list'
+        insert: []
+        update: []
+        replace: []
+        delete: []
+    vw_cloud_hsm_clusters:
+      id: azure.hardware_security_modules.vw_cloud_hsm_clusters
+      name: vw_cloud_hsm_clusters
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              identity as identity,
+              sku as sku,
+              JSON_EXTRACT(properties, '$.activationState') as activation_state,
+              JSON_EXTRACT(properties, '$.autoGeneratedDomainNameLabelScope') as auto_generated_domain_name_label_scope,
+              JSON_EXTRACT(properties, '$.fipsApprovedMode') as fips_approved_mode,
+              JSON_EXTRACT(properties, '$.hsms') as hsms,
+              JSON_EXTRACT(properties, '$.privateEndpointConnections') as private_endpoint_connections,
+              JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+              JSON_EXTRACT(properties, '$.publicNetworkAccess') as public_network_access,
+              JSON_EXTRACT(properties, '$.statusMessage') as status_message,
+              subscriptionId,
+              resourceGroupName,
+              cloudHsmClusterName
+              FROM azure.hardware_security_modules.cloud_hsm_clusters
+              WHERE subscriptionId = 'replace-me';
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                identity as identity,
+                sku as sku,
+                json_extract_path_text(properties, '$.activationState') as activation_state,
+                JSON_EXTRACT(properties, '$.autoGeneratedDomainNameLabelScope') as auto_generated_domain_name_label_scope,
+                JSON_EXTRACT(properties, '$.fipsApprovedMode') as fips_approved_mode,
+                JSON_EXTRACT(properties, '$.hsms') as hsms,
+                JSON_EXTRACT(properties, '$.privateEndpointConnections') as private_endpoint_connections,
+                JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+                JSON_EXTRACT(properties, '$.publicNetworkAccess') as public_network_access,
+                JSON_EXTRACT(properties, '$.statusMessage') as status_message,
+                subscriptionId,
+                resourceGroupName,
+                cloudHsmClusterName
+                FROM azure.hardware_security_modules.cloud_hsm_clusters
+                WHERE subscriptionId = 'replace-me';
+    vw_cloud_hsm_cluster_private_endpoint_connections:
+      id: azure.hardware_security_modules.vw_cloud_hsm_cluster_private_endpoint_connections
+      name: vw_cloud_hsm_cluster_private_endpoint_connections
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              id as id,
+              name as name,
+              type as type,
+              systemData as system_data,
+              JSON_EXTRACT(properties, '$.groupIds') as group_ids,
+              JSON_EXTRACT(properties, '$.privateEndpoint') as private_endpoint,
+              JSON_EXTRACT(properties, '$.privateLinkServiceConnectionState') as private_link_service_connection_state,
+              JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+              subscriptionId,
+              resourceGroupName,
+              cloudHsmClusterName,
+              peConnectionName
+              FROM azure.hardware_security_modules.cloud_hsm_cluster_private_endpoint_connections
+              WHERE subscriptionId = 'replace-me' AND resourceGroupName = 'replace-me' AND cloudHsmClusterName = 'replace-me' AND peConnectionName = 'replace-me';
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                id as id,
+                name as name,
+                type as type,
+                systemData as system_data,
+                json_extract_path_text(properties, '$.groupIds') as group_ids,
+                JSON_EXTRACT(properties, '$.privateEndpoint') as private_endpoint,
+                JSON_EXTRACT(properties, '$.privateLinkServiceConnectionState') as private_link_service_connection_state,
+                JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+                subscriptionId,
+                resourceGroupName,
+                cloudHsmClusterName,
+                peConnectionName
+                FROM azure.hardware_security_modules.cloud_hsm_cluster_private_endpoint_connections
+                WHERE subscriptionId = 'replace-me' AND resourceGroupName = 'replace-me' AND cloudHsmClusterName = 'replace-me' AND peConnectionName = 'replace-me';
+    vw_cloud_hsm_cluster_backup_status:
+      id: azure.hardware_security_modules.vw_cloud_hsm_cluster_backup_status
+      name: vw_cloud_hsm_cluster_backup_status
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              JSON_EXTRACT(properties, '$.azureStorageBlobContainerUri') as azure_storage_blob_container_uri,
+              JSON_EXTRACT(properties, '$.backupId') as backup_id,
+              JSON_EXTRACT(properties, '$.status') as status,
+              JSON_EXTRACT(properties, '$.statusDetails') as status_details,
+              JSON_EXTRACT(properties, '$.error') as error,
+              JSON_EXTRACT(properties, '$.startTime') as start_time,
+              JSON_EXTRACT(properties, '$.endTime') as end_time,
+              JSON_EXTRACT(properties, '$.jobId') as job_id,
+              subscriptionId,
+              resourceGroupName,
+              cloudHsmClusterName,
+              jobId
+              FROM azure.hardware_security_modules.cloud_hsm_cluster_backup_status
+              WHERE subscriptionId = 'replace-me' AND resourceGroupName = 'replace-me' AND cloudHsmClusterName = 'replace-me' AND jobId = 'replace-me';
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                json_extract_path_text(properties, '$.azureStorageBlobContainerUri') as azure_storage_blob_container_uri,
+                JSON_EXTRACT(properties, '$.backupId') as backup_id,
+                JSON_EXTRACT(properties, '$.status') as status,
+                JSON_EXTRACT(properties, '$.statusDetails') as status_details,
+                JSON_EXTRACT(properties, '$.error') as error,
+                JSON_EXTRACT(properties, '$.startTime') as start_time,
+                JSON_EXTRACT(properties, '$.endTime') as end_time,
+                JSON_EXTRACT(properties, '$.jobId') as job_id,
+                subscriptionId,
+                resourceGroupName,
+                cloudHsmClusterName,
+                jobId
+                FROM azure.hardware_security_modules.cloud_hsm_cluster_backup_status
+                WHERE subscriptionId = 'replace-me' AND resourceGroupName = 'replace-me' AND cloudHsmClusterName = 'replace-me' AND jobId = 'replace-me';
+    vw_cloud_hsm_cluster_restore_status:
+      id: azure.hardware_security_modules.vw_cloud_hsm_cluster_restore_status
+      name: vw_cloud_hsm_cluster_restore_status
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              JSON_EXTRACT(properties, '$.status') as status,
+              JSON_EXTRACT(properties, '$.statusDetails') as status_details,
+              JSON_EXTRACT(properties, '$.error') as error,
+              JSON_EXTRACT(properties, '$.startTime') as start_time,
+              JSON_EXTRACT(properties, '$.endTime') as end_time,
+              JSON_EXTRACT(properties, '$.jobId') as job_id,
+              subscriptionId,
+              resourceGroupName,
+              cloudHsmClusterName,
+              jobId
+              FROM azure.hardware_security_modules.cloud_hsm_cluster_restore_status
+              WHERE subscriptionId = 'replace-me' AND resourceGroupName = 'replace-me' AND cloudHsmClusterName = 'replace-me' AND jobId = 'replace-me';
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                json_extract_path_text(properties, '$.status') as status,
+                JSON_EXTRACT(properties, '$.statusDetails') as status_details,
+                JSON_EXTRACT(properties, '$.error') as error,
+                JSON_EXTRACT(properties, '$.startTime') as start_time,
+                JSON_EXTRACT(properties, '$.endTime') as end_time,
+                JSON_EXTRACT(properties, '$.jobId') as job_id,
+                subscriptionId,
+                resourceGroupName,
+                cloudHsmClusterName,
+                jobId
+                FROM azure.hardware_security_modules.cloud_hsm_cluster_restore_status
+                WHERE subscriptionId = 'replace-me' AND resourceGroupName = 'replace-me' AND cloudHsmClusterName = 'replace-me' AND jobId = 'replace-me';
+    vw_dedicated_hsm:
+      id: azure.hardware_security_modules.vw_dedicated_hsm
+      name: vw_dedicated_hsm
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              location as location,
+              sku as sku,
+              zones as zones,
+              tags as tags,
+              JSON_EXTRACT(properties, '$.networkProfile') as network_profile,
+              JSON_EXTRACT(properties, '$.managementNetworkProfile') as management_network_profile,
+              JSON_EXTRACT(properties, '$.stampId') as stamp_id,
+              JSON_EXTRACT(properties, '$.statusMessage') as status_message,
+              JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+              subscriptionId,
+              resourceGroupName,
+              name
+              FROM azure.hardware_security_modules.dedicated_hsm
+              WHERE subscriptionId = 'replace-me';
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                location as location,
+                sku as sku,
+                zones as zones,
+                tags as tags,
+                json_extract_path_text(properties, '$.networkProfile') as network_profile,
+                JSON_EXTRACT(properties, '$.managementNetworkProfile') as management_network_profile,
+                JSON_EXTRACT(properties, '$.stampId') as stamp_id,
+                JSON_EXTRACT(properties, '$.statusMessage') as status_message,
+                JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+                subscriptionId,
+                resourceGroupName,
+                name
+                FROM azure.hardware_security_modules.dedicated_hsm
+                WHERE subscriptionId = 'replace-me';
 paths:
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/{cloudHsmClusterName}/?api-version=2023-12-10-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/{cloudHsmClusterName}/?api-version=2024-06-30-preview:
     put:
       tags:
-        - ''
+        - Cloud HSM Cluster - Create or Update
       operationId: CloudHsmClusters_CreateOrUpdate
       description: Create or Update a Cloud HSM Cluster in the specified subscription.
       x-ms-long-running-operation: true
@@ -1720,10 +1982,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CloudHsmClusterError'
+                $ref: '#/components/schemas/ErrorResponse'
     patch:
       tags:
-        - ''
+        - Cloud HSM Cluster - Update
       operationId: CloudHsmClusters_Update
       x-ms-long-running-operation: true
       x-ms-long-running-operation-options:
@@ -1754,6 +2016,7 @@ paths:
           headers:
             Location:
               schema:
+                format: uri
                 type: string
               description: The URI to poll for completion status.
         default:
@@ -1761,10 +2024,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CloudHsmClusterError'
+                $ref: '#/components/schemas/ErrorResponse'
     get:
       tags:
-        - ''
+        - Cloud HSM Cluster - Get
       operationId: CloudHsmClusters_Get
       description: Gets the specified Cloud HSM Cluster
       parameters:
@@ -1783,10 +2046,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CloudHsmClusterError'
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
-        - ''
+        - Cloud HSM Cluster - Delete
       operationId: CloudHsmClusters_Delete
       description: Deletes the specified Cloud HSM Cluster
       x-ms-long-running-operation: true
@@ -1797,13 +2060,12 @@ paths:
         - $ref: '#/components/parameters/ResourceGroupNameParameter'
         - $ref: '#/components/parameters/cloudHsmClusterName'
       responses:
-        '200':
-          description: OK Response.
         '202':
           description: Accepted
           headers:
             Location:
               schema:
+                format: uri
                 type: string
               description: The URI to poll for completion status.
         '204':
@@ -1813,11 +2075,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CloudHsmClusterError'
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/?api-version=2023-12-10-preview:
+                $ref: '#/components/schemas/ErrorResponse'
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/?api-version=2024-06-30-preview:
     get:
       tags:
-        - ''
+        - Cloud HSM Cluster - Get by Resource Group
       operationId: CloudHsmClusters_ListByResourceGroup
       description: The List operation gets information about the Cloud HSM Clusters associated with the subscription and within the specified resource group.
       parameters:
@@ -1841,13 +2103,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CloudHsmClusterError'
+                $ref: '#/components/schemas/ErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/?api-version=2023-12-10-preview:
+  /subscriptions/{subscriptionId}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/?api-version=2024-06-30-preview:
     get:
       tags:
-        - ''
+        - Cloud HSM Cluster - Get by Subscription
       operationId: CloudHsmClusters_ListBySubscription
       description: The List operation gets information about the Cloud HSM Clusters associated with the subscription.
       parameters:
@@ -1870,13 +2132,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CloudHsmClusterError'
+                $ref: '#/components/schemas/ErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/{cloudHsmClusterName}/privateLinkResources/?api-version=2023-12-10-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/{cloudHsmClusterName}/privateLinkResources/?api-version=2024-06-30-preview:
     get:
       tags:
-        - ''
+        - Cloud HSM Cluster Private Link - Get
       operationId: CloudHsmClusterPrivateLinkResources_ListByCloudHsmCluster
       description: Gets the private link resources supported for the Cloud Hsm Cluster.
       parameters:
@@ -1895,11 +2157,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CloudHsmClusterError'
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/{cloudHsmClusterName}/privateEndpointConnections/{peConnectionName}/?api-version=2023-12-10-preview:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-ms-pageable:
+        nextLinkName: nextLink
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/{cloudHsmClusterName}/privateEndpointConnections/{peConnectionName}/?api-version=2024-06-30-preview:
     put:
       tags:
-        - ''
+        - Cloud HSM Cluster Private Endpoint - Create
       operationId: CloudHsmClusterPrivateEndpointConnections_Create
       description: Creates or updates the private endpoint connection for the Cloud Hsm Cluster.
       parameters:
@@ -1927,10 +2191,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CloudHsmClusterError'
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       tags:
-        - ''
+        - Cloud HSM Cluster Private Endpoint - Delete
       operationId: CloudHsmClusterPrivateEndpointConnections_Delete
       description: Deletes the private endpoint connection for the Cloud Hsm Cluster.
       x-ms-long-running-operation: true
@@ -1942,13 +2206,12 @@ paths:
         - $ref: '#/components/parameters/cloudHsmClusterName'
         - $ref: '#/components/parameters/peConnectionName'
       responses:
-        '200':
-          description: The private endpoint connection was successfully deleted.
         '202':
           description: The private endpoint connection is being deleted.
           headers:
             Location:
               schema:
+                format: uri
                 type: string
               description: The URI to poll for completion status.
         '204':
@@ -1958,10 +2221,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CloudHsmClusterError'
+                $ref: '#/components/schemas/ErrorResponse'
     get:
       tags:
-        - ''
+        - Cloud HSM Cluster Private Endpoint - Get
       operationId: CloudHsmClusterPrivateEndpointConnections_Get
       description: Gets the private endpoint connection for the Cloud Hsm Cluster.
       parameters:
@@ -1981,11 +2244,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CloudHsmClusterError'
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/{cloudHsmClusterName}/privateEndpointConnections/?api-version=2023-12-10-preview:
+                $ref: '#/components/schemas/ErrorResponse'
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/{cloudHsmClusterName}/privateEndpointConnections/?api-version=2024-06-30-preview:
     get:
       tags:
-        - ''
+        - Cloud HSM Cluster Private Endpoint Connections - Get
       operationId: PrivateEndpointConnections_ListByCloudHsmCluster
       description: The List operation gets information about the private endpoint connections associated with the Cloud HSM Cluster
       parameters:
@@ -2004,32 +2267,343 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CloudHsmClusterError'
+                $ref: '#/components/schemas/ErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /providers/Microsoft.HardwareSecurityModules/operations/?api-version=2021-11-30:
-    get:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/{cloudHsmClusterName}/validateBackupProperties/?api-version=2024-06-30-preview:
+    post:
       tags:
-        - DedicatedHsmOperations
-      operationId: Operations_List
-      description: Get a list of Dedicated HSM operations.
-      parameters: []
+        - Cloud HSM Cluster Validate Backup Properties
+      operationId: CloudHsmClusters_ValidateBackupProperties
+      x-ms-long-running-operation: true
+      x-ms-long-running-operation-options:
+        final-state-via: azure-async-operation
+      description: Pre Backup operation to validate whether the customer can perform a backup on the Cloud HSM Cluster resource in the specified subscription.
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionIdParameter'
+        - $ref: '#/components/parameters/ResourceGroupNameParameter'
+        - $ref: '#/components/parameters/cloudHsmClusterName'
+      requestBody:
+        description: Backup Operation Required properties
+        x-ms-requestBody-name: backupRequestProperties
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BackupRequestProperties'
       responses:
         '200':
-          description: OK
+          description: OK. Cloud HSM Cluster Backup operation API finished synchronously with Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DedicatedHsmOperationListResult'
+                $ref: '#/components/schemas/BackupResult'
+          headers:
+            x-ms-request-id:
+              schema:
+                type: string
+              description: A unique ID for the current operation, service generated. All the resource providers must return this value in the response headers to facilitate debugging.
+        '202':
+          description: Queued validating pre backup operation
+          headers:
+            Retry-After:
+              schema:
+                format: int32
+                type: integer
+              description: The recommended number of seconds to wait before calling the URI specified in Azure-AsyncOperation.
+            Azure-AsyncOperation:
+              schema:
+                format: uri
+                type: string
+              description: The URI to poll for completion status
+            Location:
+              schema:
+                format: uri
+                type: string
+              description: The URI to poll for completion status
+            x-ms-request-id:
+              schema:
+                type: string
+              description: A unique ID for the current operation, service generated. All the resource providers must return this value in the response headers to facilitate debugging.
         default:
-          description: The error response describing why the operation failed.
+          description: The error response describing why the operation failed
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DedicatedHsmError'
-      x-ms-pageable:
-        nextLinkName: null
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/dedicatedHSMs/{name}/?api-version=2021-11-30:
+                $ref: '#/components/schemas/ErrorResponse'
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/{cloudHsmClusterName}/backup/?api-version=2024-06-30-preview:
+    post:
+      tags:
+        - Cloud HSM Cluster Backup - Create
+      operationId: CloudHsmClusters_Backup
+      x-ms-long-running-operation: true
+      x-ms-long-running-operation-options:
+        final-state-via: azure-async-operation
+      description: Create a backup of the Cloud HSM Cluster in the specified subscription
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionIdParameter'
+        - $ref: '#/components/parameters/ResourceGroupNameParameter'
+        - $ref: '#/components/parameters/cloudHsmClusterName'
+      requestBody:
+        description: Azure storage Resource Uri
+        x-ms-requestBody-name: backupRequestProperties
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BackupRequestProperties'
+      responses:
+        '200':
+          description: OK. Cloud HSM Cluster Backup operation API finished synchronously with Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupResult'
+          headers:
+            x-ms-request-id:
+              schema:
+                type: string
+              description: A unique ID for the current operation, service generated. All the resource providers must return this value in the response headers to facilitate debugging.
+        '202':
+          description: Cloud HSM Cluster Backup operation started
+          headers:
+            Retry-After:
+              schema:
+                format: int32
+                type: integer
+              description: The recommended number of seconds to wait before calling the URI specified in Azure-AsyncOperation.
+            Azure-AsyncOperation:
+              schema:
+                format: uri
+                type: string
+              description: The URI to poll for completion status.
+            Location:
+              schema:
+                format: uri
+                type: string
+              description: The URI to poll for completion status
+            x-ms-request-id:
+              schema:
+                type: string
+              description: A unique ID for the current operation, service generated. All the resource providers must return this value in the response headers to facilitate debugging.
+        default:
+          description: The error response describing why the operation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/{cloudHsmClusterName}/backupOperationStatus/{jobId}/?api-version=2024-06-30-preview:
+    get:
+      tags:
+        - Cloud HSM Clusters Backup Operation Status - Get
+      operationId: CloudHsmClusterBackupStatus_Get
+      description: Gets the backup operation status of the specified Cloud HSM Cluster
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionIdParameter'
+        - $ref: '#/components/parameters/ResourceGroupNameParameter'
+        - $ref: '#/components/parameters/cloudHsmClusterName'
+        - $ref: '#/components/parameters/backupRestoreJobId'
+      responses:
+        '200':
+          description: Cloud HSM Cluster Backup Operation status returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupResult'
+          headers:
+            x-ms-request-id:
+              schema:
+                type: string
+              description: A unique ID for the current operation, service generated. All the resource providers must return this value in the response headers to facilitate debugging.
+        '202':
+          description: Cloud HSM Cluster Backup Operation status returned
+          headers:
+            x-ms-request-id:
+              schema:
+                type: string
+              description: A unique ID for the current operation, service generated. All the resource providers must return this value in the response headers to facilitate debugging.
+            Location:
+              schema:
+                format: uri
+                type: string
+              description: The URI to poll for completion status
+        default:
+          description: The error response describing why the operation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          headers:
+            x-ms-request-id:
+              schema:
+                type: string
+              description: A unique ID for the current operation, service generated. All the resource providers must return this value in the response headers to facilitate debugging.
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/{cloudHsmClusterName}/validateRestoreProperties/?api-version=2024-06-30-preview:
+    post:
+      tags:
+        - Validate Cloud HSM Cluster Restore Properties
+      operationId: CloudHsmClusters_ValidateRestoreProperties
+      x-ms-long-running-operation: true
+      x-ms-long-running-operation-options:
+        final-state-via: azure-async-operation
+      description: Queued validating pre restore operation
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionIdParameter'
+        - $ref: '#/components/parameters/ResourceGroupNameParameter'
+        - $ref: '#/components/parameters/cloudHsmClusterName'
+      requestBody:
+        description: Optional Parameters to validate prior performing a restore operation.
+        x-ms-requestBody-name: restoreRequestProperties
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreRequestProperties'
+      responses:
+        '200':
+          description: OK. Cloud HSM Cluster Restore operation API finished synchronously with Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestoreResult'
+          headers:
+            x-ms-request-id:
+              schema:
+                type: string
+              description: A unique ID for the current operation, service generated. All the resource providers must return this value in the response headers to facilitate debugging.
+        '202':
+          description: Queued pre restore operation validation.
+          headers:
+            Retry-After:
+              schema:
+                format: int32
+                type: integer
+              description: The recommended number of seconds to wait before calling the URI specified in Azure-AsyncOperation.
+            Azure-AsyncOperation:
+              schema:
+                format: uri
+                type: string
+              description: The URI to poll for completion status.
+            Location:
+              schema:
+                format: uri
+                type: string
+              description: The URI to poll for completion status
+            x-ms-request-id:
+              schema:
+                type: string
+              description: A unique ID for the current operation, service generated. All the resource providers must return this value in the response headers to facilitate debugging.
+        default:
+          description: The error response describing why the operation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/{cloudHsmClusterName}/restore/?api-version=2024-06-30-preview:
+    post:
+      tags:
+        - Cloud HSM Clusters Restore Operation - Create
+      operationId: CloudHsmClusters_Restore
+      x-ms-long-running-operation: true
+      x-ms-long-running-operation-options:
+        final-state-via: azure-async-operation
+      description: Restores all key materials of a specified Cloud HSM Cluster
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionIdParameter'
+        - $ref: '#/components/parameters/ResourceGroupNameParameter'
+        - $ref: '#/components/parameters/cloudHsmClusterName'
+      requestBody:
+        description: Restore Operation Required properties
+        required: true
+        x-ms-requestBody-name: restoreRequestProperties
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreRequestProperties'
+      responses:
+        '200':
+          description: OK. Cloud HSM Cluster Restore operation API finished synchronously with Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestoreResult'
+          headers:
+            x-ms-request-id:
+              schema:
+                type: string
+              description: A unique ID for the current operation, service generated. All the resource providers must return this value in the response headers to facilitate debugging.
+        '202':
+          description: Cloud HSM Cluster Restore operation started
+          headers:
+            Retry-After:
+              schema:
+                format: int32
+                type: integer
+              description: The recommended number of seconds to wait before calling the URI specified in Azure-AsyncOperation.
+            Azure-AsyncOperation:
+              schema:
+                format: uri
+                type: string
+              description: The URI to poll for completion status.
+            Location:
+              schema:
+                format: uri
+                type: string
+              description: The URI to poll for completion status
+            x-ms-request-id:
+              schema:
+                type: string
+              description: A unique ID for the current operation, service generated. All the resource providers must return this value in the response headers to facilitate debugging.
+        default:
+          description: The error response describing why the operation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/cloudHsmClusters/{cloudHsmClusterName}/restoreOperationStatus/{jobId}/?api-version=2024-06-30-preview:
+    get:
+      tags:
+        - Returns Restore Operation Status
+      operationId: CloudHsmClusterRestoreStatus_Get
+      description: Gets the restore operation status of the specified Cloud HSM Cluster
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionIdParameter'
+        - $ref: '#/components/parameters/ResourceGroupNameParameter'
+        - $ref: '#/components/parameters/cloudHsmClusterName'
+        - $ref: '#/components/parameters/backupRestoreJobId'
+      responses:
+        '200':
+          description: Cloud HSM Cluster Backup Operation status returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestoreResult'
+          headers:
+            x-ms-request-id:
+              schema:
+                type: string
+              description: A unique ID for the current operation, service generated. All the resource providers must return this value in the response headers to facilitate debugging.
+        '202':
+          description: Cloud HSM Cluster Restore Operation status returned
+          headers:
+            x-ms-request-id:
+              schema:
+                type: string
+              description: A unique ID for the current operation, service generated. All the resource providers must return this value in the response headers to facilitate debugging.
+            Location:
+              schema:
+                format: uri
+                type: string
+              description: The URI to poll for completion status
+        default:
+          description: The error response describing why the operation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+          headers:
+            x-ms-request-id:
+              schema:
+                type: string
+              description: A unique ID for the current operation, service generated. All the resource providers must return this value in the response headers to facilitate debugging.
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/dedicatedHSMs/{name}/?api-version=2024-06-30-preview:
     put:
       tags:
         - DedicatedHsms
@@ -2037,19 +2611,8 @@ paths:
       x-ms-long-running-operation: true
       description: Create or Update a dedicated HSM in the specified subscription.
       parameters:
-        - name: resourceGroupName
-          in: path
-          description: The name of the Resource Group to which the resource belongs.
-          required: true
-          schema:
-            type: string
-        - name: name
-          in: path
-          description: Name of the dedicated Hsm
-          required: true
-          schema:
-            pattern: ^[a-zA-Z0-9-]{3,24}$
-            type: string
+        - $ref: '#/components/parameters/ResourceGroupNameParameter'
+        - $ref: '#/components/parameters/DedicatedHsmName'
         - $ref: '#/components/parameters/SubscriptionIdParameter'
       requestBody:
         description: Parameters to create or update the dedicated hsm
@@ -2085,19 +2648,8 @@ paths:
       x-ms-long-running-operation: true
       description: Update a dedicated HSM in the specified subscription.
       parameters:
-        - name: resourceGroupName
-          in: path
-          description: The name of the Resource Group to which the server belongs.
-          required: true
-          schema:
-            type: string
-        - name: name
-          in: path
-          description: Name of the dedicated HSM
-          required: true
-          schema:
-            pattern: ^[a-zA-Z0-9-]{3,24}$
-            type: string
+        - $ref: '#/components/parameters/ResourceGroupNameParameter'
+        - $ref: '#/components/parameters/DedicatedHsmName'
         - $ref: '#/components/parameters/SubscriptionIdParameter'
       requestBody:
         description: Parameters to patch the dedicated HSM
@@ -2115,6 +2667,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DedicatedHsm'
+        '202':
+          description: Patched dedicated HSM
+          headers:
+            Location:
+              schema:
+                type: string
+              description: The URI to poll for completion status.
         default:
           description: The error response describing why the operation failed.
           content:
@@ -2128,24 +2687,17 @@ paths:
       x-ms-long-running-operation: true
       description: Deletes the specified Azure Dedicated HSM.
       parameters:
-        - name: resourceGroupName
-          in: path
-          description: The name of the Resource Group to which the dedicated HSM belongs.
-          required: true
-          schema:
-            type: string
-        - name: name
-          in: path
-          description: The name of the dedicated HSM to delete
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/ResourceGroupNameParameter'
+        - $ref: '#/components/parameters/DedicatedHsmName'
         - $ref: '#/components/parameters/SubscriptionIdParameter'
       responses:
-        '200':
-          description: OK Response.
         '202':
           description: Accepted
+          headers:
+            Location:
+              schema:
+                type: string
+              description: The URI to poll for completion status.
         '204':
           description: No Content
         default:
@@ -2160,18 +2712,8 @@ paths:
       operationId: DedicatedHsm_Get
       description: Gets the specified Azure dedicated HSM.
       parameters:
-        - name: resourceGroupName
-          in: path
-          description: The name of the Resource Group to which the dedicated hsm belongs.
-          required: true
-          schema:
-            type: string
-        - name: name
-          in: path
-          description: The name of the dedicated HSM.
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/ResourceGroupNameParameter'
+        - $ref: '#/components/parameters/DedicatedHsmName'
         - $ref: '#/components/parameters/SubscriptionIdParameter'
       responses:
         '200':
@@ -2186,19 +2728,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DedicatedHsmError'
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/dedicatedHSMs/?api-version=2021-11-30:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/dedicatedHSMs/?api-version=2024-06-30-preview:
     get:
       tags:
         - DedicatedHsms
       operationId: DedicatedHsm_ListByResourceGroup
       description: The List operation gets information about the dedicated hsms associated with the subscription and within the specified resource group.
       parameters:
-        - name: resourceGroupName
-          in: path
-          description: The name of the Resource Group to which the dedicated HSM belongs.
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/ResourceGroupNameParameter'
         - name: $top
           in: query
           description: Maximum number of results to return.
@@ -2221,7 +2758,7 @@ paths:
                 $ref: '#/components/schemas/DedicatedHsmError'
       x-ms-pageable:
         nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/providers/Microsoft.HardwareSecurityModules/dedicatedHSMs/?api-version=2021-11-30:
+  /subscriptions/{subscriptionId}/providers/Microsoft.HardwareSecurityModules/dedicatedHSMs/?api-version=2024-06-30-preview:
     get:
       tags:
         - DedicatedHsms
@@ -2250,7 +2787,7 @@ paths:
                 $ref: '#/components/schemas/DedicatedHsmError'
       x-ms-pageable:
         nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/dedicatedHSMs/{name}/outboundNetworkDependenciesEndpoints/?api-version=2021-11-30:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HardwareSecurityModules/dedicatedHSMs/{name}/outboundNetworkDependenciesEndpoints/?api-version=2024-06-30-preview:
     get:
       tags:
         - DedicatedHsms
@@ -2258,18 +2795,8 @@ paths:
       summary: Gets a list of egress endpoints (network endpoints of all outbound dependencies) in the specified dedicated hsm resource.
       description: Gets a list of egress endpoints (network endpoints of all outbound dependencies) in the specified dedicated hsm resource. The operation returns properties of each egress endpoint.
       parameters:
-        - name: resourceGroupName
-          in: path
-          description: The name of the Resource Group to which the dedicated hsm belongs.
-          required: true
-          schema:
-            type: string
-        - name: name
-          in: path
-          description: The name of the dedicated HSM.
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/ResourceGroupNameParameter'
+        - $ref: '#/components/parameters/DedicatedHsmName'
         - $ref: '#/components/parameters/SubscriptionIdParameter'
       responses:
         '200':
@@ -2286,3 +2813,25 @@ paths:
                 $ref: '#/components/schemas/DedicatedHsmError'
       x-ms-pageable:
         nextLinkName: nextLink
+  /providers/Microsoft.HardwareSecurityModules/operations/?api-version=2024-06-30-preview:
+    get:
+      tags:
+        - Operations
+      operationId: Operations_List
+      description: Get a list of Hardware Security Modules operations.
+      parameters: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationListResult'
+        default:
+          description: The error response describing why the operation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-ms-pageable:
+        nextLinkName: null

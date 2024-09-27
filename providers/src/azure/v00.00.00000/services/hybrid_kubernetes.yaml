@@ -8,7 +8,7 @@ info:
     name: StackQL Studios
     url: https://stackql.io/
     email: info@stackql.io
-  version: 2024-06-15-stackql-generated
+  version: 2024-09-27-stackql-generated
 security:
   - azure_auth:
       - user_impersonation
@@ -370,7 +370,7 @@ components:
           properties:
             provider:
               type: string
-              description: 'Service provider: Microsoft.connectedClusters'
+              description: 'Service provider: Microsoft.Kubernetes'
             resource:
               type: string
               description: Connected Cluster Resource on which the operation is performed
@@ -571,7 +571,7 @@ components:
           items:
             $ref: '#/components/schemas/ConnectedCluster'
         nextLink:
-          description: The link to fetch the next page of connected cluster
+          description: The link to fetch the next page of connected clusters
           type: string
     ConnectedCluster:
       required:
@@ -716,7 +716,7 @@ components:
             modelAsString: true
         privateLinkScopeResourceId:
           type: string
-          description: The resource id of the private link scope this connected cluster is assigned to, if any.
+          description: This is populated only if privateLinkState is enabled. The resource id of the private link scope this connected cluster is assigned to, if any.
         azureHybridBenefit:
           type: string
           description: Indicates whether Azure Hybrid Benefit is opted in
@@ -734,6 +734,24 @@ components:
         arcAgentProfile:
           description: Arc agentry configuration for the provisioned cluster.
           $ref: '#/components/schemas/ArcAgentProfile'
+        securityProfile:
+          description: Security profile for the connected cluster.
+          $ref: '#/components/schemas/SecurityProfile'
+        oidcIssuerProfile:
+          description: Open ID Connect (OIDC) Issuer Profile for the connected cluster.
+          $ref: '#/components/schemas/OidcIssuerProfile'
+        gateway:
+          description: Details of the gateway used by the Arc router for connectivity.
+          $ref: '#/components/schemas/Gateway'
+          nullable: true
+          x-nullable: true
+        arcAgentryConfigurations:
+          description: Configuration settings for customizing the behavior of the connected cluster.
+          type: array
+          items:
+            type: object
+            $ref: '#/components/schemas/ArcAgentryConfigurations'
+          nullable: true
         miscellaneousProperties:
           description: More properties related to the Connected Cluster
           type: object
@@ -838,6 +856,14 @@ components:
           description: Sender access token
           type: string
           readOnly: true
+        relayTid:
+          description: TenantID of the relay
+          type: string
+          readOnly: true
+        relayType:
+          description: Type of relay
+          type: string
+          readOnly: true
     AadProfile:
       type: object
       description: AAD Profile specifies attributes for Azure Active Directory integration.
@@ -853,6 +879,63 @@ components:
         tenantID:
           type: string
           description: The AAD tenant ID to use for authentication. If not specified, will use the tenant of the deployment subscription.
+    SecurityProfile:
+      type: object
+      description: Security Profile specifies attributes for cluster security features.
+      properties:
+        workloadIdentity:
+          type: object
+          description: The workload identity feature webhook.
+          properties:
+            enabled:
+              type: boolean
+              description: Whether to enable or disable the workload identity Webhook
+    OidcIssuerProfile:
+      type: object
+      description: OIDC Issuer Profile specifies attributes for workload identity integration.
+      properties:
+        enabled:
+          type: boolean
+          description: Whether to enable oidc issuer for workload identity integration.
+        issuerUrl:
+          type: string
+          description: The issuer url for hybrid clusters connected to Arc used for the workload identity feature.
+          readOnly: true
+        selfHostedIssuerUrl:
+          type: string
+          description: The issuer url for public cloud clusters - AKS, EKS, GKE - used for the workload identity feature.
+    Gateway:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Indicates whether the gateway for arc router connectivity is enabled.
+        resourceId:
+          type: string
+          format: arm-id
+          x-ms-arm-id-details:
+            allowedResources:
+              - type: Microsoft.HybridCompute/gateways
+          description: The resource ID of the gateway used for the Arc router feature.
+    ArcAgentryConfigurations:
+      type: object
+      properties:
+        feature:
+          type: string
+          description: Specifies the name of the feature for the configuration setting.
+        settings:
+          type: object
+          description: The configuration settings for the feature that do not contain any sensitive or secret information.
+          nullable: true
+          additionalProperties:
+            type: string
+        protectedSettings:
+          type: object
+          description: The configuration settings for the feature that contain any sensitive or secret information.
+          nullable: true
+          x-ms-secret: true
+          additionalProperties:
+            type: string
     ArcAgentProfile:
       description: Defines the Arc Agent properties for the clusters.
       type: object
@@ -870,6 +953,59 @@ components:
           x-ms-enum:
             name: AutoUpgradeOptions
             modelAsString: true
+        systemComponents:
+          type: array
+          description: List of system extensions that are installed on the cluster resource.
+          items:
+            $ref: '#/components/schemas/SystemComponent'
+        agentErrors:
+          type: array
+          description: List of arc agentry and system components errors on the cluster resource.
+          items:
+            $ref: '#/components/schemas/AgentError'
+        agentState:
+          type: string
+          description: Represents the current state of the Arc agentry and its dependent components.
+          readOnly: true
+    AgentError:
+      description: Agent Errors if any during agent or system component upgrade.
+      type: object
+      properties:
+        message:
+          type: string
+          readOnly: true
+          description: Agent error message.
+        severity:
+          type: string
+          readOnly: true
+          description: Severity of the error message.
+        component:
+          type: string
+          readOnly: true
+          description: Agent component where error message occured.
+        time:
+          format: date-time
+          description: The timestamp of error occured (UTC).
+          type: string
+          readOnly: true
+    SystemComponent:
+      description: System extensions and its current versions installed on the cluster resource.
+      type: object
+      properties:
+        type:
+          type: string
+          description: Type of the system extension
+        userSpecifiedVersion:
+          type: string
+          description: Version of the system extension to be installed on the cluster resource.
+        majorVersion:
+          type: integer
+          format: int32
+          description: Major Version of the system extension that is currently installed on the cluster resource.
+        currentVersion:
+          type: string
+          readOnly: true
+          description: Version of the system extension that is currently installed on the cluster resource.
     SystemData:
       description: Metadata pertaining to creation and last modification of the resource.
       type: object
@@ -936,40 +1072,40 @@ components:
       name: connected_cluster
       title: connected_cluster
       methods:
-        create:
+        create_or_update:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourcegroups~1{resourceGroupName}~1providers~1Microsoft.Kubernetes~1connectedClusters~1{clusterName}~1?api-version=2024-01-01/put'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourcegroups~1{resourceGroupName}~1providers~1Microsoft.Kubernetes~1connectedClusters~1{clusterName}~1?api-version=2024-07-15-preview/put'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         update:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourcegroups~1{resourceGroupName}~1providers~1Microsoft.Kubernetes~1connectedClusters~1{clusterName}~1?api-version=2024-01-01/patch'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourcegroups~1{resourceGroupName}~1providers~1Microsoft.Kubernetes~1connectedClusters~1{clusterName}~1?api-version=2024-07-15-preview/patch'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         get:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourcegroups~1{resourceGroupName}~1providers~1Microsoft.Kubernetes~1connectedClusters~1{clusterName}~1?api-version=2024-01-01/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourcegroups~1{resourceGroupName}~1providers~1Microsoft.Kubernetes~1connectedClusters~1{clusterName}~1?api-version=2024-07-15-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         delete:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourcegroups~1{resourceGroupName}~1providers~1Microsoft.Kubernetes~1connectedClusters~1{clusterName}~1?api-version=2024-01-01/delete'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourcegroups~1{resourceGroupName}~1providers~1Microsoft.Kubernetes~1connectedClusters~1{clusterName}~1?api-version=2024-07-15-preview/delete'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         list_by_resource_group:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourcegroups~1{resourceGroupName}~1providers~1Microsoft.Kubernetes~1connectedClusters~1?api-version=2024-01-01/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourcegroups~1{resourceGroupName}~1providers~1Microsoft.Kubernetes~1connectedClusters~1?api-version=2024-07-15-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.value
         list_by_subscription:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Microsoft.Kubernetes~1connectedClusters~1?api-version=2024-01-01/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Microsoft.Kubernetes~1connectedClusters~1?api-version=2024-07-15-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -980,8 +1116,9 @@ components:
           - $ref: '#/components/x-stackQL-resources/connected_cluster/methods/list_by_resource_group'
           - $ref: '#/components/x-stackQL-resources/connected_cluster/methods/list_by_subscription'
         insert:
-          - $ref: '#/components/x-stackQL-resources/connected_cluster/methods/create'
+          - $ref: '#/components/x-stackQL-resources/connected_cluster/methods/create_or_update'
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/connected_cluster/methods/delete'
     connected_cluster_cluster_user_credential:
@@ -991,7 +1128,7 @@ components:
       methods:
         list:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourcegroups~1{resourceGroupName}~1providers~1Microsoft.Kubernetes~1connectedClusters~1{clusterName}~1listClusterUserCredential~1?api-version=2024-01-01/post'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourcegroups~1{resourceGroupName}~1providers~1Microsoft.Kubernetes~1connectedClusters~1{clusterName}~1listClusterUserCredential~1?api-version=2024-07-15-preview/post'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1000,6 +1137,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/connected_cluster_cluster_user_credential/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     operations:
       id: azure.hybrid_kubernetes.operations
@@ -1008,7 +1146,7 @@ components:
       methods:
         get:
           operation:
-            $ref: '#/paths/~1providers~1Microsoft.Kubernetes~1operations~1?api-version=2024-01-01/get'
+            $ref: '#/paths/~1providers~1Microsoft.Kubernetes~1operations~1?api-version=2024-07-15-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1018,12 +1156,92 @@ components:
           - $ref: '#/components/x-stackQL-resources/operations/methods/get'
         insert: []
         update: []
+        replace: []
         delete: []
+    vw_connected_cluster:
+      id: azure.hybrid_kubernetes.vw_connected_cluster
+      name: vw_connected_cluster
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              location as location,
+              identity as identity,
+              kind as kind,
+              systemData as system_data,
+              tags as tags,
+              JSON_EXTRACT(properties, '$.agentPublicKeyCertificate') as agent_public_key_certificate,
+              JSON_EXTRACT(properties, '$.kubernetesVersion') as kubernetes_version,
+              JSON_EXTRACT(properties, '$.totalNodeCount') as total_node_count,
+              JSON_EXTRACT(properties, '$.totalCoreCount') as total_core_count,
+              JSON_EXTRACT(properties, '$.agentVersion') as agent_version,
+              JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+              JSON_EXTRACT(properties, '$.distribution') as distribution,
+              JSON_EXTRACT(properties, '$.distributionVersion') as distribution_version,
+              JSON_EXTRACT(properties, '$.infrastructure') as infrastructure,
+              JSON_EXTRACT(properties, '$.offering') as offering,
+              JSON_EXTRACT(properties, '$.managedIdentityCertificateExpirationTime') as managed_identity_certificate_expiration_time,
+              JSON_EXTRACT(properties, '$.lastConnectivityTime') as last_connectivity_time,
+              JSON_EXTRACT(properties, '$.connectivityStatus') as connectivity_status,
+              JSON_EXTRACT(properties, '$.privateLinkState') as private_link_state,
+              JSON_EXTRACT(properties, '$.privateLinkScopeResourceId') as private_link_scope_resource_id,
+              JSON_EXTRACT(properties, '$.azureHybridBenefit') as azure_hybrid_benefit,
+              JSON_EXTRACT(properties, '$.aadProfile') as aad_profile,
+              JSON_EXTRACT(properties, '$.arcAgentProfile') as arc_agent_profile,
+              JSON_EXTRACT(properties, '$.securityProfile') as security_profile,
+              JSON_EXTRACT(properties, '$.oidcIssuerProfile') as oidc_issuer_profile,
+              JSON_EXTRACT(properties, '$.gateway') as gateway,
+              JSON_EXTRACT(properties, '$.arcAgentryConfigurations') as arc_agentry_configurations,
+              JSON_EXTRACT(properties, '$.miscellaneousProperties') as miscellaneous_properties,
+              subscriptionId,
+              resourceGroupName,
+              clusterName
+              FROM azure.hybrid_kubernetes.connected_cluster
+              WHERE subscriptionId = 'replace-me';
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                location as location,
+                identity as identity,
+                kind as kind,
+                systemData as system_data,
+                tags as tags,
+                json_extract_path_text(properties, '$.agentPublicKeyCertificate') as agent_public_key_certificate,
+                JSON_EXTRACT(properties, '$.kubernetesVersion') as kubernetes_version,
+                JSON_EXTRACT(properties, '$.totalNodeCount') as total_node_count,
+                JSON_EXTRACT(properties, '$.totalCoreCount') as total_core_count,
+                JSON_EXTRACT(properties, '$.agentVersion') as agent_version,
+                JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+                JSON_EXTRACT(properties, '$.distribution') as distribution,
+                JSON_EXTRACT(properties, '$.distributionVersion') as distribution_version,
+                JSON_EXTRACT(properties, '$.infrastructure') as infrastructure,
+                JSON_EXTRACT(properties, '$.offering') as offering,
+                JSON_EXTRACT(properties, '$.managedIdentityCertificateExpirationTime') as managed_identity_certificate_expiration_time,
+                JSON_EXTRACT(properties, '$.lastConnectivityTime') as last_connectivity_time,
+                JSON_EXTRACT(properties, '$.connectivityStatus') as connectivity_status,
+                JSON_EXTRACT(properties, '$.privateLinkState') as private_link_state,
+                JSON_EXTRACT(properties, '$.privateLinkScopeResourceId') as private_link_scope_resource_id,
+                JSON_EXTRACT(properties, '$.azureHybridBenefit') as azure_hybrid_benefit,
+                JSON_EXTRACT(properties, '$.aadProfile') as aad_profile,
+                JSON_EXTRACT(properties, '$.arcAgentProfile') as arc_agent_profile,
+                JSON_EXTRACT(properties, '$.securityProfile') as security_profile,
+                JSON_EXTRACT(properties, '$.oidcIssuerProfile') as oidc_issuer_profile,
+                JSON_EXTRACT(properties, '$.gateway') as gateway,
+                JSON_EXTRACT(properties, '$.arcAgentryConfigurations') as arc_agentry_configurations,
+                JSON_EXTRACT(properties, '$.miscellaneousProperties') as miscellaneous_properties,
+                subscriptionId,
+                resourceGroupName,
+                clusterName
+                FROM azure.hybrid_kubernetes.connected_cluster
+                WHERE subscriptionId = 'replace-me';
 paths:
-  /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Kubernetes/connectedClusters/{clusterName}/?api-version=2024-01-01:
+  /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Kubernetes/connectedClusters/{clusterName}/?api-version=2024-07-15-preview:
     put:
       summary: Register a new Kubernetes cluster with Azure Resource Manager.
-      operationId: ConnectedCluster_Create
+      operationId: ConnectedCluster_CreateOrUpdate
       description: API to register a new Kubernetes cluster and create a tracked resource in Azure Resource Manager (ARM).
       parameters:
         - $ref: '#/components/parameters/SubscriptionIdParameter'
@@ -1133,7 +1351,7 @@ paths:
       x-ms-long-running-operation: true
       x-ms-long-running-operation-options:
         final-state-via: location
-  /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Kubernetes/connectedClusters/{clusterName}/listClusterUserCredential/?api-version=2024-01-01:
+  /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Kubernetes/connectedClusters/{clusterName}/listClusterUserCredential/?api-version=2024-07-15-preview:
     post:
       summary: Gets cluster user credentials of a connected cluster
       operationId: ConnectedCluster_ListClusterUserCredential
@@ -1163,9 +1381,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Kubernetes/connectedClusters/?api-version=2024-01-01:
+  /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Kubernetes/connectedClusters/?api-version=2024-07-15-preview:
     get:
-      summary: Lists all connected clusters
+      summary: Lists all connected clusters in the given ResourceGroup
       operationId: ConnectedCluster_ListByResourceGroup
       description: API to enumerate registered connected K8s clusters under a Resource Group
       parameters:
@@ -1186,9 +1404,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/providers/Microsoft.Kubernetes/connectedClusters/?api-version=2024-01-01:
+  /subscriptions/{subscriptionId}/providers/Microsoft.Kubernetes/connectedClusters/?api-version=2024-07-15-preview:
     get:
-      summary: Lists all connected clusters
+      summary: Lists all connected clusters in the given Subscription
       operationId: ConnectedCluster_ListBySubscription
       description: API to enumerate registered connected K8s clusters under a Subscription
       parameters:
@@ -1208,7 +1426,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /providers/Microsoft.Kubernetes/operations/?api-version=2024-01-01:
+  /providers/Microsoft.Kubernetes/operations/?api-version=2024-07-15-preview:
     get:
       description: Lists all of the available API operations for Connected Cluster resource.
       operationId: Operations_Get

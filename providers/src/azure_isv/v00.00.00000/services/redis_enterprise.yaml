@@ -8,7 +8,7 @@ info:
     name: StackQL Studios
     url: https://stackql.io/
     email: info@stackql.io
-  version: 2024-06-15-stackql-generated
+  version: 2024-09-27-stackql-generated
 security:
   - azure_auth:
       - user_impersonation
@@ -41,13 +41,14 @@ components:
       schema:
         pattern: ^[A-Za-z0-9]{1,60}$
         type: string
-    PrivateEndpointConnectionName:
-      name: privateEndpointConnectionName
+    AccessPolicyAssignmentNameParameter:
+      name: accessPolicyAssignmentName
       in: path
-      description: The name of the private endpoint connection associated with the Azure resource
+      description: The name of the Redis Enterprise database access policy assignment.
       required: true
       x-ms-parameter-location: method
       schema:
+        pattern: ^[A-Za-z0-9]{1,60}$
         type: string
     SubscriptionIdParameter:
       name: subscriptionId
@@ -138,6 +139,14 @@ components:
       x-ms-parameter-location: method
       schema:
         type: string
+    PrivateEndpointConnectionName:
+      name: privateEndpointConnectionName
+      in: path
+      description: The name of the private endpoint connection associated with the Azure resource
+      required: true
+      x-ms-parameter-location: method
+      schema:
+        type: string
   schemas:
     Sku:
       description: The resource model definition representing SKU
@@ -197,7 +206,7 @@ components:
         name: ResourceState
         modelAsString: true
     Cluster:
-      description: Describes the RedisEnterprise cluster
+      description: Describes the Redis Enterprise cluster
       required:
         - sku
       properties:
@@ -233,7 +242,7 @@ components:
           description: The geo-location where the resource lives
       type: object
     ClusterUpdate:
-      description: A partial update to the RedisEnterprise cluster
+      description: A partial update to the Redis Enterprise cluster
       properties:
         sku:
           $ref: '#/components/schemas/Sku'
@@ -256,13 +265,22 @@ components:
           description: Resource tags.
       type: object
     ClusterProperties:
-      title: RedisEnterprise cluster properties
-      description: Properties of RedisEnterprise clusters, as opposed to general resource properties like location, tags
+      title: Redis Enterprise cluster properties
+      description: Properties of Redis Enterprise clusters, as opposed to general resource properties like location, tags
       type: object
       properties:
+        highAvailability:
+          type: string
+          description: Enabled by default. If highAvailability is disabled, the data set is not replicated. This affects the availability SLA, and increases the risk of data loss.
+          enum:
+            - Enabled
+            - Disabled
+          x-ms-enum:
+            name: HighAvailability
+            modelAsString: true
         minimumTlsVersion:
           type: string
-          description: The minimum TLS version for the cluster to support, e.g. '1.2'
+          description: The minimum TLS version for the cluster to support, e.g. '1.2'. Newer versions can be added in the future. Note that TLS 1.0 and TLS 1.1 are now completely obsolete -- you cannot use them. They are mentioned only for the sake of consistency with old API versions.
           enum:
             - '1.0'
             - '1.1'
@@ -305,6 +323,27 @@ components:
           $ref: '#/components/schemas/ProvisioningState'
           readOnly: true
           description: Current provisioning status of the cluster
+        redundancyMode:
+          type: string
+          readOnly: true
+          description: Explains the current redundancy strategy of the cluster, which affects the expected SLA.
+          enum:
+            - None
+            - LR
+            - ZR
+          x-ms-enum:
+            name: RedundancyMode
+            modelAsString: true
+            values:
+              - name: None
+                value: None
+                description: No redundancy. Availability loss will occur.
+              - name: LR
+                value: LR
+                description: Local redundancy with high availability.
+              - name: ZR
+                value: ZR
+                description: Zone redundant. Higher availability.
         resourceState:
           $ref: '#/components/schemas/ResourceState'
           readOnly: true
@@ -316,7 +355,7 @@ components:
         privateEndpointConnections:
           type: array
           readOnly: true
-          description: List of private endpoint connections associated with the specified RedisEnterprise cluster
+          description: List of private endpoint connections associated with the specified Redis Enterprise cluster
           items:
             $ref: '#/components/schemas/PrivateEndpointConnection'
     ClusterList:
@@ -333,7 +372,7 @@ components:
           description: The URI to fetch the next page of results.
       description: The response of a list-all operation.
     Database:
-      description: Describes a database on the RedisEnterprise cluster
+      description: Describes a database on the Redis Enterprise cluster
       properties:
         properties:
           x-ms-client-flatten: true
@@ -341,7 +380,7 @@ components:
           description: Other properties of the database.
       type: object
     DatabaseUpdate:
-      description: A partial update to the RedisEnterprise database
+      description: A partial update to the Redis Enterprise database
       properties:
         properties:
           x-ms-client-flatten: true
@@ -349,8 +388,8 @@ components:
           description: Properties of the database.
       type: object
     DatabaseProperties:
-      title: RedisEnterprise database properties
-      description: Properties of RedisEnterprise databases, as opposed to general resource properties like location, tags
+      title: Redis Enterprise database properties
+      description: Properties of Redis Enterprise databases, as opposed to general resource properties like location, tags
       type: object
       properties:
         clientProtocol:
@@ -379,16 +418,23 @@ components:
           description: Current resource status of the database
         clusteringPolicy:
           type: string
-          description: Clustering policy - default is OSSCluster. Specified at create time.
+          description: Clustering policy - default is OSSCluster. This property must be chosen at create time, and cannot be changed without deleting the database.
           enum:
             - EnterpriseCluster
             - OSSCluster
-          x-ms-enum:
-            name: ClusteringPolicy
-            modelAsString: true
           x-ms-mutability:
             - read
             - create
+          x-ms-enum:
+            name: ClusteringPolicy
+            modelAsString: true
+            values:
+              - value: EnterpriseCluster
+                name: EnterpriseCluster
+                description: Enterprise clustering policy uses only the classic redis protocol, which does not support redis cluster commands.
+              - value: OSSCluster
+                name: OSSCluster
+                description: OSS clustering policy follows the redis cluster specification, and requires all clients to support redis clustering.
         evictionPolicy:
           type: string
           description: Redis eviction policy - default is VolatileLRU
@@ -442,12 +488,21 @@ components:
           description: Version of Redis the database is running on, e.g. '6.0'
         deferUpgrade:
           type: string
-          description: 'Option to defer upgrade when newest version is released - default is NotDeferred. Learn more:  https://aka.ms/redisversionupgrade'
+          description: 'Option to defer upgrade when newest version is released - default is NotDeferred. Learn more: https://aka.ms/redisversionupgrade'
           enum:
             - Deferred
             - NotDeferred
           x-ms-enum:
             name: DeferUpgradeSetting
+            modelAsString: true
+        accessKeysAuthentication:
+          type: string
+          description: This property can be Enabled/Disabled to allow or deny access with the current access keys. Can be updated even after database is created.
+          enum:
+            - Disabled
+            - Enabled
+          x-ms-enum:
+            name: accessKeysAuthentication
             modelAsString: true
     DatabaseList:
       type: object
@@ -462,20 +517,65 @@ components:
           readOnly: true
           description: The URI to fetch the next page of results.
       description: The response of a list-all operation.
+    AccessPolicyAssignmentProperties:
+      title: Redis Enterprise database access policy assignment properties
+      description: Properties of Redis Enterprise database access policy assignment.
+      type: object
+      properties:
+        provisioningState:
+          $ref: '#/components/schemas/ProvisioningState'
+          readOnly: true
+          description: Current provisioning status of the access policy assignment.
+        accessPolicyName:
+          type: string
+          description: Name of access policy under specific access policy assignment. Only "default" policy is supported for now.
+          pattern: ^([a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]|[a-zA-Z0-9])$
+        user:
+          type: object
+          properties:
+            objectId:
+              type: string
+              description: The object ID of the user.
+              example: 6497c918-11ad-41e7-1b0f-7c518a87d0b0
+          description: The user associated with the access policy.
+      required:
+        - user
+        - accessPolicyName
+    AccessPolicyAssignment:
+      description: Describes the access policy assignment of Redis Enterprise database
+      properties:
+        properties:
+          x-ms-client-flatten: true
+          $ref: '#/components/schemas/AccessPolicyAssignmentProperties'
+          description: Properties of the access policy assignment.
+      type: object
+    AccessPolicyAssignmentList:
+      type: object
+      properties:
+        value:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessPolicyAssignment'
+          description: List of access policy assignments.
+        nextLink:
+          type: string
+          readOnly: true
+          description: The URI to fetch the next page of results.
+      description: The response of a list-all operation.
     Persistence:
       title: Persistence settings
-      description: Persistence-related configuration for the RedisEnterprise database
+      description: Persistence-related configuration for the Redis Enterprise database
       type: object
       properties:
         aofEnabled:
           type: boolean
-          description: Sets whether AOF is enabled.
+          description: Sets whether AOF is enabled. Note that at most one of AOF or RDB persistence may be enabled.
         rdbEnabled:
           type: boolean
-          description: Sets whether RDB is enabled.
+          description: Sets whether RDB is enabled. Note that at most one of AOF or RDB persistence may be enabled.
         aofFrequency:
           type: string
-          description: Sets the frequency at which data is written to disk.
+          description: Sets the frequency at which data is written to disk. Defaults to '1s', meaning 'every second'. Note that the 'always' setting is deprecated, because of its performance impact.
           enum:
             - 1s
             - always
@@ -635,6 +735,7 @@ components:
             $ref: '#/components/schemas/LinkedDatabase'
     ForceUnlinkParameters:
       title: Forcibly unlink another database from this database.
+      description: Parameters for a redis enterprise active geo-replication force unlink operation.
       type: object
       properties:
         ids:
@@ -648,7 +749,6 @@ components:
           description: The resource IDs of the database resources to be unlinked.
       required:
         - ids
-      description: Parameters for a Redis Enterprise Active Geo Replication Force Unlink operation.
     FlushParameters:
       title: Flush all the keys from the current and all its linked databases.
       type: object
@@ -663,230 +763,6 @@ components:
                 - type: Microsoft.Cache/redisEnterprise/databases
           description: The identifiers of all the other database resources in the georeplication group to be flushed.
       description: Parameters for a Redis Enterprise active geo-replication flush operation
-    PrivateEndpoint:
-      type: object
-      properties:
-        id:
-          readOnly: true
-          type: string
-          description: The ARM identifier for Private Endpoint
-      description: The Private Endpoint resource.
-    PrivateEndpointConnection:
-      description: The Private Endpoint Connection resource.
-      properties:
-        properties:
-          $ref: '#/components/schemas/PrivateEndpointConnectionProperties'
-          x-ms-client-flatten: true
-          description: Resource properties.
-        id:
-          readOnly: true
-          type: string
-          format: arm-id
-          description: Fully qualified resource ID for the resource. E.g. "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}"
-        name:
-          readOnly: true
-          type: string
-          description: The name of the resource
-        type:
-          readOnly: true
-          type: string
-          description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
-        systemData:
-          readOnly: true
-          description: Azure Resource Manager metadata containing createdBy and modifiedBy information.
-          $ref: '#/components/schemas/systemData'
-      type: object
-    PrivateEndpointConnectionProperties:
-      type: object
-      properties:
-        privateEndpoint:
-          $ref: '#/components/schemas/PrivateEndpoint'
-          description: The resource of private end point.
-        privateLinkServiceConnectionState:
-          $ref: '#/components/schemas/PrivateLinkServiceConnectionState'
-          description: A collection of information about the state of the connection between service consumer and provider.
-        provisioningState:
-          $ref: '#/components/schemas/PrivateEndpointConnectionProvisioningState'
-          description: The provisioning state of the private endpoint connection resource.
-      required:
-        - privateLinkServiceConnectionState
-      description: Properties of the PrivateEndpointConnectProperties.
-    PrivateLinkServiceConnectionState:
-      type: object
-      properties:
-        status:
-          $ref: '#/components/schemas/PrivateEndpointServiceConnectionStatus'
-          description: Indicates whether the connection has been Approved/Rejected/Removed by the owner of the service.
-        description:
-          type: string
-          description: The reason for approval/rejection of the connection.
-        actionsRequired:
-          type: string
-          description: A message indicating if changes on the service provider require any updates on the consumer.
-      description: A collection of information about the state of the connection between service consumer and provider.
-    PrivateEndpointServiceConnectionStatus:
-      type: string
-      description: The private endpoint connection status.
-      enum:
-        - Pending
-        - Approved
-        - Rejected
-      x-ms-enum:
-        name: PrivateEndpointServiceConnectionStatus
-        modelAsString: true
-    PrivateEndpointConnectionProvisioningState:
-      type: string
-      readOnly: true
-      description: The current provisioning state.
-      enum:
-        - Succeeded
-        - Creating
-        - Deleting
-        - Failed
-      x-ms-enum:
-        name: PrivateEndpointConnectionProvisioningState
-        modelAsString: true
-    PrivateLinkResource:
-      description: A private link resource
-      properties:
-        properties:
-          $ref: '#/components/schemas/PrivateLinkResourceProperties'
-          description: Resource properties.
-          x-ms-client-flatten: true
-        id:
-          readOnly: true
-          type: string
-          format: arm-id
-          description: Fully qualified resource ID for the resource. E.g. "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}"
-        name:
-          readOnly: true
-          type: string
-          description: The name of the resource
-        type:
-          readOnly: true
-          type: string
-          description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
-        systemData:
-          readOnly: true
-          description: Azure Resource Manager metadata containing createdBy and modifiedBy information.
-          $ref: '#/components/schemas/systemData'
-      type: object
-    PrivateLinkResourceProperties:
-      type: object
-      properties:
-        groupId:
-          description: The private link resource group id.
-          type: string
-          readOnly: true
-        requiredMembers:
-          description: The private link resource required member names.
-          type: array
-          items:
-            type: string
-          readOnly: true
-        requiredZoneNames:
-          type: array
-          items:
-            type: string
-          description: The private link resource Private link DNS zone name.
-      description: Properties of a private link resource.
-    PrivateEndpointConnectionListResult:
-      type: object
-      properties:
-        value:
-          type: array
-          description: Array of private endpoint connections
-          items:
-            $ref: '#/components/schemas/PrivateEndpointConnection'
-      description: List of private endpoint connection associated with the specified storage account
-    PrivateLinkResourceListResult:
-      type: object
-      properties:
-        value:
-          type: array
-          description: Array of private link resources
-          items:
-            $ref: '#/components/schemas/PrivateLinkResource'
-      description: A list of private link resources
-    UserAssignedIdentities:
-      title: User-Assigned Identities
-      description: 'The set of user assigned identities associated with the resource. The userAssignedIdentities dictionary keys will be ARM resource ids in the form: ''/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{identityName}. The dictionary values can be empty objects ({}) in requests.'
-      additionalProperties:
-        $ref: '#/components/schemas/UserAssignedIdentity'
-      properties: {}
-      type: object
-    UserAssignedIdentity:
-      type: object
-      description: User assigned identity properties
-      properties:
-        principalId:
-          description: The principal ID of the assigned identity.
-          format: uuid
-          type: string
-          readOnly: true
-        clientId:
-          description: The client ID of the assigned identity.
-          format: uuid
-          type: string
-          readOnly: true
-    ManagedServiceIdentityType:
-      description: Type of managed service identity (where both SystemAssigned and UserAssigned types are allowed).
-      enum:
-        - None
-        - SystemAssigned
-        - UserAssigned
-        - SystemAssigned, UserAssigned
-      type: string
-      x-ms-enum:
-        name: ManagedServiceIdentityType
-        modelAsString: true
-    ManagedServiceIdentity:
-      description: Managed service identity (system assigned and/or user assigned identities)
-      type: object
-      properties:
-        principalId:
-          readOnly: true
-          format: uuid
-          type: string
-          description: The service principal ID of the system assigned identity. This property will only be provided for a system assigned identity.
-        tenantId:
-          readOnly: true
-          format: uuid
-          type: string
-          description: The tenant ID of the system assigned identity. This property will only be provided for a system assigned identity.
-        type:
-          $ref: '#/components/schemas/ManagedServiceIdentityType'
-        userAssignedIdentities:
-          $ref: '#/components/schemas/UserAssignedIdentities'
-      required:
-        - type
-    SystemAssignedServiceIdentityType:
-      description: Type of managed service identity (either system assigned, or none).
-      enum:
-        - None
-        - SystemAssigned
-      type: string
-      x-ms-enum:
-        name: SystemAssignedServiceIdentityType
-        modelAsString: true
-    SystemAssignedServiceIdentity:
-      description: Managed service identity (either system assigned, or none)
-      type: object
-      properties:
-        principalId:
-          readOnly: true
-          format: uuid
-          type: string
-          description: The service principal ID of the system assigned identity. This property will only be provided for a system assigned identity.
-        tenantId:
-          readOnly: true
-          format: uuid
-          type: string
-          description: The tenant ID of the system assigned identity. This property will only be provided for a system assigned identity.
-        type:
-          $ref: '#/components/schemas/SystemAssignedServiceIdentityType'
-      required:
-        - type
     Resource:
       title: Resource
       description: Common fields that are returned in the response for all Azure Resource Manager resources
@@ -1379,6 +1255,230 @@ components:
         name: SkuTier
         modelAsString: false
       description: This field is required to be implemented by the Resource Provider if the service has more than one tier, but is not required on a PUT.
+    PrivateEndpoint:
+      type: object
+      properties:
+        id:
+          readOnly: true
+          type: string
+          description: The ARM identifier for Private Endpoint
+      description: The Private Endpoint resource.
+    PrivateEndpointConnection:
+      description: The Private Endpoint Connection resource.
+      properties:
+        properties:
+          $ref: '#/components/schemas/PrivateEndpointConnectionProperties'
+          x-ms-client-flatten: true
+          description: Resource properties.
+        id:
+          readOnly: true
+          type: string
+          format: arm-id
+          description: Fully qualified resource ID for the resource. E.g. "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}"
+        name:
+          readOnly: true
+          type: string
+          description: The name of the resource
+        type:
+          readOnly: true
+          type: string
+          description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
+        systemData:
+          readOnly: true
+          description: Azure Resource Manager metadata containing createdBy and modifiedBy information.
+          $ref: '#/components/schemas/systemData'
+      type: object
+    PrivateEndpointConnectionProperties:
+      type: object
+      properties:
+        privateEndpoint:
+          $ref: '#/components/schemas/PrivateEndpoint'
+          description: The resource of private end point.
+        privateLinkServiceConnectionState:
+          $ref: '#/components/schemas/PrivateLinkServiceConnectionState'
+          description: A collection of information about the state of the connection between service consumer and provider.
+        provisioningState:
+          $ref: '#/components/schemas/PrivateEndpointConnectionProvisioningState'
+          description: The provisioning state of the private endpoint connection resource.
+      required:
+        - privateLinkServiceConnectionState
+      description: Properties of the PrivateEndpointConnectProperties.
+    PrivateLinkServiceConnectionState:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/PrivateEndpointServiceConnectionStatus'
+          description: Indicates whether the connection has been Approved/Rejected/Removed by the owner of the service.
+        description:
+          type: string
+          description: The reason for approval/rejection of the connection.
+        actionsRequired:
+          type: string
+          description: A message indicating if changes on the service provider require any updates on the consumer.
+      description: A collection of information about the state of the connection between service consumer and provider.
+    PrivateEndpointServiceConnectionStatus:
+      type: string
+      description: The private endpoint connection status.
+      enum:
+        - Pending
+        - Approved
+        - Rejected
+      x-ms-enum:
+        name: PrivateEndpointServiceConnectionStatus
+        modelAsString: true
+    PrivateEndpointConnectionProvisioningState:
+      type: string
+      readOnly: true
+      description: The current provisioning state.
+      enum:
+        - Succeeded
+        - Creating
+        - Deleting
+        - Failed
+      x-ms-enum:
+        name: PrivateEndpointConnectionProvisioningState
+        modelAsString: true
+    PrivateLinkResource:
+      description: A private link resource
+      properties:
+        properties:
+          $ref: '#/components/schemas/PrivateLinkResourceProperties'
+          description: Resource properties.
+          x-ms-client-flatten: true
+        id:
+          readOnly: true
+          type: string
+          format: arm-id
+          description: Fully qualified resource ID for the resource. E.g. "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}"
+        name:
+          readOnly: true
+          type: string
+          description: The name of the resource
+        type:
+          readOnly: true
+          type: string
+          description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
+        systemData:
+          readOnly: true
+          description: Azure Resource Manager metadata containing createdBy and modifiedBy information.
+          $ref: '#/components/schemas/systemData'
+      type: object
+    PrivateLinkResourceProperties:
+      type: object
+      properties:
+        groupId:
+          description: The private link resource group id.
+          type: string
+          readOnly: true
+        requiredMembers:
+          description: The private link resource required member names.
+          type: array
+          items:
+            type: string
+          readOnly: true
+        requiredZoneNames:
+          type: array
+          items:
+            type: string
+          description: The private link resource Private link DNS zone name.
+      description: Properties of a private link resource.
+    PrivateEndpointConnectionListResult:
+      type: object
+      properties:
+        value:
+          type: array
+          description: Array of private endpoint connections
+          items:
+            $ref: '#/components/schemas/PrivateEndpointConnection'
+      description: List of private endpoint connection associated with the specified storage account
+    PrivateLinkResourceListResult:
+      type: object
+      properties:
+        value:
+          type: array
+          description: Array of private link resources
+          items:
+            $ref: '#/components/schemas/PrivateLinkResource'
+      description: A list of private link resources
+    UserAssignedIdentities:
+      title: User-Assigned Identities
+      description: 'The set of user assigned identities associated with the resource. The userAssignedIdentities dictionary keys will be ARM resource ids in the form: ''/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{identityName}. The dictionary values can be empty objects ({}) in requests.'
+      additionalProperties:
+        $ref: '#/components/schemas/UserAssignedIdentity'
+      properties: {}
+      type: object
+    UserAssignedIdentity:
+      type: object
+      description: User assigned identity properties
+      properties:
+        principalId:
+          description: The principal ID of the assigned identity.
+          format: uuid
+          type: string
+          readOnly: true
+        clientId:
+          description: The client ID of the assigned identity.
+          format: uuid
+          type: string
+          readOnly: true
+    ManagedServiceIdentityType:
+      description: Type of managed service identity (where both SystemAssigned and UserAssigned types are allowed).
+      enum:
+        - None
+        - SystemAssigned
+        - UserAssigned
+        - SystemAssigned, UserAssigned
+      type: string
+      x-ms-enum:
+        name: ManagedServiceIdentityType
+        modelAsString: true
+    ManagedServiceIdentity:
+      description: Managed service identity (system assigned and/or user assigned identities)
+      type: object
+      properties:
+        principalId:
+          readOnly: true
+          format: uuid
+          type: string
+          description: The service principal ID of the system assigned identity. This property will only be provided for a system assigned identity.
+        tenantId:
+          readOnly: true
+          format: uuid
+          type: string
+          description: The tenant ID of the system assigned identity. This property will only be provided for a system assigned identity.
+        type:
+          $ref: '#/components/schemas/ManagedServiceIdentityType'
+        userAssignedIdentities:
+          $ref: '#/components/schemas/UserAssignedIdentities'
+      required:
+        - type
+    SystemAssignedServiceIdentityType:
+      description: Type of managed service identity (either system assigned, or none).
+      enum:
+        - None
+        - SystemAssigned
+      type: string
+      x-ms-enum:
+        name: SystemAssignedServiceIdentityType
+        modelAsString: true
+    SystemAssignedServiceIdentity:
+      description: Managed service identity (either system assigned, or none)
+      type: object
+      properties:
+        principalId:
+          readOnly: true
+          format: uuid
+          type: string
+          description: The service principal ID of the system assigned identity. This property will only be provided for a system assigned identity.
+        tenantId:
+          readOnly: true
+          format: uuid
+          type: string
+          description: The tenant ID of the system assigned identity. This property will only be provided for a system assigned identity.
+        type:
+          $ref: '#/components/schemas/SystemAssignedServiceIdentityType'
+      required:
+        - type
   x-stackQL-resources:
     operations:
       id: azure_isv.redis_enterprise.operations
@@ -1387,7 +1487,7 @@ components:
       methods:
         list:
           operation:
-            $ref: '#/paths/~1providers~1Microsoft.Cache~1operations~1?api-version=2024-06-01-preview/get'
+            $ref: '#/paths/~1providers~1Microsoft.Cache~1operations~1?api-version=2024-09-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1397,6 +1497,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/operations/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     operations_status:
       id: azure_isv.redis_enterprise.operations_status
@@ -1405,7 +1506,7 @@ components:
       methods:
         get:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Microsoft.Cache~1locations~1{location}~1operationsStatus~1{operationId}~1?api-version=2024-06-01-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Microsoft.Cache~1locations~1{location}~1operationsStatus~1{operationId}~1?api-version=2024-09-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1414,6 +1515,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/operations_status/methods/get'
         insert: []
         update: []
+        replace: []
         delete: []
     redis_enterprise:
       id: azure_isv.redis_enterprise.redis_enterprise
@@ -1422,38 +1524,38 @@ components:
       methods:
         create:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1?api-version=2024-06-01-preview/put'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1?api-version=2024-09-01-preview/put'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         update:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1?api-version=2024-06-01-preview/patch'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1?api-version=2024-09-01-preview/patch'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         delete:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1?api-version=2024-06-01-preview/delete'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1?api-version=2024-09-01-preview/delete'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         get:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1?api-version=2024-06-01-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1?api-version=2024-09-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         list_by_resource_group:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1?api-version=2024-06-01-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1?api-version=2024-09-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.value
         list:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Microsoft.Cache~1redisEnterprise~1?api-version=2024-06-01-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Microsoft.Cache~1redisEnterprise~1?api-version=2024-09-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1466,6 +1568,7 @@ components:
         insert:
           - $ref: '#/components/x-stackQL-resources/redis_enterprise/methods/create'
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/redis_enterprise/methods/delete'
     databases:
@@ -1475,74 +1578,74 @@ components:
       methods:
         list_by_cluster:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1?api-version=2024-06-01-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1?api-version=2024-09-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.value
         create:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1?api-version=2024-06-01-preview/put'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1?api-version=2024-09-01-preview/put'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         update:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1?api-version=2024-06-01-preview/patch'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1?api-version=2024-09-01-preview/patch'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         get:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1?api-version=2024-06-01-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1?api-version=2024-09-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         delete:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1?api-version=2024-06-01-preview/delete'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1?api-version=2024-09-01-preview/delete'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         regenerate_key:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1regenerateKey~1?api-version=2024-06-01-preview/post'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1regenerateKey~1?api-version=2024-09-01-preview/post'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         import:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1import~1?api-version=2024-06-01-preview/post'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1import~1?api-version=2024-09-01-preview/post'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         export:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1export~1?api-version=2024-06-01-preview/post'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1export~1?api-version=2024-09-01-preview/post'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         force_unlink:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1forceUnlink~1?api-version=2024-06-01-preview/post'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1forceUnlink~1?api-version=2024-09-01-preview/post'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         force_link_to_replication_group:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1forceLinkToReplicationGroup~1?api-version=2024-06-01-preview/post'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1forceLinkToReplicationGroup~1?api-version=2024-09-01-preview/post'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         flush:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1flush~1?api-version=2024-06-01-preview/post'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1flush~1?api-version=2024-09-01-preview/post'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         upgrade_db_redis_version:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1upgradeDBRedisVersion~1?api-version=2024-06-01-preview/post'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1upgradeDBRedisVersion~1?api-version=2024-09-01-preview/post'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1553,6 +1656,7 @@ components:
         insert:
           - $ref: '#/components/x-stackQL-resources/databases/methods/create'
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/databases/methods/delete'
     databases_keys:
@@ -1562,7 +1666,7 @@ components:
       methods:
         list:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1listKeys~1?api-version=2024-06-01-preview/post'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1listKeys~1?api-version=2024-09-01-preview/post'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1571,7 +1675,47 @@ components:
           - $ref: '#/components/x-stackQL-resources/databases_keys/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
+    access_policy_assignment:
+      id: azure_isv.redis_enterprise.access_policy_assignment
+      name: access_policy_assignment
+      title: access_policy_assignment
+      methods:
+        create_update:
+          operation:
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1accessPolicyAssignments~1{accessPolicyAssignmentName}~1?api-version=2024-09-01-preview/put'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        get:
+          operation:
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1accessPolicyAssignments~1{accessPolicyAssignmentName}~1?api-version=2024-09-01-preview/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete:
+          operation:
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1accessPolicyAssignments~1{accessPolicyAssignmentName}~1?api-version=2024-09-01-preview/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        list:
+          operation:
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1databases~1{databaseName}~1accessPolicyAssignments~1?api-version=2024-09-01-preview/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.value
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/access_policy_assignment/methods/get'
+          - $ref: '#/components/x-stackQL-resources/access_policy_assignment/methods/list'
+        insert: []
+        update: []
+        replace: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/access_policy_assignment/methods/delete'
     private_endpoint_connections:
       id: azure_isv.redis_enterprise.private_endpoint_connections
       name: private_endpoint_connections
@@ -1579,26 +1723,26 @@ components:
       methods:
         list:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1privateEndpointConnections~1?api-version=2024-06-01-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1privateEndpointConnections~1?api-version=2024-09-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.value
         get:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1privateEndpointConnections~1{privateEndpointConnectionName}~1?api-version=2024-06-01-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1privateEndpointConnections~1{privateEndpointConnectionName}~1?api-version=2024-09-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         put:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1privateEndpointConnections~1{privateEndpointConnectionName}~1?api-version=2024-06-01-preview/put'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1privateEndpointConnections~1{privateEndpointConnectionName}~1?api-version=2024-09-01-preview/put'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         delete:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1privateEndpointConnections~1{privateEndpointConnectionName}~1?api-version=2024-06-01-preview/delete'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1privateEndpointConnections~1{privateEndpointConnectionName}~1?api-version=2024-09-01-preview/delete'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1608,6 +1752,7 @@ components:
           - $ref: '#/components/x-stackQL-resources/private_endpoint_connections/methods/list'
         insert: []
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/private_endpoint_connections/methods/delete'
     private_link_resources:
@@ -1617,7 +1762,7 @@ components:
       methods:
         list_by_cluster:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1privateLinkResources~1?api-version=2024-06-01-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.Cache~1redisEnterprise~1{clusterName}~1privateLinkResources~1?api-version=2024-09-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1627,9 +1772,182 @@ components:
           - $ref: '#/components/x-stackQL-resources/private_link_resources/methods/list_by_cluster'
         insert: []
         update: []
+        replace: []
         delete: []
+    vw_redis_enterprise:
+      id: azure_isv.redis_enterprise.vw_redis_enterprise
+      name: vw_redis_enterprise
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              location as location,
+              sku as sku,
+              zones as zones,
+              identity as identity,
+              tags as tags,
+              JSON_EXTRACT(properties, '$.highAvailability') as high_availability,
+              JSON_EXTRACT(properties, '$.minimumTlsVersion') as minimum_tls_version,
+              JSON_EXTRACT(properties, '$.encryption') as encryption,
+              JSON_EXTRACT(properties, '$.hostName') as host_name,
+              JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+              JSON_EXTRACT(properties, '$.redundancyMode') as redundancy_mode,
+              JSON_EXTRACT(properties, '$.resourceState') as resource_state,
+              JSON_EXTRACT(properties, '$.redisVersion') as redis_version,
+              JSON_EXTRACT(properties, '$.privateEndpointConnections') as private_endpoint_connections,
+              subscriptionId,
+              resourceGroupName,
+              clusterName
+              FROM azure_isv.redis_enterprise.redis_enterprise
+              WHERE subscriptionId = 'replace-me';
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                location as location,
+                sku as sku,
+                zones as zones,
+                identity as identity,
+                tags as tags,
+                json_extract_path_text(properties, '$.highAvailability') as high_availability,
+                JSON_EXTRACT(properties, '$.minimumTlsVersion') as minimum_tls_version,
+                JSON_EXTRACT(properties, '$.encryption') as encryption,
+                JSON_EXTRACT(properties, '$.hostName') as host_name,
+                JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+                JSON_EXTRACT(properties, '$.redundancyMode') as redundancy_mode,
+                JSON_EXTRACT(properties, '$.resourceState') as resource_state,
+                JSON_EXTRACT(properties, '$.redisVersion') as redis_version,
+                JSON_EXTRACT(properties, '$.privateEndpointConnections') as private_endpoint_connections,
+                subscriptionId,
+                resourceGroupName,
+                clusterName
+                FROM azure_isv.redis_enterprise.redis_enterprise
+                WHERE subscriptionId = 'replace-me';
+    vw_databases:
+      id: azure_isv.redis_enterprise.vw_databases
+      name: vw_databases
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              JSON_EXTRACT(properties, '$.clientProtocol') as client_protocol,
+              JSON_EXTRACT(properties, '$.port') as port,
+              JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+              JSON_EXTRACT(properties, '$.resourceState') as resource_state,
+              JSON_EXTRACT(properties, '$.clusteringPolicy') as clustering_policy,
+              JSON_EXTRACT(properties, '$.evictionPolicy') as eviction_policy,
+              JSON_EXTRACT(properties, '$.persistence') as persistence,
+              JSON_EXTRACT(properties, '$.modules') as modules,
+              JSON_EXTRACT(properties, '$.geoReplication') as geo_replication,
+              JSON_EXTRACT(properties, '$.redisVersion') as redis_version,
+              JSON_EXTRACT(properties, '$.deferUpgrade') as defer_upgrade,
+              JSON_EXTRACT(properties, '$.accessKeysAuthentication') as access_keys_authentication,
+              subscriptionId,
+              resourceGroupName,
+              clusterName,
+              databaseName
+              FROM azure_isv.redis_enterprise.databases
+              WHERE subscriptionId = 'replace-me' AND resourceGroupName = 'replace-me' AND clusterName = 'replace-me';
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                json_extract_path_text(properties, '$.clientProtocol') as client_protocol,
+                JSON_EXTRACT(properties, '$.port') as port,
+                JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+                JSON_EXTRACT(properties, '$.resourceState') as resource_state,
+                JSON_EXTRACT(properties, '$.clusteringPolicy') as clustering_policy,
+                JSON_EXTRACT(properties, '$.evictionPolicy') as eviction_policy,
+                JSON_EXTRACT(properties, '$.persistence') as persistence,
+                JSON_EXTRACT(properties, '$.modules') as modules,
+                JSON_EXTRACT(properties, '$.geoReplication') as geo_replication,
+                JSON_EXTRACT(properties, '$.redisVersion') as redis_version,
+                JSON_EXTRACT(properties, '$.deferUpgrade') as defer_upgrade,
+                JSON_EXTRACT(properties, '$.accessKeysAuthentication') as access_keys_authentication,
+                subscriptionId,
+                resourceGroupName,
+                clusterName,
+                databaseName
+                FROM azure_isv.redis_enterprise.databases
+                WHERE subscriptionId = 'replace-me' AND resourceGroupName = 'replace-me' AND clusterName = 'replace-me';
+    vw_access_policy_assignment:
+      id: azure_isv.redis_enterprise.vw_access_policy_assignment
+      name: vw_access_policy_assignment
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+              JSON_EXTRACT(properties, '$.accessPolicyName') as access_policy_name,
+              JSON_EXTRACT(properties, '$.user') as user,
+              subscriptionId,
+              resourceGroupName,
+              clusterName,
+              databaseName,
+              accessPolicyAssignmentName
+              FROM azure_isv.redis_enterprise.access_policy_assignment
+              WHERE subscriptionId = 'replace-me' AND resourceGroupName = 'replace-me' AND clusterName = 'replace-me' AND databaseName = 'replace-me';
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                json_extract_path_text(properties, '$.provisioningState') as provisioning_state,
+                JSON_EXTRACT(properties, '$.accessPolicyName') as access_policy_name,
+                JSON_EXTRACT(properties, '$.user') as user,
+                subscriptionId,
+                resourceGroupName,
+                clusterName,
+                databaseName,
+                accessPolicyAssignmentName
+                FROM azure_isv.redis_enterprise.access_policy_assignment
+                WHERE subscriptionId = 'replace-me' AND resourceGroupName = 'replace-me' AND clusterName = 'replace-me' AND databaseName = 'replace-me';
+    vw_private_endpoint_connections:
+      id: azure_isv.redis_enterprise.vw_private_endpoint_connections
+      name: vw_private_endpoint_connections
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              id as id,
+              name as name,
+              type as type,
+              systemData as system_data,
+              JSON_EXTRACT(properties, '$.privateEndpoint') as private_endpoint,
+              JSON_EXTRACT(properties, '$.privateLinkServiceConnectionState') as private_link_service_connection_state,
+              JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+              subscriptionId,
+              resourceGroupName,
+              clusterName,
+              privateEndpointConnectionName
+              FROM azure_isv.redis_enterprise.private_endpoint_connections
+              WHERE subscriptionId = 'replace-me' AND resourceGroupName = 'replace-me' AND clusterName = 'replace-me';
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                id as id,
+                name as name,
+                type as type,
+                systemData as system_data,
+                json_extract_path_text(properties, '$.privateEndpoint') as private_endpoint,
+                JSON_EXTRACT(properties, '$.privateLinkServiceConnectionState') as private_link_service_connection_state,
+                JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+                subscriptionId,
+                resourceGroupName,
+                clusterName,
+                privateEndpointConnectionName
+                FROM azure_isv.redis_enterprise.private_endpoint_connections
+                WHERE subscriptionId = 'replace-me' AND resourceGroupName = 'replace-me' AND clusterName = 'replace-me';
 paths:
-  /providers/Microsoft.Cache/operations/?api-version=2024-06-01-preview:
+  /providers/Microsoft.Cache/operations/?api-version=2024-09-01-preview:
     get:
       tags:
         - Operations
@@ -1651,7 +1969,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/providers/Microsoft.Cache/locations/{location}/operationsStatus/{operationId}/?api-version=2024-06-01-preview:
+  /subscriptions/{subscriptionId}/providers/Microsoft.Cache/locations/{location}/operationsStatus/{operationId}/?api-version=2024-09-01-preview:
     get:
       tags:
         - OperationsStatus
@@ -1674,7 +1992,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/?api-version=2024-06-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/?api-version=2024-09-01-preview:
     put:
       tags:
         - RedisEnterprise
@@ -1688,7 +2006,7 @@ paths:
         - $ref: '#/components/parameters/ClusterNameParameter'
         - $ref: '#/components/parameters/SubscriptionIdParameter'
       requestBody:
-        description: Parameters supplied to the Create RedisEnterprise operation.
+        description: Parameters supplied to the Create Redis Enterprise operation.
         required: true
         x-ms-requestBody-name: parameters
         content:
@@ -1721,13 +2039,13 @@ paths:
       x-ms-long-running-operation: true
       x-ms-long-running-operation-options:
         final-state-via: azure-async-operation
-      description: Updates an existing RedisEnterprise cluster
+      description: Updates an existing Redis Enterprise cluster
       parameters:
         - $ref: '#/components/parameters/ResourceGroupNameParameter'
         - $ref: '#/components/parameters/ClusterNameParameter'
         - $ref: '#/components/parameters/SubscriptionIdParameter'
       requestBody:
-        description: Parameters supplied to the Update RedisEnterprise operation.
+        description: Parameters supplied to the Update Redis Enterprise operation.
         required: true
         x-ms-requestBody-name: parameters
         content:
@@ -1743,6 +2061,17 @@ paths:
                 $ref: '#/components/schemas/Cluster'
         '202':
           description: The cluster update operation was started. GET the URL in the Azure-AsyncOperation or Location headers to retrieve updated status.
+          headers:
+            Location:
+              schema:
+                format: uri
+                type: string
+              description: Location URI to poll for result
+            Azure-AsyncOperation:
+              schema:
+                format: uri
+                type: string
+              description: Azure-AsyncOperation URI to poll for result
         default:
           description: Error response describing why the operation failed.
           content:
@@ -1756,7 +2085,7 @@ paths:
       x-ms-long-running-operation: true
       x-ms-long-running-operation-options:
         final-state-via: azure-async-operation
-      description: Deletes a RedisEnterprise cache cluster.
+      description: Deletes a Redis Enterprise cache cluster.
       parameters:
         - $ref: '#/components/parameters/ResourceGroupNameParameter'
         - $ref: '#/components/parameters/ClusterNameParameter'
@@ -1766,6 +2095,17 @@ paths:
           description: The cluster was successfully deleted.
         '202':
           description: The cluster delete operation was successfully started. GET the URL in the Azure-AsyncOperation or Location headers to retrieve updated status.
+          headers:
+            Location:
+              schema:
+                format: uri
+                type: string
+              description: Location URI to poll for result
+            Azure-AsyncOperation:
+              schema:
+                format: uri
+                type: string
+              description: Azure-AsyncOperation URI to poll for result
         '204':
           description: The cluster was successfully deleted.
         default:
@@ -1778,7 +2118,7 @@ paths:
       tags:
         - RedisEnterprise
       operationId: RedisEnterprise_Get
-      description: Gets information about a RedisEnterprise cluster
+      description: Gets information about a Redis Enterprise cluster
       parameters:
         - $ref: '#/components/parameters/ResourceGroupNameParameter'
         - $ref: '#/components/parameters/ClusterNameParameter'
@@ -1796,18 +2136,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/?api-version=2024-06-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/?api-version=2024-09-01-preview:
     get:
       tags:
         - RedisEnterprise
       operationId: RedisEnterprise_ListByResourceGroup
-      description: Lists all RedisEnterprise clusters in a resource group.
+      description: Lists all Redis Enterprise clusters in a resource group.
       parameters:
         - $ref: '#/components/parameters/ResourceGroupNameParameter'
         - $ref: '#/components/parameters/SubscriptionIdParameter'
       responses:
         '200':
-          description: The list of RedisEnterprise clusters
+          description: The list of Redis Enterprise clusters
           content:
             application/json:
               schema:
@@ -1820,17 +2160,17 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/providers/Microsoft.Cache/redisEnterprise/?api-version=2024-06-01-preview:
+  /subscriptions/{subscriptionId}/providers/Microsoft.Cache/redisEnterprise/?api-version=2024-09-01-preview:
     get:
       tags:
         - RedisEnterprise
       operationId: RedisEnterprise_List
-      description: Gets all RedisEnterprise clusters in the specified subscription.
+      description: Lists all Redis Enterprise clusters in the specified subscription.
       parameters:
         - $ref: '#/components/parameters/SubscriptionIdParameter'
       responses:
         '200':
-          description: The list of RedisEnterprise clusters
+          description: The list of Redis Enterprise clusters
           content:
             application/json:
               schema:
@@ -1843,13 +2183,13 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/?api-version=2024-06-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/?api-version=2024-09-01-preview:
     get:
       tags:
         - RedisEnterprise
         - Databases
       operationId: Databases_ListByCluster
-      description: Gets all databases in the specified RedisEnterprise cluster.
+      description: Gets all databases in the specified Redis Enterprise cluster.
       parameters:
         - $ref: '#/components/parameters/SubscriptionIdParameter'
         - $ref: '#/components/parameters/ResourceGroupNameParameter'
@@ -1869,7 +2209,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/?api-version=2024-06-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/?api-version=2024-09-01-preview:
     put:
       tags:
         - RedisEnterprise
@@ -1942,6 +2282,17 @@ paths:
                 $ref: '#/components/schemas/Database'
         '202':
           description: The database update operation was successfully started. GET the URL in the Azure-AsyncOperation or Location headers to retrieve updated status.
+          headers:
+            Location:
+              schema:
+                format: uri
+                type: string
+              description: Location URI to poll for result
+            Azure-AsyncOperation:
+              schema:
+                format: uri
+                type: string
+              description: Azure-AsyncOperation URI to poll for result
         default:
           description: Error response describing why the operation failed.
           content:
@@ -1953,7 +2304,7 @@ paths:
         - RedisEnterprise
         - Databases
       operationId: Databases_Get
-      description: Gets information about a database in a RedisEnterprise cluster.
+      description: Gets information about a database in a Redis Enterprise cluster.
       parameters:
         - $ref: '#/components/parameters/ResourceGroupNameParameter'
         - $ref: '#/components/parameters/ClusterNameParameter'
@@ -1991,6 +2342,17 @@ paths:
           description: Successfully deleted the database.
         '202':
           description: The database delete operation started. GET the URL in the Azure-AsyncOperation or Location headers to retrieve updated status.
+          headers:
+            Location:
+              schema:
+                format: uri
+                type: string
+              description: Location URI to poll for result
+            Azure-AsyncOperation:
+              schema:
+                format: uri
+                type: string
+              description: Azure-AsyncOperation URI to poll for result
         '204':
           description: Successfully deleted the database.
         default:
@@ -1999,13 +2361,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/listKeys/?api-version=2024-06-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/listKeys/?api-version=2024-09-01-preview:
     post:
       tags:
         - RedisEnterprise
         - Databases
       operationId: Databases_ListKeys
-      description: Retrieves the access keys for the RedisEnterprise database.
+      description: Retrieves the access keys for the Redis Enterprise database.
       parameters:
         - $ref: '#/components/parameters/ResourceGroupNameParameter'
         - $ref: '#/components/parameters/ClusterNameParameter'
@@ -2024,7 +2386,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/regenerateKey/?api-version=2024-06-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/regenerateKey/?api-version=2024-09-01-preview:
     post:
       tags:
         - RedisEnterprise
@@ -2033,7 +2395,7 @@ paths:
       x-ms-long-running-operation: true
       x-ms-long-running-operation-options:
         final-state-via: azure-async-operation
-      description: Regenerates the RedisEnterprise database's access keys.
+      description: Regenerates the Redis Enterprise database's access keys.
       parameters:
         - $ref: '#/components/parameters/ResourceGroupNameParameter'
         - $ref: '#/components/parameters/ClusterNameParameter'
@@ -2056,13 +2418,24 @@ paths:
                 $ref: '#/components/schemas/AccessKeys'
         '202':
           description: The cluster update operation was started. GET the URL in the Azure-AsyncOperation or Location headers to retrieve updated status.
+          headers:
+            Location:
+              schema:
+                format: uri
+                type: string
+              description: Location URI to poll for result
+            Azure-AsyncOperation:
+              schema:
+                format: uri
+                type: string
+              description: Azure-AsyncOperation URI to poll for result
         default:
           description: Error response describing why the operation failed.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/import/?api-version=2024-06-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/import/?api-version=2024-09-01-preview:
     post:
       tags:
         - RedisEnterprise
@@ -2090,13 +2463,24 @@ paths:
           description: Import operation succeeded.
         '202':
           description: The import operation was started. GET the URL in the Azure-AsyncOperation or Location headers to retrieve updated status.
+          headers:
+            Location:
+              schema:
+                format: uri
+                type: string
+              description: Location URI to poll for result
+            Azure-AsyncOperation:
+              schema:
+                format: uri
+                type: string
+              description: Azure-AsyncOperation URI to poll for result
         default:
           description: Error response describing why the operation failed.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/export/?api-version=2024-06-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/export/?api-version=2024-09-01-preview:
     post:
       tags:
         - RedisEnterprise
@@ -2124,18 +2508,165 @@ paths:
           description: Export operation succeeded.
         '202':
           description: Export operation successfully enqueued; follow the Location header to poll for final outcome.
+          headers:
+            Location:
+              schema:
+                format: uri
+                type: string
+              description: Location URI to poll for result
+            Azure-AsyncOperation:
+              schema:
+                format: uri
+                type: string
+              description: Azure-AsyncOperation URI to poll for result
         default:
           description: Error response describing why the operation failed.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/privateEndpointConnections/?api-version=2024-06-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/accessPolicyAssignments/{accessPolicyAssignmentName}/?api-version=2024-09-01-preview:
+    put:
+      tags:
+        - RedisEnterprise
+        - Databases
+        - AccessPolicyAssignments
+      operationId: AccessPolicyAssignment_CreateUpdate
+      description: Creates/Updates a particular access policy assignment for a database
+      x-ms-long-running-operation: true
+      x-ms-long-running-operation-options:
+        final-state-via: original-uri
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionIdParameter'
+        - $ref: '#/components/parameters/ResourceGroupNameParameter'
+        - $ref: '#/components/parameters/ClusterNameParameter'
+        - $ref: '#/components/parameters/DatabaseNameParameter'
+        - $ref: '#/components/parameters/AccessPolicyAssignmentNameParameter'
+      requestBody:
+        description: Parameters supplied to the create access policy assignment for database.
+        required: true
+        x-ms-requestBody-name: parameters
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessPolicyAssignment'
+      responses:
+        '200':
+          description: The database access policy assignment is being created. Check provisioningState and resourceState for detailed status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessPolicyAssignment'
+        '201':
+          description: The database access policy assignment is being created. Check provisioningState and resourceState for detailed status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessPolicyAssignment'
+        default:
+          description: Error response describing why the operation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags:
+        - RedisEnterprise
+        - Databases
+        - AccessPolicyAssignments
+      operationId: AccessPolicyAssignment_Get
+      description: Gets information about access policy assignment for database.
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionIdParameter'
+        - $ref: '#/components/parameters/ResourceGroupNameParameter'
+        - $ref: '#/components/parameters/ClusterNameParameter'
+        - $ref: '#/components/parameters/DatabaseNameParameter'
+        - $ref: '#/components/parameters/AccessPolicyAssignmentNameParameter'
+      responses:
+        '200':
+          description: Successfully found the access policy assignment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessPolicyAssignment'
+        default:
+          description: Error response describing why the operation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+        - RedisEnterprise
+        - Databases
+        - AccessPolicyAssignments
+      operationId: AccessPolicyAssignment_Delete
+      description: Deletes a single access policy assignment.
+      x-ms-long-running-operation: true
+      x-ms-long-running-operation-options:
+        final-state-via: azure-async-operation
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionIdParameter'
+        - $ref: '#/components/parameters/ResourceGroupNameParameter'
+        - $ref: '#/components/parameters/ClusterNameParameter'
+        - $ref: '#/components/parameters/DatabaseNameParameter'
+        - $ref: '#/components/parameters/AccessPolicyAssignmentNameParameter'
+      responses:
+        '202':
+          description: The access policy assignment delete operation started for database. GET the URL in the Azure-AsyncOperation or Location headers to retrieve updated status.
+          headers:
+            Location:
+              schema:
+                format: uri
+                type: string
+              description: Location URI to poll for result
+            Azure-AsyncOperation:
+              schema:
+                format: uri
+                type: string
+              description: Azure-AsyncOperation URI to poll for result
+        '204':
+          description: Successfully deleted the access policy assignment.
+        default:
+          description: Error response describing why the operation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/accessPolicyAssignments/?api-version=2024-09-01-preview:
+    get:
+      tags:
+        - RedisEnterprise
+        - Databases
+        - AccessPolicyAssignments
+      operationId: AccessPolicyAssignment_List
+      description: Gets all access policy assignments..
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionIdParameter'
+        - $ref: '#/components/parameters/ResourceGroupNameParameter'
+        - $ref: '#/components/parameters/ClusterNameParameter'
+        - $ref: '#/components/parameters/DatabaseNameParameter'
+      responses:
+        '200':
+          description: The list of access policy assignment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessPolicyAssignmentList'
+        default:
+          description: Error response describing why the operation failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-ms-pageable:
+        nextLinkName: nextLink
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/privateEndpointConnections/?api-version=2024-09-01-preview:
     get:
       tags:
         - PrivateEndpointConnections
       operationId: PrivateEndpointConnections_List
-      description: Lists all the private endpoint connections associated with the RedisEnterprise cluster.
+      description: Lists all the private endpoint connections associated with the Redis Enterprise cluster.
       parameters:
         - $ref: '#/components/parameters/ResourceGroupNameParameter'
         - $ref: '#/components/parameters/ClusterNameParameter'
@@ -2155,12 +2686,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       x-ms-pageable:
         nextLinkName: null
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/privateEndpointConnections/{privateEndpointConnectionName}/?api-version=2024-06-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/privateEndpointConnections/{privateEndpointConnectionName}/?api-version=2024-09-01-preview:
     get:
       tags:
         - PrivateEndpointConnections
       operationId: PrivateEndpointConnections_Get
-      description: Gets the specified private endpoint connection associated with the RedisEnterprise cluster.
+      description: Gets the specified private endpoint connection associated with the Redis Enterprise cluster.
       parameters:
         - $ref: '#/components/parameters/ResourceGroupNameParameter'
         - $ref: '#/components/parameters/ClusterNameParameter'
@@ -2183,7 +2714,7 @@ paths:
       tags:
         - PrivateEndpointConnections
       operationId: PrivateEndpointConnections_Put
-      description: Updates the state of the specified private endpoint connection associated with the RedisEnterprise cluster.
+      description: Updates the state of the specified private endpoint connection associated with the Redis Enterprise cluster.
       x-ms-long-running-operation: true
       parameters:
         - $ref: '#/components/parameters/ResourceGroupNameParameter'
@@ -2215,7 +2746,7 @@ paths:
       tags:
         - PrivateEndpointConnections
       operationId: PrivateEndpointConnections_Delete
-      description: Deletes the specified private endpoint connection associated with the RedisEnterprise cluster.
+      description: Deletes the specified private endpoint connection associated with the Redis Enterprise cluster.
       x-ms-long-running-operation: true
       x-ms-long-running-operation-options:
         final-state-via: location
@@ -2246,12 +2777,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/privateLinkResources/?api-version=2024-06-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/privateLinkResources/?api-version=2024-09-01-preview:
     get:
       tags:
         - PrivateLinkResources
       operationId: PrivateLinkResources_ListByCluster
-      description: Gets the private link resources that need to be created for a RedisEnterprise cluster.
+      description: Gets the private link resources that need to be created for a Redis Enterprise cluster.
       parameters:
         - $ref: '#/components/parameters/ResourceGroupNameParameter'
         - $ref: '#/components/parameters/ClusterNameParameter'
@@ -2271,7 +2802,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       x-ms-pageable:
         nextLinkName: null
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/forceUnlink/?api-version=2024-06-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/forceUnlink/?api-version=2024-09-01-preview:
     post:
       tags:
         - RedisEnterprise
@@ -2299,13 +2830,24 @@ paths:
           description: Force unlink operation succeeded. The unlinked database must be deleted before it can be recreated and linked again.
         '202':
           description: Force unlink operation successfully enqueued; follow the Azure-AsyncOperation header to poll for final outcome.
+          headers:
+            Location:
+              schema:
+                format: uri
+                type: string
+              description: Location URI to poll for result
+            Azure-AsyncOperation:
+              schema:
+                format: uri
+                type: string
+              description: Azure-AsyncOperation URI to poll for result
         default:
           description: Error response describing why the operation failed.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/forceLinkToReplicationGroup/?api-version=2024-06-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/forceLinkToReplicationGroup/?api-version=2024-09-01-preview:
     post:
       tags:
         - RedisEnterprise
@@ -2348,7 +2890,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/flush/?api-version=2024-06-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/flush/?api-version=2024-09-01-preview:
     post:
       tags:
         - RedisEnterprise
@@ -2391,7 +2933,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/upgradeDBRedisVersion/?api-version=2024-06-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Cache/redisEnterprise/{clusterName}/databases/{databaseName}/upgradeDBRedisVersion/?api-version=2024-09-01-preview:
     post:
       tags:
         - RedisEnterprise

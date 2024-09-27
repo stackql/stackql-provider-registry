@@ -8,7 +8,7 @@ info:
     name: StackQL Studios
     url: https://stackql.io/
     email: info@stackql.io
-  version: 2024-06-15-stackql-generated
+  version: 2024-09-27-stackql-generated
 security:
   - azure_auth:
       - user_impersonation
@@ -35,10 +35,10 @@ components:
     SubscriptionIdParameter:
       name: subscriptionId
       in: path
-      description: The ID of the target subscription.
+      description: The ID of the target subscription. The value must be an UUID.
       required: true
       schema:
-        minLength: 1
+        format: uuid
         type: string
     ApiVersionParameter:
       name: api-version
@@ -57,6 +57,24 @@ components:
       schema:
         minLength: 1
         maxLength: 90
+        type: string
+    OperationIdParameter:
+      name: operationId
+      in: path
+      description: The ID of an ongoing async operation.
+      required: true
+      x-ms-parameter-location: method
+      schema:
+        minLength: 1
+        type: string
+    LocationParameter:
+      name: location
+      in: path
+      description: The name of the Azure region.
+      required: true
+      x-ms-parameter-location: method
+      schema:
+        minLength: 1
         type: string
     ManagementGroupNameParameter:
       name: managementGroupName
@@ -86,24 +104,6 @@ components:
       x-ms-parameter-location: method
       schema:
         format: uuid
-        type: string
-    OperationIdParameter:
-      name: operationId
-      in: path
-      description: The ID of an ongoing async operation.
-      required: true
-      x-ms-parameter-location: method
-      schema:
-        minLength: 1
-        type: string
-    LocationParameter:
-      name: location
-      in: path
-      description: The name of Azure region.
-      required: true
-      x-ms-parameter-location: method
-      schema:
-        minLength: 1
         type: string
     If-Match:
       name: ifMatch
@@ -471,6 +471,17 @@ components:
           $ref: '#/components/schemas/AutoUpgradeProfile'
         userProfile:
           $ref: '#/components/schemas/NginxDeploymentUserProfile'
+        nginxAppProtect:
+          type: object
+          description: Settings for NGINX App Protect (NAP)
+          required:
+            - webApplicationFirewallSettings
+          properties:
+            webApplicationFirewallSettings:
+              $ref: '#/components/schemas/WebApplicationFirewallSettings'
+            webApplicationFirewallStatus:
+              $ref: '#/components/schemas/WebApplicationFirewallStatus'
+              readOnly: true
     NginxDeployment:
       x-ms-azure-resource: true
       properties:
@@ -512,6 +523,12 @@ components:
           $ref: '#/components/schemas/NginxDeploymentUserProfile'
         autoUpgradeProfile:
           $ref: '#/components/schemas/AutoUpgradeProfile'
+        nginxAppProtect:
+          type: object
+          description: Update settings for NGINX App Protect (NAP)
+          properties:
+            webApplicationFirewallSettings:
+              $ref: '#/components/schemas/WebApplicationFirewallSettings'
     NginxDeploymentUpdateParameters:
       properties:
         identity:
@@ -579,6 +596,7 @@ components:
           readOnly: true
         nextLink:
           type: string
+          format: uri
           description: URL to get the next set of operation list results (if there are any).
           readOnly: true
     AnalysisCreate:
@@ -654,6 +672,71 @@ components:
         rule:
           type: string
           example: nginx-azure-load-balancer-allowed-directives
+    WebApplicationFirewallSettings:
+      type: object
+      description: Settings for the NGINX App Protect Web Application Firewall (WAF)
+      properties:
+        activationState:
+          type: string
+          enum:
+            - Enabled
+            - Disabled
+          description: The activation state of the WAF. Use 'Enabled' to enable the WAF and 'Disabled' to disable it.
+          x-ms-enum:
+            modelAsString: true
+            name: activationState
+    WebApplicationFirewallStatus:
+      type: object
+      description: The status of the NGINX App Protect Web Application Firewall
+      properties:
+        attackSignaturesPackage:
+          $ref: '#/components/schemas/WebApplicationFirewallPackage'
+          readOnly: true
+          description: Package containing attack signatures for the NGINX App Protect Web Application Firewall (WAF).
+        botSignaturesPackage:
+          $ref: '#/components/schemas/WebApplicationFirewallPackage'
+          readOnly: true
+          description: Package containing bot signatures for the NGINX App Protect Web Application Firewall (WAF).
+        threatCampaignsPackage:
+          $ref: '#/components/schemas/WebApplicationFirewallPackage'
+          readOnly: true
+          description: Package containing threat campaigns for the NGINX App Protect Web Application Firewall (WAF).
+        componentVersions:
+          $ref: '#/components/schemas/WebApplicationFirewallComponentVersions'
+          readOnly: true
+          description: Versions of the NGINX App Protect Web Application Firewall (WAF) components.
+    WebApplicationFirewallPackage:
+      type: object
+      description: NGINX App Protect Web Application Firewall (WAF) Package. Contains the version and revision date of the package.
+      required:
+        - version
+        - revisionDatetime
+      properties:
+        version:
+          type: string
+          example: '2.02'
+          description: The version of the NGINX App Protect Web Application Firewall (WAF) package.
+        revisionDatetime:
+          type: string
+          example: '2024-02-21T15:50:53Z'
+          format: date-time
+          description: The date and time of the package revision.
+    WebApplicationFirewallComponentVersions:
+      type: object
+      readOnly: true
+      required:
+        - wafEngineVersion
+        - wafNginxVersion
+      description: Versions of the NGINX App Protect Web Application Firewall (WAF) components.
+      properties:
+        wafEngineVersion:
+          type: string
+          example: 10.624.0
+          description: The version of the NGINX App Protect Web Application Firewall (WAF) engine.
+        wafNginxVersion:
+          type: string
+          example: 4.815.0
+          description: The version of the NGINX App Protect Web Application Firewall (WAF) module for NGINX.
     Resource:
       title: Resource
       description: Common fields that are returned in the response for all Azure Resource Manager resources
@@ -662,7 +745,8 @@ components:
         id:
           readOnly: true
           type: string
-          description: Fully qualified resource ID for the resource. Ex - /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}
+          format: arm-id
+          description: Fully qualified resource ID for the resource. E.g. "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}"
         name:
           readOnly: true
           type: string
@@ -671,6 +755,10 @@ components:
           readOnly: true
           type: string
           description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
+        systemData:
+          readOnly: true
+          description: Azure Resource Manager metadata containing createdBy and modifiedBy information.
+          $ref: '#/components/schemas/systemData'
       x-ms-azure-resource: true
     AzureEntityResource:
       x-ms-client-name: AzureEntityResource
@@ -684,7 +772,8 @@ components:
         id:
           readOnly: true
           type: string
-          description: Fully qualified resource ID for the resource. Ex - /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}
+          format: arm-id
+          description: Fully qualified resource ID for the resource. E.g. "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}"
         name:
           readOnly: true
           type: string
@@ -693,6 +782,10 @@ components:
           readOnly: true
           type: string
           description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
+        systemData:
+          readOnly: true
+          description: Azure Resource Manager metadata containing createdBy and modifiedBy information.
+          $ref: '#/components/schemas/systemData'
       type: object
     TrackedResource:
       title: Tracked Resource
@@ -718,7 +811,8 @@ components:
         id:
           readOnly: true
           type: string
-          description: Fully qualified resource ID for the resource. Ex - /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}
+          format: arm-id
+          description: Fully qualified resource ID for the resource. E.g. "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}"
         name:
           readOnly: true
           type: string
@@ -727,6 +821,10 @@ components:
           readOnly: true
           type: string
           description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
+        systemData:
+          readOnly: true
+          description: Azure Resource Manager metadata containing createdBy and modifiedBy information.
+          $ref: '#/components/schemas/systemData'
       type: object
     ProxyResource:
       title: Proxy Resource
@@ -735,7 +833,8 @@ components:
         id:
           readOnly: true
           type: string
-          description: Fully qualified resource ID for the resource. Ex - /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}
+          format: arm-id
+          description: Fully qualified resource ID for the resource. E.g. "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}"
         name:
           readOnly: true
           type: string
@@ -744,33 +843,15 @@ components:
           readOnly: true
           type: string
           description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
+        systemData:
+          readOnly: true
+          description: Azure Resource Manager metadata containing createdBy and modifiedBy information.
+          $ref: '#/components/schemas/systemData'
       type: object
     ResourceModelWithAllowedPropertySet:
       description: The resource model definition containing the full set of allowed properties for a resource. Except properties bag, there cannot be a top level property outside of this set.
-      type: object
+      x-ms-azure-resource: true
       properties:
-        id:
-          readOnly: true
-          type: string
-          x-ms-mutability:
-            - read
-          description: Fully qualified resource ID for the resource. Ex - /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{resourceType}/{resourceName}
-        name:
-          readOnly: true
-          type: string
-          description: The name of the resource
-        type:
-          readOnly: true
-          type: string
-          x-ms-mutability:
-            - read
-          description: The type of the resource. E.g. "Microsoft.Compute/virtualMachines" or "Microsoft.Storage/storageAccounts"
-        location:
-          type: string
-          x-ms-mutability:
-            - read
-            - create
-          description: The geo-location where the resource lives
         managedBy:
           type: string
           x-ms-mutability:
@@ -783,21 +864,12 @@ components:
           x-ms-mutability:
             - read
             - create
-          description: Metadata used by portal/tooling/etc to render different UX experiences for resources of the same type; e.g. ApiApps are a kind of Microsoft.Web/sites type.  If supported, the resource provider must validate and persist this value.
+          description: Metadata used by portal/tooling/etc to render different UX experiences for resources of the same type. E.g. ApiApps are a kind of Microsoft.Web/sites type.  If supported, the resource provider must validate and persist this value.
           pattern: ^[-\w\._,\(\)]+$
         etag:
           readOnly: true
           type: string
           description: 'The etag field is *not* required. If it is provided in the response body, it must also be provided as a header per the normal etag convention.  Entity tags are used for comparing two or more entities from the same requested resource. HTTP/1.1 uses entity tags in the etag (section 14.19), If-Match (section 14.24), If-None-Match (section 14.26), and If-Range (section 14.27) header fields. '
-        tags:
-          type: object
-          additionalProperties:
-            type: string
-          x-ms-mutability:
-            - read
-            - create
-            - update
-          description: Resource tags.
         identity:
           allOf:
             - $ref: '#/components/schemas/Identity'
@@ -807,25 +879,31 @@ components:
         plan:
           allOf:
             - $ref: '#/components/schemas/Plan'
-      x-ms-azure-resource: true
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+          x-ms-mutability:
+            - read
+            - create
+            - update
+          description: Resource tags.
+        location:
+          type: string
+          x-ms-mutability:
+            - read
+            - create
+          description: The geo-location where the resource lives
+      type: object
     Sku:
       description: The resource model definition representing SKU
       type: object
       properties:
         name:
           type: string
-          description: The name of the SKU. Ex - P3. It is typically a letter+number code
+          description: The name of the SKU. E.g. P3. It is typically a letter+number code
         tier:
-          type: string
-          enum:
-            - Free
-            - Basic
-            - Standard
-            - Premium
-          x-ms-enum:
-            name: SkuTier
-            modelAsString: false
-          description: This field is required to be implemented by the Resource Provider if the service has more than one tier, but is not required on a PUT.
+          $ref: '#/components/schemas/SkuTier'
         size:
           type: string
           description: 'The SKU size. When the name field is the combination of tier and some other value, this would be the standalone code. '
@@ -845,11 +923,13 @@ components:
         principalId:
           readOnly: true
           type: string
-          description: The principal ID of resource identity.
+          format: uuid
+          description: The principal ID of resource identity. The value must be an UUID.
         tenantId:
           readOnly: true
           type: string
-          description: The tenant ID of resource.
+          format: uuid
+          description: The tenant ID of resource. The value must be an UUID.
         type:
           type: string
           description: The identity type.
@@ -881,6 +961,38 @@ components:
         - name
         - publisher
         - product
+    ErrorDetail:
+      description: The error detail.
+      type: object
+      properties:
+        code:
+          readOnly: true
+          type: string
+          description: The error code.
+        message:
+          readOnly: true
+          type: string
+          description: The error message.
+        target:
+          readOnly: true
+          type: string
+          description: The error target.
+        details:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+          x-ms-identifiers:
+            - message
+            - target
+          description: The error details.
+        additionalInfo:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorAdditionalInfo'
+          x-ms-identifiers: []
+          description: The error additional info.
     ErrorResponse:
       title: Error response
       description: Common error response for all Azure Resource Manager APIs to return error details for failed operations. (This also follows the OData error response format.).
@@ -954,6 +1066,48 @@ components:
           x-ms-enum:
             name: ActionType
             modelAsString: true
+    OperationStatusResult:
+      description: The current status of an async operation.
+      type: object
+      required:
+        - status
+      properties:
+        id:
+          description: Fully qualified ID for the async operation.
+          type: string
+          format: arm-id
+        resourceId:
+          description: Fully qualified ID of the resource against which the original async operation was started.
+          type: string
+          format: arm-id
+          readOnly: true
+        name:
+          description: Name of the async operation.
+          type: string
+        status:
+          description: Operation status.
+          type: string
+        percentComplete:
+          description: Percent of the operation that is complete.
+          type: number
+          minimum: 0
+          maximum: 100
+        startTime:
+          description: The start time of the operation.
+          type: string
+          format: date-time
+        endTime:
+          description: The end time of the operation.
+          type: string
+          format: date-time
+        operations:
+          description: The operations list.
+          type: array
+          items:
+            $ref: '#/components/schemas/OperationStatusResult'
+        error:
+          description: If present, details of the operation error.
+          $ref: '#/components/schemas/ErrorDetail'
     locationData:
       description: Metadata pertaining to the geographic location of the resource.
       type: object
@@ -1039,85 +1193,6 @@ components:
         identity:
           description: The client ID of the identity which will be used to access key vault.
           type: string
-    SkuTier:
-      type: string
-      enum:
-        - Free
-        - Basic
-        - Standard
-        - Premium
-      x-ms-enum:
-        name: SkuTier
-        modelAsString: false
-      description: This field is required to be implemented by the Resource Provider if the service has more than one tier, but is not required on a PUT.
-    ErrorDetail:
-      description: The error detail.
-      type: object
-      properties:
-        code:
-          readOnly: true
-          type: string
-          description: The error code.
-        message:
-          readOnly: true
-          type: string
-          description: The error message.
-        target:
-          readOnly: true
-          type: string
-          description: The error target.
-        details:
-          readOnly: true
-          type: array
-          items:
-            $ref: '#/components/schemas/ErrorDetail'
-          x-ms-identifiers:
-            - message
-            - target
-          description: The error details.
-        additionalInfo:
-          readOnly: true
-          type: array
-          items:
-            $ref: '#/components/schemas/ErrorAdditionalInfo'
-          x-ms-identifiers: []
-          description: The error additional info.
-    OperationStatusResult:
-      description: The current status of an async operation.
-      type: object
-      required:
-        - status
-      properties:
-        id:
-          description: Fully qualified ID for the async operation.
-          type: string
-        name:
-          description: Name of the async operation.
-          type: string
-        status:
-          description: Operation status.
-          type: string
-        percentComplete:
-          description: Percent of the operation that is complete.
-          type: number
-          minimum: 0
-          maximum: 100
-        startTime:
-          description: The start time of the operation.
-          type: string
-          format: date-time
-        endTime:
-          description: The end time of the operation.
-          type: string
-          format: date-time
-        operations:
-          description: The operations list.
-          type: array
-          items:
-            $ref: '#/components/schemas/OperationStatusResult'
-        error:
-          description: If present, details of the operation error.
-          $ref: '#/components/schemas/ErrorDetail'
     CheckNameAvailabilityRequest:
       description: The check availability request body.
       type: object
@@ -1147,6 +1222,17 @@ components:
         message:
           description: Detailed reason why the given name is available.
           type: string
+    SkuTier:
+      type: string
+      enum:
+        - Free
+        - Basic
+        - Standard
+        - Premium
+      x-ms-enum:
+        name: SkuTier
+        modelAsString: false
+      description: This field is required to be implemented by the Resource Provider if the service has more than one tier, but is not required on a PUT.
   x-stackQL-resources:
     certificates:
       id: azure_isv.nginx.certificates
@@ -1155,25 +1241,25 @@ components:
       methods:
         get:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1certificates~1{certificateName}~1?api-version=2024-01-01-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1certificates~1{certificateName}~1?api-version=2024-06-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         create_or_update:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1certificates~1{certificateName}~1?api-version=2024-01-01-preview/put'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1certificates~1{certificateName}~1?api-version=2024-06-01-preview/put'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         delete:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1certificates~1{certificateName}~1?api-version=2024-01-01-preview/delete'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1certificates~1{certificateName}~1?api-version=2024-06-01-preview/delete'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         list:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1certificates~1?api-version=2024-01-01-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1certificates~1?api-version=2024-06-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1185,6 +1271,7 @@ components:
         insert:
           - $ref: '#/components/x-stackQL-resources/certificates/methods/create_or_update'
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/certificates/methods/delete'
     configurations:
@@ -1194,32 +1281,32 @@ components:
       methods:
         list:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1configurations~1?api-version=2024-01-01-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1configurations~1?api-version=2024-06-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.value
         get:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1configurations~1{configurationName}~1?api-version=2024-01-01-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1configurations~1{configurationName}~1?api-version=2024-06-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         create_or_update:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1configurations~1{configurationName}~1?api-version=2024-01-01-preview/put'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1configurations~1{configurationName}~1?api-version=2024-06-01-preview/put'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         delete:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1configurations~1{configurationName}~1?api-version=2024-01-01-preview/delete'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1configurations~1{configurationName}~1?api-version=2024-06-01-preview/delete'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         analysis:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1configurations~1{configurationName}~1analyze~1?api-version=2024-01-01-preview/post'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1configurations~1{configurationName}~1analyze~1?api-version=2024-06-01-preview/post'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1230,6 +1317,7 @@ components:
         insert:
           - $ref: '#/components/x-stackQL-resources/configurations/methods/create_or_update'
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/configurations/methods/delete'
     deployments:
@@ -1239,38 +1327,38 @@ components:
       methods:
         get:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1?api-version=2024-01-01-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1?api-version=2024-06-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         create_or_update:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1?api-version=2024-01-01-preview/put'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1?api-version=2024-06-01-preview/put'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         update:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1?api-version=2024-01-01-preview/patch'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1?api-version=2024-06-01-preview/patch'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         delete:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1?api-version=2024-01-01-preview/delete'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1{deploymentName}~1?api-version=2024-06-01-preview/delete'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         list:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Nginx.NginxPlus~1nginxDeployments~1?api-version=2024-01-01-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Nginx.NginxPlus~1nginxDeployments~1?api-version=2024-06-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.value
         list_by_resource_group:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1?api-version=2024-01-01-preview/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Nginx.NginxPlus~1nginxDeployments~1?api-version=2024-06-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1283,6 +1371,7 @@ components:
         insert:
           - $ref: '#/components/x-stackQL-resources/deployments/methods/create_or_update'
         update: []
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/deployments/methods/delete'
     operations:
@@ -1292,7 +1381,7 @@ components:
       methods:
         list:
           operation:
-            $ref: '#/paths/~1providers~1Nginx.NginxPlus~1operations~1?api-version=2024-01-01-preview/get'
+            $ref: '#/paths/~1providers~1Nginx.NginxPlus~1operations~1?api-version=2024-06-01-preview/get'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1302,9 +1391,167 @@ components:
           - $ref: '#/components/x-stackQL-resources/operations/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
+    vw_certificates:
+      id: azure_isv.nginx.vw_certificates
+      name: vw_certificates
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              id as id,
+              name as name,
+              location as location,
+              type as type,
+              systemData as system_data,
+              JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+              JSON_EXTRACT(properties, '$.keyVirtualPath') as key_virtual_path,
+              JSON_EXTRACT(properties, '$.certificateVirtualPath') as certificate_virtual_path,
+              JSON_EXTRACT(properties, '$.keyVaultSecretId') as key_vault_secret_id,
+              JSON_EXTRACT(properties, '$.sha1Thumbprint') as sha1_thumbprint,
+              JSON_EXTRACT(properties, '$.keyVaultSecretVersion') as key_vault_secret_version,
+              JSON_EXTRACT(properties, '$.keyVaultSecretCreated') as key_vault_secret_created,
+              JSON_EXTRACT(properties, '$.certificateError') as certificate_error,
+              subscriptionId,
+              resourceGroupName,
+              deploymentName,
+              certificateName
+              FROM azure_isv.nginx.certificates
+              WHERE subscriptionId = 'replace-me' AND resourceGroupName = 'replace-me' AND deploymentName = 'replace-me';
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                id as id,
+                name as name,
+                location as location,
+                type as type,
+                systemData as system_data,
+                json_extract_path_text(properties, '$.provisioningState') as provisioning_state,
+                JSON_EXTRACT(properties, '$.keyVirtualPath') as key_virtual_path,
+                JSON_EXTRACT(properties, '$.certificateVirtualPath') as certificate_virtual_path,
+                JSON_EXTRACT(properties, '$.keyVaultSecretId') as key_vault_secret_id,
+                JSON_EXTRACT(properties, '$.sha1Thumbprint') as sha1_thumbprint,
+                JSON_EXTRACT(properties, '$.keyVaultSecretVersion') as key_vault_secret_version,
+                JSON_EXTRACT(properties, '$.keyVaultSecretCreated') as key_vault_secret_created,
+                JSON_EXTRACT(properties, '$.certificateError') as certificate_error,
+                subscriptionId,
+                resourceGroupName,
+                deploymentName,
+                certificateName
+                FROM azure_isv.nginx.certificates
+                WHERE subscriptionId = 'replace-me' AND resourceGroupName = 'replace-me' AND deploymentName = 'replace-me';
+    vw_configurations:
+      id: azure_isv.nginx.vw_configurations
+      name: vw_configurations
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              id as id,
+              name as name,
+              location as location,
+              type as type,
+              systemData as system_data,
+              JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+              JSON_EXTRACT(properties, '$.files') as files,
+              JSON_EXTRACT(properties, '$.protectedFiles') as protected_files,
+              JSON_EXTRACT(properties, '$.package') as package,
+              JSON_EXTRACT(properties, '$.rootFile') as root_file,
+              subscriptionId,
+              resourceGroupName,
+              deploymentName,
+              configurationName
+              FROM azure_isv.nginx.configurations
+              WHERE subscriptionId = 'replace-me' AND resourceGroupName = 'replace-me' AND deploymentName = 'replace-me';
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                id as id,
+                name as name,
+                location as location,
+                type as type,
+                systemData as system_data,
+                json_extract_path_text(properties, '$.provisioningState') as provisioning_state,
+                JSON_EXTRACT(properties, '$.files') as files,
+                JSON_EXTRACT(properties, '$.protectedFiles') as protected_files,
+                JSON_EXTRACT(properties, '$.package') as package,
+                JSON_EXTRACT(properties, '$.rootFile') as root_file,
+                subscriptionId,
+                resourceGroupName,
+                deploymentName,
+                configurationName
+                FROM azure_isv.nginx.configurations
+                WHERE subscriptionId = 'replace-me' AND resourceGroupName = 'replace-me' AND deploymentName = 'replace-me';
+    vw_deployments:
+      id: azure_isv.nginx.vw_deployments
+      name: vw_deployments
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              id as id,
+              name as name,
+              location as location,
+              type as type,
+              identity as identity,
+              tags as tags,
+              sku as sku,
+              systemData as system_data,
+              JSON_EXTRACT(properties, '$.provisioningState') as provisioning_state,
+              JSON_EXTRACT(properties, '$.nginxVersion') as nginx_version,
+              JSON_EXTRACT(properties, '$.managedResourceGroup') as managed_resource_group,
+              JSON_EXTRACT(properties, '$.networkProfile') as network_profile,
+              JSON_EXTRACT(properties, '$.ipAddress') as ip_address,
+              JSON_EXTRACT(properties, '$.enableDiagnosticsSupport') as enable_diagnostics_support,
+              JSON_EXTRACT(properties, '$.logging') as logging,
+              JSON_EXTRACT(properties, '$.scalingProperties') as scaling_properties,
+              JSON_EXTRACT(properties, '$.autoUpgradeProfile') as auto_upgrade_profile,
+              JSON_EXTRACT(properties, '$.userProfile') as user_profile,
+              JSON_EXTRACT(properties, '$.nginxAppProtect') as nginx_app_protect,
+              subscriptionId,
+              resourceGroupName,
+              deploymentName
+              FROM azure_isv.nginx.deployments
+              WHERE subscriptionId = 'replace-me';
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                id as id,
+                name as name,
+                location as location,
+                type as type,
+                identity as identity,
+                tags as tags,
+                sku as sku,
+                systemData as system_data,
+                json_extract_path_text(properties, '$.provisioningState') as provisioning_state,
+                JSON_EXTRACT(properties, '$.nginxVersion') as nginx_version,
+                JSON_EXTRACT(properties, '$.managedResourceGroup') as managed_resource_group,
+                JSON_EXTRACT(properties, '$.networkProfile') as network_profile,
+                JSON_EXTRACT(properties, '$.ipAddress') as ip_address,
+                JSON_EXTRACT(properties, '$.enableDiagnosticsSupport') as enable_diagnostics_support,
+                JSON_EXTRACT(properties, '$.logging') as logging,
+                JSON_EXTRACT(properties, '$.scalingProperties') as scaling_properties,
+                JSON_EXTRACT(properties, '$.autoUpgradeProfile') as auto_upgrade_profile,
+                JSON_EXTRACT(properties, '$.userProfile') as user_profile,
+                JSON_EXTRACT(properties, '$.nginxAppProtect') as nginx_app_protect,
+                subscriptionId,
+                resourceGroupName,
+                deploymentName
+                FROM azure_isv.nginx.deployments
+                WHERE subscriptionId = 'replace-me';
 paths:
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Nginx.NginxPlus/nginxDeployments/{deploymentName}/certificates/{certificateName}/?api-version=2024-01-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Nginx.NginxPlus/nginxDeployments/{deploymentName}/certificates/{certificateName}/?api-version=2024-06-01-preview:
     get:
       tags:
         - NginxCertificate
@@ -1406,7 +1653,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ResourceProviderDefaultErrorResponse'
       x-ms-long-running-operation: true
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Nginx.NginxPlus/nginxDeployments/{deploymentName}/certificates/?api-version=2024-01-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Nginx.NginxPlus/nginxDeployments/{deploymentName}/certificates/?api-version=2024-06-01-preview:
     get:
       tags:
         - NginxCertificate
@@ -1431,7 +1678,7 @@ paths:
                 $ref: '#/components/schemas/ResourceProviderDefaultErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Nginx.NginxPlus/nginxDeployments/{deploymentName}/configurations/?api-version=2024-01-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Nginx.NginxPlus/nginxDeployments/{deploymentName}/configurations/?api-version=2024-06-01-preview:
     get:
       tags:
         - NginxConfiguration
@@ -1456,7 +1703,7 @@ paths:
                 $ref: '#/components/schemas/ResourceProviderDefaultErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Nginx.NginxPlus/nginxDeployments/{deploymentName}/configurations/{configurationName}/?api-version=2024-01-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Nginx.NginxPlus/nginxDeployments/{deploymentName}/configurations/{configurationName}/?api-version=2024-06-01-preview:
     get:
       tags:
         - NginxConfiguration
@@ -1558,7 +1805,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ResourceProviderDefaultErrorResponse'
       x-ms-long-running-operation: true
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Nginx.NginxPlus/nginxDeployments/{deploymentName}/configurations/{configurationName}/analyze/?api-version=2024-01-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Nginx.NginxPlus/nginxDeployments/{deploymentName}/configurations/{configurationName}/analyze/?api-version=2024-06-01-preview:
     post:
       tags:
         - NginxConfigurationAnalysis
@@ -1595,7 +1842,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResourceProviderDefaultErrorResponse'
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Nginx.NginxPlus/nginxDeployments/{deploymentName}/?api-version=2024-01-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Nginx.NginxPlus/nginxDeployments/{deploymentName}/?api-version=2024-06-01-preview:
     get:
       tags:
         - NginxDeployment
@@ -1713,7 +1960,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ResourceProviderDefaultErrorResponse'
       x-ms-long-running-operation: true
-  /subscriptions/{subscriptionId}/providers/Nginx.NginxPlus/nginxDeployments/?api-version=2024-01-01-preview:
+  /subscriptions/{subscriptionId}/providers/Nginx.NginxPlus/nginxDeployments/?api-version=2024-06-01-preview:
     get:
       tags:
         - NginxDeployment
@@ -1736,7 +1983,7 @@ paths:
                 $ref: '#/components/schemas/ResourceProviderDefaultErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Nginx.NginxPlus/nginxDeployments/?api-version=2024-01-01-preview:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Nginx.NginxPlus/nginxDeployments/?api-version=2024-06-01-preview:
     get:
       tags:
         - NginxDeployment
@@ -1760,11 +2007,11 @@ paths:
                 $ref: '#/components/schemas/ResourceProviderDefaultErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /providers/Nginx.NginxPlus/operations/?api-version=2024-01-01-preview:
+  /providers/Nginx.NginxPlus/operations/?api-version=2024-06-01-preview:
     get:
       tags:
         - NginxDeployment
-      summary: List all operations provided by Nginx.NginxPlus for the 2024-01-01-preview api version.
+      summary: List all operations provided by Nginx.NginxPlus for the 2024-06-01-preview api version.
       operationId: Operations_List
       parameters: []
       responses:
