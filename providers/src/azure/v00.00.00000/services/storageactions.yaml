@@ -8,7 +8,7 @@ info:
     name: StackQL Studios
     url: https://stackql.io/
     email: info@stackql.io
-  version: 2024-06-15-stackql-generated
+  version: 2024-10-15-stackql-generated
 security:
   - azure_auth:
       - user_impersonation
@@ -23,6 +23,17 @@ components:
           scopes:
             user_impersonation: impersonate your user account
   parameters:
+    StorageTaskName:
+      name: storageTaskName
+      in: path
+      description: The name of the storage task within the specified resource group. Storage task names must be between 3 and 18 characters in length and use numbers and lower-case letters only.
+      required: true
+      x-ms-parameter-location: method
+      schema:
+        pattern: ^[a-z0-9]{3,18}$
+        maxLength: 18
+        minLength: 3
+        type: string
     SubscriptionIdParameter:
       name: subscriptionId
       in: path
@@ -35,7 +46,7 @@ components:
       name: api-version
       in: query
       description: The API version to use for this operation.
-      required: true
+      required: false
       schema:
         minLength: 1
         type: string
@@ -112,18 +123,432 @@ components:
       x-ms-parameter-location: method
       schema:
         type: string
-    StorageTaskName:
-      name: storageTaskName
-      in: path
-      description: The name of the storage task within the specified resource group. Storage task names must be between 3 and 18 characters in length and use numbers and lower-case letters only.
-      required: true
-      x-ms-parameter-location: method
-      schema:
-        pattern: ^[a-z0-9]{3,18}$
-        maxLength: 18
-        minLength: 3
-        type: string
   schemas:
+    StorageTask:
+      required:
+        - identity
+        - properties
+      description: Represents Storage Task.
+      properties:
+        identity:
+          $ref: '#/components/schemas/ManagedServiceIdentity'
+          description: The managed service identity of the resource.
+        properties:
+          x-ms-client-flatten: true
+          $ref: '#/components/schemas/StorageTaskProperties'
+          description: Properties of the storage task.
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+          x-ms-mutability:
+            - read
+            - create
+            - update
+          description: Resource tags.
+        location:
+          type: string
+          x-ms-mutability:
+            - read
+            - create
+          description: The geo-location where the resource lives
+      type: object
+    StorageTaskUpdateParameters:
+      description: Parameters of the storage task update request
+      properties:
+        identity:
+          $ref: '#/components/schemas/ManagedServiceIdentity'
+          description: The identity of the resource.
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+          description: Gets or sets a list of key value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater in length than 128 characters and a value no greater in length than 256 characters.
+        properties:
+          x-ms-client-flatten: true
+          $ref: '#/components/schemas/StorageTaskProperties'
+          description: Properties of the storage task.
+      type: object
+    StorageTaskProperties:
+      type: object
+      properties:
+        taskVersion:
+          readOnly: true
+          type: integer
+          minimum: 1
+          maximum: 1
+          format: int64
+          description: Storage task version.
+        enabled:
+          type: boolean
+          description: Storage Task is enabled when set to true and disabled when set to false
+        description:
+          type: string
+          description: Text that describes the purpose of the storage task
+        action:
+          $ref: '#/components/schemas/StorageTaskAction'
+          description: The storage task action that is executed
+        provisioningState:
+          readOnly: true
+          type: string
+          description: Represents the provisioning state of the storage task.
+          enum:
+            - ValidateSubscriptionQuotaBegin
+            - ValidateSubscriptionQuotaEnd
+            - Creating
+            - Succeeded
+            - Deleting
+            - Canceled
+            - Failed
+          x-ms-enum:
+            name: ProvisioningState
+            modelAsString: false
+        creationTimeInUtc:
+          readOnly: true
+          type: string
+          format: date-time
+          description: The creation date and time of the storage task in UTC.
+      required:
+        - enabled
+        - description
+        - action
+      description: Properties of the storage task.
+    StorageTaskAction:
+      type: object
+      properties:
+        if:
+          $ref: '#/components/schemas/IfCondition'
+          description: The if block of storage task operation
+        else:
+          $ref: '#/components/schemas/ElseCondition'
+          description: The else block of storage task operation
+      required:
+        - if
+      description: The storage task action represents conditional statements and operations to be performed on target objects.
+    IfCondition:
+      type: object
+      properties:
+        condition:
+          type: string
+          description: Condition predicate to evaluate each object. See https://aka.ms/storagetaskconditions for valid properties and operators.
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageTaskOperation'
+          x-ms-identifiers: []
+          description: List of operations to execute when the condition predicate satisfies.
+      required:
+        - condition
+        - operations
+      description: The if block of storage task operation
+    ElseCondition:
+      type: object
+      properties:
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageTaskOperation'
+          x-ms-identifiers: []
+          description: List of operations to execute in the else block
+      required:
+        - operations
+      description: The else block of storage task operation
+    StorageTaskOperation:
+      type: object
+      properties:
+        name:
+          type: string
+          description: The operation to be performed on the object.
+          enum:
+            - SetBlobTier
+            - SetBlobTags
+            - SetBlobImmutabilityPolicy
+            - SetBlobLegalHold
+            - SetBlobExpiry
+            - DeleteBlob
+            - UndeleteBlob
+          x-ms-enum:
+            name: StorageTaskOperationName
+            modelAsString: true
+        parameters:
+          type: object
+          additionalProperties:
+            type: string
+          description: Key-value parameters for the operation.
+        onSuccess:
+          type: string
+          description: Action to be taken when the operation is successful for a object.
+          enum:
+            - continue
+          x-ms-enum:
+            name: onSuccess
+            modelAsString: false
+        onFailure:
+          type: string
+          description: Action to be taken when the operation fails for a object.
+          enum:
+            - break
+          x-ms-enum:
+            name: onFailure
+            modelAsString: false
+      required:
+        - name
+      description: Represents an operation to be performed on the object
+    StorageTasksListResult:
+      type: object
+      properties:
+        value:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageTask'
+          x-ms-identifiers: []
+          description: Gets the list of storage tasks and their properties.
+        nextLink:
+          type: string
+          description: Request URL that can be used to query next page of storage tasks. Returned when total number of requested storage tasks exceed maximum page size.
+          readOnly: true
+      description: The response from the List Storage Task operation.
+    StorageTaskAssignmentsListResult:
+      type: object
+      properties:
+        value:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageTaskAssignment'
+          x-ms-identifiers: []
+          description: List of Storage Task Assignment Resource IDs associated with this Storage Task.
+        nextLink:
+          type: string
+          description: Request URL that can be used to query next page of Resource IDs. Returned when total number of requested Resource IDs exceed maximum page size.
+          readOnly: true
+      description: The response from the List Storage Tasks operation.
+    StorageTaskAssignment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: arm-id
+          description: Resource ID of the Storage Task Assignment.
+          readOnly: true
+      description: Storage Task Assignment associated with this Storage Task.
+    StorageTaskReportSummary:
+      type: object
+      properties:
+        value:
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageTaskReportInstance'
+          x-ms-identifiers: []
+          description: Gets storage tasks run result summary.
+        nextLink:
+          type: string
+          description: Request URL that can be used to query next page of storage task run results summary. Returned when the number of run instances and summary reports exceed maximum page size.
+          readOnly: true
+      description: Fetch Storage Tasks Run Summary.
+    StorageTaskReportInstance:
+      description: Storage Tasks run report instance
+      properties:
+        properties:
+          $ref: '#/components/schemas/StorageTaskReportProperties'
+      type: object
+    StorageTaskReportProperties:
+      type: object
+      properties:
+        taskAssignmentId:
+          readOnly: true
+          type: string
+          format: arm-id
+          x-ms-arm-id-details:
+            allowedResources:
+              - type: Microsoft.Storage/storageAccounts/storageTaskAssignments
+          description: Resource ID of the Storage Task Assignment associated with this reported run.
+        storageAccountId:
+          readOnly: true
+          type: string
+          format: arm-id
+          x-ms-arm-id-details:
+            allowedResources:
+              - type: Microsoft.Storage/storageAccounts
+          description: Resource ID of the Storage Account where this reported run executed.
+        startTime:
+          readOnly: true
+          type: string
+          description: Start time of the run instance. Filter options such as startTime gt '2023-06-26T20:51:24.4494016Z' and other comparison operators can be used as described for DateTime properties in https://learn.microsoft.com/en-us/rest/api/storageservices/querying-tables-and-entities#supported-comparison-operators
+        finishTime:
+          readOnly: true
+          type: string
+          description: End time of the run instance. Filter options such as startTime gt '2023-06-26T20:51:24.4494016Z' and other comparison operators can be used as described for DateTime properties in https://learn.microsoft.com/en-us/rest/api/storageservices/querying-tables-and-entities#supported-comparison-operators
+        objectsTargetedCount:
+          readOnly: true
+          type: string
+          description: Total number of objects that meet the condition as defined in the storage task assignment execution context. Filter options such as objectsTargetedCount gt 50 and other comparison operators can be used as described for Numerical properties in https://learn.microsoft.com/en-us/rest/api/storageservices/querying-tables-and-entities#supported-comparison-operators
+        objectsOperatedOnCount:
+          readOnly: true
+          type: string
+          description: Total number of objects that meet the storage tasks condition and were operated upon. Filter options such as objectsOperatedOnCount ge 100 and other comparison operators can be used as described for Numerical properties in https://learn.microsoft.com/en-us/rest/api/storageservices/querying-tables-and-entities#supported-comparison-operators
+        objectFailedCount:
+          readOnly: true
+          type: string
+          description: Total number of objects where task operation failed when was attempted. Filter options such as objectFailedCount eq 0 and other comparison operators can be used as described for Numerical properties in https://learn.microsoft.com/en-us/rest/api/storageservices/querying-tables-and-entities#supported-comparison-operators
+        objectsSucceededCount:
+          readOnly: true
+          type: string
+          description: Total number of objects where task operation succeeded when was attempted.Filter options such as objectsSucceededCount gt 150 and other comparison operators can be used as described for Numerical properties in https://learn.microsoft.com/en-us/rest/api/storageservices/querying-tables-and-entities#supported-comparison-operators
+        runStatusError:
+          readOnly: true
+          type: string
+          description: Well known Azure Storage error code that represents the error encountered during execution of the run instance.
+        runStatusEnum:
+          readOnly: true
+          type: string
+          enum:
+            - InProgress
+            - Finished
+          x-ms-enum:
+            name: RunStatusEnum
+            modelAsString: true
+          description: Represents the status of the execution.
+        summaryReportPath:
+          readOnly: true
+          type: string
+          description: 'Full path to the verbose report stored in the reporting container as specified in the assignment execution context for the storage account. '
+        taskId:
+          readOnly: true
+          type: string
+          format: arm-id
+          x-ms-arm-id-details:
+            allowedResources:
+              - type: Microsoft.StorageActions/storageTasks
+          description: Resource ID of the Storage Task applied during this run.
+        taskVersion:
+          readOnly: true
+          type: string
+          description: Storage Task Version
+        runResult:
+          readOnly: true
+          type: string
+          enum:
+            - Succeeded
+            - Failed
+          x-ms-enum:
+            name: RunResult
+            modelAsString: true
+          description: Represents the overall result of the execution for the run instance
+      description: Storage task execution report for a run instance.
+    StorageTaskPreviewAction:
+      required:
+        - properties
+      description: Storage Task Preview Action.
+      properties:
+        properties:
+          x-ms-client-flatten: true
+          $ref: '#/components/schemas/StorageTaskPreviewActionProperties'
+          description: Properties of the storage task preview.
+      type: object
+    StorageTaskPreviewActionProperties:
+      type: object
+      properties:
+        container:
+          type: object
+          $ref: '#/components/schemas/StorageTaskPreviewContainerProperties'
+          description: Properties of a sample container to test for a match with the preview action.
+        blobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageTaskPreviewBlobProperties'
+          x-ms-identifiers: []
+          description: Properties of some sample blobs in the container to test for matches with the preview action.
+        action:
+          type: object
+          $ref: '#/components/schemas/StorageTaskPreviewActionCondition'
+          description: Preview action to test
+      required:
+        - container
+        - blobs
+        - action
+      description: Storage task preview action properties.
+    StorageTaskPreviewActionCondition:
+      type: object
+      properties:
+        if:
+          $ref: '#/components/schemas/StorageTaskPreviewActionIfCondition'
+          description: The condition to be tested for a match with container and blob properties.
+        elseBlockExists:
+          type: boolean
+          description: Specify whether the else block is present in the condition.
+      required:
+        - if
+        - elseBlockExists
+      description: Represents the storage task conditions to be tested for a match with container and blob properties.
+    StorageTaskPreviewActionIfCondition:
+      type: object
+      properties:
+        condition:
+          type: string
+          description: Storage task condition to bes tested for a match.
+      description: Represents storage task preview action condition.
+    StorageTaskPreviewContainerProperties:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of test container
+        metadata:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageTaskPreviewKeyValueProperties'
+          x-ms-identifiers: []
+          description: metadata key value pairs to be tested for a match against the provided condition.
+      description: Storage task preview container properties
+    StorageTaskPreviewBlobProperties:
+      description: Storage task preview container properties
+      properties:
+        name:
+          type: string
+          description: Name of test blob
+        properties:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageTaskPreviewKeyValueProperties'
+          x-ms-identifiers: []
+          description: properties key value pairs to be tested for a match against the provided condition.
+        metadata:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageTaskPreviewKeyValueProperties'
+          x-ms-identifiers: []
+          description: metadata key value pairs to be tested for a match against the provided condition.
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageTaskPreviewKeyValueProperties'
+          x-ms-identifiers: []
+          description: tags key value pairs to be tested for a match against the provided condition.
+        matchedBlock:
+          type: string
+          readOnly: true
+          enum:
+            - If
+            - Else
+            - None
+          x-ms-enum:
+            name: matchedBlockName
+            modelAsString: true
+          description: Represents the condition block name that matched blob properties.
+      type: object
+    StorageTaskPreviewKeyValueProperties:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Represents the key property of the pair.
+        value:
+          type: string
+          description: Represents the value property of the pair.
+      description: Storage task preview object key value pair properties.
     Resource:
       title: Resource
       description: Common fields that are returned in the response for all Azure Resource Manager resources
@@ -637,431 +1062,6 @@ components:
         message:
           description: Detailed reason why the given name is available.
           type: string
-    StorageTask:
-      required:
-        - identity
-        - properties
-      description: Represents Storage Task.
-      properties:
-        identity:
-          $ref: '#/components/schemas/ManagedServiceIdentity'
-          description: The managed service identity of the resource.
-        properties:
-          x-ms-client-flatten: true
-          $ref: '#/components/schemas/StorageTaskProperties'
-          description: Properties of the storage task.
-        tags:
-          type: object
-          additionalProperties:
-            type: string
-          x-ms-mutability:
-            - read
-            - create
-            - update
-          description: Resource tags.
-        location:
-          type: string
-          x-ms-mutability:
-            - read
-            - create
-          description: The geo-location where the resource lives
-      type: object
-    StorageTaskUpdateParameters:
-      description: Parameters of the storage task update request
-      properties:
-        identity:
-          $ref: '#/components/schemas/ManagedServiceIdentity'
-          description: The identity of the resource.
-        tags:
-          type: object
-          additionalProperties:
-            type: string
-          description: Gets or sets a list of key value pairs that describe the resource. These tags can be used in viewing and grouping this resource (across resource groups). A maximum of 15 tags can be provided for a resource. Each tag must have a key no greater in length than 128 characters and a value no greater in length than 256 characters.
-        properties:
-          x-ms-client-flatten: true
-          $ref: '#/components/schemas/StorageTaskProperties'
-          description: Properties of the storage task.
-      type: object
-    StorageTaskProperties:
-      type: object
-      properties:
-        taskVersion:
-          readOnly: true
-          type: integer
-          minimum: 1
-          maximum: 1
-          format: int64
-          description: Storage task version.
-        enabled:
-          type: boolean
-          description: Storage Task is enabled when set to true and disabled when set to false
-        description:
-          type: string
-          description: Text that describes the purpose of the storage task
-        action:
-          $ref: '#/components/schemas/StorageTaskAction'
-          description: The storage task action that is executed
-        provisioningState:
-          readOnly: true
-          type: string
-          description: Represents the provisioning state of the storage task.
-          enum:
-            - ValidateSubscriptionQuotaBegin
-            - ValidateSubscriptionQuotaEnd
-            - Creating
-            - Succeeded
-            - Deleting
-            - Canceled
-            - Failed
-          x-ms-enum:
-            name: ProvisioningState
-            modelAsString: false
-        creationTimeInUtc:
-          readOnly: true
-          type: string
-          format: date-time
-          description: The creation date and time of the storage task in UTC.
-      required:
-        - enabled
-        - description
-        - action
-      description: Properties of the storage task.
-    StorageTaskAction:
-      type: object
-      properties:
-        if:
-          $ref: '#/components/schemas/IfCondition'
-          description: The if block of storage task operation
-        else:
-          $ref: '#/components/schemas/ElseCondition'
-          description: The else block of storage task operation
-      required:
-        - if
-      description: The storage task action represents conditional statements and operations to be performed on target objects.
-    IfCondition:
-      type: object
-      properties:
-        condition:
-          type: string
-          description: Condition predicate to evaluate each object. See https://aka.ms/storagetaskconditions for valid properties and operators.
-        operations:
-          type: array
-          items:
-            $ref: '#/components/schemas/StorageTaskOperation'
-          x-ms-identifiers: []
-          description: List of operations to execute when the condition predicate satisfies.
-      required:
-        - condition
-        - operations
-      description: The if block of storage task operation
-    ElseCondition:
-      type: object
-      properties:
-        operations:
-          type: array
-          items:
-            $ref: '#/components/schemas/StorageTaskOperation'
-          x-ms-identifiers: []
-          description: List of operations to execute in the else block
-      required:
-        - operations
-      description: The else block of storage task operation
-    StorageTaskOperation:
-      type: object
-      properties:
-        name:
-          type: string
-          description: The operation to be performed on the object.
-          enum:
-            - SetBlobTier
-            - SetBlobTags
-            - SetBlobImmutabilityPolicy
-            - SetBlobLegalHold
-            - SetBlobExpiry
-            - DeleteBlob
-            - UndeleteBlob
-          x-ms-enum:
-            name: StorageTaskOperationName
-            modelAsString: true
-        parameters:
-          type: object
-          additionalProperties:
-            type: string
-          description: Key-value parameters for the operation.
-        onSuccess:
-          type: string
-          description: Action to be taken when the operation is successful for a object.
-          enum:
-            - continue
-          x-ms-enum:
-            name: onSuccess
-            modelAsString: false
-        onFailure:
-          type: string
-          description: Action to be taken when the operation fails for a object.
-          enum:
-            - break
-          x-ms-enum:
-            name: onFailure
-            modelAsString: false
-      required:
-        - name
-      description: Represents an operation to be performed on the object
-    StorageTasksListResult:
-      type: object
-      properties:
-        value:
-          readOnly: true
-          type: array
-          items:
-            $ref: '#/components/schemas/StorageTask'
-          x-ms-identifiers: []
-          description: Gets the list of storage tasks and their properties.
-        nextLink:
-          type: string
-          description: Request URL that can be used to query next page of storage tasks. Returned when total number of requested storage tasks exceed maximum page size.
-          readOnly: true
-      description: The response from the List Storage Task operation.
-    StorageTaskAssignmentsListResult:
-      type: object
-      properties:
-        value:
-          readOnly: true
-          type: array
-          items:
-            $ref: '#/components/schemas/StorageTaskAssignment'
-          x-ms-identifiers: []
-          description: List of Storage Task Assignment Resource IDs associated with this Storage Task.
-        nextLink:
-          type: string
-          description: Request URL that can be used to query next page of Resource IDs. Returned when total number of requested Resource IDs exceed maximum page size.
-          readOnly: true
-      description: The response from the List Storage Tasks operation.
-    StorageTaskAssignment:
-      type: object
-      properties:
-        id:
-          type: string
-          format: arm-id
-          description: Resource ID of the Storage Task Assignment.
-          readOnly: true
-      description: Storage Task Assignment associated with this Storage Task.
-    StorageTaskReportSummary:
-      type: object
-      properties:
-        value:
-          readOnly: true
-          type: array
-          items:
-            $ref: '#/components/schemas/StorageTaskReportInstance'
-          x-ms-identifiers: []
-          description: Gets storage tasks run result summary.
-        nextLink:
-          type: string
-          description: Request URL that can be used to query next page of storage task run results summary. Returned when the number of run instances and summary reports exceed maximum page size.
-          readOnly: true
-      description: Fetch Storage Tasks Run Summary.
-    StorageTaskReportInstance:
-      description: Storage Tasks run report instance
-      properties:
-        properties:
-          $ref: '#/components/schemas/StorageTaskReportProperties'
-      type: object
-    StorageTaskReportProperties:
-      type: object
-      properties:
-        taskAssignmentId:
-          readOnly: true
-          type: string
-          format: arm-id
-          x-ms-arm-id-details:
-            allowedResources:
-              - type: Microsoft.Storage/storageAccounts/storageTaskAssignments
-          description: Resource ID of the Storage Task Assignment associated with this reported run.
-        storageAccountId:
-          readOnly: true
-          type: string
-          format: arm-id
-          x-ms-arm-id-details:
-            allowedResources:
-              - type: Microsoft.Storage/storageAccounts
-          description: Resource ID of the Storage Account where this reported run executed.
-        startTime:
-          readOnly: true
-          type: string
-          description: Start time of the run instance. Filter options such as startTime gt '2023-06-26T20:51:24.4494016Z' and other comparison operators can be used as described for DateTime properties in https://learn.microsoft.com/en-us/rest/api/storageservices/querying-tables-and-entities#supported-comparison-operators
-        finishTime:
-          readOnly: true
-          type: string
-          description: End time of the run instance. Filter options such as startTime gt '2023-06-26T20:51:24.4494016Z' and other comparison operators can be used as described for DateTime properties in https://learn.microsoft.com/en-us/rest/api/storageservices/querying-tables-and-entities#supported-comparison-operators
-        objectsTargetedCount:
-          readOnly: true
-          type: string
-          description: Total number of objects that meet the condition as defined in the storage task assignment execution context. Filter options such as objectsTargetedCount gt 50 and other comparison operators can be used as described for Numerical properties in https://learn.microsoft.com/en-us/rest/api/storageservices/querying-tables-and-entities#supported-comparison-operators
-        objectsOperatedOnCount:
-          readOnly: true
-          type: string
-          description: Total number of objects that meet the storage tasks condition and were operated upon. Filter options such as objectsOperatedOnCount ge 100 and other comparison operators can be used as described for Numerical properties in https://learn.microsoft.com/en-us/rest/api/storageservices/querying-tables-and-entities#supported-comparison-operators
-        objectFailedCount:
-          readOnly: true
-          type: string
-          description: Total number of objects where task operation failed when was attempted. Filter options such as objectFailedCount eq 0 and other comparison operators can be used as described for Numerical properties in https://learn.microsoft.com/en-us/rest/api/storageservices/querying-tables-and-entities#supported-comparison-operators
-        objectsSucceededCount:
-          readOnly: true
-          type: string
-          description: Total number of objects where task operation succeeded when was attempted.Filter options such as objectsSucceededCount gt 150 and other comparison operators can be used as described for Numerical properties in https://learn.microsoft.com/en-us/rest/api/storageservices/querying-tables-and-entities#supported-comparison-operators
-        runStatusError:
-          readOnly: true
-          type: string
-          description: Well known Azure Storage error code that represents the error encountered during execution of the run instance.
-        runStatusEnum:
-          readOnly: true
-          type: string
-          enum:
-            - InProgress
-            - Finished
-          x-ms-enum:
-            name: RunStatusEnum
-            modelAsString: true
-          description: Represents the status of the execution.
-        summaryReportPath:
-          readOnly: true
-          type: string
-          description: 'Full path to the verbose report stored in the reporting container as specified in the assignment execution context for the storage account. '
-        taskId:
-          readOnly: true
-          type: string
-          format: arm-id
-          x-ms-arm-id-details:
-            allowedResources:
-              - type: Microsoft.StorageActions/storageTasks
-          description: Resource ID of the Storage Task applied during this run.
-        taskVersion:
-          readOnly: true
-          type: string
-          description: Storage Task Version
-        runResult:
-          readOnly: true
-          type: string
-          enum:
-            - Succeeded
-            - Failed
-          x-ms-enum:
-            name: RunResult
-            modelAsString: true
-          description: Represents the overall result of the execution for the run instance
-      description: Storage task execution report for a run instance.
-    StorageTaskPreviewAction:
-      required:
-        - properties
-      description: Storage Task Preview Action.
-      properties:
-        properties:
-          x-ms-client-flatten: true
-          $ref: '#/components/schemas/StorageTaskPreviewActionProperties'
-          description: Properties of the storage task preview.
-      type: object
-    StorageTaskPreviewActionProperties:
-      type: object
-      properties:
-        container:
-          type: object
-          $ref: '#/components/schemas/StorageTaskPreviewContainerProperties'
-          description: Properties of a sample container to test for a match with the preview action.
-        blobs:
-          type: array
-          items:
-            $ref: '#/components/schemas/StorageTaskPreviewBlobProperties'
-          x-ms-identifiers: []
-          description: Properties of some sample blobs in the container to test for matches with the preview action.
-        action:
-          type: object
-          $ref: '#/components/schemas/StorageTaskPreviewActionCondition'
-          description: Preview action to test
-      required:
-        - container
-        - blobs
-        - action
-      description: Storage task preview action properties.
-    StorageTaskPreviewActionCondition:
-      type: object
-      properties:
-        if:
-          $ref: '#/components/schemas/StorageTaskPreviewActionIfCondition'
-          description: The condition to be tested for a match with container and blob properties.
-        elseBlockExists:
-          type: boolean
-          description: Specify whether the else block is present in the condition.
-      required:
-        - if
-        - elseBlockExists
-      description: Represents the storage task conditions to be tested for a match with container and blob properties.
-    StorageTaskPreviewActionIfCondition:
-      type: object
-      properties:
-        condition:
-          type: string
-          description: Storage task condition to bes tested for a match.
-      description: Represents storage task preview action condition.
-    StorageTaskPreviewContainerProperties:
-      type: object
-      properties:
-        name:
-          type: string
-          description: Name of test container
-        metadata:
-          type: array
-          items:
-            $ref: '#/components/schemas/StorageTaskPreviewKeyValueProperties'
-          x-ms-identifiers: []
-          description: metadata key value pairs to be tested for a match against the provided condition.
-      description: Storage task preview container properties
-    StorageTaskPreviewBlobProperties:
-      description: Storage task preview container properties
-      properties:
-        name:
-          type: string
-          description: Name of test blob
-        properties:
-          type: array
-          items:
-            $ref: '#/components/schemas/StorageTaskPreviewKeyValueProperties'
-          x-ms-identifiers: []
-          description: properties key value pairs to be tested for a match against the provided condition.
-        metadata:
-          type: array
-          items:
-            $ref: '#/components/schemas/StorageTaskPreviewKeyValueProperties'
-          x-ms-identifiers: []
-          description: metadata key value pairs to be tested for a match against the provided condition.
-        tags:
-          type: array
-          items:
-            $ref: '#/components/schemas/StorageTaskPreviewKeyValueProperties'
-          x-ms-identifiers: []
-          description: tags key value pairs to be tested for a match against the provided condition.
-        matchedBlock:
-          type: string
-          readOnly: true
-          enum:
-            - If
-            - Else
-            - None
-          x-ms-enum:
-            name: matchedBlockName
-            modelAsString: true
-          description: Represents the condition block name that matched blob properties.
-      type: object
-    StorageTaskPreviewKeyValueProperties:
-      type: object
-      properties:
-        key:
-          type: string
-          description: Represents the key property of the pair.
-        value:
-          type: string
-          description: Represents the value property of the pair.
-      description: Storage task preview object key value pair properties.
     UserAssignedIdentities:
       title: User-Assigned Identities
       description: 'The set of user assigned identities associated with the resource. The userAssignedIdentities dictionary keys will be ARM resource ids in the form: ''/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/{identityName}. The dictionary values can be empty objects ({}) in requests.'
@@ -1151,16 +1151,19 @@ components:
       methods:
         list:
           operation:
-            $ref: '#/paths/~1providers~1Microsoft.StorageActions~1operations~1?api-version=2023-01-01/get'
+            $ref: '#/paths/~1providers~1Microsoft.StorageActions~1operations?api-version=2023-01-01/get'
+            operationId: Operations_List
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+            schemaRef: OperationListResult
             objectKey: $.value
       sqlVerbs:
         select:
           - $ref: '#/components/x-stackQL-resources/operations/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
     storage_tasks:
       id: azure.storageactions.storage_tasks
@@ -1169,48 +1172,61 @@ components:
       methods:
         create:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.StorageActions~1storageTasks~1{storageTaskName}~1?api-version=2023-01-01/put'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.StorageActions~1storageTasks~1{storageTaskName}?api-version=2023-01-01/put'
+            operationId: StorageTasks_Create
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+            schemaRef: StorageTask
         delete:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.StorageActions~1storageTasks~1{storageTaskName}~1?api-version=2023-01-01/delete'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.StorageActions~1storageTasks~1{storageTaskName}?api-version=2023-01-01/delete'
+            operationId: StorageTasks_Delete
           response:
             mediaType: application/json
-            openAPIDocKey: '200'
+            openAPIDocKey: '202'
         get:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.StorageActions~1storageTasks~1{storageTaskName}~1?api-version=2023-01-01/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.StorageActions~1storageTasks~1{storageTaskName}?api-version=2023-01-01/get'
+            operationId: StorageTasks_Get
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+            schemaRef: StorageTask
         update:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.StorageActions~1storageTasks~1{storageTaskName}~1?api-version=2023-01-01/patch'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.StorageActions~1storageTasks~1{storageTaskName}?api-version=2023-01-01/patch'
+            operationId: StorageTasks_Update
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+            schemaRef: StorageTask
         list_by_subscription:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Microsoft.StorageActions~1storageTasks~1?api-version=2023-01-01/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Microsoft.StorageActions~1storageTasks?api-version=2023-01-01/get'
+            operationId: StorageTasks_ListBySubscription
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+            schemaRef: StorageTasksListResult
             objectKey: $.value
         list_by_resource_group:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.StorageActions~1storageTasks~1?api-version=2023-01-01/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.StorageActions~1storageTasks?api-version=2023-01-01/get'
+            operationId: StorageTasks_ListByResourceGroup
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+            schemaRef: StorageTasksListResult
             objectKey: $.value
         preview_actions:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Microsoft.StorageActions~1locations~1{location}~1previewActions~1?api-version=2023-01-01/post'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Microsoft.StorageActions~1locations~1{location}~1previewActions?api-version=2023-01-01/post'
+            operationId: StorageTasks_PreviewActions
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+            schemaRef: StorageTaskPreviewAction
       sqlVerbs:
         select:
           - $ref: '#/components/x-stackQL-resources/storage_tasks/methods/get'
@@ -1218,47 +1234,96 @@ components:
           - $ref: '#/components/x-stackQL-resources/storage_tasks/methods/list_by_subscription'
         insert:
           - $ref: '#/components/x-stackQL-resources/storage_tasks/methods/create'
-        update: []
+        update:
+          - $ref: '#/components/x-stackQL-resources/storage_tasks/methods/update'
+        replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/storage_tasks/methods/delete'
-    storage_task_assignment:
-      id: azure.storageactions.storage_task_assignment
-      name: storage_task_assignment
-      title: storage_task_assignment
+    storage_task_assignments:
+      id: azure.storageactions.storage_task_assignments
+      name: storage_task_assignments
+      title: storage_task_assignments
       methods:
         list:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.StorageActions~1storageTasks~1{storageTaskName}~1storageTaskAssignments~1?api-version=2023-01-01/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.StorageActions~1storageTasks~1{storageTaskName}~1storageTaskAssignments?api-version=2023-01-01/get'
+            operationId: StorageTaskAssignment_List
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+            schemaRef: StorageTaskAssignmentsListResult
             objectKey: $.value
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/storage_task_assignment/methods/list'
+          - $ref: '#/components/x-stackQL-resources/storage_task_assignments/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
-    storage_tasks_report:
-      id: azure.storageactions.storage_tasks_report
-      name: storage_tasks_report
-      title: storage_tasks_report
+    storage_tasks_reports:
+      id: azure.storageactions.storage_tasks_reports
+      name: storage_tasks_reports
+      title: storage_tasks_reports
       methods:
         list:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.StorageActions~1storageTasks~1{storageTaskName}~1reports~1?api-version=2023-01-01/get'
+            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1resourceGroups~1{resourceGroupName}~1providers~1Microsoft.StorageActions~1storageTasks~1{storageTaskName}~1reports?api-version=2023-01-01/get'
+            operationId: StorageTasksReport_List
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+            schemaRef: StorageTaskReportSummary
             objectKey: $.value
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/storage_tasks_report/methods/list'
+          - $ref: '#/components/x-stackQL-resources/storage_tasks_reports/methods/list'
         insert: []
         update: []
+        replace: []
         delete: []
+    vw_storage_tasks:
+      id: azure.storageactions.vw_storage_tasks
+      name: vw_storage_tasks
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              location as location,
+              identity as identity,
+              tags as tags,
+              JSON_EXTRACT(properties, '$.taskVersion') as "task_version",
+              JSON_EXTRACT(properties, '$.enabled') as "enabled",
+              JSON_EXTRACT(properties, '$.description') as "description",
+              JSON_EXTRACT(properties, '$.action') as "action",
+              JSON_EXTRACT(properties, '$.provisioningState') as "provisioning_state",
+              JSON_EXTRACT(properties, '$.creationTimeInUtc') as "creation_time_in_utc",
+              subscriptionId,
+              resourceGroupName,
+              storageTaskName
+              FROM azure.storageactions.storage_tasks
+              WHERE subscriptionId = 'replace-me';
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                location as location,
+                identity as identity,
+                tags as tags,
+                json_extract_path_text(properties, '$.taskVersion') as "task_version",
+                json_extract_path_text(properties, '$.enabled') as "enabled",
+                json_extract_path_text(properties, '$.description') as "description",
+                json_extract_path_text(properties, '$.action') as "action",
+                json_extract_path_text(properties, '$.provisioningState') as "provisioning_state",
+                json_extract_path_text(properties, '$.creationTimeInUtc') as "creation_time_in_utc",
+                subscriptionId,
+                resourceGroupName,
+                storageTaskName
+                FROM azure.storageactions.storage_tasks
+                WHERE subscriptionId = 'replace-me';
 paths:
-  /providers/Microsoft.StorageActions/operations/?api-version=2023-01-01:
+  /providers/Microsoft.StorageActions/operations?api-version=2023-01-01:
     get:
       tags:
         - Storage Actions Operations
@@ -1280,7 +1345,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageActions/storageTasks/{storageTaskName}/?api-version=2023-01-01:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageActions/storageTasks/{storageTaskName}?api-version=2023-01-01:
     put:
       tags:
         - StorageTasks
@@ -1414,7 +1479,7 @@ paths:
       x-ms-long-running-operation: true
       x-ms-long-running-operation-options:
         final-state-via: location
-  /subscriptions/{subscriptionId}/providers/Microsoft.StorageActions/storageTasks/?api-version=2023-01-01:
+  /subscriptions/{subscriptionId}/providers/Microsoft.StorageActions/storageTasks?api-version=2023-01-01:
     get:
       tags:
         - StorageTasks
@@ -1437,7 +1502,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageActions/storageTasks/?api-version=2023-01-01:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageActions/storageTasks?api-version=2023-01-01:
     get:
       tags:
         - StorageTasks
@@ -1461,7 +1526,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageActions/storageTasks/{storageTaskName}/storageTaskAssignments/?api-version=2023-01-01:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageActions/storageTasks/{storageTaskName}/storageTaskAssignments?api-version=2023-01-01:
     get:
       tags:
         - StorageTasks
@@ -1474,7 +1539,8 @@ paths:
           in: query
           description: Optional, specifies the maximum number of Storage Task Assignment Resource IDs to be included in the list response.
           schema:
-            type: string
+            format: int32
+            type: integer
         - $ref: '#/components/parameters/SubscriptionIdParameter'
       responses:
         '200':
@@ -1491,7 +1557,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageActions/storageTasks/{storageTaskName}/reports/?api-version=2023-01-01:
+  /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageActions/storageTasks/{storageTaskName}/reports?api-version=2023-01-01:
     get:
       tags:
         - StorageTasks
@@ -1504,7 +1570,8 @@ paths:
           in: query
           description: Optional, specifies the maximum number of Storage Task Assignment Resource IDs to be included in the list response.
           schema:
-            type: string
+            format: int32
+            type: integer
         - name: $filter
           in: query
           description: Optional. When specified, it can be used to query using reporting properties.
@@ -1526,7 +1593,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
       x-ms-pageable:
         nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/providers/Microsoft.StorageActions/locations/{location}/previewActions/?api-version=2023-01-01:
+  /subscriptions/{subscriptionId}/providers/Microsoft.StorageActions/locations/{location}/previewActions?api-version=2023-01-01:
     post:
       tags:
         - StorageTasks
