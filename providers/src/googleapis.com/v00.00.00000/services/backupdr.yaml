@@ -7,8 +7,8 @@ info:
   title: Backup and DR Service API
   description: ''
   version: v1
-  x-discovery-doc-revision: '20240904'
-  x-generated-date: '2024-09-19'
+  x-discovery-doc-revision: '20241023'
+  x-generated-date: '2024-11-06'
 externalDocs:
   url: https://cloud.google.com/backup-disaster-recovery
 servers:
@@ -585,8 +585,9 @@ components:
             - ERROR
         networks:
           description: >-
-            Required. VPC networks to which the ManagementServer instance is
+            Optional. VPC networks to which the ManagementServer instance is
             connected. For this version, only a single network is supported.
+            This field is optional if MS is created without PSA
           type: array
           items:
             $ref: '#/components/schemas/NetworkConfig'
@@ -701,7 +702,13 @@ components:
       type: object
       properties:
         name:
-          description: Output only. Identifier. The resource name.
+          description: >-
+            Output only. Identifier. Name of the backup vault to create. It must
+            have the
+            format`"projects/{project}/locations/{location}/backupVaults/{backupvault}"`.
+            `{backupvault}` cannot be changed after creation. It must be between
+            3-63 characters long and must be unique within the project and
+            location.
           readOnly: true
           type: string
         description:
@@ -796,6 +803,33 @@ components:
           type: object
           additionalProperties:
             type: string
+        accessRestriction:
+          description: >-
+            Optional. Note: This field is added for future use case and will not
+            be supported in the current release. Optional. Access restriction
+            for the backup vault. Default value is WITHIN_ORGANIZATION if not
+            provided during creation.
+          type: string
+          enumDescriptions:
+            - >-
+              Access restriction not set. If user does not provide any value or
+              pass this value, it will be changed to WITHIN_ORGANIZATION.
+            - >-
+              Access to or from resources outside your current project will be
+              denied.
+            - >-
+              Access to or from resources outside your current organization will
+              be denied.
+            - No access restriction.
+            - >-
+              Access to or from resources outside your current organization will
+              be denied except for backup appliance.
+          enum:
+            - ACCESS_RESTRICTION_UNSPECIFIED
+            - WITHIN_PROJECT
+            - WITHIN_ORGANIZATION
+            - UNRESTRICTED
+            - WITHIN_ORG_BUT_UNRESTRICTED_FOR_BA
     ListBackupVaultsResponse:
       id: ListBackupVaultsResponse
       description: Response message for listing BackupVaults.
@@ -876,7 +910,12 @@ components:
       type: object
       properties:
         name:
-          description: Output only. Identifier. The resource name.
+          description: >-
+            Output only. Identifier. Name of the datasource to create. It must
+            have the
+            format`"projects/{project}/locations/{location}/backupVaults/{backupvault}/dataSources/{datasource}"`.
+            `{datasource}` cannot be changed after creation. It must be between
+            3-63 characters long and must be unique within the backup vault.
           readOnly: true
           type: string
         state:
@@ -1372,7 +1411,12 @@ components:
       type: object
       properties:
         name:
-          description: Output only. Identifier. Name of the resource.
+          description: >-
+            Output only. Identifier. Name of the backup to create. It must have
+            the
+            format`"projects//locations//backupVaults//dataSources/{datasource}/backups/{backup}"`.
+            `{backup}` cannot be changed after creation. It must be between 3-63
+            characters long and must be unique within the datasource.
           readOnly: true
           type: string
         description:
@@ -2675,7 +2719,8 @@ components:
         resourceType:
           description: >-
             Required. The resource type to which the `BackupPlan` will be
-            applied. Examples include, "compute.googleapis.com/Instance" and
+            applied. Examples include, "compute.googleapis.com/Instance",
+            "sqladmin.googleapis.com/Instance" and
             "storage.googleapis.com/Bucket".
           type: string
         etag:
@@ -2971,10 +3016,7 @@ components:
           readOnly: true
           type: string
         resourceType:
-          description: >-
-            Output only. Output Only. Resource type of workload on which
-            backupplan is applied
-          readOnly: true
+          description: Optional. Resource type of workload on which backupplan is applied
           type: string
         resource:
           description: >-
@@ -3007,12 +3049,14 @@ components:
             - The resource has been created and is fully usable.
             - The resource is being deleted.
             - The resource has been created but is not usable.
+            - The resource is being updated.
           enum:
             - STATE_UNSPECIFIED
             - CREATING
             - ACTIVE
             - DELETING
             - INACTIVE
+            - UPDATING
         rulesConfigInfo:
           description: Output only. The config info related to backup rules.
           readOnly: true
@@ -3212,326 +3256,44 @@ components:
           type: object
           additionalProperties:
             type: string
-    AssetLocation:
-      id: AssetLocation
-      description: >-
-        Provides the mapping of a cloud asset to a direct physical location or
-        to a proxy that defines the location on its behalf.
+    SetInternalStatusResponse:
+      id: SetInternalStatusResponse
+      description: Response message from SetStatusInternal method.
+      type: object
+      properties: {}
+    RestoreBackupResponse:
+      id: RestoreBackupResponse
+      description: Response message for restoring from a Backup.
       type: object
       properties:
-        expected:
-          description: >-
-            Defines the customer expectation around ZI/ZS for this asset and
-            ZI/ZS state of the region at the time of asset creation.
-          $ref: '#/components/schemas/IsolationExpectations'
-        locationData:
-          description: Contains all kinds of physical location definitions for this asset.
-          type: array
-          items:
-            $ref: '#/components/schemas/LocationData'
-        parentAsset:
-          description: >-
-            Defines parents assets if any in order to allow later generation of
-            child_asset_location data via child assets.
-          type: array
-          items:
-            $ref: '#/components/schemas/CloudAsset'
-        extraParameters:
-          description: Defines extra parameters required for specific asset types.
-          type: array
-          items:
-            $ref: '#/components/schemas/ExtraParameter'
-        ccfeRmsPath:
-          description: >-
-            Spanner path of the CCFE RMS database. It is only applicable for
-            CCFE tenants that use CCFE RMS for storing resource metadata.
-          type: string
-    IsolationExpectations:
-      id: IsolationExpectations
+        targetResource:
+          description: Details of the target resource created/modified as part of restore.
+          $ref: '#/components/schemas/TargetResource'
+    TargetResource:
+      id: TargetResource
+      description: Details of the target resource created/modified as part of restore.
       type: object
       properties:
-        zoneIsolation:
+        gcpResource:
           description: >-
-            Deprecated: use zi_org_policy, zi_region_policy and zi_region_state
-            instead for setting ZI expectations as per
-            go/zicy-publish-physical-location.
-          deprecated: true
-          type: string
-          enumDescriptions:
-            - ''
-            - To be used if tracking is not available
-            - ''
-            - ''
-            - ''
-          enum:
-            - ZI_UNSPECIFIED
-            - ZI_UNKNOWN
-            - ZI_NOT_REQUIRED
-            - ZI_PREFERRED
-            - ZI_REQUIRED
-        zoneSeparation:
-          description: >-
-            Deprecated: use zs_org_policy, and zs_region_stateinstead for
-            setting Zs expectations as per go/zicy-publish-physical-location.
-          deprecated: true
-          type: string
-          enumDescriptions:
-            - ''
-            - To be used if tracking is not available
-            - ''
-            - ''
-          enum:
-            - ZS_UNSPECIFIED
-            - ZS_UNKNOWN
-            - ZS_NOT_REQUIRED
-            - ZS_REQUIRED
-        zsOrgPolicy:
-          type: string
-          enumDescriptions:
-            - ''
-            - To be used if tracking is not available
-            - ''
-            - ''
-          enum:
-            - ZS_UNSPECIFIED
-            - ZS_UNKNOWN
-            - ZS_NOT_REQUIRED
-            - ZS_REQUIRED
-        zsRegionState:
-          type: string
-          enumDescriptions:
-            - ''
-            - To be used if tracking of the asset ZS-bit is not available
-            - ''
-            - ''
-          enum:
-            - ZS_REGION_UNSPECIFIED
-            - ZS_REGION_UNKNOWN
-            - ZS_REGION_NOT_ENABLED
-            - ZS_REGION_ENABLED
-        ziOrgPolicy:
-          type: string
-          enumDescriptions:
-            - ''
-            - To be used if tracking is not available
-            - ''
-            - ''
-            - ''
-          enum:
-            - ZI_UNSPECIFIED
-            - ZI_UNKNOWN
-            - ZI_NOT_REQUIRED
-            - ZI_PREFERRED
-            - ZI_REQUIRED
-        ziRegionPolicy:
-          type: string
-          enumDescriptions:
-            - ''
-            - To be used if tracking is not available
-            - ''
-            - ''
-            - ''
-          enum:
-            - ZI_REGION_POLICY_UNSPECIFIED
-            - ZI_REGION_POLICY_UNKNOWN
-            - ZI_REGION_POLICY_NOT_SET
-            - ZI_REGION_POLICY_FAIL_OPEN
-            - ZI_REGION_POLICY_FAIL_CLOSED
-        ziRegionState:
-          type: string
-          enumDescriptions:
-            - ''
-            - To be used if tracking is not available
-            - ''
-            - ''
-          enum:
-            - ZI_REGION_UNSPECIFIED
-            - ZI_REGION_UNKNOWN
-            - ZI_REGION_NOT_ENABLED
-            - ZI_REGION_ENABLED
-        requirementOverride:
-          description: >-
-            Explicit overrides for ZI and ZS requirements to be used for
-            resources that should be excluded from ZI/ZS verification logic.
-          $ref: '#/components/schemas/RequirementOverride'
-    RequirementOverride:
-      id: RequirementOverride
+            Details of the native Google Cloud resource created as part of
+            restore.
+          $ref: '#/components/schemas/GcpResource'
+    GcpResource:
+      id: GcpResource
+      description: Minimum details to identify a Google Cloud resource
       type: object
       properties:
-        ziOverride:
+        gcpResourcename:
+          description: Name of the Google Cloud resource.
           type: string
-          enumDescriptions:
-            - ''
-            - To be used if tracking is not available
-            - ''
-            - ''
-            - ''
-          enum:
-            - ZI_UNSPECIFIED
-            - ZI_UNKNOWN
-            - ZI_NOT_REQUIRED
-            - ZI_PREFERRED
-            - ZI_REQUIRED
-        zsOverride:
-          type: string
-          enumDescriptions:
-            - ''
-            - To be used if tracking is not available
-            - ''
-            - ''
-          enum:
-            - ZS_UNSPECIFIED
-            - ZS_UNKNOWN
-            - ZS_NOT_REQUIRED
-            - ZS_REQUIRED
-    LocationData:
-      id: LocationData
-      type: object
-      properties:
-        directLocation:
-          $ref: '#/components/schemas/DirectLocationAssignment'
-        spannerLocation:
-          $ref: '#/components/schemas/SpannerLocation'
-        childAssetLocation:
-          $ref: '#/components/schemas/CloudAssetComposition'
-        gcpProjectProxy:
-          $ref: '#/components/schemas/TenantProjectProxy'
-        blobstoreLocation:
-          $ref: '#/components/schemas/BlobstoreLocation'
-        placerLocation:
-          $ref: '#/components/schemas/PlacerLocation'
-    DirectLocationAssignment:
-      id: DirectLocationAssignment
-      type: object
-      properties:
         location:
-          type: array
-          items:
-            $ref: '#/components/schemas/LocationAssignment'
-    LocationAssignment:
-      id: LocationAssignment
-      type: object
-      properties:
-        location:
+          description: 'Location of the resource: //"global"/"unspecified".'
           type: string
-        locationType:
-          type: string
-          enumDescriptions:
-            - ''
-            - '1-10: Physical failure domains.'
-            - ''
-            - '11-20: Logical failure domains.'
-            - ''
-            - ''
-            - ''
-            - ''
-            - ''
-          enum:
-            - UNSPECIFIED
-            - CLUSTER
-            - POP
-            - CLOUD_ZONE
-            - CLOUD_REGION
-            - MULTI_REGION_GEO
-            - MULTI_REGION_JURISDICTION
-            - GLOBAL
-            - OTHER
-    SpannerLocation:
-      id: SpannerLocation
-      type: object
-      properties:
-        dbName:
-          description: Set of databases used by the resource in format /span//
-          type: array
-          items:
-            type: string
-        backupName:
+        type:
           description: >-
-            Set of backups used by the resource with name in the same format as
-            what is available at http://table/spanner_automon.backup_metadata
-          type: array
-          items:
-            type: string
-    CloudAssetComposition:
-      id: CloudAssetComposition
-      type: object
-      properties:
-        childAsset:
-          type: array
-          items:
-            $ref: '#/components/schemas/CloudAsset'
-    CloudAsset:
-      id: CloudAsset
-      type: object
-      properties:
-        assetType:
-          type: string
-        assetName:
-          type: string
-    TenantProjectProxy:
-      id: TenantProjectProxy
-      type: object
-      properties:
-        projectNumbers:
-          type: array
-          items:
-            type: string
-    BlobstoreLocation:
-      id: BlobstoreLocation
-      description: >-
-        Policy ID that identified data placement in Blobstore as per
-        go/blobstore-user-guide#data-metadata-placement-and-failure-domains
-      type: object
-      properties:
-        policyId:
-          type: array
-          items:
-            type: string
-    PlacerLocation:
-      id: PlacerLocation
-      description: >-
-        Message describing that the location of the customer resource is tied to
-        placer allocations
-      type: object
-      properties:
-        placerConfig:
-          description: >-
-            Directory with a config related to it in placer (e.g.
-            "/placer/prod/home/my-root/my-dir")
-          type: string
-    ExtraParameter:
-      id: ExtraParameter
-      description: Defines parameters that should only be used for specific asset types.
-      type: object
-      properties:
-        regionalMigDistributionPolicy:
-          description: >-
-            Details about zones used by regional
-            compute.googleapis.com/InstanceGroupManager to create instances.
-          $ref: '#/components/schemas/RegionalMigDistributionPolicy'
-    RegionalMigDistributionPolicy:
-      id: RegionalMigDistributionPolicy
-      description: >-
-        To be used for specifying the intended distribution of regional
-        compute.googleapis.com/InstanceGroupManager instances
-      type: object
-      properties:
-        zones:
-          description: Cloud zones used by regional MIG to create instances.
-          type: array
-          items:
-            $ref: '#/components/schemas/ZoneConfiguration'
-        targetShape:
-          description: >-
-            The shape in which the group converges around distribution of
-            resources. Instance of proto2 enum
-          type: integer
-          format: int32
-    ZoneConfiguration:
-      id: ZoneConfiguration
-      type: object
-      properties:
-        zone:
+            Type of the resource. Use the Unified Resource Type, eg.
+            compute.googleapis.com/Instance.
           type: string
   parameters:
     access_token:
@@ -4612,7 +4374,7 @@ paths:
   /v1/projects/{projectsId}/locations/{locationsId}/backupVaults:
     parameters: *ref_1
     post:
-      description: ''
+      description: Creates a new BackupVault in a given project and location.
       operationId: backupdr.projects.locations.backupVaults.create
       requestBody:
         content:
@@ -4697,6 +4459,10 @@ paths:
           name: orderBy
           schema:
             type: string
+        - in: query
+          name: view
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}/backupVaults:fetchUsable:
     parameters: *ref_1
     get:
@@ -4776,6 +4542,10 @@ paths:
         - in: path
           name: backupVaultsId
           required: true
+          schema:
+            type: string
+        - in: query
+          name: view
           schema:
             type: string
     patch:
@@ -4880,6 +4650,10 @@ paths:
             type: boolean
         - in: query
           name: allowMissing
+          schema:
+            type: boolean
+        - in: query
+          name: ignoreBackupPlanReferences
           schema:
             type: boolean
   /v1/projects/{projectsId}/locations/{locationsId}/backupVaults/{backupVaultsId}:testIamPermissions:
@@ -5382,6 +5156,10 @@ paths:
           name: orderBy
           schema:
             type: string
+        - in: query
+          name: view
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}/backupVaults/{backupVaultsId}/dataSources/{dataSourcesId}/backups/{backupsId}:
     parameters: *ref_1
     get:
@@ -5423,6 +5201,10 @@ paths:
         - in: path
           name: backupsId
           required: true
+          schema:
+            type: string
+        - in: query
+          name: view
           schema:
             type: string
     patch:

@@ -7,8 +7,8 @@ info:
   title: Cloud Storage JSON API
   description: Stores and retrieves potentially large, immutable data objects.
   version: v1
-  x-discovery-doc-revision: '20240831'
-  x-generated-date: '2024-09-19'
+  x-discovery-doc-revision: '20241031'
+  x-generated-date: '2024-11-06'
 externalDocs:
   url: https://developers.google.com/storage/docs/json_api/
 servers:
@@ -606,6 +606,24 @@ components:
         satisfiesPZI:
           type: boolean
           description: Reserved for future use.
+    AdvanceRelocateBucketOperationRequest:
+      id: AdvanceRelocateBucketOperationRequest
+      type: object
+      description: An AdvanceRelocateBucketOperation request.
+      properties:
+        ttl:
+          type: string
+          description: >-
+            Specifies the duration after which the relocation will revert to the
+            sync stage if the relocation hasn't succeeded. Optional, if not
+            supplied, a default value of 12h will be used.
+          format: google-duration
+        expireTime:
+          type: string
+          description: >-
+            Specifies the time when the relocation will revert to the sync stage
+            if the relocation hasn't succeeded.
+          format: date-time
     AnywhereCache:
       id: AnywhereCache
       type: object
@@ -1485,6 +1503,12 @@ components:
           additionalProperties:
             type: string
             description: An individual metadata entry.
+        restoreToken:
+          type: string
+          description: >-
+            Restore token used to differentiate deleted objects with the same
+            name and generation. This field is only returned for deleted objects
+            in hierarchical namespace buckets.
         metageneration:
           type: string
           description: >-
@@ -1864,6 +1888,30 @@ components:
           type: integer
           description: The IAM policy format version.
           format: int32
+    RelocateBucketRequest:
+      id: RelocateBucketRequest
+      type: object
+      description: A Relocate Bucket request.
+      properties:
+        destinationLocation:
+          type: string
+          description: The new location the bucket will be relocated to.
+        destinationCustomPlacementConfig:
+          type: object
+          description: >-
+            The bucket's new custom placement configuration if relocating to a
+            Custom Dual Region.
+          properties:
+            dataLocations:
+              type: array
+              description: The list of regional locations in which data is placed.
+              items:
+                type: string
+        validateOnly:
+          type: boolean
+          description: >-
+            If true, validate the operation, but do not actually relocate the
+            bucket.
     RewriteResponse:
       id: RewriteResponse
       type: object
@@ -2224,6 +2272,12 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        relocate:
+          operation:
+            $ref: '#/paths/~1b~1{bucket}~1relocate/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
         insert:
           operation:
             $ref: '#/paths/~1b/post'
@@ -2322,6 +2376,13 @@ components:
         get:
           operation:
             $ref: '#/paths/~1b~1{bucket}~1operations~1{operationId}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        advance_relocate_bucket:
+          operation:
+            $ref: >-
+              #/paths/~1b~1{bucket}~1operations~1{operationId}~1advanceRelocateBucket/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -3585,6 +3646,44 @@ paths:
           name: userProject
           schema:
             type: string
+  /b/{bucket}/relocate:
+    parameters: *ref_1
+    post:
+      description: >-
+        Initiates a long-running Relocate Bucket operation on the specified
+        bucket.
+      operationId: storage.buckets.relocate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelocateBucketRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+        - Oauth2:
+            - https://www.googleapis.com/auth/devstorage.full_control
+          Oauth2c:
+            - https://www.googleapis.com/auth/devstorage.full_control
+        - Oauth2:
+            - https://www.googleapis.com/auth/devstorage.read_write
+          Oauth2c:
+            - https://www.googleapis.com/auth/devstorage.read_write
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleLongrunningOperation'
+      parameters:
+        - in: path
+          name: bucket
+          required: true
+          schema:
+            type: string
   /b/{bucket}/iam:
     parameters: *ref_1
     get:
@@ -3977,6 +4076,48 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GoogleLongrunningOperation'
+      parameters:
+        - in: path
+          name: bucket
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: operationId
+          required: true
+          schema:
+            type: string
+  /b/{bucket}/operations/{operationId}/advanceRelocateBucket:
+    parameters: *ref_1
+    post:
+      description: >-
+        Starts asynchronous advancement of the relocate bucket operation in the
+        case of required write downtime, to allow it to lock the bucket at the
+        source location, and proceed with the bucket location swap. The server
+        makes a best effort to advance the relocate bucket operation, but
+        success is not guaranteed.
+      operationId: storage.buckets.operations.advanceRelocateBucket
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdvanceRelocateBucketOperationRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+        - Oauth2:
+            - https://www.googleapis.com/auth/devstorage.full_control
+          Oauth2c:
+            - https://www.googleapis.com/auth/devstorage.full_control
+        - Oauth2:
+            - https://www.googleapis.com/auth/devstorage.read_write
+          Oauth2c:
+            - https://www.googleapis.com/auth/devstorage.read_write
+      responses:
+        '204':
+          description: No Content
       parameters:
         - in: path
           name: bucket
@@ -5641,6 +5782,10 @@ paths:
           name: softDeleted
           schema:
             type: boolean
+        - in: query
+          name: restoreToken
+          schema:
+            type: string
     patch:
       description: Patches an object's metadata.
       operationId: storage.objects.patch
@@ -6400,6 +6545,10 @@ paths:
             type: string
         - in: query
           name: userProject
+          schema:
+            type: string
+        - in: query
+          name: restoreToken
           schema:
             type: string
   /b/{bucket}/o/bulkRestore:
