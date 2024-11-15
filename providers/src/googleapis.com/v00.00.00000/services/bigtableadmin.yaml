@@ -7,8 +7,8 @@ info:
   title: Cloud Bigtable Admin API
   description: Administer your Cloud Bigtable tables and instances.
   version: v2
-  x-discovery-doc-revision: '20240904'
-  x-generated-date: '2024-09-19'
+  x-discovery-doc-revision: '20241025'
+  x-generated-date: '2024-11-06'
 externalDocs:
   url: https://cloud.google.com/bigtable/
 servers:
@@ -308,6 +308,20 @@ components:
             and optimized for 50% storage utilization.
           type: integer
           format: int32
+        nodeScalingFactor:
+          description: Immutable. The node scaling factor of this cluster.
+          type: string
+          enumDescriptions:
+            - No node scaling specified. Defaults to NODE_SCALING_FACTOR_1X.
+            - The cluster is running with a scaling factor of 1.
+            - >-
+              The cluster is running with a scaling factor of 2. All node count
+              values must be in increments of 2 with this scaling factor
+              enabled, otherwise an INVALID_ARGUMENT error will be returned.
+          enum:
+            - NODE_SCALING_FACTOR_UNSPECIFIED
+            - NODE_SCALING_FACTOR_1X
+            - NODE_SCALING_FACTOR_2X
         clusterConfig:
           description: Configuration for this cluster.
           $ref: '#/components/schemas/ClusterConfig'
@@ -545,11 +559,15 @@ components:
     RowAffinity:
       id: RowAffinity
       description: >-
-        If enabled, the AFE will route the request based on the row key of the
+        If enabled, Bigtable will route the request based on the row key of the
         request, rather than randomly. Instead, each row key will be assigned to
         a cluster, and will stick to that cluster. If clusters are added or
         removed, then this may affect which row keys stick to which clusters. To
-        avoid this, users can specify a group cluster.
+        avoid this, users can use a cluster group to specify which clusters are
+        to be used. In this case, new clusters that are not a part of the
+        cluster group will not be routed to, and routing will be unaffected by
+        the new cluster. Moreover, clusters specified in the cluster group
+        cannot be deleted unless removed from the cluster group.
       type: object
       properties: {}
     SingleClusterRouting:
@@ -1392,23 +1410,20 @@ components:
         stored in Bigtable. It is heavily based on the GoogleSQL standard to
         help maintain familiarity and consistency across products and features.
         For compatibility with Bigtable's existing untyped APIs, each `Type`
-        includes an `Encoding` which describes how to convert to/from the
-        underlying data. Each encoding also defines the following properties: *
-        Order-preserving: Does the encoded value sort consistently with the
-        original typed value? Note that Bigtable will always sort data based on
-        the raw encoded value, *not* the decoded type. - Example: BYTES values
-        sort in the same order as their raw encodings. - Counterexample:
-        Encoding INT64 as a fixed-width decimal string does *not* preserve sort
-        order when dealing with negative numbers. `INT64(1) > INT64(-1)`, but
-        `STRING("-00001") > STRING("00001)`. * Self-delimiting: If we
-        concatenate two encoded values, can we always tell where the first one
-        ends and the second one begins? - Example: If we encode INT64s to
-        fixed-width STRINGs, the first value will always contain exactly N
-        digits, possibly preceded by a sign. - Counterexample: If we concatenate
-        two UTF-8 encoded STRINGs, we have no way to tell where the first one
-        ends. * Compatibility: Which other systems have matching encoding
-        schemes? For example, does this encoding have a GoogleSQL equivalent?
-        HBase? Java?
+        includes an `Encoding` which describes how to convert to or from the
+        underlying data. Each encoding can operate in one of two modes: -
+        Sorted: In this mode, Bigtable guarantees that `Encode(X) <= Encode(Y)`
+        if and only if `X <= Y`. This is useful anywhere sort order is
+        important, for example when encoding keys. - Distinct: In this mode,
+        Bigtable guarantees that if `X != Y` then `Encode(X) != Encode(Y)`.
+        However, the converse is not guaranteed. For example, both "{'foo': '1',
+        'bar': '2'}" and "{'bar': '2', 'foo': '1'}" are valid encodings of the
+        same JSON value. The API clearly documents which mode is used wherever
+        an encoding can be configured. Each encoding also documents which values
+        are supported in which modes. For example, when encoding INT64 as a
+        numeric STRING, negative numbers cannot be encoded in sorted mode. This
+        is because `INT64(1) > INT64(-1)`, but `STRING("-00001") >
+        STRING("00001")`.
       type: object
       properties:
         bytesType:
@@ -1453,11 +1468,11 @@ components:
       type: object
       properties:
         encoding:
-          description: The encoding to use when converting to/from lower level types.
+          description: The encoding to use when converting to or from lower level types.
           $ref: '#/components/schemas/GoogleBigtableAdminV2TypeBytesEncoding'
     GoogleBigtableAdminV2TypeBytesEncoding:
       id: GoogleBigtableAdminV2TypeBytesEncoding
-      description: Rules used to convert to/from lower level types.
+      description: Rules used to convert to or from lower level types.
       type: object
       properties:
         raw:
@@ -1466,8 +1481,8 @@ components:
     GoogleBigtableAdminV2TypeBytesEncodingRaw:
       id: GoogleBigtableAdminV2TypeBytesEncodingRaw
       description: >-
-        Leaves the value "as-is" * Order-preserving? Yes * Self-delimiting? No *
-        Compatibility? N/A
+        Leaves the value as-is. Sorted mode: all values are supported. Distinct
+        mode: all values are supported.
       type: object
       properties: {}
     GoogleBigtableAdminV2TypeString:
@@ -1476,15 +1491,16 @@ components:
       type: object
       properties:
         encoding:
-          description: The encoding to use when converting to/from lower level types.
+          description: The encoding to use when converting to or from lower level types.
           $ref: '#/components/schemas/GoogleBigtableAdminV2TypeStringEncoding'
     GoogleBigtableAdminV2TypeStringEncoding:
       id: GoogleBigtableAdminV2TypeStringEncoding
-      description: Rules used to convert to/from lower level types.
+      description: Rules used to convert to or from lower level types.
       type: object
       properties:
         utf8Raw:
           description: 'Deprecated: if set, converts to an empty `utf8_bytes`.'
+          deprecated: true
           $ref: '#/components/schemas/GoogleBigtableAdminV2TypeStringEncodingUtf8Raw'
         utf8Bytes:
           description: Use `Utf8Bytes` encoding.
@@ -1492,15 +1508,16 @@ components:
             #/components/schemas/GoogleBigtableAdminV2TypeStringEncodingUtf8Bytes
     GoogleBigtableAdminV2TypeStringEncodingUtf8Raw:
       id: GoogleBigtableAdminV2TypeStringEncodingUtf8Raw
+      deprecated: true
       description: 'Deprecated: prefer the equivalent `Utf8Bytes`.'
       type: object
       properties: {}
     GoogleBigtableAdminV2TypeStringEncodingUtf8Bytes:
       id: GoogleBigtableAdminV2TypeStringEncodingUtf8Bytes
       description: >-
-        UTF-8 encoding * Order-preserving? Yes (code point order) *
-        Self-delimiting? No * Compatibility? - BigQuery Federation `TEXT`
-        encoding - HBase `Bytes.toBytes` - Java
+        UTF-8 encoding. Sorted mode: - All values are supported. - Code point
+        order is preserved. Distinct mode: all values are supported. Compatible
+        with: - BigQuery `TEXT` encoding - HBase `Bytes.toBytes` - Java
         `String#getBytes(StandardCharsets.UTF_8)`
       type: object
       properties: {}
@@ -1510,11 +1527,11 @@ components:
       type: object
       properties:
         encoding:
-          description: The encoding to use when converting to/from lower level types.
+          description: The encoding to use when converting to or from lower level types.
           $ref: '#/components/schemas/GoogleBigtableAdminV2TypeInt64Encoding'
     GoogleBigtableAdminV2TypeInt64Encoding:
       id: GoogleBigtableAdminV2TypeInt64Encoding
-      description: Rules used to convert to/from lower level types.
+      description: Rules used to convert to or from lower level types.
       type: object
       properties:
         bigEndianBytes:
@@ -1524,15 +1541,16 @@ components:
     GoogleBigtableAdminV2TypeInt64EncodingBigEndianBytes:
       id: GoogleBigtableAdminV2TypeInt64EncodingBigEndianBytes
       description: >-
-        Encodes the value as an 8-byte big endian twos complement `Bytes` value.
-        * Order-preserving? No (positive values only) * Self-delimiting? Yes *
-        Compatibility? - BigQuery Federation `BINARY` encoding - HBase
+        Encodes the value as an 8-byte big-endian two's complement value. Sorted
+        mode: non-negative values are supported. Distinct mode: all values are
+        supported. Compatible with: - BigQuery `BINARY` encoding - HBase
         `Bytes.toBytes` - Java `ByteBuffer.putLong()` with
         `ByteOrder.BIG_ENDIAN`
       type: object
       properties:
         bytesType:
           description: 'Deprecated: ignored if set.'
+          deprecated: true
           $ref: '#/components/schemas/GoogleBigtableAdminV2TypeBytes'
     GoogleBigtableAdminV2TypeFloat32:
       id: GoogleBigtableAdminV2TypeFloat32
@@ -1565,22 +1583,21 @@ components:
       id: GoogleBigtableAdminV2TypeAggregate
       description: >-
         A value that combines incremental updates into a summarized value. Data
-        is never directly written or read using type `Aggregate`. Writes will
-        provide either the `input_type` or `state_type`, and reads will always
-        return the `state_type` .
+        is never directly written or read using type `Aggregate`. Writes provide
+        either the `input_type` or `state_type`, and reads always return the
+        `state_type` .
       type: object
       properties:
         inputType:
           description: >-
-            Type of the inputs that are accumulated by this `Aggregate`, which
-            must specify a full encoding. Use `AddInput` mutations to accumulate
-            new inputs.
+            Type of the inputs that are accumulated by this `Aggregate`. Use
+            `AddInput` mutations to accumulate new inputs.
           $ref: '#/components/schemas/Type'
         stateType:
           description: >-
             Output only. Type that holds the internal accumulator state for the
             `Aggregate`. This is a function of the `input_type` and `aggregator`
-            chosen, and will always specify a full encoding.
+            chosen.
           readOnly: true
           $ref: '#/components/schemas/Type'
         sum:
@@ -1805,8 +1822,9 @@ components:
           format: google-duration
         frequency:
           description: >-
-            Required. How frequently automated backups should occur. The only
-            supported value at this time is 24 hours.
+            How frequently automated backups should occur. The only supported
+            value at this time is 24 hours. An undefined frequency is treated as
+            24 hours.
           type: string
           format: google-duration
     Split:

@@ -9,8 +9,8 @@ info:
     Store and manage build artifacts in a scalable and integrated service built
     on Google infrastructure.
   version: v1
-  x-discovery-doc-revision: '20240916'
-  x-generated-date: '2024-09-19'
+  x-discovery-doc-revision: '20241029'
+  x-generated-date: '2024-11-06'
 externalDocs:
   url: https://cloud.google.com/artifacts/docs/
 servers:
@@ -679,6 +679,11 @@ components:
             Optional. If true, the cleanup pipeline is prevented from deleting
             versions in this repository.
           type: boolean
+        vulnerabilityScanningConfig:
+          description: >-
+            Optional. Config and state for vulnerability scanning of resources
+            within this Repository.
+          $ref: '#/components/schemas/VulnerabilityScanningConfig'
         disallowUnspecifiedMode:
           description: >-
             Optional. If this is true, an unspecified repo type will be treated
@@ -788,9 +793,8 @@ components:
           $ref: '#/components/schemas/YumRepository'
         commonRepository:
           description: >-
-            Common remote repository settings. Used as the RR upstream URL
-            instead of Predefined and Custom remote repositories. UI and Gcloud
-            will map all the new remote repositories to this field.
+            Common remote repository settings. Used as the remote repository
+            upstream URL.
           $ref: '#/components/schemas/CommonRemoteRepository'
         description:
           description: The description of the remote source.
@@ -1044,7 +1048,7 @@ components:
       type: object
       properties:
         uri:
-          description: Required. A common public repository base for Remote Repository.
+          description: Required. A common public repository base for remote repository.
           type: string
     UpstreamCredentials:
       id: UpstreamCredentials
@@ -1155,6 +1159,53 @@ components:
           description: Minimum number of versions to keep.
           type: integer
           format: int32
+    VulnerabilityScanningConfig:
+      id: VulnerabilityScanningConfig
+      description: >-
+        Config on whether to perform vulnerability scanning for resources in
+        this repository, as well as output fields describing current state.
+      type: object
+      properties:
+        enablementConfig:
+          description: >-
+            Optional. Config for whether this repository has vulnerability
+            scanning disabled.
+          type: string
+          enumDescriptions:
+            - Not set. This will be treated as INHERITED.
+            - Scanning is Enabled, but dependent on API enablement.
+            - >-
+              No automatic vulnerability scanning will be performed for this
+              repository.
+          enum:
+            - ENABLEMENT_CONFIG_UNSPECIFIED
+            - INHERITED
+            - DISABLED
+        lastEnableTime:
+          description: Output only. The last time this repository config was enabled.
+          readOnly: true
+          type: string
+          format: google-datetime
+        enablementState:
+          description: >-
+            Output only. State of feature enablement, combining repository
+            enablement config and API enablement state.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - Enablement state is unclear.
+            - Repository does not support vulnerability scanning.
+            - Vulnerability scanning is disabled for this repository.
+            - Vulnerability scanning is active for this repository.
+          enum:
+            - ENABLEMENT_STATE_UNSPECIFIED
+            - SCANNING_UNSUPPORTED
+            - SCANNING_DISABLED
+            - SCANNING_ACTIVE
+        enablementStateReason:
+          description: Output only. Reason for the repository state.
+          readOnly: true
+          type: string
     ListPackagesResponse:
       id: ListPackagesResponse
       description: The response from listing packages.
@@ -1225,7 +1276,7 @@ components:
         name:
           description: >-
             The name of the version, for example:
-            "projects/p1/locations/us-central1/repositories/repo1/packages/pkg1/versions/art1".
+            `projects/p1/locations/us-central1/repositories/repo1/packages/pkg1/versions/art1`.
             If the package or version ID parts contain slashes, the slashes are
             escaped.
           type: string
@@ -1258,6 +1309,11 @@ components:
           additionalProperties:
             type: any
             description: Properties of the object.
+        annotations:
+          description: Optional. Client specified annotations.
+          type: object
+          additionalProperties:
+            type: string
     Tag:
       id: Tag
       description: >-
@@ -1276,7 +1332,7 @@ components:
         version:
           description: >-
             The name of the version the tag refers to, for example:
-            "projects/p1/locations/us-central1/repositories/repo1/packages/pkg1/versions/sha256:5243811"
+            `projects/p1/locations/us-central1/repositories/repo1/packages/pkg1/versions/sha256:5243811`
             If the package or version ID parts contain slashes, the slashes are
             escaped.
           type: string
@@ -1354,6 +1410,11 @@ components:
           readOnly: true
           type: string
           format: google-datetime
+        annotations:
+          description: Optional. Client specified annotations.
+          type: object
+          additionalProperties:
+            type: string
     Hash:
       id: Hash
       description: A hash of file content.
@@ -1379,6 +1440,24 @@ components:
       description: The response to download a file.
       type: object
       properties: {}
+    UploadFileRequest:
+      id: UploadFileRequest
+      description: The request to upload a file.
+      type: object
+      properties:
+        fileId:
+          description: >-
+            Optional. The ID of the file. If left empty will default to sha256
+            digest of the content uploaded.
+          type: string
+    UploadFileMediaResponse:
+      id: UploadFileMediaResponse
+      description: The response to upload a generic artifact.
+      type: object
+      properties:
+        operation:
+          description: Operation that will be returned to the user.
+          $ref: '#/components/schemas/Operation'
     ListTagsResponse:
       id: ListTagsResponse
       description: The response from listing tags.
@@ -1403,6 +1482,106 @@ components:
         { rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty); }
       type: object
       properties: {}
+    GoogleDevtoolsArtifactregistryV1Rule:
+      id: GoogleDevtoolsArtifactregistryV1Rule
+      description: >-
+        A rule defines the deny or allow action of the operation it applies to
+        and the conditions required for the rule to apply. You can set one rule
+        for an entire repository and one rule for each package within.
+      type: object
+      properties:
+        name:
+          description: >-
+            The name of the rule, for example:
+            `projects/p1/locations/us-central1/repositories/repo1/rules/rule1`.
+          type: string
+        action:
+          description: The action this rule takes.
+          type: string
+          enumDescriptions:
+            - Action not specified.
+            - Allow the operation.
+            - Deny the operation.
+          enum:
+            - ACTION_UNSPECIFIED
+            - ALLOW
+            - DENY
+        operation:
+          type: string
+          enumDescriptions:
+            - Operation not specified.
+            - Download operation.
+          enum:
+            - OPERATION_UNSPECIFIED
+            - DOWNLOAD
+        condition:
+          description: >-
+            Optional. A CEL expression for conditions that must be met in order
+            for the rule to apply. If not provided, the rule matches all
+            objects.
+          $ref: '#/components/schemas/Expr'
+        packageId:
+          description: >-
+            The package ID the rule applies to. If empty, this rule applies to
+            all packages inside the repository.
+          type: string
+    Expr:
+      id: Expr
+      description: >-
+        Represents a textual expression in the Common Expression Language (CEL)
+        syntax. CEL is a C-like expression language. The syntax and semantics of
+        CEL are documented at https://github.com/google/cel-spec. Example
+        (Comparison): title: "Summary size limit" description: "Determines if a
+        summary is less than 100 chars" expression: "document.summary.size() <
+        100" Example (Equality): title: "Requestor is owner" description:
+        "Determines if requestor is the document owner" expression:
+        "document.owner == request.auth.claims.email" Example (Logic): title:
+        "Public documents" description: "Determine whether the document should
+        be publicly visible" expression: "document.type != 'private' &&
+        document.type != 'internal'" Example (Data Manipulation): title:
+        "Notification string" description: "Create a notification string with a
+        timestamp." expression: "'New message received at ' +
+        string(document.create_time)" The exact variables and functions that may
+        be referenced within an expression are determined by the service that
+        evaluates it. See the service documentation for additional information.
+      type: object
+      properties:
+        expression:
+          description: >-
+            Textual representation of an expression in Common Expression
+            Language syntax.
+          type: string
+        title:
+          description: >-
+            Optional. Title for the expression, i.e. a short string describing
+            its purpose. This can be used e.g. in UIs which allow to enter the
+            expression.
+          type: string
+        description:
+          description: >-
+            Optional. Description of the expression. This is a longer text which
+            describes the expression, e.g. when hovered over it in a UI.
+          type: string
+        location:
+          description: >-
+            Optional. String indicating the location of the expression for error
+            reporting, e.g. a file name and a position in the file.
+          type: string
+    ListRulesResponse:
+      id: ListRulesResponse
+      description: The response from listing rules.
+      type: object
+      properties:
+        rules:
+          description: The rules returned.
+          type: array
+          items:
+            $ref: '#/components/schemas/GoogleDevtoolsArtifactregistryV1Rule'
+        nextPageToken:
+          description: >-
+            The token to retrieve the next page of rules, or empty if there are
+            no more rules to return.
+          type: string
     SetIamPolicyRequest:
       id: SetIamPolicyRequest
       description: Request message for `SetIamPolicy` method.
@@ -1591,48 +1770,6 @@ components:
             their IAM policies, see the [IAM
             documentation](https://cloud.google.com/iam/help/conditions/resource-policies).
           $ref: '#/components/schemas/Expr'
-    Expr:
-      id: Expr
-      description: >-
-        Represents a textual expression in the Common Expression Language (CEL)
-        syntax. CEL is a C-like expression language. The syntax and semantics of
-        CEL are documented at https://github.com/google/cel-spec. Example
-        (Comparison): title: "Summary size limit" description: "Determines if a
-        summary is less than 100 chars" expression: "document.summary.size() <
-        100" Example (Equality): title: "Requestor is owner" description:
-        "Determines if requestor is the document owner" expression:
-        "document.owner == request.auth.claims.email" Example (Logic): title:
-        "Public documents" description: "Determine whether the document should
-        be publicly visible" expression: "document.type != 'private' &&
-        document.type != 'internal'" Example (Data Manipulation): title:
-        "Notification string" description: "Create a notification string with a
-        timestamp." expression: "'New message received at ' +
-        string(document.create_time)" The exact variables and functions that may
-        be referenced within an expression are determined by the service that
-        evaluates it. See the service documentation for additional information.
-      type: object
-      properties:
-        expression:
-          description: >-
-            Textual representation of an expression in Common Expression
-            Language syntax.
-          type: string
-        title:
-          description: >-
-            Optional. Title for the expression, i.e. a short string describing
-            its purpose. This can be used e.g. in UIs which allow to enter the
-            expression.
-          type: string
-        description:
-          description: >-
-            Optional. Description of the expression. This is a longer text which
-            describes the expression, e.g. when hovered over it in a UI.
-          type: string
-        location:
-          description: >-
-            Optional. String indicating the location of the expression for error
-            reporting, e.g. a file name and a position in the file.
-          type: string
     TestIamPermissionsRequest:
       id: TestIamPermissionsRequest
       description: Request message for `TestIamPermissions` method.
@@ -1735,6 +1872,83 @@ components:
             - VPCSC_POLICY_UNSPECIFIED
             - DENY
             - ALLOW
+    ListAttachmentsResponse:
+      id: ListAttachmentsResponse
+      description: The response from listing attachments.
+      type: object
+      properties:
+        attachments:
+          description: The attachments returned.
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+        nextPageToken:
+          description: >-
+            The token to retrieve the next page of attachments, or empty if
+            there are no more attachments to return.
+          type: string
+    Attachment:
+      id: Attachment
+      description: >-
+        An Attachment refers to additional metadata that can be attached to
+        artifacts in Artifact Registry. An attachment consists of one or more
+        files.
+      type: object
+      properties:
+        name:
+          description: >-
+            The name of the attachment. E.g.
+            `projects/p1/locations/us/repositories/repo/attachments/sbom`.
+          type: string
+        target:
+          description: >-
+            Required. The target the attachment is for, can be a Version,
+            Package or Repository. E.g.
+            `projects/p1/locations/us-central1/repositories/repo1/packages/p1/versions/v1`.
+          type: string
+        type:
+          description: Type of attachment. E.g. `application/vnd.spdx+json`
+          type: string
+        attachmentNamespace:
+          description: >-
+            The namespace this attachment belongs to. E.g. If an attachment is
+            created by artifact analysis, namespace is set to
+            `artifactanalysis.googleapis.com`.
+          type: string
+        annotations:
+          description: >-
+            Optional. User annotations. These attributes can only be set and
+            used by the user, and not by Artifact Registry. See
+            https://google.aip.dev/128#annotations for more details such as
+            format and size limitations.
+          type: object
+          additionalProperties:
+            type: string
+        createTime:
+          description: Output only. The time when the attachment was created.
+          readOnly: true
+          type: string
+          format: google-datetime
+        updateTime:
+          description: Output only. The time when the attachment was last updated.
+          readOnly: true
+          type: string
+          format: google-datetime
+        files:
+          description: >-
+            Required. The files that belong to this attachment. If the file ID
+            part contains slashes, they are escaped. E.g.
+            `projects/p1/locations/us-central1/repositories/repo1/files/sha:`.
+          type: array
+          items:
+            type: string
+        ociVersionName:
+          description: >-
+            Output only. The name of the OCI version that this attachment
+            created. Only populated for Docker attachments. E.g.
+            `projects/p1/locations/us-central1/repositories/repo1/packages/p1/versions/v1`.
+          readOnly: true
+          type: string
     ListLocationsResponse:
       id: ListLocationsResponse
       description: The response message for Locations.ListLocations.
@@ -2113,11 +2327,6 @@ components:
           type: array
           items:
             type: string
-    PromoteArtifactMetadata:
-      id: PromoteArtifactMetadata
-      description: The metadata for promote artifact long running operation.
-      type: object
-      properties: {}
   parameters:
     access_token:
       description: OAuth access token.
@@ -2701,6 +2910,13 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        patch:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1packages~1{packagesId}~1versions~1{versionsId}/patch
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
         batch_delete:
           operation:
             $ref: >-
@@ -2713,7 +2929,8 @@ components:
           - $ref: '#/components/x-stackQL-resources/versions/methods/get'
           - $ref: '#/components/x-stackQL-resources/versions/methods/list'
         insert: []
-        update: []
+        update:
+          - $ref: '#/components/x-stackQL-resources/versions/methods/patch'
         replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/versions/methods/delete'
@@ -2797,10 +3014,24 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        patch:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1files~1{filesId}/patch
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
         download:
           operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1files~1{filesId}:download/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        upload:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1files:upload/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -2809,10 +3040,107 @@ components:
           - $ref: '#/components/x-stackQL-resources/files/methods/get'
           - $ref: '#/components/x-stackQL-resources/files/methods/list'
         insert: []
-        update: []
+        update:
+          - $ref: '#/components/x-stackQL-resources/files/methods/patch'
         replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/files/methods/delete'
+    rules:
+      id: google.artifactregistry.rules
+      name: rules
+      title: Rules
+      methods:
+        create:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1rules/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        list:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1rules/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.rules
+        get:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1rules~1{rulesId}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        patch:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1rules~1{rulesId}/patch
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1rules~1{rulesId}/delete
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/rules/methods/get'
+          - $ref: '#/components/x-stackQL-resources/rules/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/rules/methods/create'
+        update:
+          - $ref: '#/components/x-stackQL-resources/rules/methods/patch'
+        replace: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/rules/methods/delete'
+    attachments:
+      id: google.artifactregistry.attachments
+      name: attachments
+      title: Attachments
+      methods:
+        list:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1attachments/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.attachments
+        create:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1attachments/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        get:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1attachments~1{attachmentsId}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1repositories~1{repositoriesId}~1attachments~1{attachmentsId}/delete
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/attachments/methods/get'
+          - $ref: '#/components/x-stackQL-resources/attachments/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/attachments/methods/create'
+        update: []
+        replace: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/attachments/methods/delete'
 paths:
   /v1/projects/{projectsId}/projectSettings:
     parameters: &ref_1
@@ -4460,6 +4788,57 @@ paths:
           name: force
           schema:
             type: boolean
+    patch:
+      description: Updates a version.
+      operationId: artifactregistry.projects.locations.repositories.packages.versions.patch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Version'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Version'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: repositoriesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: packagesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: versionsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: updateMask
+          schema:
+            type: string
+            format: google-fieldmask
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/packages/{packagesId}/versions:batchDelete:
     parameters: *ref_1
     post:
@@ -4880,6 +5259,52 @@ paths:
           required: true
           schema:
             type: string
+    patch:
+      description: Updates a file.
+      operationId: artifactregistry.projects.locations.repositories.files.patch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleDevtoolsArtifactregistryV1File'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleDevtoolsArtifactregistryV1File'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: repositoriesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: filesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: updateMask
+          schema:
+            type: string
+            format: google-fieldmask
   /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/files/{filesId}:download:
     parameters: *ref_1
     get:
@@ -4919,6 +5344,430 @@ paths:
             type: string
         - in: path
           name: filesId
+          required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/files:upload:
+    parameters: *ref_1
+    post:
+      description: >-
+        Directly uploads a file to a repository. The returned Operation will
+        complete once the resources are uploaded.
+      operationId: artifactregistry.projects.locations.repositories.files.upload
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadFileRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadFileMediaResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: repositoriesId
+          required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/rules:
+    parameters: *ref_1
+    post:
+      description: Creates a rule.
+      operationId: artifactregistry.projects.locations.repositories.rules.create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleDevtoolsArtifactregistryV1Rule'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleDevtoolsArtifactregistryV1Rule'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: repositoriesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: ruleId
+          schema:
+            type: string
+    get:
+      description: Lists rules.
+      operationId: artifactregistry.projects.locations.repositories.rules.list
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform.read-only
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform.read-only
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListRulesResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: repositoriesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/rules/{rulesId}:
+    parameters: *ref_1
+    get:
+      description: Gets a rule.
+      operationId: artifactregistry.projects.locations.repositories.rules.get
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform.read-only
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform.read-only
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleDevtoolsArtifactregistryV1Rule'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: repositoriesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: rulesId
+          required: true
+          schema:
+            type: string
+    patch:
+      description: Updates a rule.
+      operationId: artifactregistry.projects.locations.repositories.rules.patch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleDevtoolsArtifactregistryV1Rule'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleDevtoolsArtifactregistryV1Rule'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: repositoriesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: rulesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: updateMask
+          schema:
+            type: string
+            format: google-fieldmask
+    delete:
+      description: Deletes a rule.
+      operationId: artifactregistry.projects.locations.repositories.rules.delete
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Empty'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: repositoriesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: rulesId
+          required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/attachments:
+    parameters: *ref_1
+    get:
+      description: Lists attachments.
+      operationId: artifactregistry.projects.locations.repositories.attachments.list
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform.read-only
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform.read-only
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAttachmentsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: repositoriesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: filter
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+    post:
+      description: >-
+        Creates an attachment. The returned Operation will finish once the
+        attachment has been created. Its response will be the created
+        attachment.
+      operationId: artifactregistry.projects.locations.repositories.attachments.create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Attachment'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: repositoriesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: attachmentId
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/repositories/{repositoriesId}/attachments/{attachmentsId}:
+    parameters: *ref_1
+    get:
+      description: Gets an attachment.
+      operationId: artifactregistry.projects.locations.repositories.attachments.get
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform.read-only
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform.read-only
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attachment'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: repositoriesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: attachmentsId
+          required: true
+          schema:
+            type: string
+    delete:
+      description: >-
+        Deletes an attachment. The returned Operation will finish once the
+        attachments has been deleted. It will not have any Operation metadata
+        and will return a `google.protobuf.Empty` response.
+      operationId: artifactregistry.projects.locations.repositories.attachments.delete
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: repositoriesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: attachmentsId
           required: true
           schema:
             type: string
