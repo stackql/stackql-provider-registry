@@ -385,6 +385,52 @@ components:
           $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
       type: object
   schemas:
+    ResourcePolicy:
+      type: object
+      properties:
+        ResourceArn:
+          description: The ARN of the AWS Kinesis resource to which the policy applies.
+          type: string
+          minLength: 1
+          maxLength: 2048
+          pattern: arn:aws.*:kinesis:.*:\d{12}:stream/\S+
+          anyOf:
+            - relationshipRef:
+                typeName: AWS::Kinesis::Stream
+                propertyPath: /properties/Arn
+            - relationshipRef:
+                typeName: AWS::Kinesis::StreamConsumer
+                propertyPath: /properties/ConsumerARN
+        ResourcePolicy:
+          description: A policy document containing permissions to add to the specified resource. In IAM, you must provide policy documents in JSON format. However, in CloudFormation you can provide the policy in JSON or YAML format because CloudFormation converts YAML to JSON before submitting it to IAM.
+          type: object
+      required:
+        - ResourceArn
+        - ResourcePolicy
+      x-stackql-resource-name: resource_policy
+      description: Resource Type definition for AWS::Kinesis::ResourcePolicy
+      x-type-name: AWS::Kinesis::ResourcePolicy
+      x-stackql-primary-identifier:
+        - ResourceArn
+      x-create-only-properties:
+        - ResourceArn
+      x-required-properties:
+        - ResourceArn
+        - ResourcePolicy
+      x-tagging:
+        taggable: false
+      x-required-permissions:
+        create:
+          - kinesis:GetResourcePolicy
+          - kinesis:PutResourcePolicy
+        read:
+          - kinesis:GetResourcePolicy
+        update:
+          - kinesis:PutResourcePolicy
+          - kinesis:GetResourcePolicy
+        delete:
+          - kinesis:DeleteResourcePolicy
+          - kinesis:GetResourcePolicy
     StreamModeDetails:
       description: When specified, enables or updates the mode of stream. Default is PROVISIONED.
       additionalProperties: false
@@ -487,6 +533,10 @@ components:
       x-read-only-properties:
         - Arn
       x-tagging:
+        permissions:
+          - kinesis:AddTagsToStream
+          - kinesis:RemoveTagsFromStream
+          - kinesis:ListTagsForStream
         taggable: true
         tagOnCreate: true
         tagUpdatable: true
@@ -523,6 +573,39 @@ components:
           - kinesis:DescribeStreamSummary
           - kinesis:DeleteStream
           - kinesis:RemoveTagsFromStream
+    CreateResourcePolicyRequest:
+      properties:
+        ClientToken:
+          type: string
+        RoleArn:
+          type: string
+        TypeName:
+          type: string
+        TypeVersionId:
+          type: string
+        DesiredState:
+          type: object
+          properties:
+            ResourceArn:
+              description: The ARN of the AWS Kinesis resource to which the policy applies.
+              type: string
+              minLength: 1
+              maxLength: 2048
+              pattern: arn:aws.*:kinesis:.*:\d{12}:stream/\S+
+              anyOf:
+                - relationshipRef:
+                    typeName: AWS::Kinesis::Stream
+                    propertyPath: /properties/Arn
+                - relationshipRef:
+                    typeName: AWS::Kinesis::StreamConsumer
+                    propertyPath: /properties/ConsumerARN
+            ResourcePolicy:
+              description: A policy document containing permissions to add to the specified resource. In IAM, you must provide policy documents in JSON format. However, in CloudFormation you can provide the policy in JSON or YAML format because CloudFormation converts YAML to JSON before submitting it to IAM.
+              type: object
+          x-stackQL-stringOnly: true
+      x-title: CreateResourcePolicyRequest
+      type: object
+      required: []
     CreateStreamRequest:
       properties:
         ClientToken:
@@ -581,6 +664,85 @@ components:
       description: Amazon Signature authorization v4
       x-amazon-apigateway-authtype: awsSigv4
   x-stackQL-resources:
+    resource_policies:
+      name: resource_policies
+      id: aws.kinesis.resource_policies
+      x-cfn-schema-name: ResourcePolicy
+      x-cfn-type-name: AWS::Kinesis::ResourcePolicy
+      x-identifiers:
+        - ResourceArn
+      x-type: cloud_control
+      methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__ResourcePolicy&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Kinesis::ResourcePolicy"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Kinesis::ResourcePolicy"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Kinesis::ResourcePolicy"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/resource_policies/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/resource_policies/methods/delete_resource'
+        update:
+          - $ref: '#/components/x-stackQL-resources/resource_policies/methods/update_resource'
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.ResourceArn') as resource_arn,
+              JSON_EXTRACT(Properties, '$.ResourcePolicy') as resource_policy
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Kinesis::ResourcePolicy'
+              AND data__Identifier = '<ResourceArn>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+              ddl: |-
+                SELECT
+                region,
+                data__Identifier,
+                json_extract_path_text(Properties, 'ResourceArn') as resource_arn,
+                json_extract_path_text(Properties, 'ResourcePolicy') as resource_policy
+                FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Kinesis::ResourcePolicy'
+                AND data__Identifier = '<ResourceArn>'
+                AND region = 'us-east-1'
     streams:
       name: streams
       id: aws.kinesis.streams
@@ -936,6 +1098,48 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/x-cloud-control-schemas/UpdateResourceOutput'
+          description: Success
+  /?Action=CreateResource&Version=2021-09-30&__ResourcePolicy&__detailTransformed=true:
+    parameters:
+      - $ref: '#/components/parameters/X-Amz-Content-Sha256'
+      - $ref: '#/components/parameters/X-Amz-Date'
+      - $ref: '#/components/parameters/X-Amz-Algorithm'
+      - $ref: '#/components/parameters/X-Amz-Credential'
+      - $ref: '#/components/parameters/X-Amz-Security-Token'
+      - $ref: '#/components/parameters/X-Amz-Signature'
+      - $ref: '#/components/parameters/X-Amz-SignedHeaders'
+    post:
+      operationId: CreateResourcePolicy
+      parameters:
+        - description: Action Header
+          in: header
+          name: X-Amz-Target
+          required: false
+          schema:
+            default: CloudApiService.CreateResource
+            enum:
+              - CloudApiService.CreateResource
+            type: string
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            default: application/x-amz-json-1.0
+            enum:
+              - application/x-amz-json-1.0
+            type: string
+      requestBody:
+        content:
+          application/x-amz-json-1.0:
+            schema:
+              $ref: '#/components/schemas/CreateResourcePolicyRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
           description: Success
   /?Action=CreateResource&Version=2021-09-30&__Stream&__detailTransformed=true:
     parameters:

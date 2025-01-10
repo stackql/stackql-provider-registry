@@ -385,6 +385,279 @@ components:
           $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
       type: object
   schemas:
+    S3Location:
+      description: S3 Source Location for the Guard files.
+      type: object
+      properties:
+        Uri:
+          description: S3 uri of Guard files.
+          type: string
+        VersionId:
+          description: S3 object version
+          type: string
+      additionalProperties: false
+      required:
+        - Uri
+    Role:
+      description: IAM Role ARN
+      pattern: arn:.+:iam::[0-9]{12}:role/.+
+      type: string
+      maxLength: 256
+    StackName:
+      pattern: ^[a-zA-Z][-a-zA-Z0-9]*$
+      description: CloudFormation Stack name
+      type: string
+      maxLength: 128
+    TargetOperation:
+      description: Which operations should this Hook run against? Resource changes, stacks or change sets.
+      type: string
+      enum:
+        - RESOURCE
+        - STACK
+        - CHANGE_SET
+        - CLOUD_CONTROL
+    TargetName:
+      description: Type name of hook target. Hook targets are the destination where hooks will be invoked against.
+      type: string
+      pattern: ^(?!.*\*\?).*$
+      minLength: 1
+      maxLength: 256
+    Action:
+      description: Target actions are the type of operation hooks will be executed at.
+      type: string
+      enum:
+        - CREATE
+        - UPDATE
+        - DELETE
+    InvocationPoint:
+      description: Invocation points are the point in provisioning workflow where hooks will be executed.
+      type: string
+      enum:
+        - PRE_PROVISION
+    HookTarget:
+      description: Hook targets are the destination where hooks will be invoked against.
+      type: object
+      properties:
+        TargetName:
+          $ref: '#/components/schemas/TargetName'
+        Action:
+          $ref: '#/components/schemas/Action'
+        InvocationPoint:
+          $ref: '#/components/schemas/InvocationPoint'
+      additionalProperties: false
+      required:
+        - TargetName
+        - Action
+        - InvocationPoint
+    GuardHook:
+      type: object
+      properties:
+        RuleLocation:
+          $ref: '#/components/schemas/S3Location'
+        LogBucket:
+          description: S3 Bucket where the guard validate report will be uploaded to
+          type: string
+        HookStatus:
+          default: DISABLED
+          description: Attribute to specify which stacks this hook applies to or should get invoked for
+          type: string
+          enum:
+            - ENABLED
+            - DISABLED
+        TargetOperations:
+          description: Which operations should this Hook run against? Resource changes, stacks or change sets.
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/TargetOperation'
+        FailureMode:
+          default: WARN
+          description: Attribute to specify CloudFormation behavior on hook failure.
+          type: string
+          enum:
+            - FAIL
+            - WARN
+        TargetFilters:
+          description: Attribute to specify which targets should invoke the hook
+          type: object
+          oneOf:
+            - type: object
+              minProperties: 1
+              properties:
+                TargetNames:
+                  description: List of type names that the hook is going to target
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  uniqueItems: true
+                  x-insertionOrder: false
+                  items:
+                    $ref: '#/components/schemas/TargetName'
+                Actions:
+                  description: List of actions that the hook is going to target
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  uniqueItems: true
+                  x-insertionOrder: false
+                  items:
+                    $ref: '#/components/schemas/Action'
+                InvocationPoints:
+                  description: List of invocation points that the hook is going to target
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  uniqueItems: true
+                  x-insertionOrder: false
+                  items:
+                    $ref: '#/components/schemas/InvocationPoint'
+              additionalProperties: false
+            - type: object
+              properties:
+                Targets:
+                  description: List of hook targets
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  uniqueItems: true
+                  items:
+                    $ref: '#/components/schemas/HookTarget'
+              additionalProperties: false
+              required:
+                - Targets
+        StackFilters:
+          description: Filters to allow hooks to target specific stack attributes
+          type: object
+          properties:
+            FilteringCriteria:
+              description: Attribute to specify the filtering behavior. ANY will make the Hook pass if one filter matches. ALL will make the Hook pass if all filters match
+              type: string
+              default: ALL
+              enum:
+                - ALL
+                - ANY
+            StackNames:
+              description: List of stack names as filters
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                Include:
+                  description: List of stack names that the hook is going to target
+                  type: array
+                  maxItems: 50
+                  minItems: 1
+                  uniqueItems: true
+                  x-insertionOrder: false
+                  items:
+                    $ref: '#/components/schemas/StackName'
+                Exclude:
+                  description: List of stack names that the hook is going to be excluded from
+                  type: array
+                  maxItems: 50
+                  minItems: 1
+                  uniqueItems: true
+                  x-insertionOrder: false
+                  items:
+                    $ref: '#/components/schemas/StackName'
+            StackRoles:
+              description: List of stack roles that are performing the stack operations.
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                Include:
+                  description: List of stack roles that the hook is going to target
+                  type: array
+                  maxItems: 50
+                  minItems: 1
+                  uniqueItems: true
+                  x-insertionOrder: false
+                  items:
+                    $ref: '#/components/schemas/Role'
+                Exclude:
+                  description: List of stack roles that the hook is going to be excluded from
+                  type: array
+                  maxItems: 50
+                  minItems: 1
+                  uniqueItems: true
+                  x-insertionOrder: false
+                  items:
+                    $ref: '#/components/schemas/Role'
+          required:
+            - FilteringCriteria
+          additionalProperties: false
+        Alias:
+          description: The typename alias for the hook.
+          pattern: ^(?!(?i)aws)[A-Za-z0-9]{2,64}::[A-Za-z0-9]{2,64}::[A-Za-z0-9]{2,64}$
+          type: string
+        HookArn:
+          description: The Amazon Resource Name (ARN) of the activated hook
+          pattern: ^arn:aws[A-Za-z0-9-]{0,64}:cloudformation:[A-Za-z0-9-]{1,64}:([0-9]{12})?:type/hook/.+$
+          type: string
+        ExecutionRole:
+          description: The execution role ARN assumed by hooks to read Guard rules from S3 and write Guard outputs to S3.
+          $ref: '#/components/schemas/Role'
+        Options:
+          properties:
+            InputParams:
+              $ref: '#/components/schemas/S3Location'
+          required: []
+          additionalProperties: false
+      required:
+        - RuleLocation
+        - HookStatus
+        - TargetOperations
+        - FailureMode
+        - Alias
+        - ExecutionRole
+      x-stackql-resource-name: guard_hook
+      description: This is a CloudFormation resource for activating the first-party AWS::Hooks::GuardHook.
+      x-type-name: AWS::CloudFormation::GuardHook
+      x-stackql-primary-identifier:
+        - HookArn
+      x-create-only-properties:
+        - ExecutionRole
+        - Alias
+      x-read-only-properties:
+        - HookArn
+      x-required-properties:
+        - RuleLocation
+        - HookStatus
+        - TargetOperations
+        - FailureMode
+        - Alias
+        - ExecutionRole
+      x-tagging:
+        taggable: false
+        tagOnCreate: false
+        tagUpdatable: false
+        cloudFormationSystemTags: false
+      x-required-permissions:
+        create:
+          - cloudformation:ActivateType
+          - cloudformation:DescribeType
+          - cloudformation:ListTypes
+          - cloudformation:SetTypeConfiguration
+          - cloudformation:BatchDescribeTypeConfigurations
+          - iam:PassRole
+        read:
+          - cloudformation:DescribeType
+          - cloudformation:BatchDescribeTypeConfigurations
+        update:
+          - cloudformation:BatchDescribeTypeConfigurations
+          - cloudformation:DescribeType
+          - cloudformation:SetTypeConfiguration
+          - iam:PassRole
+        delete:
+          - cloudformation:BatchDescribeTypeConfigurations
+          - cloudformation:DescribeType
+          - cloudformation:DeactivateType
+          - cloudformation:SetTypeConfiguration
+        list:
+          - cloudformation:ListTypes
+          - cloudformation:DescribeType
+          - cloudformation:BatchDescribeTypeConfigurations
     HookDefaultVersion:
       type: object
       properties:
@@ -598,6 +871,208 @@ components:
         list:
           - cloudformation:ListTypes
           - cloudformation:ListTypeVersions
+    LambdaHook:
+      type: object
+      properties:
+        LambdaFunction:
+          description: Amazon Resource Name (ARN), Partial ARN, name, version, or alias of the Lambda function to invoke with this hook.
+          type: string
+          minLength: 1
+          maxLength: 170
+          pattern: (arn:(aws[a-zA-Z-]*)?:lambda:)?([a-z]{2}(-gov)?(-iso([a-z])?)?-[a-z]+-\d{1}:)?(\d{12}:)?(function:)?([a-zA-Z0-9-_]+)(:(\$LATEST|[a-zA-Z0-9-_]+))?
+        HookStatus:
+          default: ENABLED
+          description: Attribute to specify which stacks this hook applies to or should get invoked for
+          type: string
+          enum:
+            - ENABLED
+            - DISABLED
+        TargetOperations:
+          description: Which operations should this Hook run against? Resource changes, stacks or change sets.
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/TargetOperation'
+        FailureMode:
+          description: Attribute to specify CloudFormation behavior on hook failure.
+          type: string
+          enum:
+            - FAIL
+            - WARN
+        TargetFilters:
+          description: Attribute to specify which targets should invoke the hook
+          type: object
+          oneOf:
+            - type: object
+              minProperties: 1
+              properties:
+                TargetNames:
+                  description: List of type names that the hook is going to target
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  uniqueItems: true
+                  x-insertionOrder: false
+                  items:
+                    $ref: '#/components/schemas/TargetName'
+                Actions:
+                  description: List of actions that the hook is going to target
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  uniqueItems: true
+                  x-insertionOrder: false
+                  items:
+                    $ref: '#/components/schemas/Action'
+                InvocationPoints:
+                  description: List of invocation points that the hook is going to target
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  uniqueItems: true
+                  x-insertionOrder: false
+                  items:
+                    $ref: '#/components/schemas/InvocationPoint'
+              additionalProperties: false
+            - type: object
+              properties:
+                Targets:
+                  description: List of hook targets
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  uniqueItems: true
+                  items:
+                    $ref: '#/components/schemas/HookTarget'
+              additionalProperties: false
+              required:
+                - Targets
+        StackFilters:
+          description: Filters to allow hooks to target specific stack attributes
+          type: object
+          properties:
+            FilteringCriteria:
+              description: Attribute to specify the filtering behavior. ANY will make the Hook pass if one filter matches. ALL will make the Hook pass if all filters match
+              type: string
+              default: ALL
+              enum:
+                - ALL
+                - ANY
+            StackNames:
+              description: List of stack names as filters
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                Include:
+                  description: List of stack names that the hook is going to target
+                  type: array
+                  maxItems: 50
+                  minItems: 1
+                  uniqueItems: true
+                  x-insertionOrder: false
+                  items:
+                    $ref: '#/components/schemas/StackName'
+                Exclude:
+                  description: List of stack names that the hook is going to be excluded from
+                  type: array
+                  maxItems: 50
+                  minItems: 1
+                  uniqueItems: true
+                  x-insertionOrder: false
+                  items:
+                    $ref: '#/components/schemas/StackName'
+            StackRoles:
+              description: List of stack roles that are performing the stack operations.
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                Include:
+                  description: List of stack roles that the hook is going to target
+                  type: array
+                  maxItems: 50
+                  minItems: 1
+                  uniqueItems: true
+                  x-insertionOrder: false
+                  items:
+                    $ref: '#/components/schemas/Role'
+                Exclude:
+                  description: List of stack roles that the hook is going to be excluded from
+                  type: array
+                  maxItems: 50
+                  minItems: 1
+                  uniqueItems: true
+                  x-insertionOrder: false
+                  items:
+                    $ref: '#/components/schemas/Role'
+          required:
+            - FilteringCriteria
+          additionalProperties: false
+        Alias:
+          description: The typename alias for the hook.
+          pattern: ^(?!(?i)aws)[A-Za-z0-9]{2,64}::[A-Za-z0-9]{2,64}::[A-Za-z0-9]{2,64}$
+          type: string
+        HookArn:
+          description: The Amazon Resource Name (ARN) of the activated hook
+          pattern: ^arn:aws[A-Za-z0-9-]{0,64}:cloudformation:[A-Za-z0-9-]{1,64}:([0-9]{12})?:type/hook/.+$
+          type: string
+        ExecutionRole:
+          description: The execution role ARN assumed by Hooks to invoke Lambda.
+          $ref: '#/components/schemas/Role'
+      required:
+        - LambdaFunction
+        - FailureMode
+        - Alias
+        - ExecutionRole
+        - TargetOperations
+        - HookStatus
+      x-stackql-resource-name: lambda_hook
+      description: This is a CloudFormation resource for the first-party AWS::Hooks::LambdaHook.
+      x-type-name: AWS::CloudFormation::LambdaHook
+      x-stackql-primary-identifier:
+        - HookArn
+      x-create-only-properties:
+        - Alias
+      x-read-only-properties:
+        - HookArn
+      x-required-properties:
+        - LambdaFunction
+        - FailureMode
+        - Alias
+        - ExecutionRole
+        - TargetOperations
+        - HookStatus
+      x-tagging:
+        taggable: false
+        tagOnCreate: false
+        tagUpdatable: false
+        cloudFormationSystemTags: false
+      x-required-permissions:
+        create:
+          - cloudformation:ListTypes
+          - cloudformation:ActivateType
+          - cloudformation:BatchDescribeTypeConfigurations
+          - cloudformation:DescribeType
+          - cloudformation:SetTypeConfiguration
+          - iam:PassRole
+        read:
+          - cloudformation:BatchDescribeTypeConfigurations
+          - cloudformation:DescribeType
+        update:
+          - cloudformation:BatchDescribeTypeConfigurations
+          - cloudformation:DescribeType
+          - cloudformation:SetTypeConfiguration
+          - iam:PassRole
+        delete:
+          - cloudformation:BatchDescribeTypeConfigurations
+          - cloudformation:DeactivateType
+          - cloudformation:DescribeType
+          - cloudformation:SetTypeConfiguration
+        list:
+          - cloudformation:ListTypes
+          - cloudformation:BatchDescribeTypeConfigurations
+          - cloudformation:DescribeType
     ModuleDefaultVersion:
       type: object
       properties:
@@ -743,7 +1218,7 @@ components:
           maxLength: 64
         PublisherId:
           description: The publisher id assigned by CloudFormation for publishing in this region.
-          pattern: '[0-9a-zA-Z]{40}'
+          pattern: '[0-9a-zA-Z-]{40}'
           type: string
           minLength: 1
           maxLength: 40
@@ -808,7 +1283,7 @@ components:
           type: boolean
         PublisherId:
           description: The publisher id assigned by CloudFormation for publishing in this region.
-          pattern: '[0-9a-zA-Z]{40}'
+          pattern: '[0-9a-zA-Z-]{40}'
           type: string
           minLength: 1
           maxLength: 40
@@ -843,8 +1318,6 @@ components:
         - PublisherId
       x-create-only-properties:
         - AcceptTermsAndConditions
-        - ConnectionArn
-      x-write-only-properties:
         - ConnectionArn
       x-read-only-properties:
         - PublisherId
@@ -1221,6 +1694,12 @@ components:
       enum:
         - SEQUENTIAL
         - PARALLEL
+    ConcurrencyMode:
+      description: Specifies how the concurrency level behaves during the operation execution.
+      type: string
+      enum:
+        - STRICT_FAILURE_TOLERANCE
+        - SOFT_FAILURE_TOLERANCE
     Active:
       description: When true, StackSets performs non-conflicting operations concurrently and queues conflicting operations. After conflicting operations finish, StackSets starts queued operations in request order.
       type: boolean
@@ -1248,6 +1727,8 @@ components:
             $ref: '#/components/schemas/Region'
         RegionConcurrencyType:
           $ref: '#/components/schemas/RegionConcurrencyType'
+        ConcurrencyMode:
+          $ref: '#/components/schemas/ConcurrencyMode'
       additionalProperties: false
     Parameter:
       type: object
@@ -1483,7 +1964,7 @@ components:
           type: string
         PublisherId:
           description: The publisher id assigned by CloudFormation for publishing in this region.
-          pattern: '[0-9a-zA-Z]{40}'
+          pattern: '[0-9a-zA-Z-]{40}'
           type: string
           minLength: 1
           maxLength: 40
@@ -1561,6 +2042,175 @@ components:
           - cloudformation:DescribeType
         list:
           - cloudformation:ListTypes
+    CreateGuardHookRequest:
+      properties:
+        ClientToken:
+          type: string
+        RoleArn:
+          type: string
+        TypeName:
+          type: string
+        TypeVersionId:
+          type: string
+        DesiredState:
+          type: object
+          properties:
+            RuleLocation:
+              $ref: '#/components/schemas/S3Location'
+            LogBucket:
+              description: S3 Bucket where the guard validate report will be uploaded to
+              type: string
+            HookStatus:
+              default: DISABLED
+              description: Attribute to specify which stacks this hook applies to or should get invoked for
+              type: string
+              enum:
+                - ENABLED
+                - DISABLED
+            TargetOperations:
+              description: Which operations should this Hook run against? Resource changes, stacks or change sets.
+              type: array
+              uniqueItems: true
+              items:
+                $ref: '#/components/schemas/TargetOperation'
+            FailureMode:
+              default: WARN
+              description: Attribute to specify CloudFormation behavior on hook failure.
+              type: string
+              enum:
+                - FAIL
+                - WARN
+            TargetFilters:
+              description: Attribute to specify which targets should invoke the hook
+              type: object
+              oneOf:
+                - type: object
+                  minProperties: 1
+                  properties:
+                    TargetNames:
+                      description: List of type names that the hook is going to target
+                      type: array
+                      minItems: 1
+                      maxItems: 50
+                      uniqueItems: true
+                      x-insertionOrder: false
+                      items:
+                        $ref: '#/components/schemas/TargetName'
+                    Actions:
+                      description: List of actions that the hook is going to target
+                      type: array
+                      minItems: 1
+                      maxItems: 50
+                      uniqueItems: true
+                      x-insertionOrder: false
+                      items:
+                        $ref: '#/components/schemas/Action'
+                    InvocationPoints:
+                      description: List of invocation points that the hook is going to target
+                      type: array
+                      minItems: 1
+                      maxItems: 50
+                      uniqueItems: true
+                      x-insertionOrder: false
+                      items:
+                        $ref: '#/components/schemas/InvocationPoint'
+                  additionalProperties: false
+                - type: object
+                  properties:
+                    Targets:
+                      description: List of hook targets
+                      type: array
+                      minItems: 1
+                      maxItems: 50
+                      uniqueItems: true
+                      items:
+                        $ref: '#/components/schemas/HookTarget'
+                  additionalProperties: false
+                  required:
+                    - Targets
+            StackFilters:
+              description: Filters to allow hooks to target specific stack attributes
+              type: object
+              properties:
+                FilteringCriteria:
+                  description: Attribute to specify the filtering behavior. ANY will make the Hook pass if one filter matches. ALL will make the Hook pass if all filters match
+                  type: string
+                  default: ALL
+                  enum:
+                    - ALL
+                    - ANY
+                StackNames:
+                  description: List of stack names as filters
+                  type: object
+                  additionalProperties: false
+                  minProperties: 1
+                  properties:
+                    Include:
+                      description: List of stack names that the hook is going to target
+                      type: array
+                      maxItems: 50
+                      minItems: 1
+                      uniqueItems: true
+                      x-insertionOrder: false
+                      items:
+                        $ref: '#/components/schemas/StackName'
+                    Exclude:
+                      description: List of stack names that the hook is going to be excluded from
+                      type: array
+                      maxItems: 50
+                      minItems: 1
+                      uniqueItems: true
+                      x-insertionOrder: false
+                      items:
+                        $ref: '#/components/schemas/StackName'
+                StackRoles:
+                  description: List of stack roles that are performing the stack operations.
+                  type: object
+                  additionalProperties: false
+                  minProperties: 1
+                  properties:
+                    Include:
+                      description: List of stack roles that the hook is going to target
+                      type: array
+                      maxItems: 50
+                      minItems: 1
+                      uniqueItems: true
+                      x-insertionOrder: false
+                      items:
+                        $ref: '#/components/schemas/Role'
+                    Exclude:
+                      description: List of stack roles that the hook is going to be excluded from
+                      type: array
+                      maxItems: 50
+                      minItems: 1
+                      uniqueItems: true
+                      x-insertionOrder: false
+                      items:
+                        $ref: '#/components/schemas/Role'
+              required:
+                - FilteringCriteria
+              additionalProperties: false
+            Alias:
+              description: The typename alias for the hook.
+              pattern: ^(?!(?i)aws)[A-Za-z0-9]{2,64}::[A-Za-z0-9]{2,64}::[A-Za-z0-9]{2,64}$
+              type: string
+            HookArn:
+              description: The Amazon Resource Name (ARN) of the activated hook
+              pattern: ^arn:aws[A-Za-z0-9-]{0,64}:cloudformation:[A-Za-z0-9-]{1,64}:([0-9]{12})?:type/hook/.+$
+              type: string
+            ExecutionRole:
+              description: The execution role ARN assumed by hooks to read Guard rules from S3 and write Guard outputs to S3.
+              $ref: '#/components/schemas/Role'
+            Options:
+              properties:
+                InputParams:
+                  $ref: '#/components/schemas/S3Location'
+              required: []
+              additionalProperties: false
+          x-stackQL-stringOnly: true
+      x-title: CreateGuardHookRequest
+      type: object
+      required: []
     CreateHookDefaultVersionRequest:
       properties:
         ClientToken:
@@ -1707,6 +2357,169 @@ components:
       x-title: CreateHookVersionRequest
       type: object
       required: []
+    CreateLambdaHookRequest:
+      properties:
+        ClientToken:
+          type: string
+        RoleArn:
+          type: string
+        TypeName:
+          type: string
+        TypeVersionId:
+          type: string
+        DesiredState:
+          type: object
+          properties:
+            LambdaFunction:
+              description: Amazon Resource Name (ARN), Partial ARN, name, version, or alias of the Lambda function to invoke with this hook.
+              type: string
+              minLength: 1
+              maxLength: 170
+              pattern: (arn:(aws[a-zA-Z-]*)?:lambda:)?([a-z]{2}(-gov)?(-iso([a-z])?)?-[a-z]+-\d{1}:)?(\d{12}:)?(function:)?([a-zA-Z0-9-_]+)(:(\$LATEST|[a-zA-Z0-9-_]+))?
+            HookStatus:
+              default: ENABLED
+              description: Attribute to specify which stacks this hook applies to or should get invoked for
+              type: string
+              enum:
+                - ENABLED
+                - DISABLED
+            TargetOperations:
+              description: Which operations should this Hook run against? Resource changes, stacks or change sets.
+              type: array
+              uniqueItems: true
+              items:
+                $ref: '#/components/schemas/TargetOperation'
+            FailureMode:
+              description: Attribute to specify CloudFormation behavior on hook failure.
+              type: string
+              enum:
+                - FAIL
+                - WARN
+            TargetFilters:
+              description: Attribute to specify which targets should invoke the hook
+              type: object
+              oneOf:
+                - type: object
+                  minProperties: 1
+                  properties:
+                    TargetNames:
+                      description: List of type names that the hook is going to target
+                      type: array
+                      minItems: 1
+                      maxItems: 50
+                      uniqueItems: true
+                      x-insertionOrder: false
+                      items:
+                        $ref: '#/components/schemas/TargetName'
+                    Actions:
+                      description: List of actions that the hook is going to target
+                      type: array
+                      minItems: 1
+                      maxItems: 50
+                      uniqueItems: true
+                      x-insertionOrder: false
+                      items:
+                        $ref: '#/components/schemas/Action'
+                    InvocationPoints:
+                      description: List of invocation points that the hook is going to target
+                      type: array
+                      minItems: 1
+                      maxItems: 50
+                      uniqueItems: true
+                      x-insertionOrder: false
+                      items:
+                        $ref: '#/components/schemas/InvocationPoint'
+                  additionalProperties: false
+                - type: object
+                  properties:
+                    Targets:
+                      description: List of hook targets
+                      type: array
+                      minItems: 1
+                      maxItems: 50
+                      uniqueItems: true
+                      items:
+                        $ref: '#/components/schemas/HookTarget'
+                  additionalProperties: false
+                  required:
+                    - Targets
+            StackFilters:
+              description: Filters to allow hooks to target specific stack attributes
+              type: object
+              properties:
+                FilteringCriteria:
+                  description: Attribute to specify the filtering behavior. ANY will make the Hook pass if one filter matches. ALL will make the Hook pass if all filters match
+                  type: string
+                  default: ALL
+                  enum:
+                    - ALL
+                    - ANY
+                StackNames:
+                  description: List of stack names as filters
+                  type: object
+                  additionalProperties: false
+                  minProperties: 1
+                  properties:
+                    Include:
+                      description: List of stack names that the hook is going to target
+                      type: array
+                      maxItems: 50
+                      minItems: 1
+                      uniqueItems: true
+                      x-insertionOrder: false
+                      items:
+                        $ref: '#/components/schemas/StackName'
+                    Exclude:
+                      description: List of stack names that the hook is going to be excluded from
+                      type: array
+                      maxItems: 50
+                      minItems: 1
+                      uniqueItems: true
+                      x-insertionOrder: false
+                      items:
+                        $ref: '#/components/schemas/StackName'
+                StackRoles:
+                  description: List of stack roles that are performing the stack operations.
+                  type: object
+                  additionalProperties: false
+                  minProperties: 1
+                  properties:
+                    Include:
+                      description: List of stack roles that the hook is going to target
+                      type: array
+                      maxItems: 50
+                      minItems: 1
+                      uniqueItems: true
+                      x-insertionOrder: false
+                      items:
+                        $ref: '#/components/schemas/Role'
+                    Exclude:
+                      description: List of stack roles that the hook is going to be excluded from
+                      type: array
+                      maxItems: 50
+                      minItems: 1
+                      uniqueItems: true
+                      x-insertionOrder: false
+                      items:
+                        $ref: '#/components/schemas/Role'
+              required:
+                - FilteringCriteria
+              additionalProperties: false
+            Alias:
+              description: The typename alias for the hook.
+              pattern: ^(?!(?i)aws)[A-Za-z0-9]{2,64}::[A-Za-z0-9]{2,64}::[A-Za-z0-9]{2,64}$
+              type: string
+            HookArn:
+              description: The Amazon Resource Name (ARN) of the activated hook
+              pattern: ^arn:aws[A-Za-z0-9-]{0,64}:cloudformation:[A-Za-z0-9-]{1,64}:([0-9]{12})?:type/hook/.+$
+              type: string
+            ExecutionRole:
+              description: The execution role ARN assumed by Hooks to invoke Lambda.
+              $ref: '#/components/schemas/Role'
+          x-stackQL-stringOnly: true
+      x-title: CreateLambdaHookRequest
+      type: object
+      required: []
     CreateModuleDefaultVersionRequest:
       properties:
         ClientToken:
@@ -1829,7 +2642,7 @@ components:
               maxLength: 64
             PublisherId:
               description: The publisher id assigned by CloudFormation for publishing in this region.
-              pattern: '[0-9a-zA-Z]{40}'
+              pattern: '[0-9a-zA-Z-]{40}'
               type: string
               minLength: 1
               maxLength: 40
@@ -1877,7 +2690,7 @@ components:
               type: boolean
             PublisherId:
               description: The publisher id assigned by CloudFormation for publishing in this region.
-              pattern: '[0-9a-zA-Z]{40}'
+              pattern: '[0-9a-zA-Z-]{40}'
               type: string
               minLength: 1
               maxLength: 40
@@ -2254,7 +3067,7 @@ components:
               type: string
             PublisherId:
               description: The publisher id assigned by CloudFormation for publishing in this region.
-              pattern: '[0-9a-zA-Z]{40}'
+              pattern: '[0-9a-zA-Z-]{40}'
               type: string
               minLength: 1
               maxLength: 40
@@ -2312,6 +3125,180 @@ components:
       description: Amazon Signature authorization v4
       x-amazon-apigateway-authtype: awsSigv4
   x-stackQL-resources:
+    guard_hooks:
+      name: guard_hooks
+      id: aws.cloudformation.guard_hooks
+      x-cfn-schema-name: GuardHook
+      x-cfn-type-name: AWS::CloudFormation::GuardHook
+      x-identifiers:
+        - HookArn
+      x-type: cloud_control
+      methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__GuardHook&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::CloudFormation::GuardHook"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::CloudFormation::GuardHook"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::CloudFormation::GuardHook"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/guard_hooks/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/guard_hooks/methods/delete_resource'
+        update:
+          - $ref: '#/components/x-stackQL-resources/guard_hooks/methods/update_resource'
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.RuleLocation') as rule_location,
+              JSON_EXTRACT(Properties, '$.LogBucket') as log_bucket,
+              JSON_EXTRACT(Properties, '$.HookStatus') as hook_status,
+              JSON_EXTRACT(Properties, '$.TargetOperations') as target_operations,
+              JSON_EXTRACT(Properties, '$.FailureMode') as failure_mode,
+              JSON_EXTRACT(Properties, '$.TargetFilters') as target_filters,
+              JSON_EXTRACT(Properties, '$.StackFilters') as stack_filters,
+              JSON_EXTRACT(Properties, '$.Alias') as alias,
+              JSON_EXTRACT(Properties, '$.HookArn') as hook_arn,
+              JSON_EXTRACT(Properties, '$.ExecutionRole') as execution_role,
+              JSON_EXTRACT(Properties, '$.Options') as options
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::CloudFormation::GuardHook'
+              AND data__Identifier = '<HookArn>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "sqlite3"
+              ddl: |-
+                SELECT
+                detail.region,
+                JSON_EXTRACT(detail.Properties, '$.RuleLocation') as rule_location,
+                JSON_EXTRACT(detail.Properties, '$.LogBucket') as log_bucket,
+                JSON_EXTRACT(detail.Properties, '$.HookStatus') as hook_status,
+                JSON_EXTRACT(detail.Properties, '$.TargetOperations') as target_operations,
+                JSON_EXTRACT(detail.Properties, '$.FailureMode') as failure_mode,
+                JSON_EXTRACT(detail.Properties, '$.TargetFilters') as target_filters,
+                JSON_EXTRACT(detail.Properties, '$.StackFilters') as stack_filters,
+                JSON_EXTRACT(detail.Properties, '$.Alias') as alias,
+                JSON_EXTRACT(detail.Properties, '$.HookArn') as hook_arn,
+                JSON_EXTRACT(detail.Properties, '$.ExecutionRole') as execution_role,
+                JSON_EXTRACT(detail.Properties, '$.Options') as options
+                FROM aws.cloud_control.resources listing
+                LEFT OUTER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                WHERE listing.data__TypeName = 'AWS::CloudFormation::GuardHook'
+                AND detail.data__TypeName = 'AWS::CloudFormation::GuardHook'
+                AND listing.region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'RuleLocation') as rule_location,
+                  json_extract_path_text(Properties, 'LogBucket') as log_bucket,
+                  json_extract_path_text(Properties, 'HookStatus') as hook_status,
+                  json_extract_path_text(Properties, 'TargetOperations') as target_operations,
+                  json_extract_path_text(Properties, 'FailureMode') as failure_mode,
+                  json_extract_path_text(Properties, 'TargetFilters') as target_filters,
+                  json_extract_path_text(Properties, 'StackFilters') as stack_filters,
+                  json_extract_path_text(Properties, 'Alias') as alias,
+                  json_extract_path_text(Properties, 'HookArn') as hook_arn,
+                  json_extract_path_text(Properties, 'ExecutionRole') as execution_role,
+                  json_extract_path_text(Properties, 'Options') as options
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::CloudFormation::GuardHook'
+                  AND data__Identifier = '<HookArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    detail.region,
+                    json_extract_path_text(detail.Properties, 'RuleLocation') as rule_location,
+                    json_extract_path_text(detail.Properties, 'LogBucket') as log_bucket,
+                    json_extract_path_text(detail.Properties, 'HookStatus') as hook_status,
+                    json_extract_path_text(detail.Properties, 'TargetOperations') as target_operations,
+                    json_extract_path_text(detail.Properties, 'FailureMode') as failure_mode,
+                    json_extract_path_text(detail.Properties, 'TargetFilters') as target_filters,
+                    json_extract_path_text(detail.Properties, 'StackFilters') as stack_filters,
+                    json_extract_path_text(detail.Properties, 'Alias') as alias,
+                    json_extract_path_text(detail.Properties, 'HookArn') as hook_arn,
+                    json_extract_path_text(detail.Properties, 'ExecutionRole') as execution_role,
+                    json_extract_path_text(detail.Properties, 'Options') as options
+                    FROM aws.cloud_control.resources listing
+                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    ON detail.data__Identifier = listing.Identifier
+                    AND detail.region = listing.region
+                    WHERE listing.data__TypeName = 'AWS::CloudFormation::GuardHook'
+                    AND detail.data__TypeName = 'AWS::CloudFormation::GuardHook'
+                    AND listing.region = 'us-east-1'
+    guard_hooks_list_only:
+      name: guard_hooks_list_only
+      id: aws.cloudformation.guard_hooks_list_only
+      x-cfn-schema-name: GuardHook
+      x-cfn-type-name: AWS::CloudFormation::GuardHook
+      x-identifiers:
+        - HookArn
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.HookArn') as hook_arn
+              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::CloudFormation::GuardHook'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                json_extract_path_text(Properties, 'HookArn') as hook_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::CloudFormation::GuardHook'
+                AND region = 'us-east-1'
     hook_default_versions:
       name: hook_default_versions
       id: aws.cloudformation.hook_default_versions
@@ -2747,6 +3734,172 @@ components:
                 region,
                 json_extract_path_text(Properties, 'Arn') as arn
                 FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::CloudFormation::HookVersion'
+                AND region = 'us-east-1'
+    lambda_hooks:
+      name: lambda_hooks
+      id: aws.cloudformation.lambda_hooks
+      x-cfn-schema-name: LambdaHook
+      x-cfn-type-name: AWS::CloudFormation::LambdaHook
+      x-identifiers:
+        - HookArn
+      x-type: cloud_control
+      methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__LambdaHook&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::CloudFormation::LambdaHook"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::CloudFormation::LambdaHook"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::CloudFormation::LambdaHook"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/lambda_hooks/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/lambda_hooks/methods/delete_resource'
+        update:
+          - $ref: '#/components/x-stackQL-resources/lambda_hooks/methods/update_resource'
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.LambdaFunction') as lambda_function,
+              JSON_EXTRACT(Properties, '$.HookStatus') as hook_status,
+              JSON_EXTRACT(Properties, '$.TargetOperations') as target_operations,
+              JSON_EXTRACT(Properties, '$.FailureMode') as failure_mode,
+              JSON_EXTRACT(Properties, '$.TargetFilters') as target_filters,
+              JSON_EXTRACT(Properties, '$.StackFilters') as stack_filters,
+              JSON_EXTRACT(Properties, '$.Alias') as alias,
+              JSON_EXTRACT(Properties, '$.HookArn') as hook_arn,
+              JSON_EXTRACT(Properties, '$.ExecutionRole') as execution_role
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::CloudFormation::LambdaHook'
+              AND data__Identifier = '<HookArn>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "sqlite3"
+              ddl: |-
+                SELECT
+                detail.region,
+                JSON_EXTRACT(detail.Properties, '$.LambdaFunction') as lambda_function,
+                JSON_EXTRACT(detail.Properties, '$.HookStatus') as hook_status,
+                JSON_EXTRACT(detail.Properties, '$.TargetOperations') as target_operations,
+                JSON_EXTRACT(detail.Properties, '$.FailureMode') as failure_mode,
+                JSON_EXTRACT(detail.Properties, '$.TargetFilters') as target_filters,
+                JSON_EXTRACT(detail.Properties, '$.StackFilters') as stack_filters,
+                JSON_EXTRACT(detail.Properties, '$.Alias') as alias,
+                JSON_EXTRACT(detail.Properties, '$.HookArn') as hook_arn,
+                JSON_EXTRACT(detail.Properties, '$.ExecutionRole') as execution_role
+                FROM aws.cloud_control.resources listing
+                LEFT OUTER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                WHERE listing.data__TypeName = 'AWS::CloudFormation::LambdaHook'
+                AND detail.data__TypeName = 'AWS::CloudFormation::LambdaHook'
+                AND listing.region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'LambdaFunction') as lambda_function,
+                  json_extract_path_text(Properties, 'HookStatus') as hook_status,
+                  json_extract_path_text(Properties, 'TargetOperations') as target_operations,
+                  json_extract_path_text(Properties, 'FailureMode') as failure_mode,
+                  json_extract_path_text(Properties, 'TargetFilters') as target_filters,
+                  json_extract_path_text(Properties, 'StackFilters') as stack_filters,
+                  json_extract_path_text(Properties, 'Alias') as alias,
+                  json_extract_path_text(Properties, 'HookArn') as hook_arn,
+                  json_extract_path_text(Properties, 'ExecutionRole') as execution_role
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::CloudFormation::LambdaHook'
+                  AND data__Identifier = '<HookArn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    detail.region,
+                    json_extract_path_text(detail.Properties, 'LambdaFunction') as lambda_function,
+                    json_extract_path_text(detail.Properties, 'HookStatus') as hook_status,
+                    json_extract_path_text(detail.Properties, 'TargetOperations') as target_operations,
+                    json_extract_path_text(detail.Properties, 'FailureMode') as failure_mode,
+                    json_extract_path_text(detail.Properties, 'TargetFilters') as target_filters,
+                    json_extract_path_text(detail.Properties, 'StackFilters') as stack_filters,
+                    json_extract_path_text(detail.Properties, 'Alias') as alias,
+                    json_extract_path_text(detail.Properties, 'HookArn') as hook_arn,
+                    json_extract_path_text(detail.Properties, 'ExecutionRole') as execution_role
+                    FROM aws.cloud_control.resources listing
+                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    ON detail.data__Identifier = listing.Identifier
+                    AND detail.region = listing.region
+                    WHERE listing.data__TypeName = 'AWS::CloudFormation::LambdaHook'
+                    AND detail.data__TypeName = 'AWS::CloudFormation::LambdaHook'
+                    AND listing.region = 'us-east-1'
+    lambda_hooks_list_only:
+      name: lambda_hooks_list_only
+      id: aws.cloudformation.lambda_hooks_list_only
+      x-cfn-schema-name: LambdaHook
+      x-cfn-type-name: AWS::CloudFormation::LambdaHook
+      x-identifiers:
+        - HookArn
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.HookArn') as hook_arn
+              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::CloudFormation::LambdaHook'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                json_extract_path_text(Properties, 'HookArn') as hook_arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::CloudFormation::LambdaHook'
                 AND region = 'us-east-1'
     module_default_versions:
       name: module_default_versions
@@ -4406,6 +5559,48 @@ paths:
               schema:
                 $ref: '#/components/x-cloud-control-schemas/UpdateResourceOutput'
           description: Success
+  /?Action=CreateResource&Version=2021-09-30&__GuardHook&__detailTransformed=true:
+    parameters:
+      - $ref: '#/components/parameters/X-Amz-Content-Sha256'
+      - $ref: '#/components/parameters/X-Amz-Date'
+      - $ref: '#/components/parameters/X-Amz-Algorithm'
+      - $ref: '#/components/parameters/X-Amz-Credential'
+      - $ref: '#/components/parameters/X-Amz-Security-Token'
+      - $ref: '#/components/parameters/X-Amz-Signature'
+      - $ref: '#/components/parameters/X-Amz-SignedHeaders'
+    post:
+      operationId: CreateGuardHook
+      parameters:
+        - description: Action Header
+          in: header
+          name: X-Amz-Target
+          required: false
+          schema:
+            default: CloudApiService.CreateResource
+            enum:
+              - CloudApiService.CreateResource
+            type: string
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            default: application/x-amz-json-1.0
+            enum:
+              - application/x-amz-json-1.0
+            type: string
+      requestBody:
+        content:
+          application/x-amz-json-1.0:
+            schema:
+              $ref: '#/components/schemas/CreateGuardHookRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
+          description: Success
   /?Action=CreateResource&Version=2021-09-30&__HookDefaultVersion&__detailTransformed=true:
     parameters:
       - $ref: '#/components/parameters/X-Amz-Content-Sha256'
@@ -4524,6 +5719,48 @@ paths:
           application/x-amz-json-1.0:
             schema:
               $ref: '#/components/schemas/CreateHookVersionRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
+          description: Success
+  /?Action=CreateResource&Version=2021-09-30&__LambdaHook&__detailTransformed=true:
+    parameters:
+      - $ref: '#/components/parameters/X-Amz-Content-Sha256'
+      - $ref: '#/components/parameters/X-Amz-Date'
+      - $ref: '#/components/parameters/X-Amz-Algorithm'
+      - $ref: '#/components/parameters/X-Amz-Credential'
+      - $ref: '#/components/parameters/X-Amz-Security-Token'
+      - $ref: '#/components/parameters/X-Amz-Signature'
+      - $ref: '#/components/parameters/X-Amz-SignedHeaders'
+    post:
+      operationId: CreateLambdaHook
+      parameters:
+        - description: Action Header
+          in: header
+          name: X-Amz-Target
+          required: false
+          schema:
+            default: CloudApiService.CreateResource
+            enum:
+              - CloudApiService.CreateResource
+            type: string
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            default: application/x-amz-json-1.0
+            enum:
+              - application/x-amz-json-1.0
+            type: string
+      requestBody:
+        content:
+          application/x-amz-json-1.0:
+            schema:
+              $ref: '#/components/schemas/CreateLambdaHookRequest'
         required: true
       responses:
         '200':
