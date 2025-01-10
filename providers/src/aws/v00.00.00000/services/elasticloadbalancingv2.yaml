@@ -399,6 +399,9 @@ components:
         TrustStoreArn:
           description: The Amazon Resource Name (ARN) of the trust store.
           type: string
+        AdvertiseTrustStoreCaNames:
+          description: ''
+          type: string
     FixedResponseConfig:
       type: object
       additionalProperties: false
@@ -520,7 +523,7 @@ components:
           description: 'The hostname. This component is not percent-encoded. The hostname can contain #{host}.'
         Protocol:
           type: string
-          description: 'The protocol. You can specify HTTP, HTTPS, or #{protocol}. You can redirect HTTP to HTTP, HTTP to HTTPS, and HTTPS to HTTPS. You cannot redirect HTTPS to HTTP.'
+          description: 'The protocol. You can specify HTTP, HTTPS, or #{protocol}. You can redirect HTTP to HTTP, HTTP to HTTPS, and HTTPS to HTTPS. You can''t redirect HTTPS to HTTP.'
         StatusCode:
           type: string
           description: The HTTP redirect code. The redirect is either permanent (HTTP 301) or temporary (HTTP 302).
@@ -548,6 +551,20 @@ components:
           type: integer
           description: The time period, in seconds, during which requests from a client should be routed to the same target group. The range is 1-604800 seconds (7 days).
       description: Information about the target group stickiness for a rule.
+    ListenerAttribute:
+      description: Information about a listener attribute.
+      additionalProperties: false
+      type: object
+      properties:
+        Value:
+          description: The value of the attribute.
+          type: string
+        Key:
+          description: |-
+            The name of the attribute.
+             The following attribute is supported by Network Load Balancers, and Gateway Load Balancers.
+              +   ``tcp.idle_timeout.seconds`` - The tcp idle timeout value, in seconds. The valid range is 60-6000 seconds. The default is 350 seconds.
+          type: string
     ForwardConfig:
       type: object
       additionalProperties: false
@@ -619,6 +636,11 @@ components:
         - UserInfoEndpoint
         - ClientId
         - AuthorizationEndpoint
+      anyOf:
+        - required:
+            - ClientSecret
+        - required:
+            - UseExistingClientSecret
       description: Specifies information required using an identity provide (IdP) that is compliant with OpenID Connect (OIDC) to authenticate users.
     Certificate:
       description: Specifies an SSL server certificate to use as the default certificate for a secure listener.
@@ -644,6 +666,14 @@ components:
         MutualAuthentication:
           description: The mutual authentication configuration information.
           $ref: '#/components/schemas/MutualAuthentication'
+        ListenerAttributes:
+          x-arrayType: AttributeList
+          uniqueItems: true
+          description: The listener attributes.
+          x-insertionOrder: false
+          type: array
+          items:
+            $ref: '#/components/schemas/ListenerAttribute'
         AlpnPolicy:
           description: '[TLS listener] The name of the Application-Layer Protocol Negotiation (ALPN) policy.'
           type: array
@@ -667,7 +697,7 @@ components:
           items:
             $ref: '#/components/schemas/Action'
         Port:
-          description: The port on which the load balancer is listening. You cannot specify a port for a Gateway Load Balancer.
+          description: The port on which the load balancer is listening. You can't specify a port for a Gateway Load Balancer.
           type: integer
         Certificates:
           uniqueItems: true
@@ -678,7 +708,7 @@ components:
           items:
             $ref: '#/components/schemas/Certificate'
         Protocol:
-          description: The protocol for connections from clients to the load balancer. For Application Load Balancers, the supported protocols are HTTP and HTTPS. For Network Load Balancers, the supported protocols are TCP, TLS, UDP, and TCP_UDP. You can’t specify the UDP or TCP_UDP protocol if dual-stack mode is enabled. You cannot specify a protocol for a Gateway Load Balancer.
+          description: The protocol for connections from clients to the load balancer. For Application Load Balancers, the supported protocols are HTTP and HTTPS. For Network Load Balancers, the supported protocols are TCP, TLS, UDP, and TCP_UDP. You can’t specify the UDP or TCP_UDP protocol if dual-stack mode is enabled. You can't specify a protocol for a Gateway Load Balancer.
           type: string
       required:
         - LoadBalancerArn
@@ -705,14 +735,17 @@ components:
       x-required-permissions:
         read:
           - elasticloadbalancing:DescribeListeners
+          - elasticloadbalancing:DescribeListenerAttributes
         create:
           - elasticloadbalancing:CreateListener
           - elasticloadbalancing:DescribeListeners
           - cognito-idp:DescribeUserPoolClient
+          - elasticloadbalancing:ModifyListenerAttributes
         update:
           - elasticloadbalancing:ModifyListener
           - elasticloadbalancing:DescribeListeners
           - cognito-idp:DescribeUserPoolClient
+          - elasticloadbalancing:ModifyListenerAttributes
         list:
           - elasticloadbalancing:DescribeListeners
         delete:
@@ -957,6 +990,15 @@ components:
           - elasticloadbalancing:ModifyRule
           - elasticloadbalancing:SetRulePriorities
           - elasticloadbalancing:DescribeRules
+    MinimumLoadBalancerCapacity:
+      type: object
+      additionalProperties: false
+      properties:
+        CapacityUnits:
+          type: integer
+      required:
+        - CapacityUnits
+      description: ''
     SubnetMapping:
       type: object
       additionalProperties: false
@@ -973,6 +1015,9 @@ components:
         IPv6Address:
           type: string
           description: '[Network Load Balancers] The IPv6 address.'
+        SourceNatIpv6Prefix:
+          type: string
+          description: '[Network Load Balancers with UDP listeners] The IPv6 prefix to use for source NAT. Specify an IPv6 prefix (/80 netmask) from the subnet CIDR block or ``auto_assigned`` to use an IPv6 prefix selected at random from the subnet CIDR block.'
       required:
         - SubnetId
       description: Specifies a subnet for a load balancer.
@@ -989,7 +1034,7 @@ components:
             The name of the attribute.
              The following attributes are supported by all load balancers:
               +   ``deletion_protection.enabled`` - Indicates whether deletion protection is enabled. The value is ``true`` or ``false``. The default is ``false``.
-              +   ``load_balancing.cross_zone.enabled`` - Indicates whether cross-zone load balancing is enabled. The possible values are ``true`` and ``false``. The default for Network Load Balancers and Gateway Load Balancers is ``false``. The default for Application Load Balancers is ``true``, and cannot be changed.
+              +   ``load_balancing.cross_zone.enabled`` - Indicates whether cross-zone load balancing is enabled. The possible values are ``true`` and ``false``. The default for Network Load Balancers and Gateway Load Balancers is ``false``. The default for Application Load Balancers is ``true``, and can't be changed.
               
              The following attributes are supported by both Application Load Balancers and Network Load Balancers:
               +   ``access_logs.s3.enabled`` - Indicates whether access logs are enabled. The value is ``true`` or ``false``. The default is ``false``.
@@ -1018,6 +1063,7 @@ components:
               
              The following attributes are supported by only Network Load Balancers:
               +   ``dns_record.client_routing_policy`` - Indicates how traffic is distributed among the load balancer Availability Zones. The possible values are ``availability_zone_affinity`` with 100 percent zonal affinity, ``partial_availability_zone_affinity`` with 85 percent zonal affinity, and ``any_availability_zone`` with 0 percent zonal affinity.
+              +   ``zonal_shift.config.enabled`` - Indicates whether zonal shift is enabled. The possible values are ``true`` and ``false``. The default is ``false``.
       description: Specifies an attribute for an Application Load Balancer, a Network Load Balancer, or a Gateway Load Balancer.
     Tag:
       type: object
@@ -1035,7 +1081,14 @@ components:
       properties:
         IpAddressType:
           type: string
-          description: The IP address type. The possible values are ``ipv4`` (for IPv4 addresses) and ``dualstack`` (for IPv4 and IPv6 addresses). You can’t specify ``dualstack`` for a load balancer with a UDP or TCP_UDP listener.
+          description: |-
+            The IP address type. Internal load balancers must use ``ipv4``.
+             [Application Load Balancers] The possible values are ``ipv4`` (IPv4 addresses), ``dualstack`` (IPv4 and IPv6 addresses), and ``dualstack-without-public-ipv4`` (public IPv6 addresses and private IPv4 and IPv6 addresses).
+             Application Load Balancer authentication supports IPv4 addresses only when connecting to an Identity Provider (IdP) or Amazon Cognito endpoint. Without a public IPv4 address the load balancer can't complete the authentication process, resulting in HTTP 500 errors.
+             [Network Load Balancers and Gateway Load Balancers] The possible values are ``ipv4`` (IPv4 addresses) and ``dualstack`` (IPv4 and IPv6 addresses).
+        EnablePrefixForIpv6SourceNat:
+          type: string
+          description: '[Network Load Balancers with UDP listeners] Indicates whether to use an IPv6 prefix from each subnet for source NAT. The IP address type must be ``dualstack``. The default value is ``off``.'
         SecurityGroups:
           type: array
           description: '[Application Load Balancers and Network Load Balancers] The IDs of the security groups for the load balancer.'
@@ -1051,13 +1104,17 @@ components:
           x-arrayType: AttributeList
           items:
             $ref: '#/components/schemas/LoadBalancerAttribute'
+        MinimumLoadBalancerCapacity:
+          type: object
+          description: ''
+          $ref: '#/components/schemas/MinimumLoadBalancerCapacity'
         Scheme:
           type: string
           description: |-
             The nodes of an Internet-facing load balancer have public IP addresses. The DNS name of an Internet-facing load balancer is publicly resolvable to the public IP addresses of the nodes. Therefore, Internet-facing load balancers can route requests from clients over the internet.
              The nodes of an internal load balancer have only private IP addresses. The DNS name of an internal load balancer is publicly resolvable to the private IP addresses of the nodes. Therefore, internal load balancers can route requests only from clients with access to the VPC for the load balancer.
              The default is an Internet-facing load balancer.
-             You cannot specify a scheme for a Gateway Load Balancer.
+             You can't specify a scheme for a Gateway Load Balancer.
         DNSName:
           type: string
           description: ''
@@ -1079,8 +1136,7 @@ components:
              [Application Load Balancers] You must specify subnets from at least two Availability Zones.
              [Application Load Balancers on Outposts] You must specify one Outpost subnet.
              [Application Load Balancers on Local Zones] You can specify subnets from one or more Local Zones.
-             [Network Load Balancers] You can specify subnets from one or more Availability Zones.
-             [Gateway Load Balancers] You can specify subnets from one or more Availability Zones.
+             [Network Load Balancers and Gateway Load Balancers] You can specify subnets from one or more Availability Zones.
           uniqueItems: true
           x-insertionOrder: false
           items:
@@ -1105,11 +1161,11 @@ components:
           type: array
           description: |-
             The IDs of the subnets. You can specify only one subnet per Availability Zone. You must specify either subnets or subnet mappings, but not both.
-             [Application Load Balancers] You must specify subnets from at least two Availability Zones. You cannot specify Elastic IP addresses for your subnets.
+             [Application Load Balancers] You must specify subnets from at least two Availability Zones. You can't specify Elastic IP addresses for your subnets.
              [Application Load Balancers on Outposts] You must specify one Outpost subnet.
              [Application Load Balancers on Local Zones] You can specify subnets from one or more Local Zones.
              [Network Load Balancers] You can specify subnets from one or more Availability Zones. You can specify one Elastic IP address per subnet if you need static IP addresses for your internet-facing load balancer. For internal load balancers, you can specify one private IP address per subnet from the IPv4 range of the subnet. For internet-facing load balancer, you can specify one IPv6 address per subnet.
-             [Gateway Load Balancers] You can specify subnets from one or more Availability Zones. You cannot specify Elastic IP addresses for your subnets.
+             [Gateway Load Balancers] You can specify subnets from one or more Availability Zones. You can't specify Elastic IP addresses for your subnets.
           uniqueItems: true
           x-insertionOrder: false
           items:
@@ -1139,6 +1195,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: false
         tagProperty: /properties/Tags
+        permissions:
+          - elasticloadbalancing:AddTags
+          - elasticloadbalancing:DescribeTags
+          - elasticloadbalancing:RemoveTags
       x-required-permissions:
         create:
           - elasticloadbalancing:CreateLoadBalancer
@@ -1153,9 +1213,11 @@ components:
         read:
           - elasticloadbalancing:DescribeLoadBalancers
           - elasticloadbalancing:DescribeLoadBalancerAttributes
+          - elasticloadbalancing:DescribeCapacityReservation
           - elasticloadbalancing:DescribeTags
         update:
           - elasticloadbalancing:ModifyLoadBalancerAttributes
+          - elasticloadbalancing:ModifyCapacityReservation
           - elasticloadbalancing:SetSubnets
           - elasticloadbalancing:SetIpAddressType
           - elasticloadbalancing:SetSecurityGroups
@@ -1309,6 +1371,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: false
         tagProperty: /properties/Tags
+        permissions:
+          - elasticloadbalancing:AddTags
+          - elasticloadbalancing:DescribeTags
+          - elasticloadbalancing:RemoveTags
       x-required-permissions:
         create:
           - elasticloadbalancing:CreateTargetGroup
@@ -1389,6 +1455,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: true
         tagProperty: /properties/Tags
+        permissions:
+          - elasticloadbalancing:AddTags
+          - elasticloadbalancing:DescribeTags
+          - elasticloadbalancing:RemoveTags
       x-required-permissions:
         create:
           - elasticloadbalancing:CreateTrustStore
@@ -1502,6 +1572,14 @@ components:
             MutualAuthentication:
               description: The mutual authentication configuration information.
               $ref: '#/components/schemas/MutualAuthentication'
+            ListenerAttributes:
+              x-arrayType: AttributeList
+              uniqueItems: true
+              description: The listener attributes.
+              x-insertionOrder: false
+              type: array
+              items:
+                $ref: '#/components/schemas/ListenerAttribute'
             AlpnPolicy:
               description: '[TLS listener] The name of the Application-Layer Protocol Negotiation (ALPN) policy.'
               type: array
@@ -1525,7 +1603,7 @@ components:
               items:
                 $ref: '#/components/schemas/Action'
             Port:
-              description: The port on which the load balancer is listening. You cannot specify a port for a Gateway Load Balancer.
+              description: The port on which the load balancer is listening. You can't specify a port for a Gateway Load Balancer.
               type: integer
             Certificates:
               uniqueItems: true
@@ -1536,7 +1614,7 @@ components:
               items:
                 $ref: '#/components/schemas/Certificate'
             Protocol:
-              description: The protocol for connections from clients to the load balancer. For Application Load Balancers, the supported protocols are HTTP and HTTPS. For Network Load Balancers, the supported protocols are TCP, TLS, UDP, and TCP_UDP. You can’t specify the UDP or TCP_UDP protocol if dual-stack mode is enabled. You cannot specify a protocol for a Gateway Load Balancer.
+              description: The protocol for connections from clients to the load balancer. For Application Load Balancers, the supported protocols are HTTP and HTTPS. For Network Load Balancers, the supported protocols are TCP, TLS, UDP, and TCP_UDP. You can’t specify the UDP or TCP_UDP protocol if dual-stack mode is enabled. You can't specify a protocol for a Gateway Load Balancer.
               type: string
           x-stackQL-stringOnly: true
       x-title: CreateListenerRequest
@@ -1606,7 +1684,14 @@ components:
           properties:
             IpAddressType:
               type: string
-              description: The IP address type. The possible values are ``ipv4`` (for IPv4 addresses) and ``dualstack`` (for IPv4 and IPv6 addresses). You can’t specify ``dualstack`` for a load balancer with a UDP or TCP_UDP listener.
+              description: |-
+                The IP address type. Internal load balancers must use ``ipv4``.
+                 [Application Load Balancers] The possible values are ``ipv4`` (IPv4 addresses), ``dualstack`` (IPv4 and IPv6 addresses), and ``dualstack-without-public-ipv4`` (public IPv6 addresses and private IPv4 and IPv6 addresses).
+                 Application Load Balancer authentication supports IPv4 addresses only when connecting to an Identity Provider (IdP) or Amazon Cognito endpoint. Without a public IPv4 address the load balancer can't complete the authentication process, resulting in HTTP 500 errors.
+                 [Network Load Balancers and Gateway Load Balancers] The possible values are ``ipv4`` (IPv4 addresses) and ``dualstack`` (IPv4 and IPv6 addresses).
+            EnablePrefixForIpv6SourceNat:
+              type: string
+              description: '[Network Load Balancers with UDP listeners] Indicates whether to use an IPv6 prefix from each subnet for source NAT. The IP address type must be ``dualstack``. The default value is ``off``.'
             SecurityGroups:
               type: array
               description: '[Application Load Balancers and Network Load Balancers] The IDs of the security groups for the load balancer.'
@@ -1622,13 +1707,17 @@ components:
               x-arrayType: AttributeList
               items:
                 $ref: '#/components/schemas/LoadBalancerAttribute'
+            MinimumLoadBalancerCapacity:
+              type: object
+              description: ''
+              $ref: '#/components/schemas/MinimumLoadBalancerCapacity'
             Scheme:
               type: string
               description: |-
                 The nodes of an Internet-facing load balancer have public IP addresses. The DNS name of an Internet-facing load balancer is publicly resolvable to the public IP addresses of the nodes. Therefore, Internet-facing load balancers can route requests from clients over the internet.
                  The nodes of an internal load balancer have only private IP addresses. The DNS name of an internal load balancer is publicly resolvable to the private IP addresses of the nodes. Therefore, internal load balancers can route requests only from clients with access to the VPC for the load balancer.
                  The default is an Internet-facing load balancer.
-                 You cannot specify a scheme for a Gateway Load Balancer.
+                 You can't specify a scheme for a Gateway Load Balancer.
             DNSName:
               type: string
               description: ''
@@ -1650,8 +1739,7 @@ components:
                  [Application Load Balancers] You must specify subnets from at least two Availability Zones.
                  [Application Load Balancers on Outposts] You must specify one Outpost subnet.
                  [Application Load Balancers on Local Zones] You can specify subnets from one or more Local Zones.
-                 [Network Load Balancers] You can specify subnets from one or more Availability Zones.
-                 [Gateway Load Balancers] You can specify subnets from one or more Availability Zones.
+                 [Network Load Balancers and Gateway Load Balancers] You can specify subnets from one or more Availability Zones.
               uniqueItems: true
               x-insertionOrder: false
               items:
@@ -1676,11 +1764,11 @@ components:
               type: array
               description: |-
                 The IDs of the subnets. You can specify only one subnet per Availability Zone. You must specify either subnets or subnet mappings, but not both.
-                 [Application Load Balancers] You must specify subnets from at least two Availability Zones. You cannot specify Elastic IP addresses for your subnets.
+                 [Application Load Balancers] You must specify subnets from at least two Availability Zones. You can't specify Elastic IP addresses for your subnets.
                  [Application Load Balancers on Outposts] You must specify one Outpost subnet.
                  [Application Load Balancers on Local Zones] You can specify subnets from one or more Local Zones.
                  [Network Load Balancers] You can specify subnets from one or more Availability Zones. You can specify one Elastic IP address per subnet if you need static IP addresses for your internet-facing load balancer. For internal load balancers, you can specify one private IP address per subnet from the IPv4 range of the subnet. For internet-facing load balancer, you can specify one IPv6 address per subnet.
-                 [Gateway Load Balancers] You can specify subnets from one or more Availability Zones. You cannot specify Elastic IP addresses for your subnets.
+                 [Gateway Load Balancers] You can specify subnets from one or more Availability Zones. You can't specify Elastic IP addresses for your subnets.
               uniqueItems: true
               x-insertionOrder: false
               items:
@@ -1951,6 +2039,7 @@ components:
               data__Identifier,
               JSON_EXTRACT(Properties, '$.ListenerArn') as listener_arn,
               JSON_EXTRACT(Properties, '$.MutualAuthentication') as mutual_authentication,
+              JSON_EXTRACT(Properties, '$.ListenerAttributes') as listener_attributes,
               JSON_EXTRACT(Properties, '$.AlpnPolicy') as alpn_policy,
               JSON_EXTRACT(Properties, '$.SslPolicy') as ssl_policy,
               JSON_EXTRACT(Properties, '$.LoadBalancerArn') as load_balancer_arn,
@@ -1968,6 +2057,7 @@ components:
                 detail.region,
                 JSON_EXTRACT(detail.Properties, '$.ListenerArn') as listener_arn,
                 JSON_EXTRACT(detail.Properties, '$.MutualAuthentication') as mutual_authentication,
+                JSON_EXTRACT(detail.Properties, '$.ListenerAttributes') as listener_attributes,
                 JSON_EXTRACT(detail.Properties, '$.AlpnPolicy') as alpn_policy,
                 JSON_EXTRACT(detail.Properties, '$.SslPolicy') as ssl_policy,
                 JSON_EXTRACT(detail.Properties, '$.LoadBalancerArn') as load_balancer_arn,
@@ -1990,6 +2080,7 @@ components:
                   data__Identifier,
                   json_extract_path_text(Properties, 'ListenerArn') as listener_arn,
                   json_extract_path_text(Properties, 'MutualAuthentication') as mutual_authentication,
+                  json_extract_path_text(Properties, 'ListenerAttributes') as listener_attributes,
                   json_extract_path_text(Properties, 'AlpnPolicy') as alpn_policy,
                   json_extract_path_text(Properties, 'SslPolicy') as ssl_policy,
                   json_extract_path_text(Properties, 'LoadBalancerArn') as load_balancer_arn,
@@ -2007,6 +2098,7 @@ components:
                     detail.region,
                     json_extract_path_text(detail.Properties, 'ListenerArn') as listener_arn,
                     json_extract_path_text(detail.Properties, 'MutualAuthentication') as mutual_authentication,
+                    json_extract_path_text(detail.Properties, 'ListenerAttributes') as listener_attributes,
                     json_extract_path_text(detail.Properties, 'AlpnPolicy') as alpn_policy,
                     json_extract_path_text(detail.Properties, 'SslPolicy') as ssl_policy,
                     json_extract_path_text(detail.Properties, 'LoadBalancerArn') as load_balancer_arn,
@@ -2270,8 +2362,10 @@ components:
               region,
               data__Identifier,
               JSON_EXTRACT(Properties, '$.IpAddressType') as ip_address_type,
+              JSON_EXTRACT(Properties, '$.EnablePrefixForIpv6SourceNat') as enable_prefix_for_ipv6_source_nat,
               JSON_EXTRACT(Properties, '$.SecurityGroups') as security_groups,
               JSON_EXTRACT(Properties, '$.LoadBalancerAttributes') as load_balancer_attributes,
+              JSON_EXTRACT(Properties, '$.MinimumLoadBalancerCapacity') as minimum_load_balancer_capacity,
               JSON_EXTRACT(Properties, '$.Scheme') as scheme,
               JSON_EXTRACT(Properties, '$.DNSName') as dns_name,
               JSON_EXTRACT(Properties, '$.Name') as name,
@@ -2293,8 +2387,10 @@ components:
                 SELECT
                 detail.region,
                 JSON_EXTRACT(detail.Properties, '$.IpAddressType') as ip_address_type,
+                JSON_EXTRACT(detail.Properties, '$.EnablePrefixForIpv6SourceNat') as enable_prefix_for_ipv6_source_nat,
                 JSON_EXTRACT(detail.Properties, '$.SecurityGroups') as security_groups,
                 JSON_EXTRACT(detail.Properties, '$.LoadBalancerAttributes') as load_balancer_attributes,
+                JSON_EXTRACT(detail.Properties, '$.MinimumLoadBalancerCapacity') as minimum_load_balancer_capacity,
                 JSON_EXTRACT(detail.Properties, '$.Scheme') as scheme,
                 JSON_EXTRACT(detail.Properties, '$.DNSName') as dns_name,
                 JSON_EXTRACT(detail.Properties, '$.Name') as name,
@@ -2321,8 +2417,10 @@ components:
                   region,
                   data__Identifier,
                   json_extract_path_text(Properties, 'IpAddressType') as ip_address_type,
+                  json_extract_path_text(Properties, 'EnablePrefixForIpv6SourceNat') as enable_prefix_for_ipv6_source_nat,
                   json_extract_path_text(Properties, 'SecurityGroups') as security_groups,
                   json_extract_path_text(Properties, 'LoadBalancerAttributes') as load_balancer_attributes,
+                  json_extract_path_text(Properties, 'MinimumLoadBalancerCapacity') as minimum_load_balancer_capacity,
                   json_extract_path_text(Properties, 'Scheme') as scheme,
                   json_extract_path_text(Properties, 'DNSName') as dns_name,
                   json_extract_path_text(Properties, 'Name') as name,
@@ -2344,8 +2442,10 @@ components:
                     SELECT
                     detail.region,
                     json_extract_path_text(detail.Properties, 'IpAddressType') as ip_address_type,
+                    json_extract_path_text(detail.Properties, 'EnablePrefixForIpv6SourceNat') as enable_prefix_for_ipv6_source_nat,
                     json_extract_path_text(detail.Properties, 'SecurityGroups') as security_groups,
                     json_extract_path_text(detail.Properties, 'LoadBalancerAttributes') as load_balancer_attributes,
+                    json_extract_path_text(detail.Properties, 'MinimumLoadBalancerCapacity') as minimum_load_balancer_capacity,
                     json_extract_path_text(detail.Properties, 'Scheme') as scheme,
                     json_extract_path_text(detail.Properties, 'DNSName') as dns_name,
                     json_extract_path_text(detail.Properties, 'Name') as name,
@@ -2417,8 +2517,10 @@ components:
               JSON_EXTRACT(json_each.value, '$.Key') as tag_key,
               JSON_EXTRACT(json_each.value, '$.Value') as tag_value,
               JSON_EXTRACT(detail.Properties, '$.IpAddressType') as ip_address_type,
+              JSON_EXTRACT(detail.Properties, '$.EnablePrefixForIpv6SourceNat') as enable_prefix_for_ipv6_source_nat,
               JSON_EXTRACT(detail.Properties, '$.SecurityGroups') as security_groups,
               JSON_EXTRACT(detail.Properties, '$.LoadBalancerAttributes') as load_balancer_attributes,
+              JSON_EXTRACT(detail.Properties, '$.MinimumLoadBalancerCapacity') as minimum_load_balancer_capacity,
               JSON_EXTRACT(detail.Properties, '$.Scheme') as scheme,
               JSON_EXTRACT(detail.Properties, '$.DNSName') as dns_name,
               JSON_EXTRACT(detail.Properties, '$.Name') as name,
@@ -2446,8 +2548,10 @@ components:
                 json_extract_path_text(json_each.value, 'Key') as tag_key,
                 json_extract_path_text(json_each.value, 'Value') as tag_value,
                 json_extract_path_text(detail.Properties, 'IpAddressType') as ip_address_type,
+                json_extract_path_text(detail.Properties, 'EnablePrefixForIpv6SourceNat') as enable_prefix_for_ipv6_source_nat,
                 json_extract_path_text(detail.Properties, 'SecurityGroups') as security_groups,
                 json_extract_path_text(detail.Properties, 'LoadBalancerAttributes') as load_balancer_attributes,
+                json_extract_path_text(detail.Properties, 'MinimumLoadBalancerCapacity') as minimum_load_balancer_capacity,
                 json_extract_path_text(detail.Properties, 'Scheme') as scheme,
                 json_extract_path_text(detail.Properties, 'DNSName') as dns_name,
                 json_extract_path_text(detail.Properties, 'Name') as name,

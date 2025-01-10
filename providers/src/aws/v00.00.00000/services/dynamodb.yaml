@@ -487,6 +487,14 @@ components:
         PointInTimeRecoveryEnabled:
           description: Indicates whether point in time recovery is enabled (true) or disabled (false) on the table.
           type: boolean
+        RecoveryPeriodInDays:
+          maximum: 35
+          description: ''
+          type: integer
+          minimum: 1
+      x-dependencies:
+        RecoveryPeriodInDays:
+          - PointInTimeRecoveryEnabled
     ReplicaSpecification:
       type: object
       additionalProperties: false
@@ -604,6 +612,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/KeySchema'
+        WarmThroughput:
+          description: Represents the warm throughput value (in read units per second and write units per second) for the specified secondary index. If you use this parameter, you must specify ``ReadUnitsPerSecond``, ``WriteUnitsPerSecond``, or both.
+          $ref: '#/components/schemas/WarmThroughput'
       required:
         - IndexName
         - Projection
@@ -802,6 +813,24 @@ components:
           format: double
       required:
         - TargetValue
+    WarmThroughput:
+      anyOf:
+        - required:
+            - ReadUnitsPerSecond
+        - required:
+            - WriteUnitsPerSecond
+      description: Provides visibility into the number of read and write operations your table or secondary index can instantaneously support. The settings can be modified using the ``UpdateTable`` operation to meet the throughput requirements of an upcoming peak event.
+      additionalProperties: false
+      type: object
+      properties:
+        ReadUnitsPerSecond:
+          description: Represents the number of read operations your base table can instantaneously support.
+          type: integer
+          minimum: 1
+        WriteUnitsPerSecond:
+          description: Represents the number of write operations your base table can instantaneously support.
+          type: integer
+          minimum: 1
     GlobalTable:
       type: object
       properties:
@@ -837,10 +866,14 @@ components:
           x-insertionOrder: false
           items:
             $ref: '#/components/schemas/LocalSecondaryIndex'
+        PointInTimeRecoverySpecification:
+          $ref: '#/components/schemas/PointInTimeRecoverySpecification'
         WriteProvisionedThroughputSettings:
           $ref: '#/components/schemas/WriteProvisionedThroughputSettings'
         WriteOnDemandThroughputSettings:
           $ref: '#/components/schemas/WriteOnDemandThroughputSettings'
+        WarmThroughput:
+          $ref: '#/components/schemas/WarmThroughput'
         Replicas:
           type: array
           uniqueItems: true
@@ -1126,8 +1159,8 @@ components:
           $ref: '#/components/schemas/ContributorInsightsSpecification'
         ImportSourceSpecification:
           description: |-
-            Specifies the properties of data being imported from the S3 bucket source to the table.
-              If you specify the ``ImportSourceSpecification`` property, and also specify either the ``StreamSpecification``, the ``TableClass`` property, or the ``DeletionProtectionEnabled`` property, the IAM entity creating/updating stack must have ``UpdateTable`` permission.
+            Specifies the properties of data being imported from the S3 bucket source to the" table.
+              If you specify the ``ImportSourceSpecification`` property, and also specify either the ``StreamSpecification``, the ``TableClass`` property, the ``DeletionProtectionEnabled`` property, or the ``WarmThroughput`` property, the IAM entity creating/updating stack must have ``UpdateTable`` permission.
           $ref: '#/components/schemas/ImportSourceSpecification'
         PointInTimeRecoverySpecification:
           description: The settings used to enable point in time recovery.
@@ -1137,6 +1170,9 @@ components:
             Throughput for the specified table, which consists of values for ``ReadCapacityUnits`` and ``WriteCapacityUnits``. For more information about the contents of a provisioned throughput structure, see [Amazon DynamoDB Table ProvisionedThroughput](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_ProvisionedThroughput.html). 
              If you set ``BillingMode`` as ``PROVISIONED``, you must specify this property. If you set ``BillingMode`` as ``PAY_PER_REQUEST``, you cannot specify this property.
           $ref: '#/components/schemas/ProvisionedThroughput'
+        WarmThroughput:
+          description: Represents the warm throughput (in read units per second and write units per second) for creating a table.
+          $ref: '#/components/schemas/WarmThroughput'
         TableName:
           description: |-
             A name for the table. If you don't specify a name, CFNlong generates a unique physical ID and uses that ID for the table name. For more information, see [Name Type](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-name.html).
@@ -1225,13 +1261,15 @@ components:
          You should be aware of the following behaviors when working with DDB tables:
           +   CFNlong typically creates DDB tables in parallel. However, if your template includes multiple DDB tables with indexes, you must declare dependencies so that the tables are created sequentially. DDBlong limits the number of tables with secondary indexes that are in the creating state. If you create multiple tables with indexes at the same time, DDB returns an error and the stack operation fails. For an example, see [DynamoDB Table with a DependsOn Attribute](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-dynamodb-table.html#aws-resource-dynamodb-table--examples--DynamoDB_Table_with_a_DependsOn_Attribute).
           
-           Our guidance is to use the latest schema documented here for your CFNlong templates. This schema supports the provisioning of all table settings below. When using this schema in your CFNlong templates, please ensure that your Identity and Access Management (IAM) policies are updated with appropriate permissions to allow for the authorization of these setting changes.
+           Our guidance is to use the latest schema documented for your CFNlong templates. This schema supports the provisioning of all table settings below. When using this schema in your CFNlong templates, please ensure that your Identity and Access Management (IAM) policies are updated with appropriate permissions to allow for the authorization of these setting changes.
       x-type-name: AWS::DynamoDB::Table
       x-stackql-primary-identifier:
         - TableName
       x-create-only-properties:
         - TableName
         - ImportSourceSpecification
+      x-conditional-create-only-properties:
+        - KeySchema
       x-write-only-properties:
         - ImportSourceSpecification
       x-read-only-properties:
@@ -1240,6 +1278,10 @@ components:
       x-required-properties:
         - KeySchema
       x-tagging:
+        permissions:
+          - dynamodb:TagResource
+          - dynamodb:UntagResource
+          - dynamodb:ListTagsOfResource
         taggable: true
         tagOnCreate: true
         tagUpdatable: true
@@ -1366,10 +1408,14 @@ components:
               x-insertionOrder: false
               items:
                 $ref: '#/components/schemas/LocalSecondaryIndex'
+            PointInTimeRecoverySpecification:
+              $ref: '#/components/schemas/PointInTimeRecoverySpecification'
             WriteProvisionedThroughputSettings:
               $ref: '#/components/schemas/WriteProvisionedThroughputSettings'
             WriteOnDemandThroughputSettings:
               $ref: '#/components/schemas/WriteOnDemandThroughputSettings'
+            WarmThroughput:
+              $ref: '#/components/schemas/WarmThroughput'
             Replicas:
               type: array
               uniqueItems: true
@@ -1421,8 +1467,8 @@ components:
               $ref: '#/components/schemas/ContributorInsightsSpecification'
             ImportSourceSpecification:
               description: |-
-                Specifies the properties of data being imported from the S3 bucket source to the table.
-                  If you specify the ``ImportSourceSpecification`` property, and also specify either the ``StreamSpecification``, the ``TableClass`` property, or the ``DeletionProtectionEnabled`` property, the IAM entity creating/updating stack must have ``UpdateTable`` permission.
+                Specifies the properties of data being imported from the S3 bucket source to the" table.
+                  If you specify the ``ImportSourceSpecification`` property, and also specify either the ``StreamSpecification``, the ``TableClass`` property, the ``DeletionProtectionEnabled`` property, or the ``WarmThroughput`` property, the IAM entity creating/updating stack must have ``UpdateTable`` permission.
               $ref: '#/components/schemas/ImportSourceSpecification'
             PointInTimeRecoverySpecification:
               description: The settings used to enable point in time recovery.
@@ -1432,6 +1478,9 @@ components:
                 Throughput for the specified table, which consists of values for ``ReadCapacityUnits`` and ``WriteCapacityUnits``. For more information about the contents of a provisioned throughput structure, see [Amazon DynamoDB Table ProvisionedThroughput](https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_ProvisionedThroughput.html). 
                  If you set ``BillingMode`` as ``PROVISIONED``, you must specify this property. If you set ``BillingMode`` as ``PAY_PER_REQUEST``, you cannot specify this property.
               $ref: '#/components/schemas/ProvisionedThroughput'
+            WarmThroughput:
+              description: Represents the warm throughput (in read units per second and write units per second) for creating a table.
+              $ref: '#/components/schemas/WarmThroughput'
             TableName:
               description: |-
                 A name for the table. If you don't specify a name, CFNlong generates a unique physical ID and uses that ID for the table name. For more information, see [Name Type](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-name.html).
@@ -1594,8 +1643,10 @@ components:
               JSON_EXTRACT(Properties, '$.GlobalSecondaryIndexes') as global_secondary_indexes,
               JSON_EXTRACT(Properties, '$.KeySchema') as key_schema,
               JSON_EXTRACT(Properties, '$.LocalSecondaryIndexes') as local_secondary_indexes,
+              JSON_EXTRACT(Properties, '$.PointInTimeRecoverySpecification') as point_in_time_recovery_specification,
               JSON_EXTRACT(Properties, '$.WriteProvisionedThroughputSettings') as write_provisioned_throughput_settings,
               JSON_EXTRACT(Properties, '$.WriteOnDemandThroughputSettings') as write_on_demand_throughput_settings,
+              JSON_EXTRACT(Properties, '$.WarmThroughput') as warm_throughput,
               JSON_EXTRACT(Properties, '$.Replicas') as replicas,
               JSON_EXTRACT(Properties, '$.SSESpecification') as sse_specification,
               JSON_EXTRACT(Properties, '$.StreamSpecification') as stream_specification,
@@ -1617,8 +1668,10 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.GlobalSecondaryIndexes') as global_secondary_indexes,
                 JSON_EXTRACT(detail.Properties, '$.KeySchema') as key_schema,
                 JSON_EXTRACT(detail.Properties, '$.LocalSecondaryIndexes') as local_secondary_indexes,
+                JSON_EXTRACT(detail.Properties, '$.PointInTimeRecoverySpecification') as point_in_time_recovery_specification,
                 JSON_EXTRACT(detail.Properties, '$.WriteProvisionedThroughputSettings') as write_provisioned_throughput_settings,
                 JSON_EXTRACT(detail.Properties, '$.WriteOnDemandThroughputSettings') as write_on_demand_throughput_settings,
+                JSON_EXTRACT(detail.Properties, '$.WarmThroughput') as warm_throughput,
                 JSON_EXTRACT(detail.Properties, '$.Replicas') as replicas,
                 JSON_EXTRACT(detail.Properties, '$.SSESpecification') as sse_specification,
                 JSON_EXTRACT(detail.Properties, '$.StreamSpecification') as stream_specification,
@@ -1645,8 +1698,10 @@ components:
                   json_extract_path_text(Properties, 'GlobalSecondaryIndexes') as global_secondary_indexes,
                   json_extract_path_text(Properties, 'KeySchema') as key_schema,
                   json_extract_path_text(Properties, 'LocalSecondaryIndexes') as local_secondary_indexes,
+                  json_extract_path_text(Properties, 'PointInTimeRecoverySpecification') as point_in_time_recovery_specification,
                   json_extract_path_text(Properties, 'WriteProvisionedThroughputSettings') as write_provisioned_throughput_settings,
                   json_extract_path_text(Properties, 'WriteOnDemandThroughputSettings') as write_on_demand_throughput_settings,
+                  json_extract_path_text(Properties, 'WarmThroughput') as warm_throughput,
                   json_extract_path_text(Properties, 'Replicas') as replicas,
                   json_extract_path_text(Properties, 'SSESpecification') as sse_specification,
                   json_extract_path_text(Properties, 'StreamSpecification') as stream_specification,
@@ -1668,8 +1723,10 @@ components:
                     json_extract_path_text(detail.Properties, 'GlobalSecondaryIndexes') as global_secondary_indexes,
                     json_extract_path_text(detail.Properties, 'KeySchema') as key_schema,
                     json_extract_path_text(detail.Properties, 'LocalSecondaryIndexes') as local_secondary_indexes,
+                    json_extract_path_text(detail.Properties, 'PointInTimeRecoverySpecification') as point_in_time_recovery_specification,
                     json_extract_path_text(detail.Properties, 'WriteProvisionedThroughputSettings') as write_provisioned_throughput_settings,
                     json_extract_path_text(detail.Properties, 'WriteOnDemandThroughputSettings') as write_on_demand_throughput_settings,
+                    json_extract_path_text(detail.Properties, 'WarmThroughput') as warm_throughput,
                     json_extract_path_text(detail.Properties, 'Replicas') as replicas,
                     json_extract_path_text(detail.Properties, 'SSESpecification') as sse_specification,
                     json_extract_path_text(detail.Properties, 'StreamSpecification') as stream_specification,
@@ -1785,6 +1842,7 @@ components:
               JSON_EXTRACT(Properties, '$.ImportSourceSpecification') as import_source_specification,
               JSON_EXTRACT(Properties, '$.PointInTimeRecoverySpecification') as point_in_time_recovery_specification,
               JSON_EXTRACT(Properties, '$.ProvisionedThroughput') as provisioned_throughput,
+              JSON_EXTRACT(Properties, '$.WarmThroughput') as warm_throughput,
               JSON_EXTRACT(Properties, '$.TableName') as table_name,
               JSON_EXTRACT(Properties, '$.AttributeDefinitions') as attribute_definitions,
               JSON_EXTRACT(Properties, '$.BillingMode') as billing_mode,
@@ -1814,6 +1872,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.ImportSourceSpecification') as import_source_specification,
                 JSON_EXTRACT(detail.Properties, '$.PointInTimeRecoverySpecification') as point_in_time_recovery_specification,
                 JSON_EXTRACT(detail.Properties, '$.ProvisionedThroughput') as provisioned_throughput,
+                JSON_EXTRACT(detail.Properties, '$.WarmThroughput') as warm_throughput,
                 JSON_EXTRACT(detail.Properties, '$.TableName') as table_name,
                 JSON_EXTRACT(detail.Properties, '$.AttributeDefinitions') as attribute_definitions,
                 JSON_EXTRACT(detail.Properties, '$.BillingMode') as billing_mode,
@@ -1848,6 +1907,7 @@ components:
                   json_extract_path_text(Properties, 'ImportSourceSpecification') as import_source_specification,
                   json_extract_path_text(Properties, 'PointInTimeRecoverySpecification') as point_in_time_recovery_specification,
                   json_extract_path_text(Properties, 'ProvisionedThroughput') as provisioned_throughput,
+                  json_extract_path_text(Properties, 'WarmThroughput') as warm_throughput,
                   json_extract_path_text(Properties, 'TableName') as table_name,
                   json_extract_path_text(Properties, 'AttributeDefinitions') as attribute_definitions,
                   json_extract_path_text(Properties, 'BillingMode') as billing_mode,
@@ -1877,6 +1937,7 @@ components:
                     json_extract_path_text(detail.Properties, 'ImportSourceSpecification') as import_source_specification,
                     json_extract_path_text(detail.Properties, 'PointInTimeRecoverySpecification') as point_in_time_recovery_specification,
                     json_extract_path_text(detail.Properties, 'ProvisionedThroughput') as provisioned_throughput,
+                    json_extract_path_text(detail.Properties, 'WarmThroughput') as warm_throughput,
                     json_extract_path_text(detail.Properties, 'TableName') as table_name,
                     json_extract_path_text(detail.Properties, 'AttributeDefinitions') as attribute_definitions,
                     json_extract_path_text(detail.Properties, 'BillingMode') as billing_mode,
@@ -1956,6 +2017,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.ImportSourceSpecification') as import_source_specification,
               JSON_EXTRACT(detail.Properties, '$.PointInTimeRecoverySpecification') as point_in_time_recovery_specification,
               JSON_EXTRACT(detail.Properties, '$.ProvisionedThroughput') as provisioned_throughput,
+              JSON_EXTRACT(detail.Properties, '$.WarmThroughput') as warm_throughput,
               JSON_EXTRACT(detail.Properties, '$.TableName') as table_name,
               JSON_EXTRACT(detail.Properties, '$.AttributeDefinitions') as attribute_definitions,
               JSON_EXTRACT(detail.Properties, '$.BillingMode') as billing_mode,
@@ -1991,6 +2053,7 @@ components:
                 json_extract_path_text(detail.Properties, 'ImportSourceSpecification') as import_source_specification,
                 json_extract_path_text(detail.Properties, 'PointInTimeRecoverySpecification') as point_in_time_recovery_specification,
                 json_extract_path_text(detail.Properties, 'ProvisionedThroughput') as provisioned_throughput,
+                json_extract_path_text(detail.Properties, 'WarmThroughput') as warm_throughput,
                 json_extract_path_text(detail.Properties, 'TableName') as table_name,
                 json_extract_path_text(detail.Properties, 'AttributeDefinitions') as attribute_definitions,
                 json_extract_path_text(detail.Properties, 'BillingMode') as billing_mode,

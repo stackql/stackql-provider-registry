@@ -416,6 +416,8 @@ components:
           enum:
             - DATA_PROTECTION_POLICY
             - SUBSCRIPTION_FILTER_POLICY
+            - FIELD_INDEX_POLICY
+            - TRANSFORMER_POLICY
         Scope:
           description: Scope for policy application
           type: string
@@ -453,6 +455,7 @@ components:
       x-required-permissions:
         create:
           - logs:PutAccountPolicy
+          - logs:PutIndexPolicy
           - logs:PutDataProtectionPolicy
           - logs:DescribeAccountPolicies
           - logs:CreateLogDelivery
@@ -460,31 +463,40 @@ components:
           - firehose:TagDeliveryStream
           - logs:PutSubscriptionFilter
           - logs:DeleteSubscriptionFilter
+          - logs:PutTransformer
           - iam:PassRole
         read:
           - logs:DescribeAccountPolicies
+          - logs:GetTransformer
         update:
           - logs:PutAccountPolicy
+          - logs:PutIndexPolicy
           - logs:PutDataProtectionPolicy
           - logs:DescribeAccountPolicies
           - logs:DeleteAccountPolicy
+          - logs:DeleteIndexPolicy
           - logs:DeleteDataProtectionPolicy
           - logs:CreateLogDelivery
           - logs:PutSubscriptionFilter
           - logs:DeleteSubscriptionFilter
+          - logs:PutTransformer
+          - logs:DeleteTransformer
           - s3:REST.PUT.OBJECT
           - firehose:TagDeliveryStream
           - iam:PassRole
         delete:
           - logs:DeleteAccountPolicy
+          - logs:DeleteIndexPolicy
           - logs:DeleteDataProtectionPolicy
           - logs:DescribeAccountPolicies
           - logs:DeleteSubscriptionFilter
+          - logs:DeleteTransformer
           - iam:PassRole
         list:
           - logs:DescribeAccountPolicies
+          - logs:GetTransformer
     Tag:
-      description: ''
+      description: The value of this key-value pair.
       type: object
       additionalProperties: false
       properties:
@@ -495,18 +507,22 @@ components:
           maxLength: 128
         Value:
           type: string
-          description: ''
+          description: The value of this key-value pair.
           minLength: 0
           maxLength: 256
       required:
         - Key
         - Value
     Arn:
-      description: The Amazon Resource Name (ARN) that uniquely identifies this delivery source.
       type: string
-      minLength: 16
+      minLength: 20
       maxLength: 2048
-      pattern: ^arn:(aws[a-zA-Z-]*)?:[A-Za-z0-9][A-Za-z0-9_/.-]{0,62}:[A-Za-z0-9_/.-]{0,63}:[A-Za-z0-9_/.-]{0,63}:[A-Za-z0-9][A-Za-z0-9:_/+=,@.-]{0,1023}$
+      pattern: '[\w#+=/:,.@-]*\*?'
+    FieldHeader:
+      description: A single record field to be delivered to the destination.
+      type: string
+      minLength: 1
+      maxLength: 50
     Delivery:
       type: object
       properties:
@@ -541,6 +557,24 @@ components:
           x-insertionOrder: false
           items:
             $ref: '#/components/schemas/Tag'
+        RecordFields:
+          description: The list of record fields to be delivered to the destination, in order. If the delivery's log source has mandatory fields, they must be included in this list.
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldHeader'
+        FieldDelimiter:
+          description: The field delimiter to use between record fields when the final output format of a delivery is in Plain , W3C , or Raw format.
+          type: string
+          minLength: 1
+          maxLength: 5
+        S3SuffixPath:
+          description: This string allows re-configuring the S3 object prefix to contain either static or variable sections. The valid variables to use in the suffix path will vary by each log source. See ConfigurationTemplate$allowedSuffixPathFields for more info on what values are supported in the suffix path for each log source.
+          type: string
+          minLength: 0
+          maxLength: 256
+        S3EnableHiveCompatiblePath:
+          description: This parameter causes the S3 objects that contain delivered logs to use a prefix structure that allows for integration with Apache Hive.
+          type: boolean
       required:
         - DeliverySourceName
         - DeliveryDestinationArn
@@ -624,7 +658,7 @@ components:
           description: The Amazon Resource Name (ARN) that uniquely identifies this delivery destination.
           $ref: '#/components/schemas/Arn'
         DestinationResourceArn:
-          description: The ARN of the AWS resource that will receive the logs.
+          description: The ARN of the Amazon Web Services destination that this delivery destination represents. That Amazon Web Services destination can be a log group in CloudWatch Logs, an Amazon S3 bucket, or a delivery stream in Firehose.
           $ref: '#/components/schemas/Arn'
         Tags:
           description: The tags that have been assigned to this delivery destination.
@@ -649,6 +683,12 @@ components:
           type: object
           items:
             $ref: '#/components/schemas/DestinationPolicy'
+        OutputFormat:
+          description: The format of the logs that are sent to this delivery destination.
+          type: string
+          minLength: 1
+          maxLength: 12
+          pattern: ^[0-9A-Za-z]+$
       required:
         - Name
       x-stackql-resource-name: delivery_destination
@@ -661,6 +701,7 @@ components:
         - Name
       x-create-only-properties:
         - Name
+        - OutputFormat
         - DestinationResourceArn
       x-read-only-properties:
         - Arn
@@ -850,6 +891,130 @@ components:
           - logs:DeleteDestination
         list:
           - logs:DescribeDestinations
+    OpenSearchResourceConfig:
+      type: object
+      properties:
+        KmsKeyArn:
+          $ref: '#/components/schemas/Arn'
+        DataSourceRoleArn:
+          $ref: '#/components/schemas/Arn'
+        DashboardViewerPrincipals:
+          type: array
+          items:
+            $ref: '#/components/schemas/Arn'
+        ApplicationARN:
+          $ref: '#/components/schemas/Arn'
+        RetentionDays:
+          type: integer
+          minimum: 1
+          maximum: 3650
+      required:
+        - DataSourceRoleArn
+        - DashboardViewerPrincipals
+      additionalProperties: false
+    Integration:
+      type: object
+      properties:
+        IntegrationName:
+          description: User provided identifier for integration, unique to the user account.
+          type: string
+          pattern: '[\.\-_/#A-Za-z0-9]+'
+          minLength: 1
+          maxLength: 50
+        IntegrationType:
+          description: The type of the Integration.
+          type: string
+          enum:
+            - OPENSEARCH
+        ResourceConfig:
+          description: OpenSearchResourceConfig for the given Integration
+          type: object
+          properties:
+            OpenSearchResourceConfig:
+              $ref: '#/components/schemas/OpenSearchResourceConfig'
+          additionalProperties: false
+        IntegrationStatus:
+          description: Status of creation for the Integration and its resources
+          type: string
+          enum:
+            - PROVISIONING
+            - ACTIVE
+            - FAILED
+      required:
+        - IntegrationName
+        - IntegrationType
+        - ResourceConfig
+      x-stackql-resource-name: integration
+      description: Resource Schema for Logs Integration Resource
+      x-type-name: AWS::Logs::Integration
+      x-stackql-primary-identifier:
+        - IntegrationName
+      x-create-only-properties:
+        - IntegrationName
+        - IntegrationType
+        - ResourceConfig
+      x-write-only-properties:
+        - ResourceConfig
+      x-read-only-properties:
+        - IntegrationStatus
+      x-required-properties:
+        - IntegrationName
+        - IntegrationType
+        - ResourceConfig
+      x-replacement-strategy: delete_then_create
+      x-tagging:
+        taggable: false
+        tagOnCreate: false
+        tagUpdatable: false
+        cloudFormationSystemTags: false
+      x-required-permissions:
+        create:
+          - logs:PutIntegration
+          - logs:GetIntegration
+          - aoss:CreateCollection
+          - aoss:CreateSecurityPolicy
+          - aoss:CreateAccessPolicy
+          - aoss:CreateLifeCyclePolicy
+          - aoss:BatchGetCollection
+          - aoss:DeleteCollection
+          - aoss:DeleteSecurityPolicy
+          - aoss:DeleteAccessPolicy
+          - aoss:DeleteLifeCyclePolicy
+          - aoss:GetAccessPolicy
+          - aoss:GetSecurityPolicy
+          - aoss:BatchGetLifecyclePolicy
+          - aoss:TagResource
+          - aoss:APIAccessAll
+          - opensearch:AddDirectQueryDataSource
+          - opensearch:DeleteDirectQueryDataSource
+          - opensearch:GetDirectQueryDataSource
+          - opensearch:CreateApplication
+          - opensearch:GetApplication
+          - opensearch:UpdateApplication
+          - opensearch:DeleteApplication
+          - opensearch:ApplicationAccessAll
+          - opensearch:DashboardsAccessAll
+          - opensearch:StartDirectQuery
+          - opensearch:GetDirectQuery
+          - iam:PassRole
+          - iam:CreateServiceLinkedRole
+          - iam:AttachRolePolicy
+          - iam:AttachUserPolicy
+          - es:AddDirectQueryDataSource
+          - es:CreateApplication
+          - es:UpdateApplication
+          - es:GetApplication
+          - es:DeleteApplication
+          - es:DeleteDirectQueryDataSource
+          - es:GetDirectQueryDataSource
+          - es:AddTags
+          - es:ListApplications
+        read:
+          - logs:GetIntegration
+        delete:
+          - logs:DeleteIntegration
+        list:
+          - logs:ListIntegrations
     LogAnomalyDetector:
       type: object
       properties:
@@ -1088,6 +1253,11 @@ components:
           description: The name of an existing log group that you want to associate with this metric filter.
           type: string
           maxLength: 512
+        ApplyOnTransformedLogs:
+          description: |-
+            This parameter is valid only for log groups that have an active log transformer. For more information about log transformers, see [PutTransformer](https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_PutTransformer.html).
+             If this value is ``true``, the metric filter is applied on the transformed version of the log events instead of the original ingested log events.
+          type: boolean
         FilterName:
           minLength: 1
           pattern: ^[^:*]{1,512}
@@ -1154,6 +1324,14 @@ components:
           type: string
           minLength: 0
           maxLength: 256
+        QueryLanguage:
+          description: Query language of the query string. Possible values are CWLI, SQL, PPL, with CWLI being the default.
+          type: string
+          enum:
+            - CWLI
+            - SQL
+            - PPL
+          default: CWLI
       required:
         - Name
         - QueryString
@@ -1248,6 +1426,11 @@ components:
           enum:
             - Random
             - ByLogStream
+        ApplyOnTransformedLogs:
+          description: |-
+            This parameter is valid only for log groups that have an active log transformer. For more information about log transformers, see [PutTransformer](https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_PutTransformer.html).
+             If this value is ``true``, the subscription filter is applied on the transformed version of the log events instead of the original ingested log events.
+          type: boolean
       required:
         - DestinationArn
         - FilterPattern
@@ -1293,6 +1476,470 @@ components:
           - logs:DeleteSubscriptionFilter
         list:
           - logs:DescribeSubscriptionFilters
+    Processor:
+      description: Individual processor configuration
+      type: object
+      properties:
+        ParseCloudfront:
+          $ref: '#/components/schemas/ParseCloudfront'
+        ParseVPC:
+          $ref: '#/components/schemas/ParseVPC'
+        ParseWAF:
+          $ref: '#/components/schemas/ParseWAF'
+        ParseJSON:
+          type: object
+          properties:
+            Source:
+              type: string
+            Destination:
+              $ref: '#/components/schemas/NonEmptyAndMaxLengthString'
+          additionalProperties: false
+        ParseRoute53:
+          $ref: '#/components/schemas/ParseRoute53'
+        ParsePostgres:
+          $ref: '#/components/schemas/ParsePostgres'
+        ParseKeyValue:
+          type: object
+          properties:
+            Source:
+              $ref: '#/components/schemas/NonEmptyString'
+            Destination:
+              $ref: '#/components/schemas/NonEmptyString'
+            FieldDelimiter:
+              type: string
+            KeyValueDelimiter:
+              type: string
+            KeyPrefix:
+              $ref: '#/components/schemas/NonEmptyString'
+            NonMatchValue:
+              $ref: '#/components/schemas/NonEmptyString'
+            OverwriteIfExists:
+              type: boolean
+          additionalProperties: false
+        CopyValue:
+          type: object
+          properties:
+            Entries:
+              type: array
+              items:
+                $ref: '#/components/schemas/CopyValueEntry'
+              minItems: 1
+              maxItems: 5
+              x-insertionOrder: false
+          required:
+            - Entries
+          additionalProperties: false
+        Csv:
+          type: object
+          properties:
+            QuoteCharacter:
+              type: string
+              maxLength: 1
+            Delimiter:
+              type: string
+              maxLength: 1
+            Source:
+              type: string
+            Columns:
+              type: array
+              items:
+                $ref: '#/components/schemas/Column'
+              minItems: 1
+              maxItems: 100
+              x-insertionOrder: false
+          additionalProperties: false
+        DateTimeConverter:
+          type: object
+          properties:
+            Source:
+              $ref: '#/components/schemas/NonEmptyString'
+            Target:
+              $ref: '#/components/schemas/NonEmptyAndMaxLengthString'
+            TargetFormat:
+              type: string
+            MatchPatterns:
+              type: array
+              items:
+                $ref: '#/components/schemas/MatchPattern'
+              minItems: 1
+              maxItems: 5
+              uniqueItems: true
+              x-insertionOrder: false
+            SourceTimezone:
+              type: string
+            TargetTimezone:
+              type: string
+            Locale:
+              type: string
+          required:
+            - Source
+            - Target
+            - MatchPatterns
+          additionalProperties: false
+        DeleteKeys:
+          type: object
+          properties:
+            WithKeys:
+              type: array
+              items:
+                $ref: '#/components/schemas/WithKey'
+              minItems: 1
+              maxItems: 5
+              uniqueItems: true
+              x-insertionOrder: false
+          required:
+            - WithKeys
+          additionalProperties: false
+        Grok:
+          type: object
+          properties:
+            Source:
+              $ref: '#/components/schemas/NonEmptyString'
+            Match:
+              type: string
+              maxLength: 128
+          required:
+            - Match
+          additionalProperties: false
+        ListToMap:
+          type: object
+          properties:
+            Source:
+              $ref: '#/components/schemas/NonEmptyString'
+            Key:
+              $ref: '#/components/schemas/NonEmptyString'
+            ValueKey:
+              $ref: '#/components/schemas/NonEmptyString'
+            Target:
+              $ref: '#/components/schemas/NonEmptyAndMaxLengthString'
+            Flatten:
+              type: boolean
+            FlattenedElement:
+              type: string
+              enum:
+                - first
+                - last
+          required:
+            - Source
+            - Key
+          additionalProperties: false
+        AddKeys:
+          type: object
+          properties:
+            Entries:
+              type: array
+              items:
+                $ref: '#/components/schemas/AddKeyEntry'
+              minItems: 1
+              maxItems: 5
+              uniqueItems: true
+              x-insertionOrder: false
+          required:
+            - Entries
+          additionalProperties: false
+        MoveKeys:
+          type: object
+          properties:
+            Entries:
+              type: array
+              items:
+                $ref: '#/components/schemas/MoveKeyEntry'
+              minItems: 1
+              maxItems: 5
+              x-insertionOrder: false
+          required:
+            - Entries
+          additionalProperties: false
+        RenameKeys:
+          type: object
+          properties:
+            Entries:
+              type: array
+              items:
+                $ref: '#/components/schemas/RenameKeyEntry'
+              minItems: 1
+              maxItems: 5
+              x-insertionOrder: false
+          required:
+            - Entries
+          additionalProperties: false
+        LowerCaseString:
+          type: object
+          properties:
+            WithKeys:
+              type: array
+              items:
+                $ref: '#/components/schemas/WithKey'
+              minItems: 1
+              maxItems: 10
+              uniqueItems: true
+              x-insertionOrder: false
+          required:
+            - WithKeys
+          additionalProperties: false
+        SplitString:
+          type: object
+          properties:
+            Entries:
+              type: array
+              items:
+                $ref: '#/components/schemas/SplitStringEntry'
+              minItems: 1
+              maxItems: 10
+              x-insertionOrder: false
+          required:
+            - Entries
+          additionalProperties: false
+        SubstituteString:
+          type: object
+          properties:
+            Entries:
+              type: array
+              items:
+                $ref: '#/components/schemas/SubstituteStringEntry'
+              minItems: 1
+              maxItems: 10
+              x-insertionOrder: false
+          required:
+            - Entries
+          additionalProperties: false
+        TrimString:
+          type: object
+          properties:
+            WithKeys:
+              type: array
+              items:
+                $ref: '#/components/schemas/WithKey'
+              minItems: 1
+              maxItems: 10
+              uniqueItems: true
+              x-insertionOrder: false
+          required:
+            - WithKeys
+          additionalProperties: false
+        UpperCaseString:
+          type: object
+          properties:
+            WithKeys:
+              type: array
+              items:
+                $ref: '#/components/schemas/WithKey'
+              minItems: 1
+              maxItems: 10
+              uniqueItems: true
+              x-insertionOrder: false
+          required:
+            - WithKeys
+          additionalProperties: false
+        TypeConverter:
+          type: object
+          properties:
+            Entries:
+              type: array
+              items:
+                $ref: '#/components/schemas/TypeConverterEntry'
+              minItems: 1
+              maxItems: 5
+              x-insertionOrder: false
+          required:
+            - Entries
+          additionalProperties: false
+      additionalProperties: false
+      minProperties: 1
+      maxProperties: 1
+    ParseCloudfront:
+      type: object
+      properties:
+        Source:
+          $ref: '#/components/schemas/NonEmptyString'
+      additionalProperties: false
+    ParseVPC:
+      type: object
+      properties:
+        Source:
+          $ref: '#/components/schemas/NonEmptyString'
+      additionalProperties: false
+    ParseWAF:
+      type: object
+      properties:
+        Source:
+          $ref: '#/components/schemas/NonEmptyString'
+      additionalProperties: false
+    ParseRoute53:
+      type: object
+      properties:
+        Source:
+          $ref: '#/components/schemas/NonEmptyString'
+      additionalProperties: false
+    ParsePostgres:
+      type: object
+      properties:
+        Source:
+          $ref: '#/components/schemas/NonEmptyString'
+      additionalProperties: false
+    AddKeyEntry:
+      type: object
+      properties:
+        Key:
+          $ref: '#/components/schemas/NonEmptyAndMaxLengthString'
+        Value:
+          type: string
+          minLength: 1
+          maxLength: 256
+        OverwriteIfExists:
+          type: boolean
+      additionalProperties: false
+      required:
+        - Key
+        - Value
+    CopyValueEntry:
+      type: object
+      properties:
+        Source:
+          $ref: '#/components/schemas/NonEmptyString'
+        Target:
+          $ref: '#/components/schemas/NonEmptyAndMaxLengthString'
+        OverwriteIfExists:
+          type: boolean
+      required:
+        - Source
+        - Target
+      additionalProperties: false
+    Column:
+      $ref: '#/components/schemas/NonEmptyAndMaxLengthString'
+    WithKey:
+      type: string
+      minLength: 1
+      maxLength: 128
+    MatchPattern:
+      $ref: '#/components/schemas/NonEmptyString'
+    MoveKeyEntry:
+      type: object
+      properties:
+        Source:
+          $ref: '#/components/schemas/NonEmptyString'
+        Target:
+          $ref: '#/components/schemas/NonEmptyString'
+        OverwriteIfExists:
+          type: boolean
+      required:
+        - Source
+        - Target
+      additionalProperties: false
+    RenameKeyEntry:
+      type: object
+      properties:
+        Key:
+          $ref: '#/components/schemas/NonEmptyString'
+        RenameTo:
+          $ref: '#/components/schemas/NonEmptyString'
+        OverwriteIfExists:
+          type: boolean
+      required:
+        - Key
+        - RenameTo
+      additionalProperties: false
+    SplitStringEntry:
+      type: object
+      properties:
+        Source:
+          $ref: '#/components/schemas/NonEmptyString'
+        Delimiter:
+          type: string
+          maxLength: 1
+      required:
+        - Source
+        - Delimiter
+      additionalProperties: false
+    SubstituteStringEntry:
+      type: object
+      properties:
+        Source:
+          $ref: '#/components/schemas/NonEmptyString'
+        From:
+          $ref: '#/components/schemas/NonEmptyAndMaxLengthString'
+        To:
+          $ref: '#/components/schemas/NonEmptyAndMaxLengthString'
+      required:
+        - Source
+        - From
+        - To
+      additionalProperties: false
+    TypeConverterEntry:
+      type: object
+      properties:
+        Key:
+          $ref: '#/components/schemas/NonEmptyString'
+        Type:
+          type: string
+          enum:
+            - boolean
+            - integer
+            - double
+            - string
+      required:
+        - Key
+        - Type
+      additionalProperties: false
+    NonEmptyAndMaxLengthString:
+      type: string
+      maxLength: 128
+      pattern: ^.*[a-zA-Z0-9]+.*$
+    NonEmptyString:
+      type: string
+      pattern: ^.*[a-zA-Z0-9]+.*$
+    MaxLengthString:
+      type: string
+      maxLength: 128
+    Transformer:
+      type: object
+      properties:
+        LogGroupIdentifier:
+          description: Existing log group that you want to associate with this transformer.
+          type: string
+          minLength: 1
+          maxLength: 2048
+          pattern: '[\w#+=/:,.@-]*'
+        TransformerConfig:
+          description: List of processors in a transformer
+          type: array
+          items:
+            $ref: '#/components/schemas/Processor'
+          minItems: 1
+          maxItems: 20
+          x-insertionOrder: false
+      required:
+        - LogGroupIdentifier
+        - TransformerConfig
+      x-stackql-resource-name: transformer
+      description: Specifies a transformer on the log group to transform logs into consistent structured and information rich format.
+      x-type-name: AWS::Logs::Transformer
+      x-stackql-primary-identifier:
+        - LogGroupIdentifier
+      x-create-only-properties:
+        - LogGroupIdentifier
+      x-required-properties:
+        - LogGroupIdentifier
+        - TransformerConfig
+      x-tagging:
+        taggable: false
+        tagOnCreate: false
+        tagUpdatable: false
+        cloudFormationSystemTags: false
+      x-required-permissions:
+        create:
+          - logs:PutTransformer
+          - logs:GetTransformer
+        read:
+          - logs:GetTransformer
+        update:
+          - logs:GetTransformer
+          - logs:PutTransformer
+        delete:
+          - logs:DeleteTransformer
+        list:
+          - logs:DescribeLogGroups
+          - logs:GetTransformer
     CreateAccountPolicyRequest:
       properties:
         ClientToken:
@@ -1334,6 +1981,8 @@ components:
               enum:
                 - DATA_PROTECTION_POLICY
                 - SUBSCRIPTION_FILTER_POLICY
+                - FIELD_INDEX_POLICY
+                - TRANSFORMER_POLICY
             Scope:
               description: Scope for policy application
               type: string
@@ -1390,6 +2039,24 @@ components:
               x-insertionOrder: false
               items:
                 $ref: '#/components/schemas/Tag'
+            RecordFields:
+              description: The list of record fields to be delivered to the destination, in order. If the delivery's log source has mandatory fields, they must be included in this list.
+              type: array
+              items:
+                $ref: '#/components/schemas/FieldHeader'
+            FieldDelimiter:
+              description: The field delimiter to use between record fields when the final output format of a delivery is in Plain , W3C , or Raw format.
+              type: string
+              minLength: 1
+              maxLength: 5
+            S3SuffixPath:
+              description: This string allows re-configuring the S3 object prefix to contain either static or variable sections. The valid variables to use in the suffix path will vary by each log source. See ConfigurationTemplate$allowedSuffixPathFields for more info on what values are supported in the suffix path for each log source.
+              type: string
+              minLength: 0
+              maxLength: 256
+            S3EnableHiveCompatiblePath:
+              description: This parameter causes the S3 objects that contain delivered logs to use a prefix structure that allows for integration with Apache Hive.
+              type: boolean
           x-stackQL-stringOnly: true
       x-title: CreateDeliveryRequest
       type: object
@@ -1417,7 +2084,7 @@ components:
               description: The Amazon Resource Name (ARN) that uniquely identifies this delivery destination.
               $ref: '#/components/schemas/Arn'
             DestinationResourceArn:
-              description: The ARN of the AWS resource that will receive the logs.
+              description: The ARN of the Amazon Web Services destination that this delivery destination represents. That Amazon Web Services destination can be a log group in CloudWatch Logs, an Amazon S3 bucket, or a delivery stream in Firehose.
               $ref: '#/components/schemas/Arn'
             Tags:
               description: The tags that have been assigned to this delivery destination.
@@ -1442,6 +2109,12 @@ components:
               type: object
               items:
                 $ref: '#/components/schemas/DestinationPolicy'
+            OutputFormat:
+              description: The format of the logs that are sent to this delivery destination.
+              type: string
+              minLength: 1
+              maxLength: 12
+              pattern: ^[0-9A-Za-z]+$
           x-stackQL-stringOnly: true
       x-title: CreateDeliveryDestinationRequest
       type: object
@@ -1536,6 +2209,48 @@ components:
               minLength: 1
           x-stackQL-stringOnly: true
       x-title: CreateDestinationRequest
+      type: object
+      required: []
+    CreateIntegrationRequest:
+      properties:
+        ClientToken:
+          type: string
+        RoleArn:
+          type: string
+        TypeName:
+          type: string
+        TypeVersionId:
+          type: string
+        DesiredState:
+          type: object
+          properties:
+            IntegrationName:
+              description: User provided identifier for integration, unique to the user account.
+              type: string
+              pattern: '[\.\-_/#A-Za-z0-9]+'
+              minLength: 1
+              maxLength: 50
+            IntegrationType:
+              description: The type of the Integration.
+              type: string
+              enum:
+                - OPENSEARCH
+            ResourceConfig:
+              description: OpenSearchResourceConfig for the given Integration
+              type: object
+              properties:
+                OpenSearchResourceConfig:
+                  $ref: '#/components/schemas/OpenSearchResourceConfig'
+              additionalProperties: false
+            IntegrationStatus:
+              description: Status of creation for the Integration and its resources
+              type: string
+              enum:
+                - PROVISIONING
+                - ACTIVE
+                - FAILED
+          x-stackQL-stringOnly: true
+      x-title: CreateIntegrationRequest
       type: object
       required: []
     CreateLogAnomalyDetectorRequest:
@@ -1656,6 +2371,11 @@ components:
               description: The name of an existing log group that you want to associate with this metric filter.
               type: string
               maxLength: 512
+            ApplyOnTransformedLogs:
+              description: |-
+                This parameter is valid only for log groups that have an active log transformer. For more information about log transformers, see [PutTransformer](https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_PutTransformer.html).
+                 If this value is ``true``, the metric filter is applied on the transformed version of the log events instead of the original ingested log events.
+              type: boolean
             FilterName:
               minLength: 1
               pattern: ^[^:*]{1,512}
@@ -1701,6 +2421,14 @@ components:
               type: string
               minLength: 0
               maxLength: 256
+            QueryLanguage:
+              description: Query language of the query string. Possible values are CWLI, SQL, PPL, with CWLI being the default.
+              type: string
+              enum:
+                - CWLI
+                - SQL
+                - PPL
+              default: CWLI
           x-stackQL-stringOnly: true
       x-title: CreateQueryDefinitionRequest
       type: object
@@ -1768,8 +2496,44 @@ components:
               enum:
                 - Random
                 - ByLogStream
+            ApplyOnTransformedLogs:
+              description: |-
+                This parameter is valid only for log groups that have an active log transformer. For more information about log transformers, see [PutTransformer](https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_PutTransformer.html).
+                 If this value is ``true``, the subscription filter is applied on the transformed version of the log events instead of the original ingested log events.
+              type: boolean
           x-stackQL-stringOnly: true
       x-title: CreateSubscriptionFilterRequest
+      type: object
+      required: []
+    CreateTransformerRequest:
+      properties:
+        ClientToken:
+          type: string
+        RoleArn:
+          type: string
+        TypeName:
+          type: string
+        TypeVersionId:
+          type: string
+        DesiredState:
+          type: object
+          properties:
+            LogGroupIdentifier:
+              description: Existing log group that you want to associate with this transformer.
+              type: string
+              minLength: 1
+              maxLength: 2048
+              pattern: '[\w#+=/:,.@-]*'
+            TransformerConfig:
+              description: List of processors in a transformer
+              type: array
+              items:
+                $ref: '#/components/schemas/Processor'
+              minItems: 1
+              maxItems: 20
+              x-insertionOrder: false
+          x-stackQL-stringOnly: true
+      x-title: CreateTransformerRequest
       type: object
       required: []
   securitySchemes:
@@ -2010,7 +2774,11 @@ components:
               JSON_EXTRACT(Properties, '$.DeliverySourceName') as delivery_source_name,
               JSON_EXTRACT(Properties, '$.DeliveryDestinationArn') as delivery_destination_arn,
               JSON_EXTRACT(Properties, '$.DeliveryDestinationType') as delivery_destination_type,
-              JSON_EXTRACT(Properties, '$.Tags') as tags
+              JSON_EXTRACT(Properties, '$.Tags') as tags,
+              JSON_EXTRACT(Properties, '$.RecordFields') as record_fields,
+              JSON_EXTRACT(Properties, '$.FieldDelimiter') as field_delimiter,
+              JSON_EXTRACT(Properties, '$.S3SuffixPath') as s3_suffix_path,
+              JSON_EXTRACT(Properties, '$.S3EnableHiveCompatiblePath') as s3_enable_hive_compatible_path
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Logs::Delivery'
               AND data__Identifier = '<DeliveryId>'
               AND region = 'us-east-1'
@@ -2024,7 +2792,11 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.DeliverySourceName') as delivery_source_name,
                 JSON_EXTRACT(detail.Properties, '$.DeliveryDestinationArn') as delivery_destination_arn,
                 JSON_EXTRACT(detail.Properties, '$.DeliveryDestinationType') as delivery_destination_type,
-                JSON_EXTRACT(detail.Properties, '$.Tags') as tags
+                JSON_EXTRACT(detail.Properties, '$.Tags') as tags,
+                JSON_EXTRACT(detail.Properties, '$.RecordFields') as record_fields,
+                JSON_EXTRACT(detail.Properties, '$.FieldDelimiter') as field_delimiter,
+                JSON_EXTRACT(detail.Properties, '$.S3SuffixPath') as s3_suffix_path,
+                JSON_EXTRACT(detail.Properties, '$.S3EnableHiveCompatiblePath') as s3_enable_hive_compatible_path
                 FROM aws.cloud_control.resources listing
                 LEFT OUTER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
@@ -2043,7 +2815,11 @@ components:
                   json_extract_path_text(Properties, 'DeliverySourceName') as delivery_source_name,
                   json_extract_path_text(Properties, 'DeliveryDestinationArn') as delivery_destination_arn,
                   json_extract_path_text(Properties, 'DeliveryDestinationType') as delivery_destination_type,
-                  json_extract_path_text(Properties, 'Tags') as tags
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'RecordFields') as record_fields,
+                  json_extract_path_text(Properties, 'FieldDelimiter') as field_delimiter,
+                  json_extract_path_text(Properties, 'S3SuffixPath') as s3_suffix_path,
+                  json_extract_path_text(Properties, 'S3EnableHiveCompatiblePath') as s3_enable_hive_compatible_path
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Logs::Delivery'
                   AND data__Identifier = '<DeliveryId>'
                   AND region = 'us-east-1'
@@ -2057,7 +2833,11 @@ components:
                     json_extract_path_text(detail.Properties, 'DeliverySourceName') as delivery_source_name,
                     json_extract_path_text(detail.Properties, 'DeliveryDestinationArn') as delivery_destination_arn,
                     json_extract_path_text(detail.Properties, 'DeliveryDestinationType') as delivery_destination_type,
-                    json_extract_path_text(detail.Properties, 'Tags') as tags
+                    json_extract_path_text(detail.Properties, 'Tags') as tags,
+                    json_extract_path_text(detail.Properties, 'RecordFields') as record_fields,
+                    json_extract_path_text(detail.Properties, 'FieldDelimiter') as field_delimiter,
+                    json_extract_path_text(detail.Properties, 'S3SuffixPath') as s3_suffix_path,
+                    json_extract_path_text(detail.Properties, 'S3EnableHiveCompatiblePath') as s3_enable_hive_compatible_path
                     FROM aws.cloud_control.resources listing
                     LEFT OUTER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
@@ -2120,7 +2900,11 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
               JSON_EXTRACT(detail.Properties, '$.DeliverySourceName') as delivery_source_name,
               JSON_EXTRACT(detail.Properties, '$.DeliveryDestinationArn') as delivery_destination_arn,
-              JSON_EXTRACT(detail.Properties, '$.DeliveryDestinationType') as delivery_destination_type
+              JSON_EXTRACT(detail.Properties, '$.DeliveryDestinationType') as delivery_destination_type,
+              JSON_EXTRACT(detail.Properties, '$.RecordFields') as record_fields,
+              JSON_EXTRACT(detail.Properties, '$.FieldDelimiter') as field_delimiter,
+              JSON_EXTRACT(detail.Properties, '$.S3SuffixPath') as s3_suffix_path,
+              JSON_EXTRACT(detail.Properties, '$.S3EnableHiveCompatiblePath') as s3_enable_hive_compatible_path
               FROM aws.cloud_control.resources listing
               LEFT OUTER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
@@ -2140,7 +2924,11 @@ components:
                 json_extract_path_text(detail.Properties, 'Arn') as arn,
                 json_extract_path_text(detail.Properties, 'DeliverySourceName') as delivery_source_name,
                 json_extract_path_text(detail.Properties, 'DeliveryDestinationArn') as delivery_destination_arn,
-                json_extract_path_text(detail.Properties, 'DeliveryDestinationType') as delivery_destination_type
+                json_extract_path_text(detail.Properties, 'DeliveryDestinationType') as delivery_destination_type,
+                json_extract_path_text(detail.Properties, 'RecordFields') as record_fields,
+                json_extract_path_text(detail.Properties, 'FieldDelimiter') as field_delimiter,
+                json_extract_path_text(detail.Properties, 'S3SuffixPath') as s3_suffix_path,
+                json_extract_path_text(detail.Properties, 'S3EnableHiveCompatiblePath') as s3_enable_hive_compatible_path
                 FROM aws.cloud_control.resources listing
                 LEFT OUTER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
@@ -2217,7 +3005,8 @@ components:
               JSON_EXTRACT(Properties, '$.DestinationResourceArn') as destination_resource_arn,
               JSON_EXTRACT(Properties, '$.Tags') as tags,
               JSON_EXTRACT(Properties, '$.DeliveryDestinationType') as delivery_destination_type,
-              JSON_EXTRACT(Properties, '$.DeliveryDestinationPolicy') as delivery_destination_policy
+              JSON_EXTRACT(Properties, '$.DeliveryDestinationPolicy') as delivery_destination_policy,
+              JSON_EXTRACT(Properties, '$.OutputFormat') as output_format
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Logs::DeliveryDestination'
               AND data__Identifier = '<Name>'
               AND region = 'us-east-1'
@@ -2231,7 +3020,8 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.DestinationResourceArn') as destination_resource_arn,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags,
                 JSON_EXTRACT(detail.Properties, '$.DeliveryDestinationType') as delivery_destination_type,
-                JSON_EXTRACT(detail.Properties, '$.DeliveryDestinationPolicy') as delivery_destination_policy
+                JSON_EXTRACT(detail.Properties, '$.DeliveryDestinationPolicy') as delivery_destination_policy,
+                JSON_EXTRACT(detail.Properties, '$.OutputFormat') as output_format
                 FROM aws.cloud_control.resources listing
                 LEFT OUTER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
@@ -2250,7 +3040,8 @@ components:
                   json_extract_path_text(Properties, 'DestinationResourceArn') as destination_resource_arn,
                   json_extract_path_text(Properties, 'Tags') as tags,
                   json_extract_path_text(Properties, 'DeliveryDestinationType') as delivery_destination_type,
-                  json_extract_path_text(Properties, 'DeliveryDestinationPolicy') as delivery_destination_policy
+                  json_extract_path_text(Properties, 'DeliveryDestinationPolicy') as delivery_destination_policy,
+                  json_extract_path_text(Properties, 'OutputFormat') as output_format
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Logs::DeliveryDestination'
                   AND data__Identifier = '<Name>'
                   AND region = 'us-east-1'
@@ -2264,7 +3055,8 @@ components:
                     json_extract_path_text(detail.Properties, 'DestinationResourceArn') as destination_resource_arn,
                     json_extract_path_text(detail.Properties, 'Tags') as tags,
                     json_extract_path_text(detail.Properties, 'DeliveryDestinationType') as delivery_destination_type,
-                    json_extract_path_text(detail.Properties, 'DeliveryDestinationPolicy') as delivery_destination_policy
+                    json_extract_path_text(detail.Properties, 'DeliveryDestinationPolicy') as delivery_destination_policy,
+                    json_extract_path_text(detail.Properties, 'OutputFormat') as output_format
                     FROM aws.cloud_control.resources listing
                     LEFT OUTER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
@@ -2327,7 +3119,8 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
               JSON_EXTRACT(detail.Properties, '$.DestinationResourceArn') as destination_resource_arn,
               JSON_EXTRACT(detail.Properties, '$.DeliveryDestinationType') as delivery_destination_type,
-              JSON_EXTRACT(detail.Properties, '$.DeliveryDestinationPolicy') as delivery_destination_policy
+              JSON_EXTRACT(detail.Properties, '$.DeliveryDestinationPolicy') as delivery_destination_policy,
+              JSON_EXTRACT(detail.Properties, '$.OutputFormat') as output_format
               FROM aws.cloud_control.resources listing
               LEFT OUTER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
@@ -2347,7 +3140,8 @@ components:
                 json_extract_path_text(detail.Properties, 'Arn') as arn,
                 json_extract_path_text(detail.Properties, 'DestinationResourceArn') as destination_resource_arn,
                 json_extract_path_text(detail.Properties, 'DeliveryDestinationType') as delivery_destination_type,
-                json_extract_path_text(detail.Properties, 'DeliveryDestinationPolicy') as delivery_destination_policy
+                json_extract_path_text(detail.Properties, 'DeliveryDestinationPolicy') as delivery_destination_policy,
+                json_extract_path_text(detail.Properties, 'OutputFormat') as output_format
                 FROM aws.cloud_control.resources listing
                 LEFT OUTER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
@@ -2719,6 +3513,139 @@ components:
                 json_extract_path_text(Properties, 'DestinationName') as destination_name
                 FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Logs::Destination'
                 AND region = 'us-east-1'
+    integrations:
+      name: integrations
+      id: aws.logs.integrations
+      x-cfn-schema-name: Integration
+      x-cfn-type-name: AWS::Logs::Integration
+      x-identifiers:
+        - IntegrationName
+      x-type: cloud_control
+      methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Integration&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Logs::Integration"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Logs::Integration"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/integrations/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/integrations/methods/delete_resource'
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.IntegrationName') as integration_name,
+              JSON_EXTRACT(Properties, '$.IntegrationType') as integration_type,
+              JSON_EXTRACT(Properties, '$.ResourceConfig') as resource_config,
+              JSON_EXTRACT(Properties, '$.IntegrationStatus') as integration_status
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Logs::Integration'
+              AND data__Identifier = '<IntegrationName>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "sqlite3"
+              ddl: |-
+                SELECT
+                detail.region,
+                JSON_EXTRACT(detail.Properties, '$.IntegrationName') as integration_name,
+                JSON_EXTRACT(detail.Properties, '$.IntegrationType') as integration_type,
+                JSON_EXTRACT(detail.Properties, '$.ResourceConfig') as resource_config,
+                JSON_EXTRACT(detail.Properties, '$.IntegrationStatus') as integration_status
+                FROM aws.cloud_control.resources listing
+                LEFT OUTER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                WHERE listing.data__TypeName = 'AWS::Logs::Integration'
+                AND detail.data__TypeName = 'AWS::Logs::Integration'
+                AND listing.region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'IntegrationName') as integration_name,
+                  json_extract_path_text(Properties, 'IntegrationType') as integration_type,
+                  json_extract_path_text(Properties, 'ResourceConfig') as resource_config,
+                  json_extract_path_text(Properties, 'IntegrationStatus') as integration_status
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Logs::Integration'
+                  AND data__Identifier = '<IntegrationName>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    detail.region,
+                    json_extract_path_text(detail.Properties, 'IntegrationName') as integration_name,
+                    json_extract_path_text(detail.Properties, 'IntegrationType') as integration_type,
+                    json_extract_path_text(detail.Properties, 'ResourceConfig') as resource_config,
+                    json_extract_path_text(detail.Properties, 'IntegrationStatus') as integration_status
+                    FROM aws.cloud_control.resources listing
+                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    ON detail.data__Identifier = listing.Identifier
+                    AND detail.region = listing.region
+                    WHERE listing.data__TypeName = 'AWS::Logs::Integration'
+                    AND detail.data__TypeName = 'AWS::Logs::Integration'
+                    AND listing.region = 'us-east-1'
+    integrations_list_only:
+      name: integrations_list_only
+      id: aws.logs.integrations_list_only
+      x-cfn-schema-name: Integration
+      x-cfn-type-name: AWS::Logs::Integration
+      x-identifiers:
+        - IntegrationName
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.IntegrationName') as integration_name
+              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Logs::Integration'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                json_extract_path_text(Properties, 'IntegrationName') as integration_name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Logs::Integration'
+                AND region = 'us-east-1'
     log_anomaly_detectors:
       name: log_anomaly_detectors
       id: aws.logs.log_anomaly_detectors
@@ -3089,6 +4016,7 @@ components:
               JSON_EXTRACT(Properties, '$.MetricTransformations') as metric_transformations,
               JSON_EXTRACT(Properties, '$.FilterPattern') as filter_pattern,
               JSON_EXTRACT(Properties, '$.LogGroupName') as log_group_name,
+              JSON_EXTRACT(Properties, '$.ApplyOnTransformedLogs') as apply_on_transformed_logs,
               JSON_EXTRACT(Properties, '$.FilterName') as filter_name
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Logs::MetricFilter'
               AND data__Identifier = '<LogGroupName>|<FilterName>'
@@ -3101,6 +4029,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.MetricTransformations') as metric_transformations,
                 JSON_EXTRACT(detail.Properties, '$.FilterPattern') as filter_pattern,
                 JSON_EXTRACT(detail.Properties, '$.LogGroupName') as log_group_name,
+                JSON_EXTRACT(detail.Properties, '$.ApplyOnTransformedLogs') as apply_on_transformed_logs,
                 JSON_EXTRACT(detail.Properties, '$.FilterName') as filter_name
                 FROM aws.cloud_control.resources listing
                 LEFT OUTER JOIN aws.cloud_control.resource detail
@@ -3118,6 +4047,7 @@ components:
                   json_extract_path_text(Properties, 'MetricTransformations') as metric_transformations,
                   json_extract_path_text(Properties, 'FilterPattern') as filter_pattern,
                   json_extract_path_text(Properties, 'LogGroupName') as log_group_name,
+                  json_extract_path_text(Properties, 'ApplyOnTransformedLogs') as apply_on_transformed_logs,
                   json_extract_path_text(Properties, 'FilterName') as filter_name
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Logs::MetricFilter'
                   AND data__Identifier = '<LogGroupName>|<FilterName>'
@@ -3130,6 +4060,7 @@ components:
                     json_extract_path_text(detail.Properties, 'MetricTransformations') as metric_transformations,
                     json_extract_path_text(detail.Properties, 'FilterPattern') as filter_pattern,
                     json_extract_path_text(detail.Properties, 'LogGroupName') as log_group_name,
+                    json_extract_path_text(detail.Properties, 'ApplyOnTransformedLogs') as apply_on_transformed_logs,
                     json_extract_path_text(detail.Properties, 'FilterName') as filter_name
                     FROM aws.cloud_control.resources listing
                     LEFT OUTER JOIN aws.cloud_control.resource detail
@@ -3238,7 +4169,8 @@ components:
               JSON_EXTRACT(Properties, '$.Name') as name,
               JSON_EXTRACT(Properties, '$.QueryString') as query_string,
               JSON_EXTRACT(Properties, '$.LogGroupNames') as log_group_names,
-              JSON_EXTRACT(Properties, '$.QueryDefinitionId') as query_definition_id
+              JSON_EXTRACT(Properties, '$.QueryDefinitionId') as query_definition_id,
+              JSON_EXTRACT(Properties, '$.QueryLanguage') as query_language
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Logs::QueryDefinition'
               AND data__Identifier = '<QueryDefinitionId>'
               AND region = 'us-east-1'
@@ -3250,7 +4182,8 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Name') as name,
                 JSON_EXTRACT(detail.Properties, '$.QueryString') as query_string,
                 JSON_EXTRACT(detail.Properties, '$.LogGroupNames') as log_group_names,
-                JSON_EXTRACT(detail.Properties, '$.QueryDefinitionId') as query_definition_id
+                JSON_EXTRACT(detail.Properties, '$.QueryDefinitionId') as query_definition_id,
+                JSON_EXTRACT(detail.Properties, '$.QueryLanguage') as query_language
                 FROM aws.cloud_control.resources listing
                 LEFT OUTER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
@@ -3267,7 +4200,8 @@ components:
                   json_extract_path_text(Properties, 'Name') as name,
                   json_extract_path_text(Properties, 'QueryString') as query_string,
                   json_extract_path_text(Properties, 'LogGroupNames') as log_group_names,
-                  json_extract_path_text(Properties, 'QueryDefinitionId') as query_definition_id
+                  json_extract_path_text(Properties, 'QueryDefinitionId') as query_definition_id,
+                  json_extract_path_text(Properties, 'QueryLanguage') as query_language
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Logs::QueryDefinition'
                   AND data__Identifier = '<QueryDefinitionId>'
                   AND region = 'us-east-1'
@@ -3279,7 +4213,8 @@ components:
                     json_extract_path_text(detail.Properties, 'Name') as name,
                     json_extract_path_text(detail.Properties, 'QueryString') as query_string,
                     json_extract_path_text(detail.Properties, 'LogGroupNames') as log_group_names,
-                    json_extract_path_text(detail.Properties, 'QueryDefinitionId') as query_definition_id
+                    json_extract_path_text(detail.Properties, 'QueryDefinitionId') as query_definition_id,
+                    json_extract_path_text(detail.Properties, 'QueryLanguage') as query_language
                     FROM aws.cloud_control.resources listing
                     LEFT OUTER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
@@ -3525,7 +4460,8 @@ components:
               JSON_EXTRACT(Properties, '$.FilterPattern') as filter_pattern,
               JSON_EXTRACT(Properties, '$.LogGroupName') as log_group_name,
               JSON_EXTRACT(Properties, '$.RoleArn') as role_arn,
-              JSON_EXTRACT(Properties, '$.Distribution') as distribution
+              JSON_EXTRACT(Properties, '$.Distribution') as distribution,
+              JSON_EXTRACT(Properties, '$.ApplyOnTransformedLogs') as apply_on_transformed_logs
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Logs::SubscriptionFilter'
               AND data__Identifier = '<FilterName>|<LogGroupName>'
               AND region = 'us-east-1'
@@ -3539,7 +4475,8 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.FilterPattern') as filter_pattern,
                 JSON_EXTRACT(detail.Properties, '$.LogGroupName') as log_group_name,
                 JSON_EXTRACT(detail.Properties, '$.RoleArn') as role_arn,
-                JSON_EXTRACT(detail.Properties, '$.Distribution') as distribution
+                JSON_EXTRACT(detail.Properties, '$.Distribution') as distribution,
+                JSON_EXTRACT(detail.Properties, '$.ApplyOnTransformedLogs') as apply_on_transformed_logs
                 FROM aws.cloud_control.resources listing
                 LEFT OUTER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
@@ -3558,7 +4495,8 @@ components:
                   json_extract_path_text(Properties, 'FilterPattern') as filter_pattern,
                   json_extract_path_text(Properties, 'LogGroupName') as log_group_name,
                   json_extract_path_text(Properties, 'RoleArn') as role_arn,
-                  json_extract_path_text(Properties, 'Distribution') as distribution
+                  json_extract_path_text(Properties, 'Distribution') as distribution,
+                  json_extract_path_text(Properties, 'ApplyOnTransformedLogs') as apply_on_transformed_logs
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Logs::SubscriptionFilter'
                   AND data__Identifier = '<FilterName>|<LogGroupName>'
                   AND region = 'us-east-1'
@@ -3572,7 +4510,8 @@ components:
                     json_extract_path_text(detail.Properties, 'FilterPattern') as filter_pattern,
                     json_extract_path_text(detail.Properties, 'LogGroupName') as log_group_name,
                     json_extract_path_text(detail.Properties, 'RoleArn') as role_arn,
-                    json_extract_path_text(detail.Properties, 'Distribution') as distribution
+                    json_extract_path_text(detail.Properties, 'Distribution') as distribution,
+                    json_extract_path_text(detail.Properties, 'ApplyOnTransformedLogs') as apply_on_transformed_logs
                     FROM aws.cloud_control.resources listing
                     LEFT OUTER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
@@ -3613,6 +4552,144 @@ components:
                 json_extract_path_text(Properties, 'FilterName') as filter_name,
                 json_extract_path_text(Properties, 'LogGroupName') as log_group_name
                 FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Logs::SubscriptionFilter'
+                AND region = 'us-east-1'
+    transformers:
+      name: transformers
+      id: aws.logs.transformers
+      x-cfn-schema-name: Transformer
+      x-cfn-type-name: AWS::Logs::Transformer
+      x-identifiers:
+        - LogGroupIdentifier
+      x-type: cloud_control
+      methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Transformer&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Logs::Transformer"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Logs::Transformer"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Logs::Transformer"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/transformers/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/transformers/methods/delete_resource'
+        update:
+          - $ref: '#/components/x-stackQL-resources/transformers/methods/update_resource'
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.LogGroupIdentifier') as log_group_identifier,
+              JSON_EXTRACT(Properties, '$.TransformerConfig') as transformer_config
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Logs::Transformer'
+              AND data__Identifier = '<LogGroupIdentifier>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "sqlite3"
+              ddl: |-
+                SELECT
+                detail.region,
+                JSON_EXTRACT(detail.Properties, '$.LogGroupIdentifier') as log_group_identifier,
+                JSON_EXTRACT(detail.Properties, '$.TransformerConfig') as transformer_config
+                FROM aws.cloud_control.resources listing
+                LEFT OUTER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                WHERE listing.data__TypeName = 'AWS::Logs::Transformer'
+                AND detail.data__TypeName = 'AWS::Logs::Transformer'
+                AND listing.region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'LogGroupIdentifier') as log_group_identifier,
+                  json_extract_path_text(Properties, 'TransformerConfig') as transformer_config
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Logs::Transformer'
+                  AND data__Identifier = '<LogGroupIdentifier>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    detail.region,
+                    json_extract_path_text(detail.Properties, 'LogGroupIdentifier') as log_group_identifier,
+                    json_extract_path_text(detail.Properties, 'TransformerConfig') as transformer_config
+                    FROM aws.cloud_control.resources listing
+                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    ON detail.data__Identifier = listing.Identifier
+                    AND detail.region = listing.region
+                    WHERE listing.data__TypeName = 'AWS::Logs::Transformer'
+                    AND detail.data__TypeName = 'AWS::Logs::Transformer'
+                    AND listing.region = 'us-east-1'
+    transformers_list_only:
+      name: transformers_list_only
+      id: aws.logs.transformers_list_only
+      x-cfn-schema-name: Transformer
+      x-cfn-type-name: AWS::Logs::Transformer
+      x-identifiers:
+        - LogGroupIdentifier
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.LogGroupIdentifier') as log_group_identifier
+              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Logs::Transformer'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                json_extract_path_text(Properties, 'LogGroupIdentifier') as log_group_identifier
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Logs::Transformer'
                 AND region = 'us-east-1'
 paths:
   /?Action=CreateResource&Version=2021-09-30:
@@ -3967,6 +5044,48 @@ paths:
               schema:
                 $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
           description: Success
+  /?Action=CreateResource&Version=2021-09-30&__Integration&__detailTransformed=true:
+    parameters:
+      - $ref: '#/components/parameters/X-Amz-Content-Sha256'
+      - $ref: '#/components/parameters/X-Amz-Date'
+      - $ref: '#/components/parameters/X-Amz-Algorithm'
+      - $ref: '#/components/parameters/X-Amz-Credential'
+      - $ref: '#/components/parameters/X-Amz-Security-Token'
+      - $ref: '#/components/parameters/X-Amz-Signature'
+      - $ref: '#/components/parameters/X-Amz-SignedHeaders'
+    post:
+      operationId: CreateIntegration
+      parameters:
+        - description: Action Header
+          in: header
+          name: X-Amz-Target
+          required: false
+          schema:
+            default: CloudApiService.CreateResource
+            enum:
+              - CloudApiService.CreateResource
+            type: string
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            default: application/x-amz-json-1.0
+            enum:
+              - application/x-amz-json-1.0
+            type: string
+      requestBody:
+        content:
+          application/x-amz-json-1.0:
+            schema:
+              $ref: '#/components/schemas/CreateIntegrationRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
+          description: Success
   /?Action=CreateResource&Version=2021-09-30&__LogAnomalyDetector&__detailTransformed=true:
     parameters:
       - $ref: '#/components/parameters/X-Amz-Content-Sha256'
@@ -4211,6 +5330,48 @@ paths:
           application/x-amz-json-1.0:
             schema:
               $ref: '#/components/schemas/CreateSubscriptionFilterRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
+          description: Success
+  /?Action=CreateResource&Version=2021-09-30&__Transformer&__detailTransformed=true:
+    parameters:
+      - $ref: '#/components/parameters/X-Amz-Content-Sha256'
+      - $ref: '#/components/parameters/X-Amz-Date'
+      - $ref: '#/components/parameters/X-Amz-Algorithm'
+      - $ref: '#/components/parameters/X-Amz-Credential'
+      - $ref: '#/components/parameters/X-Amz-Security-Token'
+      - $ref: '#/components/parameters/X-Amz-Signature'
+      - $ref: '#/components/parameters/X-Amz-SignedHeaders'
+    post:
+      operationId: CreateTransformer
+      parameters:
+        - description: Action Header
+          in: header
+          name: X-Amz-Target
+          required: false
+          schema:
+            default: CloudApiService.CreateResource
+            enum:
+              - CloudApiService.CreateResource
+            type: string
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            default: application/x-amz-json-1.0
+            enum:
+              - application/x-amz-json-1.0
+            type: string
+      requestBody:
+        content:
+          application/x-amz-json-1.0:
+            schema:
+              $ref: '#/components/schemas/CreateTransformerRequest'
         required: true
       responses:
         '200':

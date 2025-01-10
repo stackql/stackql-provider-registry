@@ -402,6 +402,18 @@ components:
           pattern: ^([a-z0-9]+[a-z0-9-.]*)\/((?:[a-z0-9]+(?:[._-][a-z0-9]+)*\/)*[a-z0-9]+(?:[._-][a-z0-9]+)*)(?:\:([a-zA-Z0-9_][a-zA-Z0-9-._]{0,299})|@(sha256:[0-9a-f]{64}))$
           description: The URI of an image in the Amazon ECR registry. This field is required when you create a new application. If you leave this field blank in an update, Amazon EMR will remove the image configuration.
       additionalProperties: false
+    InteractiveConfiguration:
+      additionalProperties: false
+      type: object
+      properties:
+        LivyEndpointEnabled:
+          description: Enables an Apache Livy endpoint that you can connect to and run interactive jobs
+          type: boolean
+          default: false
+        StudioEnabled:
+          description: Enabled you to connect an Application to Amazon EMR Studio to run interactive workloads in a notebook
+          type: boolean
+          default: false
     ConfigurationList:
       type: array
       description: Runtime configuration for batch and interactive JobRun.
@@ -409,6 +421,17 @@ components:
       x-insertionOrder: false
       items:
         $ref: '#/components/schemas/ConfigurationObject'
+    SchedulerConfiguration:
+      type: object
+      description: The scheduler configuration for batch and streaming jobs running on this application. Supported with release labels emr-7.0.0 and above.
+      additionalProperties: false
+      properties:
+        QueueTimeoutMinutes:
+          description: The maximum duration in minutes for the job in QUEUED state. If scheduler configuration is enabled on your application, the default value is 360 minutes (6 hours). The valid range is from 15 to 720.
+          type: integer
+        MaxConcurrentRuns:
+          description: The maximum concurrent job runs on this application. If scheduler configuration is enabled on your application, the default value is 15. The valid range is 1 to 1000.
+          type: integer
     MonitoringConfiguration:
       type: object
       description: Monitoring configuration for batch and interactive JobRun.
@@ -533,6 +556,9 @@ components:
         Disk:
           description: Per worker Disk resource. GB is the only supported unit and specifying GB is optional
           $ref: '#/components/schemas/DiskSize'
+        DiskType:
+          description: Per worker DiskType resource. Shuffle optimized and Standard are only supported types and specifying diskType is optional
+          $ref: '#/components/schemas/DiskType'
       required:
         - Cpu
         - Memory
@@ -715,6 +741,10 @@ components:
       minLength: 1
       maxLength: 15
       pattern: ^[1-9][0-9]*(\s)?(GB|gb|gB|Gb)$
+    DiskType:
+      description: Per worker DiskType resource. Shuffle optimized and Standard are only supported types and specifying diskType is optional
+      type: string
+      pattern: ^(SHUFFLE_OPTIMIZED|[Ss]huffle_[Oo]ptimized|STANDARD|[Ss]tandard)$
     WorkerTypeSpecificationInput:
       type: object
       description: The specifications for a worker type.
@@ -773,12 +803,15 @@ components:
           $ref: '#/components/schemas/MonitoringConfiguration'
         RuntimeConfiguration:
           $ref: '#/components/schemas/ConfigurationList'
+        InteractiveConfiguration:
+          $ref: '#/components/schemas/InteractiveConfiguration'
         NetworkConfiguration:
           description: Network Configuration for customer VPC connectivity.
           $ref: '#/components/schemas/NetworkConfiguration'
         Arn:
           description: The Amazon Resource Name (ARN) of the EMR Serverless Application.
           type: string
+          pattern: ^arn:(aws[a-zA-Z0-9-]*):emr-serverless:.+:(\d{12}):\/applications\/[0-9a-zA-Z]+$
         ApplicationId:
           description: The ID of the EMR Serverless Application.
           type: string
@@ -787,6 +820,9 @@ components:
         WorkerTypeSpecifications:
           description: The key-value pairs that specify worker type to WorkerTypeSpecificationInput. This parameter must contain all valid worker types for a Spark or Hive application. Valid worker types include Driver and Executor for Spark applications and HiveDriver and TezTask for Hive applications. You can either set image details in this parameter for each worker type, or in imageConfiguration for all worker types.
           $ref: '#/components/schemas/WorkerTypeSpecificationInputMap'
+        SchedulerConfiguration:
+          description: The scheduler configuration for batch and streaming jobs running on this application. Supported with release labels emr-7.0.0 and above.
+          $ref: '#/components/schemas/SchedulerConfiguration'
       required:
         - ReleaseLabel
         - Type
@@ -810,6 +846,8 @@ components:
         - ImageConfiguration
         - MonitoringConfiguration
         - RuntimeConfiguration
+        - InteractiveConfiguration
+        - SchedulerConfiguration
       x-read-only-properties:
         - Arn
         - ApplicationId
@@ -818,20 +856,35 @@ components:
         - Type
       x-tagging:
         taggable: true
+        tagOnCreate: true
+        tagUpdatable: true
         cloudFormationSystemTags: false
         tagProperty: /properties/Tags
+        permissions:
+          - emr-serverless:TagResource
+          - emr-serverless:UntagResource
+          - kms:TagResource
+          - kms:UntagResource
       x-required-permissions:
         create:
-          - kms:Create*
-          - kms:Describe*
-          - kms:Enable*
-          - kms:List*
-          - kms:Put*
-          - kms:Update*
-          - kms:Revoke*
-          - kms:Disable*
-          - kms:Get*
-          - kms:Delete*
+          - kms:CreateKey
+          - kms:CreateAlias
+          - kms:DescribeKey
+          - kms:EnableKey
+          - kms:ListGrants
+          - kms:ListAliases
+          - kms:ListKeyPolicies
+          - kms:ListKeys
+          - kms:PutKeyPolicy
+          - kms:UpdateKeyDescription
+          - kms:UpdateAlias
+          - kms:UpdatePrimaryRegion
+          - kms:RevokeGrant
+          - kms:DisableKey
+          - kms:DisableKeyRotation
+          - kms:GetKeyPolicy
+          - kms:GetKeyRotationStatus
+          - kms:DeleteAlias
           - kms:ScheduleKeyDeletion
           - kms:CancelKeyDeletion
           - kms:GenerateDataKey
@@ -857,16 +910,24 @@ components:
           - ecr:BatchGetImage
           - ecr:DescribeImages
           - ecr:GetDownloadUrlForLayer
-          - kms:Create*
-          - kms:Describe*
-          - kms:Enable*
-          - kms:List*
-          - kms:Put*
-          - kms:Update*
-          - kms:Revoke*
-          - kms:Disable*
-          - kms:Get*
-          - kms:Delete*
+          - kms:CreateKey
+          - kms:CreateAlias
+          - kms:DescribeKey
+          - kms:EnableKey
+          - kms:ListGrants
+          - kms:ListAliases
+          - kms:ListKeyPolicies
+          - kms:ListKeys
+          - kms:PutKeyPolicy
+          - kms:UpdateKeyDescription
+          - kms:UpdateAlias
+          - kms:UpdatePrimaryRegion
+          - kms:RevokeGrant
+          - kms:DisableKey
+          - kms:DisableKeyRotation
+          - kms:GetKeyPolicy
+          - kms:GetKeyRotationStatus
+          - kms:DeleteAlias
           - kms:ScheduleKeyDeletion
           - kms:CancelKeyDeletion
           - kms:GenerateDataKey
@@ -933,12 +994,15 @@ components:
               $ref: '#/components/schemas/MonitoringConfiguration'
             RuntimeConfiguration:
               $ref: '#/components/schemas/ConfigurationList'
+            InteractiveConfiguration:
+              $ref: '#/components/schemas/InteractiveConfiguration'
             NetworkConfiguration:
               description: Network Configuration for customer VPC connectivity.
               $ref: '#/components/schemas/NetworkConfiguration'
             Arn:
               description: The Amazon Resource Name (ARN) of the EMR Serverless Application.
               type: string
+              pattern: ^arn:(aws[a-zA-Z0-9-]*):emr-serverless:.+:(\d{12}):\/applications\/[0-9a-zA-Z]+$
             ApplicationId:
               description: The ID of the EMR Serverless Application.
               type: string
@@ -947,6 +1011,9 @@ components:
             WorkerTypeSpecifications:
               description: The key-value pairs that specify worker type to WorkerTypeSpecificationInput. This parameter must contain all valid worker types for a Spark or Hive application. Valid worker types include Driver and Executor for Spark applications and HiveDriver and TezTask for Hive applications. You can either set image details in this parameter for each worker type, or in imageConfiguration for all worker types.
               $ref: '#/components/schemas/WorkerTypeSpecificationInputMap'
+            SchedulerConfiguration:
+              description: The scheduler configuration for batch and streaming jobs running on this application. Supported with release labels emr-7.0.0 and above.
+              $ref: '#/components/schemas/SchedulerConfiguration'
           x-stackQL-stringOnly: true
       x-title: CreateApplicationRequest
       type: object
@@ -1034,10 +1101,12 @@ components:
               JSON_EXTRACT(Properties, '$.ImageConfiguration') as image_configuration,
               JSON_EXTRACT(Properties, '$.MonitoringConfiguration') as monitoring_configuration,
               JSON_EXTRACT(Properties, '$.RuntimeConfiguration') as runtime_configuration,
+              JSON_EXTRACT(Properties, '$.InteractiveConfiguration') as interactive_configuration,
               JSON_EXTRACT(Properties, '$.NetworkConfiguration') as network_configuration,
               JSON_EXTRACT(Properties, '$.Arn') as arn,
               JSON_EXTRACT(Properties, '$.ApplicationId') as application_id,
-              JSON_EXTRACT(Properties, '$.WorkerTypeSpecifications') as worker_type_specifications
+              JSON_EXTRACT(Properties, '$.WorkerTypeSpecifications') as worker_type_specifications,
+              JSON_EXTRACT(Properties, '$.SchedulerConfiguration') as scheduler_configuration
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::EMRServerless::Application'
               AND data__Identifier = '<ApplicationId>'
               AND region = 'us-east-1'
@@ -1058,10 +1127,12 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.ImageConfiguration') as image_configuration,
                 JSON_EXTRACT(detail.Properties, '$.MonitoringConfiguration') as monitoring_configuration,
                 JSON_EXTRACT(detail.Properties, '$.RuntimeConfiguration') as runtime_configuration,
+                JSON_EXTRACT(detail.Properties, '$.InteractiveConfiguration') as interactive_configuration,
                 JSON_EXTRACT(detail.Properties, '$.NetworkConfiguration') as network_configuration,
                 JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
                 JSON_EXTRACT(detail.Properties, '$.ApplicationId') as application_id,
-                JSON_EXTRACT(detail.Properties, '$.WorkerTypeSpecifications') as worker_type_specifications
+                JSON_EXTRACT(detail.Properties, '$.WorkerTypeSpecifications') as worker_type_specifications,
+                JSON_EXTRACT(detail.Properties, '$.SchedulerConfiguration') as scheduler_configuration
                 FROM aws.cloud_control.resources listing
                 LEFT OUTER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
@@ -1087,10 +1158,12 @@ components:
                   json_extract_path_text(Properties, 'ImageConfiguration') as image_configuration,
                   json_extract_path_text(Properties, 'MonitoringConfiguration') as monitoring_configuration,
                   json_extract_path_text(Properties, 'RuntimeConfiguration') as runtime_configuration,
+                  json_extract_path_text(Properties, 'InteractiveConfiguration') as interactive_configuration,
                   json_extract_path_text(Properties, 'NetworkConfiguration') as network_configuration,
                   json_extract_path_text(Properties, 'Arn') as arn,
                   json_extract_path_text(Properties, 'ApplicationId') as application_id,
-                  json_extract_path_text(Properties, 'WorkerTypeSpecifications') as worker_type_specifications
+                  json_extract_path_text(Properties, 'WorkerTypeSpecifications') as worker_type_specifications,
+                  json_extract_path_text(Properties, 'SchedulerConfiguration') as scheduler_configuration
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::EMRServerless::Application'
                   AND data__Identifier = '<ApplicationId>'
                   AND region = 'us-east-1'
@@ -1111,10 +1184,12 @@ components:
                     json_extract_path_text(detail.Properties, 'ImageConfiguration') as image_configuration,
                     json_extract_path_text(detail.Properties, 'MonitoringConfiguration') as monitoring_configuration,
                     json_extract_path_text(detail.Properties, 'RuntimeConfiguration') as runtime_configuration,
+                    json_extract_path_text(detail.Properties, 'InteractiveConfiguration') as interactive_configuration,
                     json_extract_path_text(detail.Properties, 'NetworkConfiguration') as network_configuration,
                     json_extract_path_text(detail.Properties, 'Arn') as arn,
                     json_extract_path_text(detail.Properties, 'ApplicationId') as application_id,
-                    json_extract_path_text(detail.Properties, 'WorkerTypeSpecifications') as worker_type_specifications
+                    json_extract_path_text(detail.Properties, 'WorkerTypeSpecifications') as worker_type_specifications,
+                    json_extract_path_text(detail.Properties, 'SchedulerConfiguration') as scheduler_configuration
                     FROM aws.cloud_control.resources listing
                     LEFT OUTER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
@@ -1184,10 +1259,12 @@ components:
               JSON_EXTRACT(detail.Properties, '$.ImageConfiguration') as image_configuration,
               JSON_EXTRACT(detail.Properties, '$.MonitoringConfiguration') as monitoring_configuration,
               JSON_EXTRACT(detail.Properties, '$.RuntimeConfiguration') as runtime_configuration,
+              JSON_EXTRACT(detail.Properties, '$.InteractiveConfiguration') as interactive_configuration,
               JSON_EXTRACT(detail.Properties, '$.NetworkConfiguration') as network_configuration,
               JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
               JSON_EXTRACT(detail.Properties, '$.ApplicationId') as application_id,
-              JSON_EXTRACT(detail.Properties, '$.WorkerTypeSpecifications') as worker_type_specifications
+              JSON_EXTRACT(detail.Properties, '$.WorkerTypeSpecifications') as worker_type_specifications,
+              JSON_EXTRACT(detail.Properties, '$.SchedulerConfiguration') as scheduler_configuration
               FROM aws.cloud_control.resources listing
               LEFT OUTER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
@@ -1214,10 +1291,12 @@ components:
                 json_extract_path_text(detail.Properties, 'ImageConfiguration') as image_configuration,
                 json_extract_path_text(detail.Properties, 'MonitoringConfiguration') as monitoring_configuration,
                 json_extract_path_text(detail.Properties, 'RuntimeConfiguration') as runtime_configuration,
+                json_extract_path_text(detail.Properties, 'InteractiveConfiguration') as interactive_configuration,
                 json_extract_path_text(detail.Properties, 'NetworkConfiguration') as network_configuration,
                 json_extract_path_text(detail.Properties, 'Arn') as arn,
                 json_extract_path_text(detail.Properties, 'ApplicationId') as application_id,
-                json_extract_path_text(detail.Properties, 'WorkerTypeSpecifications') as worker_type_specifications
+                json_extract_path_text(detail.Properties, 'WorkerTypeSpecifications') as worker_type_specifications,
+                json_extract_path_text(detail.Properties, 'SchedulerConfiguration') as scheduler_configuration
                 FROM aws.cloud_control.resources listing
                 LEFT OUTER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
