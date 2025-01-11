@@ -385,6 +385,24 @@ components:
           $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
       type: object
   schemas:
+    Tag:
+      description: A key-value pair to associate with a resource.
+      type: object
+      properties:
+        Key:
+          type: string
+          description: 'The key name of the tag. You can specify a value that is 1 to 127 Unicode characters in length and cannot be prefixed with aws:. You can use any of the following characters: the set of Unicode letters, digits, whitespace, _, ., /, =, +, and -. '
+          minLength: 1
+          maxLength: 127
+        Value:
+          type: string
+          description: 'The value for the tag. You can specify a value that is 1 to 255 Unicode characters in length and cannot be prefixed with aws:. You can use any of the following characters: the set of Unicode letters, digits, whitespace, _, ., /, =, +, and -. '
+          minLength: 1
+          maxLength: 255
+      required:
+        - Key
+        - Value
+      additionalProperties: false
     Farm:
       type: object
       properties:
@@ -405,7 +423,15 @@ components:
           pattern: ^arn:aws[-a-z]*:kms:.*:key/.*
         Arn:
           type: string
-          pattern: ^arn:(aws[a-zA-Z-]*):deadline:[a-z0-9-]+:[0-9]+:farm/.+?
+          pattern: ^arn:(aws[a-zA-Z-]*):deadline:[a-z0-9-]+:[0-9]+:farm/farm-[0-9a-z]{32}$
+        Tags:
+          type: array
+          maxItems: 50
+          description: An array of key-value pairs to apply to this resource.
+          items:
+            $ref: '#/components/schemas/Tag'
+          x-insertionOrder: false
+          uniqueItems: true
       required:
         - DisplayName
       x-stackql-resource-name: farm
@@ -421,20 +447,29 @@ components:
       x-required-properties:
         - DisplayName
       x-tagging:
-        taggable: false
-        tagOnCreate: false
-        tagUpdatable: false
-        cloudFormationSystemTags: false
+        taggable: true
+        tagOnCreate: true
+        tagUpdatable: true
+        cloudFormationSystemTags: true
+        tagProperty: /properties/Tags
+        permissions:
+          - deadline:TagResource
+          - deadline:UntagResource
+          - deadline:ListTagsForResource
       x-required-permissions:
         create:
           - deadline:CreateFarm
           - deadline:GetFarm
+          - deadline:TagResource
+          - deadline:ListTagsForResource
+          - identitystore:ListGroupMembershipsForMember
           - kms:Encrypt
           - kms:Decrypt
           - kms:CreateGrant
           - kms:GenerateDataKey
         read:
           - deadline:GetFarm
+          - deadline:ListTagsForResource
           - identitystore:ListGroupMembershipsForMember
           - kms:Encrypt
           - kms:Decrypt
@@ -443,6 +478,9 @@ components:
         update:
           - deadline:UpdateFarm
           - deadline:GetFarm
+          - deadline:TagResource
+          - deadline:UntagResource
+          - deadline:ListTagsForResource
           - identitystore:ListGroupMembershipsForMember
           - kms:Encrypt
           - kms:Decrypt
@@ -575,6 +613,36 @@ components:
           maximum: 1000
           minimum: 125
       additionalProperties: false
+    AcceleratorSelection:
+      type: object
+      properties:
+        Name:
+          type: string
+          enum:
+            - t4
+            - a10g
+            - l4
+            - l40s
+        Runtime:
+          type: string
+          maxLength: 100
+          minLength: 1
+      required:
+        - Name
+      additionalProperties: false
+    AcceleratorCapabilities:
+      type: object
+      properties:
+        Selections:
+          type: array
+          items:
+            $ref: '#/components/schemas/AcceleratorSelection'
+          minItems: 1
+        Count:
+          $ref: '#/components/schemas/AcceleratorCountRange'
+      required:
+        - Selections
+      additionalProperties: false
     Ec2MarketType:
       type: string
       enum:
@@ -705,6 +773,8 @@ components:
           $ref: '#/components/schemas/CpuArchitectureType'
         RootEbsVolume:
           $ref: '#/components/schemas/Ec2EbsVolume'
+        AcceleratorCapabilities:
+          $ref: '#/components/schemas/AcceleratorCapabilities'
         AllowedInstanceTypes:
           type: array
           items:
@@ -741,6 +811,7 @@ components:
       type: string
       enum:
         - LINUX
+        - WINDOWS
     VCpuCountRange:
       type: object
       properties:
@@ -796,9 +867,18 @@ components:
         Arn:
           type: string
           pattern: ^arn:(aws[a-zA-Z-]*):deadline:[a-z0-9-]+:[0-9]+:farm/farm-[0-9a-z]{32}/fleet/fleet-[0-9a-z]{32}
+        Tags:
+          type: array
+          maxItems: 50
+          description: An array of key-value pairs to apply to this resource.
+          items:
+            $ref: '#/components/schemas/Tag'
+          x-insertionOrder: false
+          uniqueItems: true
       required:
         - Configuration
         - DisplayName
+        - FarmId
         - MaxWorkerCount
         - RoleArn
       x-stackql-resource-name: fleet
@@ -817,13 +897,19 @@ components:
       x-required-properties:
         - Configuration
         - DisplayName
+        - FarmId
         - MaxWorkerCount
         - RoleArn
       x-tagging:
-        taggable: false
-        tagOnCreate: false
-        tagUpdatable: false
-        cloudFormationSystemTags: false
+        taggable: true
+        tagOnCreate: true
+        tagUpdatable: true
+        cloudFormationSystemTags: true
+        tagProperty: /properties/Tags
+        permissions:
+          - deadline:TagResource
+          - deadline:UntagResource
+          - deadline:ListTagsForResource
       x-required-permissions:
         create:
           - deadline:CreateFleet
@@ -831,14 +917,20 @@ components:
           - iam:PassRole
           - identitystore:ListGroupMembershipsForMember
           - logs:CreateLogGroup
+          - deadline:TagResource
+          - deadline:ListTagsForResource
         read:
           - deadline:GetFleet
           - identitystore:ListGroupMembershipsForMember
+          - deadline:ListTagsForResource
         update:
           - deadline:UpdateFleet
           - deadline:GetFleet
           - iam:PassRole
           - identitystore:ListGroupMembershipsForMember
+          - deadline:TagResource
+          - deadline:UntagResource
+          - deadline:ListTagsForResource
         delete:
           - deadline:DeleteFleet
           - deadline:GetFleet
@@ -890,6 +982,14 @@ components:
         Arn:
           type: string
           pattern: ^arn:(aws[a-zA-Z-]*):deadline:[a-z0-9-]+:[0-9]{12}:license-endpoint/le-[0-9a-z]{32}
+        Tags:
+          type: array
+          maxItems: 50
+          description: An array of key-value pairs to apply to this resource.
+          items:
+            $ref: '#/components/schemas/Tag'
+          x-insertionOrder: false
+          uniqueItems: true
       required:
         - SecurityGroupIds
         - SubnetIds
@@ -914,10 +1014,15 @@ components:
         - SubnetIds
         - VpcId
       x-tagging:
-        taggable: false
-        tagOnCreate: false
-        tagUpdatable: false
-        cloudFormationSystemTags: false
+        taggable: true
+        tagOnCreate: true
+        tagUpdatable: true
+        cloudFormationSystemTags: true
+        tagProperty: /properties/Tags
+        permissions:
+          - deadline:TagResource
+          - deadline:UntagResource
+          - deadline:ListTagsForResource
       x-required-permissions:
         create:
           - deadline:CreateLicenseEndpoint
@@ -925,7 +1030,15 @@ components:
           - ec2:CreateTags
           - ec2:CreateVpcEndpoint
           - ec2:DescribeVpcEndpoints
+          - deadline:TagResource
+          - deadline:ListTagsForResource
         read:
+          - deadline:GetLicenseEndpoint
+          - deadline:ListTagsForResource
+        update:
+          - deadline:TagResource
+          - deadline:UntagResource
+          - deadline:ListTagsForResource
           - deadline:GetLicenseEndpoint
         delete:
           - deadline:GetLicenseEndpoint
@@ -968,6 +1081,9 @@ components:
         - ProductId
       x-read-only-properties:
         - Arn
+        - Port
+        - Family
+        - Vendor
       x-tagging:
         taggable: false
         tagOnCreate: false
@@ -985,6 +1101,85 @@ components:
           - deadline:ListMeteredProducts
         list:
           - deadline:ListMeteredProducts
+    Monitor:
+      type: object
+      properties:
+        DisplayName:
+          type: string
+          maxLength: 100
+          minLength: 1
+        IdentityCenterApplicationArn:
+          type: string
+        IdentityCenterInstanceArn:
+          type: string
+          pattern: ^arn:(aws|aws-us-gov|aws-cn|aws-iso|aws-iso-b):sso:::instance/(sso)?ins-[a-zA-Z0-9-.]{16}$
+        MonitorId:
+          type: string
+          pattern: ^monitor-[0-9a-f]{32}$
+        RoleArn:
+          type: string
+          pattern: ^arn:(aws[a-zA-Z-]*):iam::\d{12}:role(/[!-.0-~]+)*/[\w+=,.@-]+$
+        Subdomain:
+          type: string
+          pattern: ^[a-z0-9-]{1,100}$
+        Url:
+          type: string
+        Arn:
+          type: string
+          pattern: ^arn:(aws[a-zA-Z-]*):deadline:[a-z0-9-]+:[0-9]+:monitor/monitor-[0-9a-z]{32}$
+      required:
+        - DisplayName
+        - IdentityCenterInstanceArn
+        - RoleArn
+        - Subdomain
+      x-stackql-resource-name: monitor
+      description: Definition of AWS::Deadline::Monitor Resource Type
+      x-type-name: AWS::Deadline::Monitor
+      x-stackql-primary-identifier:
+        - Arn
+      x-create-only-properties:
+        - IdentityCenterInstanceArn
+      x-read-only-properties:
+        - IdentityCenterApplicationArn
+        - MonitorId
+        - Url
+        - Arn
+      x-required-properties:
+        - DisplayName
+        - IdentityCenterInstanceArn
+        - RoleArn
+        - Subdomain
+      x-tagging:
+        taggable: false
+        tagOnCreate: false
+        tagUpdatable: false
+        cloudFormationSystemTags: false
+      x-required-permissions:
+        create:
+          - deadline:CreateMonitor
+          - deadline:GetMonitor
+          - iam:PassRole
+          - kms:CreateGrant
+          - sso:CreateApplication
+          - sso:DeleteApplication
+          - sso:PutApplicationAssignmentConfiguration
+          - sso:PutApplicationAuthenticationMethod
+          - sso:PutApplicationGrant
+        read:
+          - deadline:GetMonitor
+        update:
+          - deadline:GetMonitor
+          - deadline:UpdateMonitor
+          - iam:PassRole
+          - kms:CreateGrant
+          - sso:PutApplicationGrant
+          - sso:UpdateApplication
+        delete:
+          - deadline:DeleteMonitor
+          - deadline:GetMonitor
+          - sso:DeleteApplication
+        list:
+          - deadline:ListMonitors
     DefaultQueueBudgetAction:
       type: string
       default: NONE
@@ -1107,8 +1302,17 @@ components:
         Arn:
           type: string
           pattern: ^arn:*
+        Tags:
+          type: array
+          maxItems: 50
+          description: An array of key-value pairs to apply to this resource.
+          items:
+            $ref: '#/components/schemas/Tag'
+          x-insertionOrder: false
+          uniqueItems: true
       required:
         - DisplayName
+        - FarmId
       x-stackql-resource-name: queue
       description: Definition of AWS::Deadline::Queue Resource Type
       x-type-name: AWS::Deadline::Queue
@@ -1121,11 +1325,17 @@ components:
         - Arn
       x-required-properties:
         - DisplayName
+        - FarmId
       x-tagging:
-        taggable: false
-        tagOnCreate: false
-        tagUpdatable: false
-        cloudFormationSystemTags: false
+        taggable: true
+        tagOnCreate: true
+        tagUpdatable: true
+        cloudFormationSystemTags: true
+        tagProperty: /properties/Tags
+        permissions:
+          - deadline:TagResource
+          - deadline:UntagResource
+          - deadline:ListTagsForResource
       x-required-permissions:
         create:
           - deadline:CreateQueue
@@ -1134,9 +1344,12 @@ components:
           - identitystore:ListGroupMembershipsForMember
           - logs:CreateLogGroup
           - s3:ListBucket
+          - deadline:TagResource
+          - deadline:ListTagsForResource
         read:
           - deadline:GetQueue
           - identitystore:ListGroupMembershipsForMember
+          - deadline:ListTagsForResource
         update:
           - deadline:UpdateQueue
           - deadline:GetQueue
@@ -1144,6 +1357,9 @@ components:
           - identitystore:ListGroupMembershipsForMember
           - logs:CreateLogGroup
           - s3:ListBucket
+          - deadline:TagResource
+          - deadline:UntagResource
+          - deadline:ListTagsForResource
         delete:
           - deadline:DeleteQueue
           - deadline:GetQueue
@@ -1334,6 +1550,7 @@ components:
           pattern: ^sp-[0-9a-f]{32}$
       required:
         - DisplayName
+        - FarmId
         - OsFamily
       x-stackql-resource-name: storage_profile
       description: Definition of AWS::Deadline::StorageProfile Resource Type
@@ -1347,6 +1564,7 @@ components:
         - StorageProfileId
       x-required-properties:
         - DisplayName
+        - FarmId
         - OsFamily
       x-tagging:
         taggable: false
@@ -1402,7 +1620,15 @@ components:
               pattern: ^arn:aws[-a-z]*:kms:.*:key/.*
             Arn:
               type: string
-              pattern: ^arn:(aws[a-zA-Z-]*):deadline:[a-z0-9-]+:[0-9]+:farm/.+?
+              pattern: ^arn:(aws[a-zA-Z-]*):deadline:[a-z0-9-]+:[0-9]+:farm/farm-[0-9a-z]{32}$
+            Tags:
+              type: array
+              maxItems: 50
+              description: An array of key-value pairs to apply to this resource.
+              items:
+                $ref: '#/components/schemas/Tag'
+              x-insertionOrder: false
+              uniqueItems: true
           x-stackQL-stringOnly: true
       x-title: CreateFarmRequest
       type: object
@@ -1458,6 +1684,14 @@ components:
             Arn:
               type: string
               pattern: ^arn:(aws[a-zA-Z-]*):deadline:[a-z0-9-]+:[0-9]+:farm/farm-[0-9a-z]{32}/fleet/fleet-[0-9a-z]{32}
+            Tags:
+              type: array
+              maxItems: 50
+              description: An array of key-value pairs to apply to this resource.
+              items:
+                $ref: '#/components/schemas/Tag'
+              x-insertionOrder: false
+              uniqueItems: true
           x-stackQL-stringOnly: true
       x-title: CreateFleetRequest
       type: object
@@ -1507,6 +1741,14 @@ components:
             Arn:
               type: string
               pattern: ^arn:(aws[a-zA-Z-]*):deadline:[a-z0-9-]+:[0-9]{12}:license-endpoint/le-[0-9a-z]{32}
+            Tags:
+              type: array
+              maxItems: 50
+              description: An array of key-value pairs to apply to this resource.
+              items:
+                $ref: '#/components/schemas/Tag'
+              x-insertionOrder: false
+              uniqueItems: true
           x-stackQL-stringOnly: true
       x-title: CreateLicenseEndpointRequest
       type: object
@@ -1547,6 +1789,46 @@ components:
               pattern: ^arn:(aws[a-zA-Z-]*):deadline:[a-z0-9-]+:[0-9]{12}:license-endpoint/le-[0-9a-z]{32}/metered-product/[0-9a-z]{1,32}-[.0-9a-z]{1,32}
           x-stackQL-stringOnly: true
       x-title: CreateMeteredProductRequest
+      type: object
+      required: []
+    CreateMonitorRequest:
+      properties:
+        ClientToken:
+          type: string
+        RoleArn:
+          type: string
+        TypeName:
+          type: string
+        TypeVersionId:
+          type: string
+        DesiredState:
+          type: object
+          properties:
+            DisplayName:
+              type: string
+              maxLength: 100
+              minLength: 1
+            IdentityCenterApplicationArn:
+              type: string
+            IdentityCenterInstanceArn:
+              type: string
+              pattern: ^arn:(aws|aws-us-gov|aws-cn|aws-iso|aws-iso-b):sso:::instance/(sso)?ins-[a-zA-Z0-9-.]{16}$
+            MonitorId:
+              type: string
+              pattern: ^monitor-[0-9a-f]{32}$
+            RoleArn:
+              type: string
+              pattern: ^arn:(aws[a-zA-Z-]*):iam::\d{12}:role(/[!-.0-~]+)*/[\w+=,.@-]+$
+            Subdomain:
+              type: string
+              pattern: ^[a-z0-9-]{1,100}$
+            Url:
+              type: string
+            Arn:
+              type: string
+              pattern: ^arn:(aws[a-zA-Z-]*):deadline:[a-z0-9-]+:[0-9]+:monitor/monitor-[0-9a-z]{32}$
+          x-stackQL-stringOnly: true
+      x-title: CreateMonitorRequest
       type: object
       required: []
     CreateQueueRequest:
@@ -1607,6 +1889,14 @@ components:
             Arn:
               type: string
               pattern: ^arn:*
+            Tags:
+              type: array
+              maxItems: 50
+              description: An array of key-value pairs to apply to this resource.
+              items:
+                $ref: '#/components/schemas/Tag'
+              x-insertionOrder: false
+              uniqueItems: true
           x-stackQL-stringOnly: true
       x-title: CreateQueueRequest
       type: object
@@ -1785,7 +2075,8 @@ components:
               JSON_EXTRACT(Properties, '$.DisplayName') as display_name,
               JSON_EXTRACT(Properties, '$.FarmId') as farm_id,
               JSON_EXTRACT(Properties, '$.KmsKeyArn') as kms_key_arn,
-              JSON_EXTRACT(Properties, '$.Arn') as arn
+              JSON_EXTRACT(Properties, '$.Arn') as arn,
+              JSON_EXTRACT(Properties, '$.Tags') as tags
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Deadline::Farm'
               AND data__Identifier = '<Arn>'
               AND region = 'us-east-1'
@@ -1798,9 +2089,10 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.DisplayName') as display_name,
                 JSON_EXTRACT(detail.Properties, '$.FarmId') as farm_id,
                 JSON_EXTRACT(detail.Properties, '$.KmsKeyArn') as kms_key_arn,
-                JSON_EXTRACT(detail.Properties, '$.Arn') as arn
+                JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
+                JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::Deadline::Farm'
@@ -1816,7 +2108,8 @@ components:
                   json_extract_path_text(Properties, 'DisplayName') as display_name,
                   json_extract_path_text(Properties, 'FarmId') as farm_id,
                   json_extract_path_text(Properties, 'KmsKeyArn') as kms_key_arn,
-                  json_extract_path_text(Properties, 'Arn') as arn
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'Tags') as tags
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Deadline::Farm'
                   AND data__Identifier = '<Arn>'
                   AND region = 'us-east-1'
@@ -1829,9 +2122,10 @@ components:
                     json_extract_path_text(detail.Properties, 'DisplayName') as display_name,
                     json_extract_path_text(detail.Properties, 'FarmId') as farm_id,
                     json_extract_path_text(detail.Properties, 'KmsKeyArn') as kms_key_arn,
-                    json_extract_path_text(detail.Properties, 'Arn') as arn
+                    json_extract_path_text(detail.Properties, 'Arn') as arn,
+                    json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::Deadline::Farm'
@@ -1868,6 +2162,59 @@ components:
                 json_extract_path_text(Properties, 'Arn') as arn
                 FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Deadline::Farm'
                 AND region = 'us-east-1'
+    farm_tags:
+      name: farm_tags
+      id: aws.deadline.farm_tags
+      x-cfn-schema-name: Farm
+      x-cfn-type-name: AWS::Deadline::Farm
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              detail.region,
+              JSON_EXTRACT(json_each.value, '$.Key') as tag_key,
+              JSON_EXTRACT(json_each.value, '$.Value') as tag_value,
+              JSON_EXTRACT(detail.Properties, '$.Description') as description,
+              JSON_EXTRACT(detail.Properties, '$.DisplayName') as display_name,
+              JSON_EXTRACT(detail.Properties, '$.FarmId') as farm_id,
+              JSON_EXTRACT(detail.Properties, '$.KmsKeyArn') as kms_key_arn,
+              JSON_EXTRACT(detail.Properties, '$.Arn') as arn
+              FROM aws.cloud_control.resources listing
+              INNER JOIN aws.cloud_control.resource detail
+              ON detail.data__Identifier = listing.Identifier
+              AND detail.region = listing.region
+              ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
+              WHERE listing.data__TypeName = 'AWS::Deadline::Farm'
+              AND detail.data__TypeName = 'AWS::Deadline::Farm'
+              AND listing.region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                detail.region,
+                json_extract_path_text(json_each.value, 'Key') as tag_key,
+                json_extract_path_text(json_each.value, 'Value') as tag_value,
+                json_extract_path_text(detail.Properties, 'Description') as description,
+                json_extract_path_text(detail.Properties, 'DisplayName') as display_name,
+                json_extract_path_text(detail.Properties, 'FarmId') as farm_id,
+                json_extract_path_text(detail.Properties, 'KmsKeyArn') as kms_key_arn,
+                json_extract_path_text(detail.Properties, 'Arn') as arn
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
+                WHERE listing.data__TypeName = 'AWS::Deadline::Farm'
+                AND detail.data__TypeName = 'AWS::Deadline::Farm'
+                AND listing.region = 'us-east-1'
     fleets:
       name: fleets
       id: aws.deadline.fleets
@@ -1942,7 +2289,8 @@ components:
               JSON_EXTRACT(Properties, '$.RoleArn') as role_arn,
               JSON_EXTRACT(Properties, '$.Status') as status,
               JSON_EXTRACT(Properties, '$.WorkerCount') as worker_count,
-              JSON_EXTRACT(Properties, '$.Arn') as arn
+              JSON_EXTRACT(Properties, '$.Arn') as arn,
+              JSON_EXTRACT(Properties, '$.Tags') as tags
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Deadline::Fleet'
               AND data__Identifier = '<Arn>'
               AND region = 'us-east-1'
@@ -1962,9 +2310,10 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.RoleArn') as role_arn,
                 JSON_EXTRACT(detail.Properties, '$.Status') as status,
                 JSON_EXTRACT(detail.Properties, '$.WorkerCount') as worker_count,
-                JSON_EXTRACT(detail.Properties, '$.Arn') as arn
+                JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
+                JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::Deadline::Fleet'
@@ -1987,7 +2336,8 @@ components:
                   json_extract_path_text(Properties, 'RoleArn') as role_arn,
                   json_extract_path_text(Properties, 'Status') as status,
                   json_extract_path_text(Properties, 'WorkerCount') as worker_count,
-                  json_extract_path_text(Properties, 'Arn') as arn
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'Tags') as tags
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Deadline::Fleet'
                   AND data__Identifier = '<Arn>'
                   AND region = 'us-east-1'
@@ -2007,9 +2357,10 @@ components:
                     json_extract_path_text(detail.Properties, 'RoleArn') as role_arn,
                     json_extract_path_text(detail.Properties, 'Status') as status,
                     json_extract_path_text(detail.Properties, 'WorkerCount') as worker_count,
-                    json_extract_path_text(detail.Properties, 'Arn') as arn
+                    json_extract_path_text(detail.Properties, 'Arn') as arn,
+                    json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::Deadline::Fleet'
@@ -2046,6 +2397,73 @@ components:
                 json_extract_path_text(Properties, 'Arn') as arn
                 FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Deadline::Fleet'
                 AND region = 'us-east-1'
+    fleet_tags:
+      name: fleet_tags
+      id: aws.deadline.fleet_tags
+      x-cfn-schema-name: Fleet
+      x-cfn-type-name: AWS::Deadline::Fleet
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              detail.region,
+              JSON_EXTRACT(json_each.value, '$.Key') as tag_key,
+              JSON_EXTRACT(json_each.value, '$.Value') as tag_value,
+              JSON_EXTRACT(detail.Properties, '$.Capabilities') as capabilities,
+              JSON_EXTRACT(detail.Properties, '$.Configuration') as configuration,
+              JSON_EXTRACT(detail.Properties, '$.Description') as description,
+              JSON_EXTRACT(detail.Properties, '$.DisplayName') as display_name,
+              JSON_EXTRACT(detail.Properties, '$.FarmId') as farm_id,
+              JSON_EXTRACT(detail.Properties, '$.FleetId') as fleet_id,
+              JSON_EXTRACT(detail.Properties, '$.MaxWorkerCount') as max_worker_count,
+              JSON_EXTRACT(detail.Properties, '$.MinWorkerCount') as min_worker_count,
+              JSON_EXTRACT(detail.Properties, '$.RoleArn') as role_arn,
+              JSON_EXTRACT(detail.Properties, '$.Status') as status,
+              JSON_EXTRACT(detail.Properties, '$.WorkerCount') as worker_count,
+              JSON_EXTRACT(detail.Properties, '$.Arn') as arn
+              FROM aws.cloud_control.resources listing
+              INNER JOIN aws.cloud_control.resource detail
+              ON detail.data__Identifier = listing.Identifier
+              AND detail.region = listing.region
+              ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
+              WHERE listing.data__TypeName = 'AWS::Deadline::Fleet'
+              AND detail.data__TypeName = 'AWS::Deadline::Fleet'
+              AND listing.region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                detail.region,
+                json_extract_path_text(json_each.value, 'Key') as tag_key,
+                json_extract_path_text(json_each.value, 'Value') as tag_value,
+                json_extract_path_text(detail.Properties, 'Capabilities') as capabilities,
+                json_extract_path_text(detail.Properties, 'Configuration') as configuration,
+                json_extract_path_text(detail.Properties, 'Description') as description,
+                json_extract_path_text(detail.Properties, 'DisplayName') as display_name,
+                json_extract_path_text(detail.Properties, 'FarmId') as farm_id,
+                json_extract_path_text(detail.Properties, 'FleetId') as fleet_id,
+                json_extract_path_text(detail.Properties, 'MaxWorkerCount') as max_worker_count,
+                json_extract_path_text(detail.Properties, 'MinWorkerCount') as min_worker_count,
+                json_extract_path_text(detail.Properties, 'RoleArn') as role_arn,
+                json_extract_path_text(detail.Properties, 'Status') as status,
+                json_extract_path_text(detail.Properties, 'WorkerCount') as worker_count,
+                json_extract_path_text(detail.Properties, 'Arn') as arn
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
+                WHERE listing.data__TypeName = 'AWS::Deadline::Fleet'
+                AND detail.data__TypeName = 'AWS::Deadline::Fleet'
+                AND listing.region = 'us-east-1'
     license_endpoints:
       name: license_endpoints
       id: aws.deadline.license_endpoints
@@ -2061,6 +2479,18 @@ components:
               algorithm: naive_DesiredState
           operation:
             $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__LicenseEndpoint&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Deadline::LicenseEndpoint"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
           request:
             mediaType: application/x-amz-json-1.0
             base: |-
@@ -2087,7 +2517,8 @@ components:
           - $ref: '#/components/x-stackQL-resources/license_endpoints/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/license_endpoints/methods/delete_resource'
-        update: []
+        update:
+          - $ref: '#/components/x-stackQL-resources/license_endpoints/methods/update_resource'
       config:
         views:
           select:
@@ -2103,7 +2534,8 @@ components:
               JSON_EXTRACT(Properties, '$.StatusMessage') as status_message,
               JSON_EXTRACT(Properties, '$.SubnetIds') as subnet_ids,
               JSON_EXTRACT(Properties, '$.VpcId') as vpc_id,
-              JSON_EXTRACT(Properties, '$.Arn') as arn
+              JSON_EXTRACT(Properties, '$.Arn') as arn,
+              JSON_EXTRACT(Properties, '$.Tags') as tags
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Deadline::LicenseEndpoint'
               AND data__Identifier = '<Arn>'
               AND region = 'us-east-1'
@@ -2119,9 +2551,10 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.StatusMessage') as status_message,
                 JSON_EXTRACT(detail.Properties, '$.SubnetIds') as subnet_ids,
                 JSON_EXTRACT(detail.Properties, '$.VpcId') as vpc_id,
-                JSON_EXTRACT(detail.Properties, '$.Arn') as arn
+                JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
+                JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::Deadline::LicenseEndpoint'
@@ -2140,7 +2573,8 @@ components:
                   json_extract_path_text(Properties, 'StatusMessage') as status_message,
                   json_extract_path_text(Properties, 'SubnetIds') as subnet_ids,
                   json_extract_path_text(Properties, 'VpcId') as vpc_id,
-                  json_extract_path_text(Properties, 'Arn') as arn
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'Tags') as tags
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Deadline::LicenseEndpoint'
                   AND data__Identifier = '<Arn>'
                   AND region = 'us-east-1'
@@ -2156,9 +2590,10 @@ components:
                     json_extract_path_text(detail.Properties, 'StatusMessage') as status_message,
                     json_extract_path_text(detail.Properties, 'SubnetIds') as subnet_ids,
                     json_extract_path_text(detail.Properties, 'VpcId') as vpc_id,
-                    json_extract_path_text(detail.Properties, 'Arn') as arn
+                    json_extract_path_text(detail.Properties, 'Arn') as arn,
+                    json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::Deadline::LicenseEndpoint'
@@ -2195,6 +2630,65 @@ components:
                 json_extract_path_text(Properties, 'Arn') as arn
                 FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Deadline::LicenseEndpoint'
                 AND region = 'us-east-1'
+    license_endpoint_tags:
+      name: license_endpoint_tags
+      id: aws.deadline.license_endpoint_tags
+      x-cfn-schema-name: LicenseEndpoint
+      x-cfn-type-name: AWS::Deadline::LicenseEndpoint
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              detail.region,
+              JSON_EXTRACT(json_each.value, '$.Key') as tag_key,
+              JSON_EXTRACT(json_each.value, '$.Value') as tag_value,
+              JSON_EXTRACT(detail.Properties, '$.DnsName') as dns_name,
+              JSON_EXTRACT(detail.Properties, '$.LicenseEndpointId') as license_endpoint_id,
+              JSON_EXTRACT(detail.Properties, '$.SecurityGroupIds') as security_group_ids,
+              JSON_EXTRACT(detail.Properties, '$.Status') as status,
+              JSON_EXTRACT(detail.Properties, '$.StatusMessage') as status_message,
+              JSON_EXTRACT(detail.Properties, '$.SubnetIds') as subnet_ids,
+              JSON_EXTRACT(detail.Properties, '$.VpcId') as vpc_id,
+              JSON_EXTRACT(detail.Properties, '$.Arn') as arn
+              FROM aws.cloud_control.resources listing
+              INNER JOIN aws.cloud_control.resource detail
+              ON detail.data__Identifier = listing.Identifier
+              AND detail.region = listing.region
+              ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
+              WHERE listing.data__TypeName = 'AWS::Deadline::LicenseEndpoint'
+              AND detail.data__TypeName = 'AWS::Deadline::LicenseEndpoint'
+              AND listing.region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                detail.region,
+                json_extract_path_text(json_each.value, 'Key') as tag_key,
+                json_extract_path_text(json_each.value, 'Value') as tag_value,
+                json_extract_path_text(detail.Properties, 'DnsName') as dns_name,
+                json_extract_path_text(detail.Properties, 'LicenseEndpointId') as license_endpoint_id,
+                json_extract_path_text(detail.Properties, 'SecurityGroupIds') as security_group_ids,
+                json_extract_path_text(detail.Properties, 'Status') as status,
+                json_extract_path_text(detail.Properties, 'StatusMessage') as status_message,
+                json_extract_path_text(detail.Properties, 'SubnetIds') as subnet_ids,
+                json_extract_path_text(detail.Properties, 'VpcId') as vpc_id,
+                json_extract_path_text(detail.Properties, 'Arn') as arn
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
+                WHERE listing.data__TypeName = 'AWS::Deadline::LicenseEndpoint'
+                AND detail.data__TypeName = 'AWS::Deadline::LicenseEndpoint'
+                AND listing.region = 'us-east-1'
     metered_products:
       name: metered_products
       id: aws.deadline.metered_products
@@ -2266,7 +2760,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Vendor') as vendor,
                 JSON_EXTRACT(detail.Properties, '$.Arn') as arn
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::Deadline::MeteredProduct'
@@ -2299,7 +2793,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Vendor') as vendor,
                     json_extract_path_text(detail.Properties, 'Arn') as arn
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::Deadline::MeteredProduct'
@@ -2335,6 +2829,168 @@ components:
                 region,
                 json_extract_path_text(Properties, 'Arn') as arn
                 FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Deadline::MeteredProduct'
+                AND region = 'us-east-1'
+    monitors:
+      name: monitors
+      id: aws.deadline.monitors
+      x-cfn-schema-name: Monitor
+      x-cfn-type-name: AWS::Deadline::Monitor
+      x-identifiers:
+        - Arn
+      x-type: cloud_control
+      methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Monitor&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Deadline::Monitor"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Deadline::Monitor"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::Deadline::Monitor"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/monitors/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/monitors/methods/delete_resource'
+        update:
+          - $ref: '#/components/x-stackQL-resources/monitors/methods/update_resource'
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.DisplayName') as display_name,
+              JSON_EXTRACT(Properties, '$.IdentityCenterApplicationArn') as identity_center_application_arn,
+              JSON_EXTRACT(Properties, '$.IdentityCenterInstanceArn') as identity_center_instance_arn,
+              JSON_EXTRACT(Properties, '$.MonitorId') as monitor_id,
+              JSON_EXTRACT(Properties, '$.RoleArn') as role_arn,
+              JSON_EXTRACT(Properties, '$.Subdomain') as subdomain,
+              JSON_EXTRACT(Properties, '$.Url') as url,
+              JSON_EXTRACT(Properties, '$.Arn') as arn
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Deadline::Monitor'
+              AND data__Identifier = '<Arn>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "sqlite3"
+              ddl: |-
+                SELECT
+                detail.region,
+                JSON_EXTRACT(detail.Properties, '$.DisplayName') as display_name,
+                JSON_EXTRACT(detail.Properties, '$.IdentityCenterApplicationArn') as identity_center_application_arn,
+                JSON_EXTRACT(detail.Properties, '$.IdentityCenterInstanceArn') as identity_center_instance_arn,
+                JSON_EXTRACT(detail.Properties, '$.MonitorId') as monitor_id,
+                JSON_EXTRACT(detail.Properties, '$.RoleArn') as role_arn,
+                JSON_EXTRACT(detail.Properties, '$.Subdomain') as subdomain,
+                JSON_EXTRACT(detail.Properties, '$.Url') as url,
+                JSON_EXTRACT(detail.Properties, '$.Arn') as arn
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                WHERE listing.data__TypeName = 'AWS::Deadline::Monitor'
+                AND detail.data__TypeName = 'AWS::Deadline::Monitor'
+                AND listing.region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'DisplayName') as display_name,
+                  json_extract_path_text(Properties, 'IdentityCenterApplicationArn') as identity_center_application_arn,
+                  json_extract_path_text(Properties, 'IdentityCenterInstanceArn') as identity_center_instance_arn,
+                  json_extract_path_text(Properties, 'MonitorId') as monitor_id,
+                  json_extract_path_text(Properties, 'RoleArn') as role_arn,
+                  json_extract_path_text(Properties, 'Subdomain') as subdomain,
+                  json_extract_path_text(Properties, 'Url') as url,
+                  json_extract_path_text(Properties, 'Arn') as arn
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Deadline::Monitor'
+                  AND data__Identifier = '<Arn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    detail.region,
+                    json_extract_path_text(detail.Properties, 'DisplayName') as display_name,
+                    json_extract_path_text(detail.Properties, 'IdentityCenterApplicationArn') as identity_center_application_arn,
+                    json_extract_path_text(detail.Properties, 'IdentityCenterInstanceArn') as identity_center_instance_arn,
+                    json_extract_path_text(detail.Properties, 'MonitorId') as monitor_id,
+                    json_extract_path_text(detail.Properties, 'RoleArn') as role_arn,
+                    json_extract_path_text(detail.Properties, 'Subdomain') as subdomain,
+                    json_extract_path_text(detail.Properties, 'Url') as url,
+                    json_extract_path_text(detail.Properties, 'Arn') as arn
+                    FROM aws.cloud_control.resources listing
+                    INNER JOIN aws.cloud_control.resource detail
+                    ON detail.data__Identifier = listing.Identifier
+                    AND detail.region = listing.region
+                    WHERE listing.data__TypeName = 'AWS::Deadline::Monitor'
+                    AND detail.data__TypeName = 'AWS::Deadline::Monitor'
+                    AND listing.region = 'us-east-1'
+    monitors_list_only:
+      name: monitors_list_only
+      id: aws.deadline.monitors_list_only
+      x-cfn-schema-name: Monitor
+      x-cfn-type-name: AWS::Deadline::Monitor
+      x-identifiers:
+        - Arn
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.Arn') as arn
+              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Deadline::Monitor'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                json_extract_path_text(Properties, 'Arn') as arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Deadline::Monitor'
                 AND region = 'us-east-1'
     queues:
       name: queues
@@ -2409,7 +3065,8 @@ components:
               JSON_EXTRACT(Properties, '$.QueueId') as queue_id,
               JSON_EXTRACT(Properties, '$.RequiredFileSystemLocationNames') as required_file_system_location_names,
               JSON_EXTRACT(Properties, '$.RoleArn') as role_arn,
-              JSON_EXTRACT(Properties, '$.Arn') as arn
+              JSON_EXTRACT(Properties, '$.Arn') as arn,
+              JSON_EXTRACT(Properties, '$.Tags') as tags
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Deadline::Queue'
               AND data__Identifier = '<Arn>'
               AND region = 'us-east-1'
@@ -2428,9 +3085,10 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.QueueId') as queue_id,
                 JSON_EXTRACT(detail.Properties, '$.RequiredFileSystemLocationNames') as required_file_system_location_names,
                 JSON_EXTRACT(detail.Properties, '$.RoleArn') as role_arn,
-                JSON_EXTRACT(detail.Properties, '$.Arn') as arn
+                JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
+                JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::Deadline::Queue'
@@ -2452,7 +3110,8 @@ components:
                   json_extract_path_text(Properties, 'QueueId') as queue_id,
                   json_extract_path_text(Properties, 'RequiredFileSystemLocationNames') as required_file_system_location_names,
                   json_extract_path_text(Properties, 'RoleArn') as role_arn,
-                  json_extract_path_text(Properties, 'Arn') as arn
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'Tags') as tags
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::Deadline::Queue'
                   AND data__Identifier = '<Arn>'
                   AND region = 'us-east-1'
@@ -2471,9 +3130,10 @@ components:
                     json_extract_path_text(detail.Properties, 'QueueId') as queue_id,
                     json_extract_path_text(detail.Properties, 'RequiredFileSystemLocationNames') as required_file_system_location_names,
                     json_extract_path_text(detail.Properties, 'RoleArn') as role_arn,
-                    json_extract_path_text(detail.Properties, 'Arn') as arn
+                    json_extract_path_text(detail.Properties, 'Arn') as arn,
+                    json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::Deadline::Queue'
@@ -2510,6 +3170,71 @@ components:
                 json_extract_path_text(Properties, 'Arn') as arn
                 FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::Deadline::Queue'
                 AND region = 'us-east-1'
+    queue_tags:
+      name: queue_tags
+      id: aws.deadline.queue_tags
+      x-cfn-schema-name: Queue
+      x-cfn-type-name: AWS::Deadline::Queue
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              detail.region,
+              JSON_EXTRACT(json_each.value, '$.Key') as tag_key,
+              JSON_EXTRACT(json_each.value, '$.Value') as tag_value,
+              JSON_EXTRACT(detail.Properties, '$.AllowedStorageProfileIds') as allowed_storage_profile_ids,
+              JSON_EXTRACT(detail.Properties, '$.DefaultBudgetAction') as default_budget_action,
+              JSON_EXTRACT(detail.Properties, '$.Description') as description,
+              JSON_EXTRACT(detail.Properties, '$.DisplayName') as display_name,
+              JSON_EXTRACT(detail.Properties, '$.FarmId') as farm_id,
+              JSON_EXTRACT(detail.Properties, '$.JobAttachmentSettings') as job_attachment_settings,
+              JSON_EXTRACT(detail.Properties, '$.JobRunAsUser') as job_run_as_user,
+              JSON_EXTRACT(detail.Properties, '$.QueueId') as queue_id,
+              JSON_EXTRACT(detail.Properties, '$.RequiredFileSystemLocationNames') as required_file_system_location_names,
+              JSON_EXTRACT(detail.Properties, '$.RoleArn') as role_arn,
+              JSON_EXTRACT(detail.Properties, '$.Arn') as arn
+              FROM aws.cloud_control.resources listing
+              INNER JOIN aws.cloud_control.resource detail
+              ON detail.data__Identifier = listing.Identifier
+              AND detail.region = listing.region
+              ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
+              WHERE listing.data__TypeName = 'AWS::Deadline::Queue'
+              AND detail.data__TypeName = 'AWS::Deadline::Queue'
+              AND listing.region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                detail.region,
+                json_extract_path_text(json_each.value, 'Key') as tag_key,
+                json_extract_path_text(json_each.value, 'Value') as tag_value,
+                json_extract_path_text(detail.Properties, 'AllowedStorageProfileIds') as allowed_storage_profile_ids,
+                json_extract_path_text(detail.Properties, 'DefaultBudgetAction') as default_budget_action,
+                json_extract_path_text(detail.Properties, 'Description') as description,
+                json_extract_path_text(detail.Properties, 'DisplayName') as display_name,
+                json_extract_path_text(detail.Properties, 'FarmId') as farm_id,
+                json_extract_path_text(detail.Properties, 'JobAttachmentSettings') as job_attachment_settings,
+                json_extract_path_text(detail.Properties, 'JobRunAsUser') as job_run_as_user,
+                json_extract_path_text(detail.Properties, 'QueueId') as queue_id,
+                json_extract_path_text(detail.Properties, 'RequiredFileSystemLocationNames') as required_file_system_location_names,
+                json_extract_path_text(detail.Properties, 'RoleArn') as role_arn,
+                json_extract_path_text(detail.Properties, 'Arn') as arn
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
+                WHERE listing.data__TypeName = 'AWS::Deadline::Queue'
+                AND detail.data__TypeName = 'AWS::Deadline::Queue'
+                AND listing.region = 'us-east-1'
     queue_environments:
       name: queue_environments
       id: aws.deadline.queue_environments
@@ -2598,7 +3323,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Template') as template,
                 JSON_EXTRACT(detail.Properties, '$.TemplateType') as template_type
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::Deadline::QueueEnvironment'
@@ -2633,7 +3358,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Template') as template,
                     json_extract_path_text(detail.Properties, 'TemplateType') as template_type
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::Deadline::QueueEnvironment'
@@ -2743,7 +3468,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.FleetId') as fleet_id,
                 JSON_EXTRACT(detail.Properties, '$.QueueId') as queue_id
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::Deadline::QueueFleetAssociation'
@@ -2770,7 +3495,7 @@ components:
                     json_extract_path_text(detail.Properties, 'FleetId') as fleet_id,
                     json_extract_path_text(detail.Properties, 'QueueId') as queue_id
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::Deadline::QueueFleetAssociation'
@@ -2896,7 +3621,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.OsFamily') as os_family,
                 JSON_EXTRACT(detail.Properties, '$.StorageProfileId') as storage_profile_id
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::Deadline::StorageProfile'
@@ -2927,7 +3652,7 @@ components:
                     json_extract_path_text(detail.Properties, 'OsFamily') as os_family,
                     json_extract_path_text(detail.Properties, 'StorageProfileId') as storage_profile_id
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::Deadline::StorageProfile'
@@ -3270,6 +3995,48 @@ paths:
           application/x-amz-json-1.0:
             schema:
               $ref: '#/components/schemas/CreateMeteredProductRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
+          description: Success
+  /?Action=CreateResource&Version=2021-09-30&__Monitor&__detailTransformed=true:
+    parameters:
+      - $ref: '#/components/parameters/X-Amz-Content-Sha256'
+      - $ref: '#/components/parameters/X-Amz-Date'
+      - $ref: '#/components/parameters/X-Amz-Algorithm'
+      - $ref: '#/components/parameters/X-Amz-Credential'
+      - $ref: '#/components/parameters/X-Amz-Security-Token'
+      - $ref: '#/components/parameters/X-Amz-Signature'
+      - $ref: '#/components/parameters/X-Amz-SignedHeaders'
+    post:
+      operationId: CreateMonitor
+      parameters:
+        - description: Action Header
+          in: header
+          name: X-Amz-Target
+          required: false
+          schema:
+            default: CloudApiService.CreateResource
+            enum:
+              - CloudApiService.CreateResource
+            type: string
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            default: application/x-amz-json-1.0
+            enum:
+              - application/x-amz-json-1.0
+            type: string
+      requestBody:
+        content:
+          application/x-amz-json-1.0:
+            schema:
+              $ref: '#/components/schemas/CreateMonitorRequest'
         required: true
       responses:
         '200':

@@ -431,8 +431,13 @@ components:
         ResourceIdentifier:
           type: string
           maxLength: 2048
-          minLength: 20
-          pattern: ^((((sn)|(svc))-[0-9a-z]{17})|(arn(:[a-z0-9]+([.-][a-z0-9]+)*){2}(:([a-z0-9]+([.-][a-z0-9]+)*)?){2}:((servicenetwork/sn)|(service/svc))-[0-9a-z]{17}))$
+          minLength: 17
+          pattern: ^((((sn)|(svc)|(rcfg))-[0-9a-z]{17})|(arn(:[a-z0-9]+([.-][a-z0-9]+)*){2}(:([a-z0-9]+([.-][a-z0-9]+)*)?){2}:((servicenetwork/sn)|(resourceconfiguration/rcfg)|(service/svc))-[0-9a-z]{17}))$
+        ServiceNetworkLogType:
+          type: string
+          enum:
+            - SERVICE
+            - RESOURCE
         Tags:
           type: array
           x-insertionOrder: false
@@ -451,6 +456,8 @@ components:
       x-stackql-additional-identifiers:
         - - Id
         - - ResourceIdentifier
+          - DestinationArn
+          - ServiceNetworkLogType
       x-create-only-properties:
         - ResourceIdentifier
       x-write-only-properties:
@@ -468,6 +475,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: false
         tagProperty: /properties/Tags
+        permissions:
+          - vpc-lattice:UntagResource
+          - vpc-lattice:TagResource
+          - vpc-lattice:ListTagsForResource
       x-required-permissions:
         create:
           - vpc-lattice:CreateAccessLogSubscription
@@ -497,6 +508,7 @@ components:
         update:
           - vpc-lattice:GetAccessLogSubscription
           - vpc-lattice:UpdateAccessLogSubscription
+          - vpc-lattice:ListTagsForResource
           - vpc-lattice:TagResource
           - vpc-lattice:UntagResource
           - logs:UpdateLogDelivery
@@ -537,7 +549,7 @@ components:
           type: string
           pattern: ^((((sn)|(svc))-[0-9a-z]{17})|(arn(:[a-z0-9]+([.-][a-z0-9]+)*){2}(:([a-z0-9]+([.-][a-z0-9]+)*)?){2}:((servicenetwork/sn)|(service/svc))-[0-9a-z]{17}))$
           maxLength: 200
-          minLength: 21
+          minLength: 17
         Policy:
           type: object
         State:
@@ -707,6 +719,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: false
         tagProperty: /properties/Tags
+        permissions:
+          - vpc-lattice:UntagResource
+          - vpc-lattice:TagResource
+          - vpc-lattice:ListTagsForResource
       x-required-permissions:
         create:
           - vpc-lattice:CreateListener
@@ -726,6 +742,285 @@ components:
           - vpc-lattice:DeleteListener
         list:
           - vpc-lattice:ListListeners
+    IpResource:
+      minLength: 4
+      type: string
+      maxLength: 39
+    PortRange:
+      minLength: 1
+      pattern: ^((\d{1,5}\-\d{1,5})|(\d+))$
+      type: string
+      maxLength: 11
+    DnsResource:
+      additionalProperties: false
+      type: object
+      properties:
+        IpAddressType:
+          type: string
+          enum:
+            - IPV4
+            - IPV6
+            - DUALSTACK
+        DomainName:
+          minLength: 3
+          type: string
+          maxLength: 255
+      required:
+        - DomainName
+        - IpAddressType
+    ArnResource:
+      pattern: ^arn.*
+      type: string
+      maxLength: 1224
+    Id:
+      minLength: 22
+      pattern: ^rcfg-[0-9a-z]{17}$
+      type: string
+      maxLength: 22
+    ResourceConfiguration:
+      type: object
+      properties:
+        AllowAssociationToSharableServiceNetwork:
+          type: boolean
+        ProtocolType:
+          type: string
+          enum:
+            - TCP
+        ResourceConfigurationType:
+          type: string
+          enum:
+            - GROUP
+            - CHILD
+            - SINGLE
+            - ARN
+        PortRanges:
+          x-insertionOrder: false
+          type: array
+          items:
+            $ref: '#/components/schemas/PortRange'
+        ResourceConfigurationDefinition:
+          oneOf:
+            - additionalProperties: false
+              type: object
+              title: IpResource
+              properties:
+                IpResource:
+                  $ref: '#/components/schemas/IpResource'
+              required:
+                - IpResource
+            - additionalProperties: false
+              type: object
+              title: ArnResource
+              properties:
+                ArnResource:
+                  $ref: '#/components/schemas/ArnResource'
+              required:
+                - ArnResource
+            - additionalProperties: false
+              type: object
+              title: DnsResource
+              properties:
+                DnsResource:
+                  $ref: '#/components/schemas/DnsResource'
+              required:
+                - DnsResource
+          type: object
+        Id:
+          $ref: '#/components/schemas/Id'
+        ResourceGatewayId:
+          type: string
+        Arn:
+          minLength: 20
+          pattern: ^arn:[a-z0-9f\-]+:vpc-lattice:[a-zA-Z0-9\-]+:\d{12}:resourceconfiguration/rcfg-[0-9a-z]{17}$
+          type: string
+          maxLength: 2048
+        ResourceConfigurationAuthType:
+          type: string
+          enum:
+            - NONE
+            - AWS_IAM
+        ResourceConfigurationGroupId:
+          $ref: '#/components/schemas/Id'
+        Tags:
+          minItems: 0
+          maxItems: 50
+          uniqueItems: true
+          x-insertionOrder: false
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+        Name:
+          minLength: 3
+          pattern: ^(?!rcfg-)(?![-])(?!.*[-]$)(?!.*[-]{2})[a-z0-9-]+$
+          type: string
+          maxLength: 40
+      required: []
+      x-stackql-resource-name: resource_configuration
+      description: VpcLattice ResourceConfiguration CFN resource
+      x-type-name: AWS::VpcLattice::ResourceConfiguration
+      x-stackql-primary-identifier:
+        - Arn
+      x-stackql-additional-identifiers:
+        - - Id
+      x-create-only-properties:
+        - ResourceGatewayId
+        - ResourceConfigurationType
+        - ProtocolType
+        - ResourceConfigurationAuthType
+      x-write-only-properties:
+        - ResourceConfigurationAuthType
+        - ResourceConfigurationGroupId
+      x-read-only-properties:
+        - Id
+        - Arn
+      x-required-properties: []
+      x-tagging:
+        permissions:
+          - vpc-lattice:UntagResource
+          - vpc-lattice:TagResource
+          - vpc-lattice:ListTagsForResource
+        taggable: true
+        tagOnCreate: true
+        tagUpdatable: true
+        tagProperty: /properties/Tags
+        cloudFormationSystemTags: true
+      x-required-permissions:
+        read:
+          - vpc-lattice:GetResourceConfiguration
+          - vpc-lattice:ListTagsForResource
+        create:
+          - ec2:DescribeSubnets
+          - vpc-lattice:CreateResourceConfiguration
+          - vpc-lattice:GetResourceConfiguration
+          - vpc-lattice:TagResource
+          - vpc-lattice:ListTagsForResource
+        update:
+          - ec2:DescribeSubnets
+          - vpc-lattice:TagResource
+          - vpc-lattice:UntagResource
+          - vpc-lattice:ListTagsForResource
+          - vpc-lattice:UpdateResourceConfiguration
+          - vpc-lattice:GetResourceConfiguration
+        list:
+          - vpc-lattice:ListResourceConfigurations
+        delete:
+          - vpc-lattice:DeleteResourceConfiguration
+          - vpc-lattice:GetResourceConfiguration
+          - vpc-lattice:UntagResource
+    ResourceGateway:
+      type: object
+      properties:
+        IpAddressType:
+          type: string
+          enum:
+            - IPV4
+            - IPV6
+            - DUALSTACK
+        VpcIdentifier:
+          minLength: 5
+          type: string
+          maxLength: 50
+        Id:
+          minLength: 17
+          pattern: ^((rgw-[0-9a-z]{17})|(arn:[a-z0-9\-]+:vpc-lattice:[a-zA-Z0-9\-]+:\d{12}:resourcegateway/rgw-[0-9a-z]{17}))$
+          type: string
+          maxLength: 2048
+        Arn:
+          minLength: 20
+          pattern: ^arn:[a-z0-9\-]+:vpc-lattice:[a-zA-Z0-9\-]+:\d{12}:resourcegateway/rgw-[0-9a-z]{17}$
+          type: string
+          maxLength: 2048
+        SubnetIds:
+          uniqueItems: true
+          description: The ID of one or more subnets in which to create an endpoint network interface.
+          x-insertionOrder: false
+          type: array
+          items:
+            relationshipRef:
+              typeName: AWS::EC2::Subnet
+              propertyPath: /properties/SubnetId
+            type: string
+        SecurityGroupIds:
+          uniqueItems: true
+          description: The ID of one or more security groups to associate with the endpoint network interface.
+          x-insertionOrder: false
+          type: array
+          items:
+            anyOf:
+              - relationshipRef:
+                  typeName: AWS::EC2::SecurityGroup
+                  propertyPath: /properties/GroupId
+              - relationshipRef:
+                  typeName: AWS::EC2::SecurityGroup
+                  propertyPath: /properties/Id
+              - relationshipRef:
+                  typeName: AWS::EC2::VPC
+                  propertyPath: /properties/DefaultSecurityGroup
+            type: string
+        Tags:
+          minItems: 0
+          maxItems: 50
+          uniqueItems: true
+          x-insertionOrder: false
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+        Name:
+          minLength: 3
+          pattern: ^(?!rgw-)(?![-])(?!.*[-]$)(?!.*[-]{2})[a-z0-9-]+$
+          type: string
+          maxLength: 40
+      x-stackql-resource-name: resource_gateway
+      description: 'Creates a resource gateway for a service. '
+      x-type-name: AWS::VpcLattice::ResourceGateway
+      x-stackql-primary-identifier:
+        - Arn
+      x-stackql-additional-identifiers:
+        - - Id
+      x-create-only-properties:
+        - VpcIdentifier
+        - SubnetIds
+        - IpAddressType
+        - Name
+      x-read-only-properties:
+        - Id
+        - Arn
+      x-tagging:
+        permissions:
+          - vpc-lattice:UntagResource
+          - vpc-lattice:TagResource
+          - vpc-lattice:ListTagsForResource
+        taggable: true
+        tagOnCreate: true
+        tagUpdatable: true
+        tagProperty: /properties/Tags
+        cloudFormationSystemTags: false
+      x-required-permissions:
+        read:
+          - vpc-lattice:GetResourceGateway
+          - vpc-lattice:ListTagsForResource
+        create:
+          - vpc-lattice:CreateResourceGateway
+          - vpc-lattice:GetResourceGateway
+          - vpc-lattice:TagResource
+          - vpc-lattice:ListTagsForResource
+          - ec2:DescribeVpcs
+          - ec2:DescribeSubnets
+          - ec2:DescribeSecurityGroups
+        update:
+          - vpc-lattice:UpdateResourceGateway
+          - vpc-lattice:GetResourceGateway
+          - vpc-lattice:TagResource
+          - vpc-lattice:UntagResource
+          - vpc-lattice:ListTagsForResource
+          - ec2:DescribeVpcs
+          - ec2:DescribeSubnets
+          - ec2:DescribeSecurityGroups
+        list:
+          - vpc-lattice:ListResourceGateways
+        delete:
+          - vpc-lattice:DeleteResourceGateway
+          - vpc-lattice:GetResourceGateway
     ResourcePolicy:
       type: object
       properties:
@@ -939,6 +1234,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: false
         tagProperty: /properties/Tags
+        permissions:
+          - vpc-lattice:UntagResource
+          - vpc-lattice:TagResource
+          - vpc-lattice:ListTagsForResource
       x-required-permissions:
         create:
           - vpc-lattice:CreateRule
@@ -953,8 +1252,10 @@ components:
           - vpc-lattice:GetRule
           - vpc-lattice:TagResource
           - vpc-lattice:UntagResource
+          - vpc-lattice:ListTagsForResource
         delete:
           - vpc-lattice:DeleteRule
+          - vpc-lattice:UntagResource
         list:
           - vpc-lattice:ListRules
     DnsEntry:
@@ -1044,6 +1345,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: true
         tagProperty: /properties/Tags
+        permissions:
+          - vpc-lattice:UntagResource
+          - vpc-lattice:TagResource
+          - vpc-lattice:ListTagsForResource
       x-required-permissions:
         create:
           - vpc-lattice:CreateService
@@ -1065,8 +1370,17 @@ components:
         delete:
           - vpc-lattice:DeleteService
           - vpc-lattice:GetService
+          - vpc-lattice:UntagResource
         list:
           - vpc-lattice:ListServices
+    SharingConfig:
+      type: object
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+      required:
+        - enabled
     ServiceNetwork:
       type: object
       properties:
@@ -1103,6 +1417,8 @@ components:
           maxItems: 50
           items:
             $ref: '#/components/schemas/Tag'
+        SharingConfig:
+          $ref: '#/components/schemas/SharingConfig'
       x-stackql-resource-name: service_network
       description: A service network is a logical boundary for a collection of services. You can associate services and VPCs with a service network.
       x-type-name: AWS::VpcLattice::ServiceNetwork
@@ -1124,6 +1440,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: false
         tagProperty: /properties/Tags
+        permissions:
+          - vpc-lattice:UntagResource
+          - vpc-lattice:TagResource
+          - vpc-lattice:ListTagsForResource
       x-required-permissions:
         create:
           - vpc-lattice:GetServiceNetwork
@@ -1139,10 +1459,86 @@ components:
           - vpc-lattice:UpdateServiceNetwork
           - vpc-lattice:TagResource
           - vpc-lattice:UntagResource
+          - vpc-lattice:ListTagsForResource
         delete:
           - vpc-lattice:DeleteServiceNetwork
+          - vpc-lattice:UntagResource
         list:
           - vpc-lattice:ListServiceNetworks
+    ServiceNetworkResourceAssociation:
+      type: object
+      properties:
+        Id:
+          type: string
+          minLength: 22
+          maxLength: 22
+          pattern: ^snra-[0-9a-f]{17}$
+        Arn:
+          type: string
+          minLength: 22
+          maxLength: 2048
+          pattern: ^arn:[a-z0-9\-]+:vpc-lattice:[a-zA-Z0-9\-]+:\d{12}:servicenetworkresourceassociation/snra-[0-9a-f]{17}$
+        ResourceConfigurationId:
+          type: string
+          minLength: 17
+          maxLength: 2048
+          pattern: ^rcfg-[0-9a-z]{17}$
+        ServiceNetworkId:
+          type: string
+          minLength: 3
+          maxLength: 2048
+          pattern: ^((sn-[0-9a-z]{17})|(arn:[a-z0-9\-]+:vpc-lattice:[a-zA-Z0-9\-]+:\d{12}:servicenetwork/sn-[0-9a-z]{17}))$
+        Tags:
+          type: array
+          x-insertionOrder: false
+          uniqueItems: true
+          minItems: 0
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/Tag'
+      x-stackql-resource-name: service_network_resource_association
+      description: VpcLattice ServiceNetworkResourceAssociation CFN resource
+      x-type-name: AWS::VpcLattice::ServiceNetworkResourceAssociation
+      x-stackql-primary-identifier:
+        - Arn
+      x-stackql-additional-identifiers:
+        - - Id
+      x-create-only-properties:
+        - ResourceConfigurationId
+        - ServiceNetworkId
+      x-read-only-properties:
+        - Id
+        - Arn
+      x-tagging:
+        taggable: true
+        tagOnCreate: true
+        tagUpdatable: true
+        cloudFormationSystemTags: true
+        tagProperty: /properties/Tags
+        permissions:
+          - vpc-lattice:UntagResource
+          - vpc-lattice:TagResource
+          - vpc-lattice:ListTagsForResource
+      x-required-permissions:
+        create:
+          - vpc-lattice:CreateServiceNetworkResourceAssociation
+          - vpc-lattice:GetServiceNetworkResourceAssociation
+          - vpc-lattice:TagResource
+          - vpc-lattice:ListTagsForResource
+        read:
+          - vpc-lattice:GetServiceNetworkResourceAssociation
+          - vpc-lattice:ListTagsForResource
+        update:
+          - vpc-lattice:TagResource
+          - vpc-lattice:UntagResource
+          - vpc-lattice:GetServiceNetworkResourceAssociation
+          - vpc-lattice:ListTagsForResource
+        delete:
+          - vpc-lattice:DeleteServiceNetworkResourceAssociation
+          - vpc-lattice:GetServiceNetworkResourceAssociation
+          - vpc-lattice:UntagResource
+        list:
+          - vpc-lattice:ListServiceNetworkResourceAssociations
     ServiceNetworkServiceAssociation:
       type: object
       properties:
@@ -1250,6 +1646,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: true
         tagProperty: /properties/Tags
+        permissions:
+          - vpc-lattice:UntagResource
+          - vpc-lattice:TagResource
+          - vpc-lattice:ListTagsForResource
       x-required-permissions:
         create:
           - vpc-lattice:CreateServiceNetworkServiceAssociation
@@ -1267,6 +1667,7 @@ components:
         delete:
           - vpc-lattice:DeleteServiceNetworkServiceAssociation
           - vpc-lattice:GetServiceNetworkServiceAssociation
+          - vpc-lattice:UntagResource
         list:
           - vpc-lattice:ListServiceNetworkServiceAssociations
     ServiceNetworkVpcAssociation:
@@ -1370,6 +1771,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: true
         tagProperty: /properties/Tags
+        permissions:
+          - vpc-lattice:UntagResource
+          - vpc-lattice:TagResource
+          - vpc-lattice:ListTagsForResource
       x-required-permissions:
         create:
           - vpc-lattice:CreateServiceNetworkVpcAssociation
@@ -1392,6 +1797,7 @@ components:
         delete:
           - vpc-lattice:DeleteServiceNetworkVpcAssociation
           - vpc-lattice:GetServiceNetworkVpcAssociation
+          - vpc-lattice:UntagResource
         list:
           - vpc-lattice:ListServiceNetworkVpcAssociations
     HealthCheckConfig:
@@ -1588,6 +1994,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: true
         tagProperty: /properties/Tags
+        permissions:
+          - vpc-lattice:UntagResource
+          - vpc-lattice:TagResource
+          - vpc-lattice:ListTagsForResource
       x-required-permissions:
         create:
           - vpc-lattice:CreateTargetGroup
@@ -1675,8 +2085,13 @@ components:
             ResourceIdentifier:
               type: string
               maxLength: 2048
-              minLength: 20
-              pattern: ^((((sn)|(svc))-[0-9a-z]{17})|(arn(:[a-z0-9]+([.-][a-z0-9]+)*){2}(:([a-z0-9]+([.-][a-z0-9]+)*)?){2}:((servicenetwork/sn)|(service/svc))-[0-9a-z]{17}))$
+              minLength: 17
+              pattern: ^((((sn)|(svc)|(rcfg))-[0-9a-z]{17})|(arn(:[a-z0-9]+([.-][a-z0-9]+)*){2}(:([a-z0-9]+([.-][a-z0-9]+)*)?){2}:((servicenetwork/sn)|(resourceconfiguration/rcfg)|(service/svc))-[0-9a-z]{17}))$
+            ServiceNetworkLogType:
+              type: string
+              enum:
+                - SERVICE
+                - RESOURCE
             Tags:
               type: array
               x-insertionOrder: false
@@ -1706,7 +2121,7 @@ components:
               type: string
               pattern: ^((((sn)|(svc))-[0-9a-z]{17})|(arn(:[a-z0-9]+([.-][a-z0-9]+)*){2}(:([a-z0-9]+([.-][a-z0-9]+)*)?){2}:((servicenetwork/sn)|(service/svc))-[0-9a-z]{17}))$
               maxLength: 200
-              minLength: 21
+              minLength: 17
             Policy:
               type: object
             State:
@@ -1783,6 +2198,174 @@ components:
                 $ref: '#/components/schemas/Tag'
           x-stackQL-stringOnly: true
       x-title: CreateListenerRequest
+      type: object
+      required: []
+    CreateResourceConfigurationRequest:
+      properties:
+        ClientToken:
+          type: string
+        RoleArn:
+          type: string
+        TypeName:
+          type: string
+        TypeVersionId:
+          type: string
+        DesiredState:
+          type: object
+          properties:
+            AllowAssociationToSharableServiceNetwork:
+              type: boolean
+            ProtocolType:
+              type: string
+              enum:
+                - TCP
+            ResourceConfigurationType:
+              type: string
+              enum:
+                - GROUP
+                - CHILD
+                - SINGLE
+                - ARN
+            PortRanges:
+              x-insertionOrder: false
+              type: array
+              items:
+                $ref: '#/components/schemas/PortRange'
+            ResourceConfigurationDefinition:
+              oneOf:
+                - additionalProperties: false
+                  type: object
+                  title: IpResource
+                  properties:
+                    IpResource:
+                      $ref: '#/components/schemas/IpResource'
+                  required:
+                    - IpResource
+                - additionalProperties: false
+                  type: object
+                  title: ArnResource
+                  properties:
+                    ArnResource:
+                      $ref: '#/components/schemas/ArnResource'
+                  required:
+                    - ArnResource
+                - additionalProperties: false
+                  type: object
+                  title: DnsResource
+                  properties:
+                    DnsResource:
+                      $ref: '#/components/schemas/DnsResource'
+                  required:
+                    - DnsResource
+              type: object
+            Id:
+              $ref: '#/components/schemas/Id'
+            ResourceGatewayId:
+              type: string
+            Arn:
+              minLength: 20
+              pattern: ^arn:[a-z0-9f\-]+:vpc-lattice:[a-zA-Z0-9\-]+:\d{12}:resourceconfiguration/rcfg-[0-9a-z]{17}$
+              type: string
+              maxLength: 2048
+            ResourceConfigurationAuthType:
+              type: string
+              enum:
+                - NONE
+                - AWS_IAM
+            ResourceConfigurationGroupId:
+              $ref: '#/components/schemas/Id'
+            Tags:
+              minItems: 0
+              maxItems: 50
+              uniqueItems: true
+              x-insertionOrder: false
+              type: array
+              items:
+                $ref: '#/components/schemas/Tag'
+            Name:
+              minLength: 3
+              pattern: ^(?!rcfg-)(?![-])(?!.*[-]$)(?!.*[-]{2})[a-z0-9-]+$
+              type: string
+              maxLength: 40
+          x-stackQL-stringOnly: true
+      x-title: CreateResourceConfigurationRequest
+      type: object
+      required: []
+    CreateResourceGatewayRequest:
+      properties:
+        ClientToken:
+          type: string
+        RoleArn:
+          type: string
+        TypeName:
+          type: string
+        TypeVersionId:
+          type: string
+        DesiredState:
+          type: object
+          properties:
+            IpAddressType:
+              type: string
+              enum:
+                - IPV4
+                - IPV6
+                - DUALSTACK
+            VpcIdentifier:
+              minLength: 5
+              type: string
+              maxLength: 50
+            Id:
+              minLength: 17
+              pattern: ^((rgw-[0-9a-z]{17})|(arn:[a-z0-9\-]+:vpc-lattice:[a-zA-Z0-9\-]+:\d{12}:resourcegateway/rgw-[0-9a-z]{17}))$
+              type: string
+              maxLength: 2048
+            Arn:
+              minLength: 20
+              pattern: ^arn:[a-z0-9\-]+:vpc-lattice:[a-zA-Z0-9\-]+:\d{12}:resourcegateway/rgw-[0-9a-z]{17}$
+              type: string
+              maxLength: 2048
+            SubnetIds:
+              uniqueItems: true
+              description: The ID of one or more subnets in which to create an endpoint network interface.
+              x-insertionOrder: false
+              type: array
+              items:
+                relationshipRef:
+                  typeName: AWS::EC2::Subnet
+                  propertyPath: /properties/SubnetId
+                type: string
+            SecurityGroupIds:
+              uniqueItems: true
+              description: The ID of one or more security groups to associate with the endpoint network interface.
+              x-insertionOrder: false
+              type: array
+              items:
+                anyOf:
+                  - relationshipRef:
+                      typeName: AWS::EC2::SecurityGroup
+                      propertyPath: /properties/GroupId
+                  - relationshipRef:
+                      typeName: AWS::EC2::SecurityGroup
+                      propertyPath: /properties/Id
+                  - relationshipRef:
+                      typeName: AWS::EC2::VPC
+                      propertyPath: /properties/DefaultSecurityGroup
+                type: string
+            Tags:
+              minItems: 0
+              maxItems: 50
+              uniqueItems: true
+              x-insertionOrder: false
+              type: array
+              items:
+                $ref: '#/components/schemas/Tag'
+            Name:
+              minLength: 3
+              pattern: ^(?!rgw-)(?![-])(?!.*[-]$)(?!.*[-]{2})[a-z0-9-]+$
+              type: string
+              maxLength: 40
+          x-stackQL-stringOnly: true
+      x-title: CreateResourceGatewayRequest
       type: object
       required: []
     CreateResourcePolicyRequest:
@@ -1981,8 +2564,55 @@ components:
               maxItems: 50
               items:
                 $ref: '#/components/schemas/Tag'
+            SharingConfig:
+              $ref: '#/components/schemas/SharingConfig'
           x-stackQL-stringOnly: true
       x-title: CreateServiceNetworkRequest
+      type: object
+      required: []
+    CreateServiceNetworkResourceAssociationRequest:
+      properties:
+        ClientToken:
+          type: string
+        RoleArn:
+          type: string
+        TypeName:
+          type: string
+        TypeVersionId:
+          type: string
+        DesiredState:
+          type: object
+          properties:
+            Id:
+              type: string
+              minLength: 22
+              maxLength: 22
+              pattern: ^snra-[0-9a-f]{17}$
+            Arn:
+              type: string
+              minLength: 22
+              maxLength: 2048
+              pattern: ^arn:[a-z0-9\-]+:vpc-lattice:[a-zA-Z0-9\-]+:\d{12}:servicenetworkresourceassociation/snra-[0-9a-f]{17}$
+            ResourceConfigurationId:
+              type: string
+              minLength: 17
+              maxLength: 2048
+              pattern: ^rcfg-[0-9a-z]{17}$
+            ServiceNetworkId:
+              type: string
+              minLength: 3
+              maxLength: 2048
+              pattern: ^((sn-[0-9a-z]{17})|(arn:[a-z0-9\-]+:vpc-lattice:[a-zA-Z0-9\-]+:\d{12}:servicenetwork/sn-[0-9a-z]{17}))$
+            Tags:
+              type: array
+              x-insertionOrder: false
+              uniqueItems: true
+              minItems: 0
+              maxItems: 50
+              items:
+                $ref: '#/components/schemas/Tag'
+          x-stackQL-stringOnly: true
+      x-title: CreateServiceNetworkResourceAssociationRequest
       type: object
       required: []
     CreateServiceNetworkServiceAssociationRequest:
@@ -2303,6 +2933,7 @@ components:
               JSON_EXTRACT(Properties, '$.ResourceArn') as resource_arn,
               JSON_EXTRACT(Properties, '$.ResourceId') as resource_id,
               JSON_EXTRACT(Properties, '$.ResourceIdentifier') as resource_identifier,
+              JSON_EXTRACT(Properties, '$.ServiceNetworkLogType') as service_network_log_type,
               JSON_EXTRACT(Properties, '$.Tags') as tags
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::VpcLattice::AccessLogSubscription'
               AND data__Identifier = '<Arn>'
@@ -2318,9 +2949,10 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.ResourceArn') as resource_arn,
                 JSON_EXTRACT(detail.Properties, '$.ResourceId') as resource_id,
                 JSON_EXTRACT(detail.Properties, '$.ResourceIdentifier') as resource_identifier,
+                JSON_EXTRACT(detail.Properties, '$.ServiceNetworkLogType') as service_network_log_type,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::VpcLattice::AccessLogSubscription'
@@ -2338,6 +2970,7 @@ components:
                   json_extract_path_text(Properties, 'ResourceArn') as resource_arn,
                   json_extract_path_text(Properties, 'ResourceId') as resource_id,
                   json_extract_path_text(Properties, 'ResourceIdentifier') as resource_identifier,
+                  json_extract_path_text(Properties, 'ServiceNetworkLogType') as service_network_log_type,
                   json_extract_path_text(Properties, 'Tags') as tags
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::VpcLattice::AccessLogSubscription'
                   AND data__Identifier = '<Arn>'
@@ -2353,9 +2986,10 @@ components:
                     json_extract_path_text(detail.Properties, 'ResourceArn') as resource_arn,
                     json_extract_path_text(detail.Properties, 'ResourceId') as resource_id,
                     json_extract_path_text(detail.Properties, 'ResourceIdentifier') as resource_identifier,
+                    json_extract_path_text(detail.Properties, 'ServiceNetworkLogType') as service_network_log_type,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::VpcLattice::AccessLogSubscription'
@@ -2417,9 +3051,10 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Id') as id,
               JSON_EXTRACT(detail.Properties, '$.ResourceArn') as resource_arn,
               JSON_EXTRACT(detail.Properties, '$.ResourceId') as resource_id,
-              JSON_EXTRACT(detail.Properties, '$.ResourceIdentifier') as resource_identifier
+              JSON_EXTRACT(detail.Properties, '$.ResourceIdentifier') as resource_identifier,
+              JSON_EXTRACT(detail.Properties, '$.ServiceNetworkLogType') as service_network_log_type
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -2438,9 +3073,10 @@ components:
                 json_extract_path_text(detail.Properties, 'Id') as id,
                 json_extract_path_text(detail.Properties, 'ResourceArn') as resource_arn,
                 json_extract_path_text(detail.Properties, 'ResourceId') as resource_id,
-                json_extract_path_text(detail.Properties, 'ResourceIdentifier') as resource_identifier
+                json_extract_path_text(detail.Properties, 'ResourceIdentifier') as resource_identifier,
+                json_extract_path_text(detail.Properties, 'ServiceNetworkLogType') as service_network_log_type
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -2620,7 +3256,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.ServiceIdentifier') as service_identifier,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::VpcLattice::Listener'
@@ -2661,7 +3297,7 @@ components:
                     json_extract_path_text(detail.Properties, 'ServiceIdentifier') as service_identifier,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::VpcLattice::Listener'
@@ -2728,7 +3364,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.ServiceId') as service_id,
               JSON_EXTRACT(detail.Properties, '$.ServiceIdentifier') as service_identifier
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -2752,12 +3388,474 @@ components:
                 json_extract_path_text(detail.Properties, 'ServiceId') as service_id,
                 json_extract_path_text(detail.Properties, 'ServiceIdentifier') as service_identifier
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
                 WHERE listing.data__TypeName = 'AWS::VpcLattice::Listener'
                 AND detail.data__TypeName = 'AWS::VpcLattice::Listener'
+                AND listing.region = 'us-east-1'
+    resource_configurations:
+      name: resource_configurations
+      id: aws.vpclattice.resource_configurations
+      x-cfn-schema-name: ResourceConfiguration
+      x-cfn-type-name: AWS::VpcLattice::ResourceConfiguration
+      x-identifiers:
+        - Arn
+      x-type: cloud_control
+      methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__ResourceConfiguration&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::VpcLattice::ResourceConfiguration"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::VpcLattice::ResourceConfiguration"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::VpcLattice::ResourceConfiguration"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/resource_configurations/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/resource_configurations/methods/delete_resource'
+        update:
+          - $ref: '#/components/x-stackQL-resources/resource_configurations/methods/update_resource'
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.AllowAssociationToSharableServiceNetwork') as allow_association_to_sharable_service_network,
+              JSON_EXTRACT(Properties, '$.ProtocolType') as protocol_type,
+              JSON_EXTRACT(Properties, '$.ResourceConfigurationType') as resource_configuration_type,
+              JSON_EXTRACT(Properties, '$.PortRanges') as port_ranges,
+              JSON_EXTRACT(Properties, '$.ResourceConfigurationDefinition') as resource_configuration_definition,
+              JSON_EXTRACT(Properties, '$.Id') as id,
+              JSON_EXTRACT(Properties, '$.ResourceGatewayId') as resource_gateway_id,
+              JSON_EXTRACT(Properties, '$.Arn') as arn,
+              JSON_EXTRACT(Properties, '$.ResourceConfigurationAuthType') as resource_configuration_auth_type,
+              JSON_EXTRACT(Properties, '$.ResourceConfigurationGroupId') as resource_configuration_group_id,
+              JSON_EXTRACT(Properties, '$.Tags') as tags,
+              JSON_EXTRACT(Properties, '$.Name') as name
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::VpcLattice::ResourceConfiguration'
+              AND data__Identifier = '<Arn>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "sqlite3"
+              ddl: |-
+                SELECT
+                detail.region,
+                JSON_EXTRACT(detail.Properties, '$.AllowAssociationToSharableServiceNetwork') as allow_association_to_sharable_service_network,
+                JSON_EXTRACT(detail.Properties, '$.ProtocolType') as protocol_type,
+                JSON_EXTRACT(detail.Properties, '$.ResourceConfigurationType') as resource_configuration_type,
+                JSON_EXTRACT(detail.Properties, '$.PortRanges') as port_ranges,
+                JSON_EXTRACT(detail.Properties, '$.ResourceConfigurationDefinition') as resource_configuration_definition,
+                JSON_EXTRACT(detail.Properties, '$.Id') as id,
+                JSON_EXTRACT(detail.Properties, '$.ResourceGatewayId') as resource_gateway_id,
+                JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
+                JSON_EXTRACT(detail.Properties, '$.ResourceConfigurationAuthType') as resource_configuration_auth_type,
+                JSON_EXTRACT(detail.Properties, '$.ResourceConfigurationGroupId') as resource_configuration_group_id,
+                JSON_EXTRACT(detail.Properties, '$.Tags') as tags,
+                JSON_EXTRACT(detail.Properties, '$.Name') as name
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                WHERE listing.data__TypeName = 'AWS::VpcLattice::ResourceConfiguration'
+                AND detail.data__TypeName = 'AWS::VpcLattice::ResourceConfiguration'
+                AND listing.region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'AllowAssociationToSharableServiceNetwork') as allow_association_to_sharable_service_network,
+                  json_extract_path_text(Properties, 'ProtocolType') as protocol_type,
+                  json_extract_path_text(Properties, 'ResourceConfigurationType') as resource_configuration_type,
+                  json_extract_path_text(Properties, 'PortRanges') as port_ranges,
+                  json_extract_path_text(Properties, 'ResourceConfigurationDefinition') as resource_configuration_definition,
+                  json_extract_path_text(Properties, 'Id') as id,
+                  json_extract_path_text(Properties, 'ResourceGatewayId') as resource_gateway_id,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'ResourceConfigurationAuthType') as resource_configuration_auth_type,
+                  json_extract_path_text(Properties, 'ResourceConfigurationGroupId') as resource_configuration_group_id,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'Name') as name
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::VpcLattice::ResourceConfiguration'
+                  AND data__Identifier = '<Arn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    detail.region,
+                    json_extract_path_text(detail.Properties, 'AllowAssociationToSharableServiceNetwork') as allow_association_to_sharable_service_network,
+                    json_extract_path_text(detail.Properties, 'ProtocolType') as protocol_type,
+                    json_extract_path_text(detail.Properties, 'ResourceConfigurationType') as resource_configuration_type,
+                    json_extract_path_text(detail.Properties, 'PortRanges') as port_ranges,
+                    json_extract_path_text(detail.Properties, 'ResourceConfigurationDefinition') as resource_configuration_definition,
+                    json_extract_path_text(detail.Properties, 'Id') as id,
+                    json_extract_path_text(detail.Properties, 'ResourceGatewayId') as resource_gateway_id,
+                    json_extract_path_text(detail.Properties, 'Arn') as arn,
+                    json_extract_path_text(detail.Properties, 'ResourceConfigurationAuthType') as resource_configuration_auth_type,
+                    json_extract_path_text(detail.Properties, 'ResourceConfigurationGroupId') as resource_configuration_group_id,
+                    json_extract_path_text(detail.Properties, 'Tags') as tags,
+                    json_extract_path_text(detail.Properties, 'Name') as name
+                    FROM aws.cloud_control.resources listing
+                    INNER JOIN aws.cloud_control.resource detail
+                    ON detail.data__Identifier = listing.Identifier
+                    AND detail.region = listing.region
+                    WHERE listing.data__TypeName = 'AWS::VpcLattice::ResourceConfiguration'
+                    AND detail.data__TypeName = 'AWS::VpcLattice::ResourceConfiguration'
+                    AND listing.region = 'us-east-1'
+    resource_configurations_list_only:
+      name: resource_configurations_list_only
+      id: aws.vpclattice.resource_configurations_list_only
+      x-cfn-schema-name: ResourceConfiguration
+      x-cfn-type-name: AWS::VpcLattice::ResourceConfiguration
+      x-identifiers:
+        - Arn
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.Arn') as arn
+              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::VpcLattice::ResourceConfiguration'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                json_extract_path_text(Properties, 'Arn') as arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::VpcLattice::ResourceConfiguration'
+                AND region = 'us-east-1'
+    resource_configuration_tags:
+      name: resource_configuration_tags
+      id: aws.vpclattice.resource_configuration_tags
+      x-cfn-schema-name: ResourceConfiguration
+      x-cfn-type-name: AWS::VpcLattice::ResourceConfiguration
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              detail.region,
+              JSON_EXTRACT(json_each.value, '$.Key') as tag_key,
+              JSON_EXTRACT(json_each.value, '$.Value') as tag_value,
+              JSON_EXTRACT(detail.Properties, '$.AllowAssociationToSharableServiceNetwork') as allow_association_to_sharable_service_network,
+              JSON_EXTRACT(detail.Properties, '$.ProtocolType') as protocol_type,
+              JSON_EXTRACT(detail.Properties, '$.ResourceConfigurationType') as resource_configuration_type,
+              JSON_EXTRACT(detail.Properties, '$.PortRanges') as port_ranges,
+              JSON_EXTRACT(detail.Properties, '$.ResourceConfigurationDefinition') as resource_configuration_definition,
+              JSON_EXTRACT(detail.Properties, '$.Id') as id,
+              JSON_EXTRACT(detail.Properties, '$.ResourceGatewayId') as resource_gateway_id,
+              JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
+              JSON_EXTRACT(detail.Properties, '$.ResourceConfigurationAuthType') as resource_configuration_auth_type,
+              JSON_EXTRACT(detail.Properties, '$.ResourceConfigurationGroupId') as resource_configuration_group_id,
+              JSON_EXTRACT(detail.Properties, '$.Name') as name
+              FROM aws.cloud_control.resources listing
+              INNER JOIN aws.cloud_control.resource detail
+              ON detail.data__Identifier = listing.Identifier
+              AND detail.region = listing.region
+              ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
+              WHERE listing.data__TypeName = 'AWS::VpcLattice::ResourceConfiguration'
+              AND detail.data__TypeName = 'AWS::VpcLattice::ResourceConfiguration'
+              AND listing.region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                detail.region,
+                json_extract_path_text(json_each.value, 'Key') as tag_key,
+                json_extract_path_text(json_each.value, 'Value') as tag_value,
+                json_extract_path_text(detail.Properties, 'AllowAssociationToSharableServiceNetwork') as allow_association_to_sharable_service_network,
+                json_extract_path_text(detail.Properties, 'ProtocolType') as protocol_type,
+                json_extract_path_text(detail.Properties, 'ResourceConfigurationType') as resource_configuration_type,
+                json_extract_path_text(detail.Properties, 'PortRanges') as port_ranges,
+                json_extract_path_text(detail.Properties, 'ResourceConfigurationDefinition') as resource_configuration_definition,
+                json_extract_path_text(detail.Properties, 'Id') as id,
+                json_extract_path_text(detail.Properties, 'ResourceGatewayId') as resource_gateway_id,
+                json_extract_path_text(detail.Properties, 'Arn') as arn,
+                json_extract_path_text(detail.Properties, 'ResourceConfigurationAuthType') as resource_configuration_auth_type,
+                json_extract_path_text(detail.Properties, 'ResourceConfigurationGroupId') as resource_configuration_group_id,
+                json_extract_path_text(detail.Properties, 'Name') as name
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
+                WHERE listing.data__TypeName = 'AWS::VpcLattice::ResourceConfiguration'
+                AND detail.data__TypeName = 'AWS::VpcLattice::ResourceConfiguration'
+                AND listing.region = 'us-east-1'
+    resource_gateways:
+      name: resource_gateways
+      id: aws.vpclattice.resource_gateways
+      x-cfn-schema-name: ResourceGateway
+      x-cfn-type-name: AWS::VpcLattice::ResourceGateway
+      x-identifiers:
+        - Arn
+      x-type: cloud_control
+      methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__ResourceGateway&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::VpcLattice::ResourceGateway"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::VpcLattice::ResourceGateway"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::VpcLattice::ResourceGateway"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/resource_gateways/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/resource_gateways/methods/delete_resource'
+        update:
+          - $ref: '#/components/x-stackQL-resources/resource_gateways/methods/update_resource'
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.IpAddressType') as ip_address_type,
+              JSON_EXTRACT(Properties, '$.VpcIdentifier') as vpc_identifier,
+              JSON_EXTRACT(Properties, '$.Id') as id,
+              JSON_EXTRACT(Properties, '$.Arn') as arn,
+              JSON_EXTRACT(Properties, '$.SubnetIds') as subnet_ids,
+              JSON_EXTRACT(Properties, '$.SecurityGroupIds') as security_group_ids,
+              JSON_EXTRACT(Properties, '$.Tags') as tags,
+              JSON_EXTRACT(Properties, '$.Name') as name
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::VpcLattice::ResourceGateway'
+              AND data__Identifier = '<Arn>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "sqlite3"
+              ddl: |-
+                SELECT
+                detail.region,
+                JSON_EXTRACT(detail.Properties, '$.IpAddressType') as ip_address_type,
+                JSON_EXTRACT(detail.Properties, '$.VpcIdentifier') as vpc_identifier,
+                JSON_EXTRACT(detail.Properties, '$.Id') as id,
+                JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
+                JSON_EXTRACT(detail.Properties, '$.SubnetIds') as subnet_ids,
+                JSON_EXTRACT(detail.Properties, '$.SecurityGroupIds') as security_group_ids,
+                JSON_EXTRACT(detail.Properties, '$.Tags') as tags,
+                JSON_EXTRACT(detail.Properties, '$.Name') as name
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                WHERE listing.data__TypeName = 'AWS::VpcLattice::ResourceGateway'
+                AND detail.data__TypeName = 'AWS::VpcLattice::ResourceGateway'
+                AND listing.region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'IpAddressType') as ip_address_type,
+                  json_extract_path_text(Properties, 'VpcIdentifier') as vpc_identifier,
+                  json_extract_path_text(Properties, 'Id') as id,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'SubnetIds') as subnet_ids,
+                  json_extract_path_text(Properties, 'SecurityGroupIds') as security_group_ids,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'Name') as name
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::VpcLattice::ResourceGateway'
+                  AND data__Identifier = '<Arn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    detail.region,
+                    json_extract_path_text(detail.Properties, 'IpAddressType') as ip_address_type,
+                    json_extract_path_text(detail.Properties, 'VpcIdentifier') as vpc_identifier,
+                    json_extract_path_text(detail.Properties, 'Id') as id,
+                    json_extract_path_text(detail.Properties, 'Arn') as arn,
+                    json_extract_path_text(detail.Properties, 'SubnetIds') as subnet_ids,
+                    json_extract_path_text(detail.Properties, 'SecurityGroupIds') as security_group_ids,
+                    json_extract_path_text(detail.Properties, 'Tags') as tags,
+                    json_extract_path_text(detail.Properties, 'Name') as name
+                    FROM aws.cloud_control.resources listing
+                    INNER JOIN aws.cloud_control.resource detail
+                    ON detail.data__Identifier = listing.Identifier
+                    AND detail.region = listing.region
+                    WHERE listing.data__TypeName = 'AWS::VpcLattice::ResourceGateway'
+                    AND detail.data__TypeName = 'AWS::VpcLattice::ResourceGateway'
+                    AND listing.region = 'us-east-1'
+    resource_gateways_list_only:
+      name: resource_gateways_list_only
+      id: aws.vpclattice.resource_gateways_list_only
+      x-cfn-schema-name: ResourceGateway
+      x-cfn-type-name: AWS::VpcLattice::ResourceGateway
+      x-identifiers:
+        - Arn
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.Arn') as arn
+              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::VpcLattice::ResourceGateway'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                json_extract_path_text(Properties, 'Arn') as arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::VpcLattice::ResourceGateway'
+                AND region = 'us-east-1'
+    resource_gateway_tags:
+      name: resource_gateway_tags
+      id: aws.vpclattice.resource_gateway_tags
+      x-cfn-schema-name: ResourceGateway
+      x-cfn-type-name: AWS::VpcLattice::ResourceGateway
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              detail.region,
+              JSON_EXTRACT(json_each.value, '$.Key') as tag_key,
+              JSON_EXTRACT(json_each.value, '$.Value') as tag_value,
+              JSON_EXTRACT(detail.Properties, '$.IpAddressType') as ip_address_type,
+              JSON_EXTRACT(detail.Properties, '$.VpcIdentifier') as vpc_identifier,
+              JSON_EXTRACT(detail.Properties, '$.Id') as id,
+              JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
+              JSON_EXTRACT(detail.Properties, '$.SubnetIds') as subnet_ids,
+              JSON_EXTRACT(detail.Properties, '$.SecurityGroupIds') as security_group_ids,
+              JSON_EXTRACT(detail.Properties, '$.Name') as name
+              FROM aws.cloud_control.resources listing
+              INNER JOIN aws.cloud_control.resource detail
+              ON detail.data__Identifier = listing.Identifier
+              AND detail.region = listing.region
+              ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
+              WHERE listing.data__TypeName = 'AWS::VpcLattice::ResourceGateway'
+              AND detail.data__TypeName = 'AWS::VpcLattice::ResourceGateway'
+              AND listing.region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                detail.region,
+                json_extract_path_text(json_each.value, 'Key') as tag_key,
+                json_extract_path_text(json_each.value, 'Value') as tag_value,
+                json_extract_path_text(detail.Properties, 'IpAddressType') as ip_address_type,
+                json_extract_path_text(detail.Properties, 'VpcIdentifier') as vpc_identifier,
+                json_extract_path_text(detail.Properties, 'Id') as id,
+                json_extract_path_text(detail.Properties, 'Arn') as arn,
+                json_extract_path_text(detail.Properties, 'SubnetIds') as subnet_ids,
+                json_extract_path_text(detail.Properties, 'SecurityGroupIds') as security_group_ids,
+                json_extract_path_text(detail.Properties, 'Name') as name
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
+                WHERE listing.data__TypeName = 'AWS::VpcLattice::ResourceGateway'
+                AND detail.data__TypeName = 'AWS::VpcLattice::ResourceGateway'
                 AND listing.region = 'us-east-1'
     resource_policies:
       name: resource_policies
@@ -2928,7 +4026,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.ServiceIdentifier') as service_identifier,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::VpcLattice::Rule'
@@ -2967,7 +4065,7 @@ components:
                     json_extract_path_text(detail.Properties, 'ServiceIdentifier') as service_identifier,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::VpcLattice::Rule'
@@ -3033,7 +4131,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Priority') as priority,
               JSON_EXTRACT(detail.Properties, '$.ServiceIdentifier') as service_identifier
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -3056,7 +4154,7 @@ components:
                 json_extract_path_text(detail.Properties, 'Priority') as priority,
                 json_extract_path_text(detail.Properties, 'ServiceIdentifier') as service_identifier
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -3157,7 +4255,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.CustomDomainName') as custom_domain_name,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::VpcLattice::Service'
@@ -3200,7 +4298,7 @@ components:
                     json_extract_path_text(detail.Properties, 'CustomDomainName') as custom_domain_name,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::VpcLattice::Service'
@@ -3268,7 +4366,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.CertificateArn') as certificate_arn,
               JSON_EXTRACT(detail.Properties, '$.CustomDomainName') as custom_domain_name
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -3293,7 +4391,7 @@ components:
                 json_extract_path_text(detail.Properties, 'CertificateArn') as certificate_arn,
                 json_extract_path_text(detail.Properties, 'CustomDomainName') as custom_domain_name
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -3369,7 +4467,8 @@ components:
               JSON_EXTRACT(Properties, '$.LastUpdatedAt') as last_updated_at,
               JSON_EXTRACT(Properties, '$.Name') as name,
               JSON_EXTRACT(Properties, '$.AuthType') as auth_type,
-              JSON_EXTRACT(Properties, '$.Tags') as tags
+              JSON_EXTRACT(Properties, '$.Tags') as tags,
+              JSON_EXTRACT(Properties, '$.SharingConfig') as sharing_config
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::VpcLattice::ServiceNetwork'
               AND data__Identifier = '<Arn>'
               AND region = 'us-east-1'
@@ -3384,9 +4483,10 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.LastUpdatedAt') as last_updated_at,
                 JSON_EXTRACT(detail.Properties, '$.Name') as name,
                 JSON_EXTRACT(detail.Properties, '$.AuthType') as auth_type,
-                JSON_EXTRACT(detail.Properties, '$.Tags') as tags
+                JSON_EXTRACT(detail.Properties, '$.Tags') as tags,
+                JSON_EXTRACT(detail.Properties, '$.SharingConfig') as sharing_config
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::VpcLattice::ServiceNetwork'
@@ -3404,7 +4504,8 @@ components:
                   json_extract_path_text(Properties, 'LastUpdatedAt') as last_updated_at,
                   json_extract_path_text(Properties, 'Name') as name,
                   json_extract_path_text(Properties, 'AuthType') as auth_type,
-                  json_extract_path_text(Properties, 'Tags') as tags
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'SharingConfig') as sharing_config
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::VpcLattice::ServiceNetwork'
                   AND data__Identifier = '<Arn>'
                   AND region = 'us-east-1'
@@ -3419,9 +4520,10 @@ components:
                     json_extract_path_text(detail.Properties, 'LastUpdatedAt') as last_updated_at,
                     json_extract_path_text(detail.Properties, 'Name') as name,
                     json_extract_path_text(detail.Properties, 'AuthType') as auth_type,
-                    json_extract_path_text(detail.Properties, 'Tags') as tags
+                    json_extract_path_text(detail.Properties, 'Tags') as tags,
+                    json_extract_path_text(detail.Properties, 'SharingConfig') as sharing_config
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::VpcLattice::ServiceNetwork'
@@ -3483,9 +4585,10 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Id') as id,
               JSON_EXTRACT(detail.Properties, '$.LastUpdatedAt') as last_updated_at,
               JSON_EXTRACT(detail.Properties, '$.Name') as name,
-              JSON_EXTRACT(detail.Properties, '$.AuthType') as auth_type
+              JSON_EXTRACT(detail.Properties, '$.AuthType') as auth_type,
+              JSON_EXTRACT(detail.Properties, '$.SharingConfig') as sharing_config
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -3504,14 +4607,216 @@ components:
                 json_extract_path_text(detail.Properties, 'Id') as id,
                 json_extract_path_text(detail.Properties, 'LastUpdatedAt') as last_updated_at,
                 json_extract_path_text(detail.Properties, 'Name') as name,
-                json_extract_path_text(detail.Properties, 'AuthType') as auth_type
+                json_extract_path_text(detail.Properties, 'AuthType') as auth_type,
+                json_extract_path_text(detail.Properties, 'SharingConfig') as sharing_config
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
                 WHERE listing.data__TypeName = 'AWS::VpcLattice::ServiceNetwork'
                 AND detail.data__TypeName = 'AWS::VpcLattice::ServiceNetwork'
+                AND listing.region = 'us-east-1'
+    service_network_resource_associations:
+      name: service_network_resource_associations
+      id: aws.vpclattice.service_network_resource_associations
+      x-cfn-schema-name: ServiceNetworkResourceAssociation
+      x-cfn-type-name: AWS::VpcLattice::ServiceNetworkResourceAssociation
+      x-identifiers:
+        - Arn
+      x-type: cloud_control
+      methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__ServiceNetworkResourceAssociation&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::VpcLattice::ServiceNetworkResourceAssociation"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::VpcLattice::ServiceNetworkResourceAssociation"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::VpcLattice::ServiceNetworkResourceAssociation"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/service_network_resource_associations/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/service_network_resource_associations/methods/delete_resource'
+        update:
+          - $ref: '#/components/x-stackQL-resources/service_network_resource_associations/methods/update_resource'
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.Id') as id,
+              JSON_EXTRACT(Properties, '$.Arn') as arn,
+              JSON_EXTRACT(Properties, '$.ResourceConfigurationId') as resource_configuration_id,
+              JSON_EXTRACT(Properties, '$.ServiceNetworkId') as service_network_id,
+              JSON_EXTRACT(Properties, '$.Tags') as tags
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::VpcLattice::ServiceNetworkResourceAssociation'
+              AND data__Identifier = '<Arn>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "sqlite3"
+              ddl: |-
+                SELECT
+                detail.region,
+                JSON_EXTRACT(detail.Properties, '$.Id') as id,
+                JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
+                JSON_EXTRACT(detail.Properties, '$.ResourceConfigurationId') as resource_configuration_id,
+                JSON_EXTRACT(detail.Properties, '$.ServiceNetworkId') as service_network_id,
+                JSON_EXTRACT(detail.Properties, '$.Tags') as tags
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                WHERE listing.data__TypeName = 'AWS::VpcLattice::ServiceNetworkResourceAssociation'
+                AND detail.data__TypeName = 'AWS::VpcLattice::ServiceNetworkResourceAssociation'
+                AND listing.region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Id') as id,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'ResourceConfigurationId') as resource_configuration_id,
+                  json_extract_path_text(Properties, 'ServiceNetworkId') as service_network_id,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::VpcLattice::ServiceNetworkResourceAssociation'
+                  AND data__Identifier = '<Arn>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    detail.region,
+                    json_extract_path_text(detail.Properties, 'Id') as id,
+                    json_extract_path_text(detail.Properties, 'Arn') as arn,
+                    json_extract_path_text(detail.Properties, 'ResourceConfigurationId') as resource_configuration_id,
+                    json_extract_path_text(detail.Properties, 'ServiceNetworkId') as service_network_id,
+                    json_extract_path_text(detail.Properties, 'Tags') as tags
+                    FROM aws.cloud_control.resources listing
+                    INNER JOIN aws.cloud_control.resource detail
+                    ON detail.data__Identifier = listing.Identifier
+                    AND detail.region = listing.region
+                    WHERE listing.data__TypeName = 'AWS::VpcLattice::ServiceNetworkResourceAssociation'
+                    AND detail.data__TypeName = 'AWS::VpcLattice::ServiceNetworkResourceAssociation'
+                    AND listing.region = 'us-east-1'
+    service_network_resource_associations_list_only:
+      name: service_network_resource_associations_list_only
+      id: aws.vpclattice.service_network_resource_associations_list_only
+      x-cfn-schema-name: ServiceNetworkResourceAssociation
+      x-cfn-type-name: AWS::VpcLattice::ServiceNetworkResourceAssociation
+      x-identifiers:
+        - Arn
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.Arn') as arn
+              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::VpcLattice::ServiceNetworkResourceAssociation'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                json_extract_path_text(Properties, 'Arn') as arn
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::VpcLattice::ServiceNetworkResourceAssociation'
+                AND region = 'us-east-1'
+    service_network_resource_association_tags:
+      name: service_network_resource_association_tags
+      id: aws.vpclattice.service_network_resource_association_tags
+      x-cfn-schema-name: ServiceNetworkResourceAssociation
+      x-cfn-type-name: AWS::VpcLattice::ServiceNetworkResourceAssociation
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              detail.region,
+              JSON_EXTRACT(json_each.value, '$.Key') as tag_key,
+              JSON_EXTRACT(json_each.value, '$.Value') as tag_value,
+              JSON_EXTRACT(detail.Properties, '$.Id') as id,
+              JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
+              JSON_EXTRACT(detail.Properties, '$.ResourceConfigurationId') as resource_configuration_id,
+              JSON_EXTRACT(detail.Properties, '$.ServiceNetworkId') as service_network_id
+              FROM aws.cloud_control.resources listing
+              INNER JOIN aws.cloud_control.resource detail
+              ON detail.data__Identifier = listing.Identifier
+              AND detail.region = listing.region
+              ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
+              WHERE listing.data__TypeName = 'AWS::VpcLattice::ServiceNetworkResourceAssociation'
+              AND detail.data__TypeName = 'AWS::VpcLattice::ServiceNetworkResourceAssociation'
+              AND listing.region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                detail.region,
+                json_extract_path_text(json_each.value, 'Key') as tag_key,
+                json_extract_path_text(json_each.value, 'Value') as tag_value,
+                json_extract_path_text(detail.Properties, 'Id') as id,
+                json_extract_path_text(detail.Properties, 'Arn') as arn,
+                json_extract_path_text(detail.Properties, 'ResourceConfigurationId') as resource_configuration_id,
+                json_extract_path_text(detail.Properties, 'ServiceNetworkId') as service_network_id
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
+                WHERE listing.data__TypeName = 'AWS::VpcLattice::ServiceNetworkResourceAssociation'
+                AND detail.data__TypeName = 'AWS::VpcLattice::ServiceNetworkResourceAssociation'
                 AND listing.region = 'us-east-1'
     service_network_service_associations:
       name: service_network_service_associations
@@ -3613,7 +4918,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Status') as status,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::VpcLattice::ServiceNetworkServiceAssociation'
@@ -3662,7 +4967,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Status') as status,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::VpcLattice::ServiceNetworkServiceAssociation'
@@ -3733,7 +5038,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.ServiceName') as service_name,
               JSON_EXTRACT(detail.Properties, '$.Status') as status
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -3761,7 +5066,7 @@ components:
                 json_extract_path_text(detail.Properties, 'ServiceName') as service_name,
                 json_extract_path_text(detail.Properties, 'Status') as status
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -3864,7 +5169,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.VpcIdentifier') as vpc_identifier,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::VpcLattice::ServiceNetworkVpcAssociation'
@@ -3909,7 +5214,7 @@ components:
                     json_extract_path_text(detail.Properties, 'VpcIdentifier') as vpc_identifier,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::VpcLattice::ServiceNetworkVpcAssociation'
@@ -3978,7 +5283,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.VpcId') as vpc_id,
               JSON_EXTRACT(detail.Properties, '$.VpcIdentifier') as vpc_identifier
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -4004,7 +5309,7 @@ components:
                 json_extract_path_text(detail.Properties, 'VpcId') as vpc_id,
                 json_extract_path_text(detail.Properties, 'VpcIdentifier') as vpc_identifier
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -4103,7 +5408,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Targets') as targets,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::VpcLattice::TargetGroup'
@@ -4144,7 +5449,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Targets') as targets,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::VpcLattice::TargetGroup'
@@ -4211,7 +5516,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Type') as type,
               JSON_EXTRACT(detail.Properties, '$.Targets') as targets
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -4235,7 +5540,7 @@ components:
                 json_extract_path_text(detail.Properties, 'Type') as type,
                 json_extract_path_text(detail.Properties, 'Targets') as targets
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -4511,6 +5816,90 @@ paths:
               schema:
                 $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
           description: Success
+  /?Action=CreateResource&Version=2021-09-30&__ResourceConfiguration&__detailTransformed=true:
+    parameters:
+      - $ref: '#/components/parameters/X-Amz-Content-Sha256'
+      - $ref: '#/components/parameters/X-Amz-Date'
+      - $ref: '#/components/parameters/X-Amz-Algorithm'
+      - $ref: '#/components/parameters/X-Amz-Credential'
+      - $ref: '#/components/parameters/X-Amz-Security-Token'
+      - $ref: '#/components/parameters/X-Amz-Signature'
+      - $ref: '#/components/parameters/X-Amz-SignedHeaders'
+    post:
+      operationId: CreateResourceConfiguration
+      parameters:
+        - description: Action Header
+          in: header
+          name: X-Amz-Target
+          required: false
+          schema:
+            default: CloudApiService.CreateResource
+            enum:
+              - CloudApiService.CreateResource
+            type: string
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            default: application/x-amz-json-1.0
+            enum:
+              - application/x-amz-json-1.0
+            type: string
+      requestBody:
+        content:
+          application/x-amz-json-1.0:
+            schema:
+              $ref: '#/components/schemas/CreateResourceConfigurationRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
+          description: Success
+  /?Action=CreateResource&Version=2021-09-30&__ResourceGateway&__detailTransformed=true:
+    parameters:
+      - $ref: '#/components/parameters/X-Amz-Content-Sha256'
+      - $ref: '#/components/parameters/X-Amz-Date'
+      - $ref: '#/components/parameters/X-Amz-Algorithm'
+      - $ref: '#/components/parameters/X-Amz-Credential'
+      - $ref: '#/components/parameters/X-Amz-Security-Token'
+      - $ref: '#/components/parameters/X-Amz-Signature'
+      - $ref: '#/components/parameters/X-Amz-SignedHeaders'
+    post:
+      operationId: CreateResourceGateway
+      parameters:
+        - description: Action Header
+          in: header
+          name: X-Amz-Target
+          required: false
+          schema:
+            default: CloudApiService.CreateResource
+            enum:
+              - CloudApiService.CreateResource
+            type: string
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            default: application/x-amz-json-1.0
+            enum:
+              - application/x-amz-json-1.0
+            type: string
+      requestBody:
+        content:
+          application/x-amz-json-1.0:
+            schema:
+              $ref: '#/components/schemas/CreateResourceGatewayRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
+          description: Success
   /?Action=CreateResource&Version=2021-09-30&__ResourcePolicy&__detailTransformed=true:
     parameters:
       - $ref: '#/components/parameters/X-Amz-Content-Sha256'
@@ -4671,6 +6060,48 @@ paths:
           application/x-amz-json-1.0:
             schema:
               $ref: '#/components/schemas/CreateServiceNetworkRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
+          description: Success
+  /?Action=CreateResource&Version=2021-09-30&__ServiceNetworkResourceAssociation&__detailTransformed=true:
+    parameters:
+      - $ref: '#/components/parameters/X-Amz-Content-Sha256'
+      - $ref: '#/components/parameters/X-Amz-Date'
+      - $ref: '#/components/parameters/X-Amz-Algorithm'
+      - $ref: '#/components/parameters/X-Amz-Credential'
+      - $ref: '#/components/parameters/X-Amz-Security-Token'
+      - $ref: '#/components/parameters/X-Amz-Signature'
+      - $ref: '#/components/parameters/X-Amz-SignedHeaders'
+    post:
+      operationId: CreateServiceNetworkResourceAssociation
+      parameters:
+        - description: Action Header
+          in: header
+          name: X-Amz-Target
+          required: false
+          schema:
+            default: CloudApiService.CreateResource
+            enum:
+              - CloudApiService.CreateResource
+            type: string
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            default: application/x-amz-json-1.0
+            enum:
+              - application/x-amz-json-1.0
+            type: string
+      requestBody:
+        content:
+          application/x-amz-json-1.0:
+            schema:
+              $ref: '#/components/schemas/CreateServiceNetworkResourceAssociationRequest'
         required: true
       responses:
         '200':

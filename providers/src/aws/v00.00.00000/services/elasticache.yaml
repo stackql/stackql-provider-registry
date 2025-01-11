@@ -445,6 +445,9 @@ components:
         EngineVersion:
           description: The engine version of the Global Datastore.
           type: string
+        Engine:
+          description: The engine of the Global Datastore.
+          type: string
         CacheParameterGroupName:
           description: Cache parameter group name to use for the new engine version. This parameter cannot be modified independently.
           type: string
@@ -584,6 +587,8 @@ components:
           - ElastiCache:DescribeCacheParameterGroups
           - ElastiCache:AddTagsToResource
           - ElastiCache:ModifyCacheParameterGroup
+          - iam:CreateServiceLinkedRole
+          - iam:PutRolePolicy
         read:
           - ElastiCache:DescribeCacheParameterGroups
           - ElastiCache:DescribeCacheParameters
@@ -735,8 +740,6 @@ components:
         - ServerlessCacheName
       x-create-only-properties:
         - ServerlessCacheName
-        - Engine
-        - MajorEngineVersion
         - KmsKeyId
         - SnapshotArnsToRestore
         - SubnetIds
@@ -761,6 +764,9 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: false
         tagProperty: /properties/Tags
+        permissions:
+          - elasticache:AddTagsToResource
+          - elasticache:RemoveTagsFromResource
       x-required-permissions:
         create:
           - elasticache:CreateServerlessCache
@@ -862,10 +868,11 @@ components:
           description: The username of the user.
           type: string
         Engine:
-          description: Must be redis.
+          description: The target cache engine for the user.
           type: string
           enum:
             - redis
+            - valkey
         AccessString:
           description: Access permissions string used for this user account.
           type: string
@@ -924,7 +931,6 @@ components:
       x-create-only-properties:
         - UserId
         - UserName
-        - Engine
       x-write-only-properties:
         - Passwords
         - NoPasswordRequired
@@ -1070,6 +1076,9 @@ components:
               type: string
             EngineVersion:
               description: The engine version of the Global Datastore.
+              type: string
+            Engine:
+              description: The engine of the Global Datastore.
               type: string
             CacheParameterGroupName:
               description: Cache parameter group name to use for the new engine version. This parameter cannot be modified independently.
@@ -1293,10 +1302,11 @@ components:
               description: The username of the user.
               type: string
             Engine:
-              description: Must be redis.
+              description: The target cache engine for the user.
               type: string
               enum:
                 - redis
+                - valkey
             AccessString:
               description: Access permissions string used for this user account.
               type: string
@@ -1470,6 +1480,7 @@ components:
               JSON_EXTRACT(Properties, '$.AutomaticFailoverEnabled') as automatic_failover_enabled,
               JSON_EXTRACT(Properties, '$.CacheNodeType') as cache_node_type,
               JSON_EXTRACT(Properties, '$.EngineVersion') as engine_version,
+              JSON_EXTRACT(Properties, '$.Engine') as engine,
               JSON_EXTRACT(Properties, '$.CacheParameterGroupName') as cache_parameter_group_name,
               JSON_EXTRACT(Properties, '$.GlobalNodeGroupCount') as global_node_group_count,
               JSON_EXTRACT(Properties, '$.GlobalReplicationGroupDescription') as global_replication_group_description,
@@ -1489,6 +1500,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.AutomaticFailoverEnabled') as automatic_failover_enabled,
                 JSON_EXTRACT(detail.Properties, '$.CacheNodeType') as cache_node_type,
                 JSON_EXTRACT(detail.Properties, '$.EngineVersion') as engine_version,
+                JSON_EXTRACT(detail.Properties, '$.Engine') as engine,
                 JSON_EXTRACT(detail.Properties, '$.CacheParameterGroupName') as cache_parameter_group_name,
                 JSON_EXTRACT(detail.Properties, '$.GlobalNodeGroupCount') as global_node_group_count,
                 JSON_EXTRACT(detail.Properties, '$.GlobalReplicationGroupDescription') as global_replication_group_description,
@@ -1497,7 +1509,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Status') as status,
                 JSON_EXTRACT(detail.Properties, '$.RegionalConfigurations') as regional_configurations
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::ElastiCache::GlobalReplicationGroup'
@@ -1513,6 +1525,7 @@ components:
                   json_extract_path_text(Properties, 'AutomaticFailoverEnabled') as automatic_failover_enabled,
                   json_extract_path_text(Properties, 'CacheNodeType') as cache_node_type,
                   json_extract_path_text(Properties, 'EngineVersion') as engine_version,
+                  json_extract_path_text(Properties, 'Engine') as engine,
                   json_extract_path_text(Properties, 'CacheParameterGroupName') as cache_parameter_group_name,
                   json_extract_path_text(Properties, 'GlobalNodeGroupCount') as global_node_group_count,
                   json_extract_path_text(Properties, 'GlobalReplicationGroupDescription') as global_replication_group_description,
@@ -1532,6 +1545,7 @@ components:
                     json_extract_path_text(detail.Properties, 'AutomaticFailoverEnabled') as automatic_failover_enabled,
                     json_extract_path_text(detail.Properties, 'CacheNodeType') as cache_node_type,
                     json_extract_path_text(detail.Properties, 'EngineVersion') as engine_version,
+                    json_extract_path_text(detail.Properties, 'Engine') as engine,
                     json_extract_path_text(detail.Properties, 'CacheParameterGroupName') as cache_parameter_group_name,
                     json_extract_path_text(detail.Properties, 'GlobalNodeGroupCount') as global_node_group_count,
                     json_extract_path_text(detail.Properties, 'GlobalReplicationGroupDescription') as global_replication_group_description,
@@ -1540,7 +1554,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Status') as status,
                     json_extract_path_text(detail.Properties, 'RegionalConfigurations') as regional_configurations
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::ElastiCache::GlobalReplicationGroup'
@@ -1659,7 +1673,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.CacheParameterGroupName') as cache_parameter_group_name,
                 JSON_EXTRACT(detail.Properties, '$.CacheParameterGroupFamily') as cache_parameter_group_family
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::ElastiCache::ParameterGroup'
@@ -1690,7 +1704,7 @@ components:
                     json_extract_path_text(detail.Properties, 'CacheParameterGroupName') as cache_parameter_group_name,
                     json_extract_path_text(detail.Properties, 'CacheParameterGroupFamily') as cache_parameter_group_family
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::ElastiCache::ParameterGroup'
@@ -1752,7 +1766,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.CacheParameterGroupName') as cache_parameter_group_name,
               JSON_EXTRACT(detail.Properties, '$.CacheParameterGroupFamily') as cache_parameter_group_family
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -1771,7 +1785,7 @@ components:
                 json_extract_path_text(detail.Properties, 'CacheParameterGroupName') as cache_parameter_group_name,
                 json_extract_path_text(detail.Properties, 'CacheParameterGroupFamily') as cache_parameter_group_family
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -1890,7 +1904,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.ARN') as arn,
                 JSON_EXTRACT(detail.Properties, '$.FinalSnapshotName') as final_snapshot_name
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::ElastiCache::ServerlessCache'
@@ -1951,7 +1965,7 @@ components:
                     json_extract_path_text(detail.Properties, 'ARN') as arn,
                     json_extract_path_text(detail.Properties, 'FinalSnapshotName') as final_snapshot_name
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::ElastiCache::ServerlessCache'
@@ -2028,7 +2042,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.ARN') as arn,
               JSON_EXTRACT(detail.Properties, '$.FinalSnapshotName') as final_snapshot_name
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -2062,7 +2076,7 @@ components:
                 json_extract_path_text(detail.Properties, 'ARN') as arn,
                 json_extract_path_text(detail.Properties, 'FinalSnapshotName') as final_snapshot_name
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -2149,7 +2163,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.CacheSubnetGroupName') as cache_subnet_group_name,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::ElastiCache::SubnetGroup'
@@ -2178,7 +2192,7 @@ components:
                     json_extract_path_text(detail.Properties, 'CacheSubnetGroupName') as cache_subnet_group_name,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::ElastiCache::SubnetGroup'
@@ -2239,7 +2253,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.SubnetIds') as subnet_ids,
               JSON_EXTRACT(detail.Properties, '$.CacheSubnetGroupName') as cache_subnet_group_name
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -2257,7 +2271,7 @@ components:
                 json_extract_path_text(detail.Properties, 'SubnetIds') as subnet_ids,
                 json_extract_path_text(detail.Properties, 'CacheSubnetGroupName') as cache_subnet_group_name
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -2356,7 +2370,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.AuthenticationMode') as authentication_mode,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::ElastiCache::User'
@@ -2397,7 +2411,7 @@ components:
                     json_extract_path_text(detail.Properties, 'AuthenticationMode') as authentication_mode,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::ElastiCache::User'
@@ -2464,7 +2478,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
               JSON_EXTRACT(detail.Properties, '$.AuthenticationMode') as authentication_mode
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -2488,7 +2502,7 @@ components:
                 json_extract_path_text(detail.Properties, 'Arn') as arn,
                 json_extract_path_text(detail.Properties, 'AuthenticationMode') as authentication_mode
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -2579,7 +2593,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::ElastiCache::UserGroup'
@@ -2612,7 +2626,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Arn') as arn,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::ElastiCache::UserGroup'
@@ -2675,7 +2689,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.UserIds') as user_ids,
               JSON_EXTRACT(detail.Properties, '$.Arn') as arn
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -2695,7 +2709,7 @@ components:
                 json_extract_path_text(detail.Properties, 'UserIds') as user_ids,
                 json_extract_path_text(detail.Properties, 'Arn') as arn
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))

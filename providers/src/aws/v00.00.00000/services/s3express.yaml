@@ -430,27 +430,137 @@ components:
     Arn:
       description: The Amazon Resource Name (ARN) of the specified bucket.
       type: string
+    BucketEncryption:
+      description: Specifies default encryption for a bucket using server-side encryption with Amazon S3 managed keys (SSE-S3) or AWS KMS keys (SSE-KMS).
+      type: object
+      additionalProperties: false
+      properties:
+        ServerSideEncryptionConfiguration:
+          description: Specifies the default server-side-encryption configuration.
+          type: array
+          uniqueItems: true
+          x-insertionOrder: true
+          items:
+            $ref: '#/components/schemas/ServerSideEncryptionRule'
+      required:
+        - ServerSideEncryptionConfiguration
+    ServerSideEncryptionRule:
+      description: Specifies the default server-side encryption configuration.
+      type: object
+      additionalProperties: false
+      properties:
+        BucketKeyEnabled:
+          description: Specifies whether Amazon S3 should use an S3 Bucket Key with server-side encryption using KMS (SSE-KMS) for new objects in the bucket. Existing objects are not affected. Amazon S3 Express One Zone uses an S3 Bucket Key with SSE-KMS and S3 Bucket Key cannot be disabled. It's only allowed to set the BucketKeyEnabled element to true.
+          type: boolean
+        ServerSideEncryptionByDefault:
+          $ref: '#/components/schemas/ServerSideEncryptionByDefault'
+    ServerSideEncryptionByDefault:
+      description: Specifies the default server-side encryption to apply to new objects in the bucket. If a PUT Object request doesn't specify any server-side encryption, this default encryption will be applied.
+      type: object
+      properties:
+        KMSMasterKeyID:
+          description: AWS Key Management Service (KMS) customer managed key ID to use for the default encryption. This parameter is allowed only if SSEAlgorithm is set to aws:kms. You can specify this parameter with the key ID or the Amazon Resource Name (ARN) of the KMS key
+          type: string
+          anyOf:
+            - relationshipRef:
+                typeName: AWS::KMS::Key
+                propertyPath: /properties/KeyId
+            - relationshipRef:
+                typeName: AWS::KMS::Key
+                propertyPath: /properties/Arn
+        SSEAlgorithm:
+          type: string
+          enum:
+            - aws:kms
+            - AES256
+      additionalProperties: false
+      required:
+        - SSEAlgorithm
+    LifecycleConfiguration:
+      type: object
+      additionalProperties: false
+      properties:
+        Rules:
+          description: A lifecycle rule for individual objects in an Amazon S3 Express bucket.
+          type: array
+          uniqueItems: true
+          x-insertionOrder: true
+          items:
+            $ref: '#/components/schemas/Rule'
+      required:
+        - Rules
+    Rule:
+      type: object
+      description: 'You must specify at least one of the following properties: AbortIncompleteMultipartUpload, or ExpirationInDays.'
+      additionalProperties: false
+      properties:
+        AbortIncompleteMultipartUpload:
+          $ref: '#/components/schemas/AbortIncompleteMultipartUpload'
+        ExpirationInDays:
+          type: integer
+        Id:
+          type: string
+          maxLength: 255
+        Prefix:
+          type: string
+        Status:
+          type: string
+          enum:
+            - Enabled
+            - Disabled
+        ObjectSizeGreaterThan:
+          type: string
+          maxLength: 20
+          pattern: '[0-9]+'
+        ObjectSizeLessThan:
+          type: string
+          maxLength: 20
+          pattern: '[0-9]+'
+      required:
+        - Status
+    AbortIncompleteMultipartUpload:
+      description: Specifies the days since the initiation of an incomplete multipart upload that Amazon S3 will wait before permanently removing all parts of the upload.
+      type: object
+      additionalProperties: false
+      properties:
+        DaysAfterInitiation:
+          description: Specifies the number of days after which Amazon S3 aborts an incomplete multipart upload.
+          type: integer
+          minimum: 0
+      required:
+        - DaysAfterInitiation
     DirectoryBucket:
       type: object
       properties:
         BucketName:
-          description: Specifies a name for the bucket. The bucket name must contain only lowercase letters, numbers, and hyphens (-). A directory bucket name must be unique in the chosen Availability Zone. The bucket name must also follow the format 'bucket_base_name--az_id--x-s3' (for example, 'DOC-EXAMPLE-BUCKET--usw2-az1--x-s3'). If you don't specify a name, AWS CloudFormation generates a unique physical ID and uses that ID for the bucket name.
+          description: Specifies a name for the bucket. The bucket name must contain only lowercase letters, numbers, and hyphens (-). A directory bucket name must be unique in the chosen Availability Zone or Local Zone. The bucket name must also follow the format 'bucket_base_name--zone_id--x-s3'. The zone_id can be the ID of an Availability Zone or a Local Zone. If you don't specify a name, AWS CloudFormation generates a unique physical ID and uses that ID for the bucket name.
           maxLength: 63
           pattern: ^[a-z0-9][a-z0-9//.//-]*[a-z0-9]$
           type: string
         LocationName:
-          description: Specifies the AZ ID of the Availability Zone where the directory bucket will be created. An example AZ ID value is 'use1-az5'.
+          description: Specifies the Zone ID of the Availability Zone or Local Zone where the directory bucket will be created. An example Availability Zone ID value is 'use1-az5'.
+          type: string
+        AvailabilityZoneName:
+          description: Returns the code for the Availability Zone or Local Zone where the directory bucket was created. An example for the code of an Availability Zone is 'us-east-1f'.
+          x-examples:
+            - us-east-1f
           type: string
         DataRedundancy:
-          description: Specifies the number of Availability Zone that's used for redundancy for the bucket.
+          description: Specifies the number of Availability Zone or Local Zone that's used for redundancy for the bucket.
           type: string
           enum:
             - SingleAvailabilityZone
+            - SingleLocalZone
         Arn:
           $ref: '#/components/schemas/Arn'
           description: Returns the Amazon Resource Name (ARN) of the specified bucket.
           x-examples:
             - arn:aws:s3express:us-west-2:123456789123:bucket/DOC-EXAMPLE-BUCKET--usw2-az1--x-s3
+        BucketEncryption:
+          $ref: '#/components/schemas/BucketEncryption'
+        LifecycleConfiguration:
+          $ref: '#/components/schemas/LifecycleConfiguration'
+          description: Lifecycle rules that define how Amazon S3 Express manages objects during their lifetime.
       required:
         - LocationName
         - DataRedundancy
@@ -465,6 +575,7 @@ components:
         - DataRedundancy
       x-read-only-properties:
         - Arn
+        - AvailabilityZoneName
       x-required-properties:
         - LocationName
         - DataRedundancy
@@ -475,10 +586,22 @@ components:
         cloudFormationSystemTags: false
       x-required-permissions:
         create:
+          - kms:GenerateDataKey
+          - kms:Decrypt
           - s3express:CreateBucket
           - s3express:ListAllMyDirectoryBuckets
+          - s3express:PutEncryptionConfiguration
+          - s3express:PutLifecycleConfiguration
         read:
           - s3express:ListAllMyDirectoryBuckets
+          - ec2:DescribeAvailabilityZones
+          - s3express:GetEncryptionConfiguration
+          - s3express:GetLifecycleConfiguration
+        update:
+          - kms:GenerateDataKey
+          - kms:Decrypt
+          - s3express:PutEncryptionConfiguration
+          - s3express:PutLifecycleConfiguration
         delete:
           - s3express:DeleteBucket
           - s3express:ListAllMyDirectoryBuckets
@@ -521,23 +644,34 @@ components:
           type: object
           properties:
             BucketName:
-              description: Specifies a name for the bucket. The bucket name must contain only lowercase letters, numbers, and hyphens (-). A directory bucket name must be unique in the chosen Availability Zone. The bucket name must also follow the format 'bucket_base_name--az_id--x-s3' (for example, 'DOC-EXAMPLE-BUCKET--usw2-az1--x-s3'). If you don't specify a name, AWS CloudFormation generates a unique physical ID and uses that ID for the bucket name.
+              description: Specifies a name for the bucket. The bucket name must contain only lowercase letters, numbers, and hyphens (-). A directory bucket name must be unique in the chosen Availability Zone or Local Zone. The bucket name must also follow the format 'bucket_base_name--zone_id--x-s3'. The zone_id can be the ID of an Availability Zone or a Local Zone. If you don't specify a name, AWS CloudFormation generates a unique physical ID and uses that ID for the bucket name.
               maxLength: 63
               pattern: ^[a-z0-9][a-z0-9//.//-]*[a-z0-9]$
               type: string
             LocationName:
-              description: Specifies the AZ ID of the Availability Zone where the directory bucket will be created. An example AZ ID value is 'use1-az5'.
+              description: Specifies the Zone ID of the Availability Zone or Local Zone where the directory bucket will be created. An example Availability Zone ID value is 'use1-az5'.
+              type: string
+            AvailabilityZoneName:
+              description: Returns the code for the Availability Zone or Local Zone where the directory bucket was created. An example for the code of an Availability Zone is 'us-east-1f'.
+              x-examples:
+                - us-east-1f
               type: string
             DataRedundancy:
-              description: Specifies the number of Availability Zone that's used for redundancy for the bucket.
+              description: Specifies the number of Availability Zone or Local Zone that's used for redundancy for the bucket.
               type: string
               enum:
                 - SingleAvailabilityZone
+                - SingleLocalZone
             Arn:
               $ref: '#/components/schemas/Arn'
               description: Returns the Amazon Resource Name (ARN) of the specified bucket.
               x-examples:
                 - arn:aws:s3express:us-west-2:123456789123:bucket/DOC-EXAMPLE-BUCKET--usw2-az1--x-s3
+            BucketEncryption:
+              $ref: '#/components/schemas/BucketEncryption'
+            LifecycleConfiguration:
+              $ref: '#/components/schemas/LifecycleConfiguration'
+              description: Lifecycle rules that define how Amazon S3 Express manages objects during their lifetime.
           x-stackQL-stringOnly: true
       x-title: CreateDirectoryBucketRequest
       type: object
@@ -626,7 +760,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Bucket') as bucket,
                 JSON_EXTRACT(detail.Properties, '$.PolicyDocument') as policy_document
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::S3Express::BucketPolicy'
@@ -651,7 +785,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Bucket') as bucket,
                     json_extract_path_text(detail.Properties, 'PolicyDocument') as policy_document
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::S3Express::BucketPolicy'
@@ -712,6 +846,18 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::S3Express::DirectoryBucket"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
         delete_resource:
           operation:
             $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
@@ -729,7 +875,8 @@ components:
           - $ref: '#/components/x-stackQL-resources/directory_buckets/methods/create_resource'
         delete:
           - $ref: '#/components/x-stackQL-resources/directory_buckets/methods/delete_resource'
-        update: []
+        update:
+          - $ref: '#/components/x-stackQL-resources/directory_buckets/methods/update_resource'
       config:
         views:
           select:
@@ -740,8 +887,11 @@ components:
               data__Identifier,
               JSON_EXTRACT(Properties, '$.BucketName') as bucket_name,
               JSON_EXTRACT(Properties, '$.LocationName') as location_name,
+              JSON_EXTRACT(Properties, '$.AvailabilityZoneName') as availability_zone_name,
               JSON_EXTRACT(Properties, '$.DataRedundancy') as data_redundancy,
-              JSON_EXTRACT(Properties, '$.Arn') as arn
+              JSON_EXTRACT(Properties, '$.Arn') as arn,
+              JSON_EXTRACT(Properties, '$.BucketEncryption') as bucket_encryption,
+              JSON_EXTRACT(Properties, '$.LifecycleConfiguration') as lifecycle_configuration
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::S3Express::DirectoryBucket'
               AND data__Identifier = '<BucketName>'
               AND region = 'us-east-1'
@@ -752,10 +902,13 @@ components:
                 detail.region,
                 JSON_EXTRACT(detail.Properties, '$.BucketName') as bucket_name,
                 JSON_EXTRACT(detail.Properties, '$.LocationName') as location_name,
+                JSON_EXTRACT(detail.Properties, '$.AvailabilityZoneName') as availability_zone_name,
                 JSON_EXTRACT(detail.Properties, '$.DataRedundancy') as data_redundancy,
-                JSON_EXTRACT(detail.Properties, '$.Arn') as arn
+                JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
+                JSON_EXTRACT(detail.Properties, '$.BucketEncryption') as bucket_encryption,
+                JSON_EXTRACT(detail.Properties, '$.LifecycleConfiguration') as lifecycle_configuration
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::S3Express::DirectoryBucket'
@@ -769,8 +922,11 @@ components:
                   data__Identifier,
                   json_extract_path_text(Properties, 'BucketName') as bucket_name,
                   json_extract_path_text(Properties, 'LocationName') as location_name,
+                  json_extract_path_text(Properties, 'AvailabilityZoneName') as availability_zone_name,
                   json_extract_path_text(Properties, 'DataRedundancy') as data_redundancy,
-                  json_extract_path_text(Properties, 'Arn') as arn
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'BucketEncryption') as bucket_encryption,
+                  json_extract_path_text(Properties, 'LifecycleConfiguration') as lifecycle_configuration
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::S3Express::DirectoryBucket'
                   AND data__Identifier = '<BucketName>'
                   AND region = 'us-east-1'
@@ -781,10 +937,13 @@ components:
                     detail.region,
                     json_extract_path_text(detail.Properties, 'BucketName') as bucket_name,
                     json_extract_path_text(detail.Properties, 'LocationName') as location_name,
+                    json_extract_path_text(detail.Properties, 'AvailabilityZoneName') as availability_zone_name,
                     json_extract_path_text(detail.Properties, 'DataRedundancy') as data_redundancy,
-                    json_extract_path_text(detail.Properties, 'Arn') as arn
+                    json_extract_path_text(detail.Properties, 'Arn') as arn,
+                    json_extract_path_text(detail.Properties, 'BucketEncryption') as bucket_encryption,
+                    json_extract_path_text(detail.Properties, 'LifecycleConfiguration') as lifecycle_configuration
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::S3Express::DirectoryBucket'

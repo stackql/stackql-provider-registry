@@ -490,7 +490,6 @@ components:
         - S3PrefixType
         - Tags
       x-write-only-properties:
-        - Tags
         - S3PrefixType
       x-read-only-properties:
         - AccessGrantId
@@ -504,19 +503,26 @@ components:
         taggable: true
         tagOnCreate: true
         tagUpdatable: true
+        cloudFormationSystemTags: false
         tagProperty: /properties/Tags
+        permissions:
+          - s3:UntagResource
+          - s3:TagResource
+          - s3:ListTagsForResource
       x-required-permissions:
         create:
           - s3:CreateAccessGrant
           - s3:TagResource
         read:
           - s3:GetAccessGrant
+          - s3:ListTagsForResource
         delete:
           - s3:DeleteAccessGrant
         list:
           - s3:ListAccessGrants
         update:
           - s3:TagResource
+          - s3:UntagResource
     AccessGrantsInstanceArn:
       description: The Amazon Resource Name (ARN) of the specified Access Grants instance.
       type: string
@@ -563,17 +569,24 @@ components:
         taggable: true
         tagOnCreate: true
         tagUpdatable: true
+        cloudFormationSystemTags: false
         tagProperty: /properties/Tags
+        permissions:
+          - s3:UntagResource
+          - s3:TagResource
+          - s3:ListTagsForResource
       x-required-permissions:
         create:
           - s3:CreateAccessGrantsInstance
           - s3:TagResource
         read:
           - s3:GetAccessGrantsInstance
+          - s3:ListTagsForResource
         delete:
           - s3:DeleteAccessGrantsInstance
         update:
           - s3:TagResource
+          - s3:UntagResource
         list:
           - s3:ListAccessGrantsInstances
     AccessGrantsLocation:
@@ -611,8 +624,6 @@ components:
         - AccessGrantsLocationId
       x-create-only-properties:
         - Tags
-      x-write-only-properties:
-        - Tags
       x-read-only-properties:
         - AccessGrantsLocationArn
         - AccessGrantsLocationId
@@ -621,7 +632,12 @@ components:
         taggable: true
         tagOnCreate: true
         tagUpdatable: true
+        cloudFormationSystemTags: false
         tagProperty: /properties/Tags
+        permissions:
+          - s3:UntagResource
+          - s3:TagResource
+          - s3:ListTagsForResource
       x-required-permissions:
         create:
           - s3:CreateAccessGrantsLocation
@@ -629,6 +645,7 @@ components:
           - s3:TagResource
         read:
           - s3:GetAccessGrantsLocation
+          - s3:ListTagsForResource
         delete:
           - s3:DeleteAccessGrantsLocation
         list:
@@ -636,6 +653,7 @@ components:
         update:
           - s3:UpdateAccessGrantsLocation
           - s3:TagResource
+          - s3:UntagResource
           - iam:PassRole
     VpcConfiguration:
       description: The Virtual Private Cloud (VPC) configuration for a bucket access point.
@@ -735,6 +753,8 @@ components:
         - Arn
       x-required-properties:
         - Bucket
+      x-tagging:
+        taggable: false
       x-required-permissions:
         create:
           - s3:CreateAccessPoint
@@ -867,7 +887,10 @@ components:
       required:
         - ServerSideEncryptionConfiguration
     ServerSideEncryptionRule:
-      description: Specifies the default server-side encryption configuration.
+      description: |-
+        Specifies the default server-side encryption configuration.
+           +   *General purpose buckets* - If you're specifying a customer managed KMS key, we recommend using a fully qualified KMS key ARN. If you use a KMS key alias instead, then KMS resolves the key within the requester’s account. This behavior can result in data that's encrypted with a KMS key that belongs to the requester, and not the bucket owner.
+          +   *Directory buckets* - When you specify an [customer managed key](https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk) for encryption in your directory bucket, only use the key ID or key ARN. The key alias format of the KMS key isn't supported.
       type: object
       additionalProperties: false
       properties:
@@ -880,40 +903,39 @@ components:
           $ref: '#/components/schemas/ServerSideEncryptionByDefault'
           description: Specifies the default server-side encryption to apply to new objects in the bucket. If a PUT Object request doesn't specify any server-side encryption, this default encryption will be applied.
     ServerSideEncryptionByDefault:
-      description: >-
-        Describes the default server-side encryption to apply to new objects in the bucket. If a PUT Object request doesn't specify any server-side encryption, this default encryption will be applied. If you don't specify a customer managed key at configuration, Amazon S3 automatically creates an AWS KMS key in your AWS account the first time that you add an object encrypted with SSE-KMS to a bucket. By default, Amazon S3 uses this KMS key for SSE-KMS. For more information, see [PUT Bucket
-        encryption](https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTencryption.html) in the *Amazon S3 API Reference*.
+      description: |-
+        Describes the default server-side encryption to apply to new objects in the bucket. If a PUT Object request doesn't specify any server-side encryption, this default encryption will be applied. For more information, see [PutBucketEncryption](https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTencryption.html).
+           +   *General purpose buckets* - If you don't specify a customer managed key at configuration, Amazon S3 automatically creates an AWS KMS key (``aws/s3``) in your AWS account the first time that you add an object encrypted with SSE-KMS to a bucket. By default, Amazon S3 uses this KMS key for SSE-KMS. 
+          +   *Directory buckets* - Your SSE-KMS configuration can only support 1 [customer managed key](https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk) per directory bucket for the lifetime of the bucket. The [managed key](https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#aws-managed-cmk) (``aws/s3``) isn't supported. 
+          +   *Directory buckets* - For directory buckets, there are only two supported options for server-side encryption: SSE-S3 and SSE-KMS.
       type: object
       properties:
         KMSMasterKeyID:
           description: |-
-            AWS Key Management Service (KMS) customer AWS KMS key ID to use for the default encryption. This parameter is allowed if and only if ``SSEAlgorithm`` is set to ``aws:kms`` or ``aws:kms:dsse``.
-             You can specify the key ID, key alias, or the Amazon Resource Name (ARN) of the KMS key.
+            AWS Key Management Service (KMS) customer managed key ID to use for the default encryption. 
+               +   *General purpose buckets* - This parameter is allowed if and only if ``SSEAlgorithm`` is set to ``aws:kms`` or ``aws:kms:dsse``.
+              +   *Directory buckets* - This parameter is allowed if and only if ``SSEAlgorithm`` is set to ``aws:kms``.
+              
+              You can specify the key ID, key alias, or the Amazon Resource Name (ARN) of the KMS key.
               +  Key ID: ``1234abcd-12ab-34cd-56ef-1234567890ab`` 
               +  Key ARN: ``arn:aws:kms:us-east-2:111122223333:key/1234abcd-12ab-34cd-56ef-1234567890ab`` 
               +  Key Alias: ``alias/alias-name`` 
               
-             If you use a key ID, you can run into a LogDestination undeliverable error when creating a VPC flow log. 
-             If you are using encryption with cross-account or AWS service operations you must use a fully qualified KMS key ARN. For more information, see [Using encryption for cross-account operations](https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-encryption.html#bucket-encryption-update-bucket-policy).
-              Amazon S3 only supports symmetric encryption KMS keys. For more information, see [Asymmetric keys in KMS](https://docs.aws.amazon.com//kms/latest/developerguide/symmetric-asymmetric.html) in the *Key Management Service Developer Guide*.
+             If you are using encryption with cross-account or AWS service operations, you must use a fully qualified KMS key ARN. For more information, see [Using encryption for cross-account operations](https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-encryption.html#bucket-encryption-update-bucket-policy).
+               +   *General purpose buckets* - If you're specifying a customer managed KMS key, we recommend using a fully qualified KMS key ARN. If you use a KMS key alias instead, then KMS resolves the key within the requester’s account. This behavior can result in data that's encrypted with a KMS key that belongs to the requester, and not the bucket owner. Also, if you use a key ID, you can run into a LogDestination undeliverable error when creating a VPC flow log. 
+              +   *Directory buckets* - When you specify an [customer managed key](https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk) for encryption in your directory bucket, only use the key ID or key ARN. The key alias format of the KMS key isn't supported.
+              
+               Amazon S3 only supports symmetric encryption KMS keys. For more information, see [Asymmetric keys in KMS](https://docs.aws.amazon.com//kms/latest/developerguide/symmetric-asymmetric.html) in the *Key Management Service Developer Guide*.
           type: string
-          anyOf:
-            - relationshipRef:
-                typeName: AWS::KMS::Key
-                propertyPath: /properties/KeyId
-            - relationshipRef:
-                typeName: AWS::KMS::Key
-                propertyPath: /properties/Arn
-            - relationshipRef:
-                typeName: AWS::KMS::Alias
-                propertyPath: /properties/AliasName
         SSEAlgorithm:
           type: string
           enum:
             - aws:kms
             - AES256
             - aws:kms:dsse
-          description: Server-side encryption algorithm to use for the default encryption.
+          description: |-
+            Server-side encryption algorithm to use for the default encryption.
+              For directory buckets, there are only two supported values for server-side encryption: ``AES256`` and ``aws:kms``.
       additionalProperties: false
       required:
         - SSEAlgorithm
@@ -1109,6 +1131,12 @@ components:
           x-insertionOrder: true
           items:
             $ref: '#/components/schemas/Rule'
+        TransitionDefaultMinimumObjectSize:
+          description: ''
+          type: string
+          enum:
+            - varies_by_storage_class
+            - all_storage_classes_128K
       required:
         - Rules
       description: Specifies the lifecycle configuration for objects in an Amazon S3 bucket. For more information, see [Object Lifecycle Management](https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html) in the *Amazon S3 User Guide*.
@@ -1315,7 +1343,10 @@ components:
       properties:
         PartitionDateSource:
           type: string
-          description: Specifies the partition date source for the partitioned prefix. PartitionDateSource can be EventTime or DeliveryTime.
+          description: |-
+            Specifies the partition date source for the partitioned prefix. ``PartitionDateSource`` can be ``EventTime`` or ``DeliveryTime``.
+             For ``DeliveryTime``, the time in the log file names corresponds to the delivery time for the log files. 
+              For ``EventTime``, The logs delivered are for a specific day only. The year, month, and day correspond to the day on which the event occurred, and the hour, minutes and seconds are set to 00 in the key.
           enum:
             - EventTime
             - DeliveryTime
@@ -1513,7 +1544,7 @@ components:
     DefaultRetention:
       type: object
       description: |-
-        The container element for specifying the default Object Lock retention settings for new objects placed in the specified bucket.
+        The container element for optionally specifying the default Object Lock retention settings for new objects placed in the specified bucket.
            +  The ``DefaultRetention`` settings require both a mode and a period.
           +  The ``DefaultRetention`` period can be either ``Days`` or ``Years`` but you must select one. You cannot specify ``Days`` and ``Years`` at the same time.
       additionalProperties: false
@@ -1696,7 +1727,9 @@ components:
         - Owner
     EncryptionConfiguration:
       type: object
-      description: Specifies encryption-related information for an Amazon S3 bucket that is a destination for replicated objects.
+      description: |-
+        Specifies encryption-related information for an Amazon S3 bucket that is a destination for replicated objects.
+          If you're specifying a customer managed KMS key, we recommend using a fully qualified KMS key ARN. If you use a KMS key alias instead, then KMS resolves the key within the requester’s account. This behavior can result in data that's encrypted with a KMS key that belongs to the requester, and not the bucket owner.
       additionalProperties: false
       properties:
         ReplicaKmsKeyID:
@@ -1829,7 +1862,9 @@ components:
       required:
         - Status
     VersioningConfiguration:
-      description: Describes the versioning state of an Amazon S3 bucket. For more information, see [PUT Bucket versioning](https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTVersioningStatus.html) in the *Amazon S3 API Reference*.
+      description: |-
+        Describes the versioning state of an Amazon S3 bucket. For more information, see [PUT Bucket versioning](https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTVersioningStatus.html) in the *Amazon S3 API Reference*.
+          When you enable versioning on a bucket for the first time, it might take a short amount of time for the change to be fully propagated. We recommend that you wait for 15 minutes after enabling versioning before issuing write operations (``PUT`` or ``DELETE``) on objects in the bucket.
       type: object
       additionalProperties: false
       properties:
@@ -2036,7 +2071,9 @@ components:
           type: array
         VersioningConfiguration:
           $ref: '#/components/schemas/VersioningConfiguration'
-          description: Enables multiple versions of all objects in this bucket. You might enable versioning to prevent objects from being deleted or overwritten by mistake or to archive objects so that you can retrieve previous versions of them.
+          description: |-
+            Enables multiple versions of all objects in this bucket. You might enable versioning to prevent objects from being deleted or overwritten by mistake or to archive objects so that you can retrieve previous versions of them.
+              When you enable versioning on a bucket for the first time, it might take a short amount of time for the change to be fully propagated. We recommend that you wait for 15 minutes after enabling versioning before issuing write operations (``PUT`` or ``DELETE``) on objects in the bucket.
         WebsiteConfiguration:
           $ref: '#/components/schemas/WebsiteConfiguration'
           description: Information used to configure the bucket as a static website. For more information, see [Hosting Websites on Amazon S3](https://docs.aws.amazon.com/AmazonS3/latest/dev/WebsiteHosting.html).
@@ -2217,20 +2254,20 @@ components:
         tagUpdatable: false
         cloudFormationSystemTags: false
       x-required-permissions:
-        read:
-          - s3:GetBucketPolicy
         create:
           - s3:GetBucketPolicy
           - s3:PutBucketPolicy
+        read:
+          - s3:GetBucketPolicy
         update:
           - s3:GetBucketPolicy
           - s3:PutBucketPolicy
-        list:
-          - s3:GetBucketPolicy
-          - s3:ListAllMyBuckets
         delete:
           - s3:GetBucketPolicy
           - s3:DeleteBucketPolicy
+        list:
+          - s3:GetBucketPolicy
+          - s3:ListAllMyBuckets
     Region:
       type: object
       properties:
@@ -3155,7 +3192,9 @@ components:
               type: array
             VersioningConfiguration:
               $ref: '#/components/schemas/VersioningConfiguration'
-              description: Enables multiple versions of all objects in this bucket. You might enable versioning to prevent objects from being deleted or overwritten by mistake or to archive objects so that you can retrieve previous versions of them.
+              description: |-
+                Enables multiple versions of all objects in this bucket. You might enable versioning to prevent objects from being deleted or overwritten by mistake or to archive objects so that you can retrieve previous versions of them.
+                  When you enable versioning on a bucket for the first time, it might take a short amount of time for the change to be fully propagated. We recommend that you wait for 15 minutes after enabling versioning before issuing write operations (``PUT`` or ``DELETE``) on objects in the bucket.
             WebsiteConfiguration:
               $ref: '#/components/schemas/WebsiteConfiguration'
               description: Information used to configure the bucket as a static website. For more information, see [Hosting Websites on Amazon S3](https://docs.aws.amazon.com/AmazonS3/latest/dev/WebsiteHosting.html).
@@ -3452,7 +3491,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Grantee') as grantee,
                 JSON_EXTRACT(detail.Properties, '$.AccessGrantsLocationConfiguration') as access_grants_location_configuration
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::S3::AccessGrant'
@@ -3493,7 +3532,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Grantee') as grantee,
                     json_extract_path_text(detail.Properties, 'AccessGrantsLocationConfiguration') as access_grants_location_configuration
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::S3::AccessGrant'
@@ -3560,7 +3599,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Grantee') as grantee,
               JSON_EXTRACT(detail.Properties, '$.AccessGrantsLocationConfiguration') as access_grants_location_configuration
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -3584,7 +3623,7 @@ components:
                 json_extract_path_text(detail.Properties, 'Grantee') as grantee,
                 json_extract_path_text(detail.Properties, 'AccessGrantsLocationConfiguration') as access_grants_location_configuration
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -3671,7 +3710,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.AccessGrantsInstanceId') as access_grants_instance_id,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::S3::AccessGrantsInstance'
@@ -3700,7 +3739,7 @@ components:
                     json_extract_path_text(detail.Properties, 'AccessGrantsInstanceId') as access_grants_instance_id,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::S3::AccessGrantsInstance'
@@ -3761,7 +3800,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.IdentityCenterArn') as identity_center_arn,
               JSON_EXTRACT(detail.Properties, '$.AccessGrantsInstanceId') as access_grants_instance_id
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -3779,7 +3818,7 @@ components:
                 json_extract_path_text(detail.Properties, 'IdentityCenterArn') as identity_center_arn,
                 json_extract_path_text(detail.Properties, 'AccessGrantsInstanceId') as access_grants_instance_id
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -3868,7 +3907,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.LocationScope') as location_scope,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::S3::AccessGrantsLocation'
@@ -3899,7 +3938,7 @@ components:
                     json_extract_path_text(detail.Properties, 'LocationScope') as location_scope,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::S3::AccessGrantsLocation'
@@ -3961,7 +4000,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.IamRoleArn') as iam_role_arn,
               JSON_EXTRACT(detail.Properties, '$.LocationScope') as location_scope
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -3980,7 +4019,7 @@ components:
                 json_extract_path_text(detail.Properties, 'IamRoleArn') as iam_role_arn,
                 json_extract_path_text(detail.Properties, 'LocationScope') as location_scope
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -4077,7 +4116,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.NetworkOrigin') as network_origin,
                 JSON_EXTRACT(detail.Properties, '$.Arn') as arn
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::S3::AccessPoint'
@@ -4116,7 +4155,7 @@ components:
                     json_extract_path_text(detail.Properties, 'NetworkOrigin') as network_origin,
                     json_extract_path_text(detail.Properties, 'Arn') as arn
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::S3::AccessPoint'
@@ -4275,7 +4314,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.RegionalDomainName') as regional_domain_name,
                 JSON_EXTRACT(detail.Properties, '$.WebsiteURL') as website_url
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::S3::Bucket'
@@ -4346,7 +4385,7 @@ components:
                     json_extract_path_text(detail.Properties, 'RegionalDomainName') as regional_domain_name,
                     json_extract_path_text(detail.Properties, 'WebsiteURL') as website_url
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::S3::Bucket'
@@ -4428,7 +4467,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.RegionalDomainName') as regional_domain_name,
               JSON_EXTRACT(detail.Properties, '$.WebsiteURL') as website_url
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -4467,7 +4506,7 @@ components:
                 json_extract_path_text(detail.Properties, 'RegionalDomainName') as regional_domain_name,
                 json_extract_path_text(detail.Properties, 'WebsiteURL') as website_url
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -4550,7 +4589,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Bucket') as bucket,
                 JSON_EXTRACT(detail.Properties, '$.PolicyDocument') as policy_document
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::S3::BucketPolicy'
@@ -4575,7 +4614,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Bucket') as bucket,
                     json_extract_path_text(detail.Properties, 'PolicyDocument') as policy_document
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::S3::BucketPolicy'
@@ -4681,7 +4720,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.PublicAccessBlockConfiguration') as public_access_block_configuration,
                 JSON_EXTRACT(detail.Properties, '$.Regions') as regions
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::S3::MultiRegionAccessPoint'
@@ -4712,7 +4751,7 @@ components:
                     json_extract_path_text(detail.Properties, 'PublicAccessBlockConfiguration') as public_access_block_configuration,
                     json_extract_path_text(detail.Properties, 'Regions') as regions
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::S3::MultiRegionAccessPoint'
@@ -4906,7 +4945,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.StorageLensConfiguration') as storage_lens_configuration,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::S3::StorageLens'
@@ -4931,7 +4970,7 @@ components:
                     json_extract_path_text(detail.Properties, 'StorageLensConfiguration') as storage_lens_configuration,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::S3::StorageLens'
@@ -4990,7 +5029,7 @@ components:
               JSON_EXTRACT(json_each.value, '$.Value') as tag_value,
               JSON_EXTRACT(detail.Properties, '$.StorageLensConfiguration') as storage_lens_configuration
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -5006,7 +5045,7 @@ components:
                 json_extract_path_text(json_each.value, 'Value') as tag_value,
                 json_extract_path_text(detail.Properties, 'StorageLensConfiguration') as storage_lens_configuration
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -5093,7 +5132,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.StorageLensGroupArn') as storage_lens_group_arn,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::S3::StorageLensGroup'
@@ -5122,7 +5161,7 @@ components:
                     json_extract_path_text(detail.Properties, 'StorageLensGroupArn') as storage_lens_group_arn,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::S3::StorageLensGroup'
@@ -5183,7 +5222,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Filter') as filter,
               JSON_EXTRACT(detail.Properties, '$.StorageLensGroupArn') as storage_lens_group_arn
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -5201,7 +5240,7 @@ components:
                 json_extract_path_text(detail.Properties, 'Filter') as filter,
                 json_extract_path_text(detail.Properties, 'StorageLensGroupArn') as storage_lens_group_arn
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))

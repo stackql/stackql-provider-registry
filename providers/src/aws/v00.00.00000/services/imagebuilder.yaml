@@ -415,6 +415,7 @@ components:
           enum:
             - Windows
             - Linux
+            - macOS
         Data:
           description: The data of the component.
           type: string
@@ -480,7 +481,10 @@ components:
         create:
           - iam:CreateServiceLinkedRole
           - iam:GetRole
-          - kms:GenerateDataKey*
+          - kms:GenerateDataKey
+          - kms:GenerateDataKeyPair
+          - kms:GenerateDataKeyPairWithoutPlaintext
+          - kms:GenerateDataKeyWithoutPlaintext
           - kms:Encrypt
           - kms:Decrypt
           - s3:GetObject
@@ -491,12 +495,14 @@ components:
           - imagebuilder:CreateComponent
         read:
           - imagebuilder:GetComponent
+          - kms:Decrypt
         delete:
           - imagebuilder:GetComponent
           - imagebuilder:UnTagResource
           - imagebuilder:DeleteComponent
         list:
           - imagebuilder:ListComponents
+          - imagebuilder:ListComponentBuildVersions
     ComponentConfiguration:
       description: Configuration details of the component.
       type: object
@@ -716,13 +722,17 @@ components:
           - kms:Decrypt
           - kms:ReEncryptFrom
           - kms:ReEncryptTo
-          - kms:GenerateDataKey*
+          - kms:GenerateDataKey
+          - kms:GenerateDataKeyPair
+          - kms:GenerateDataKeyPairWithoutPlaintext
+          - kms:GenerateDataKeyWithoutPlaintext
           - s3:GetObject
           - s3:ListBucket
           - ecr:DescribeRepositories
           - ec2:DescribeImages
         read:
           - imagebuilder:GetContainerRecipe
+          - kms:Decrypt
         delete:
           - imagebuilder:UnTagResource
           - imagebuilder:GetContainerRecipe
@@ -961,19 +971,6 @@ components:
           - imagebuilder:DeleteDistributionConfiguration
         list:
           - imagebuilder:ListDistributionConfigurations
-    ImageTestsConfiguration:
-      description: Image tests configuration.
-      type: object
-      additionalProperties: false
-      properties:
-        ImageTestsEnabled:
-          description: Defines if tests should be executed when building this image.
-          type: boolean
-        TimeoutMinutes:
-          description: The maximum time in minutes that tests are permitted to run.
-          type: integer
-          minimum: 60
-          maximum: 1440
     ImageScanningConfiguration:
       description: Determines if tests should run after building the image. Image Builder defaults to enable tests to run following the image build, before image distribution.
       type: object
@@ -985,20 +982,6 @@ components:
         ImageScanningEnabled:
           description: This sets whether Image Builder keeps a snapshot of the vulnerability scans that Amazon Inspector runs against the build instance when you create a new image.
           type: boolean
-    EcrConfiguration:
-      description: Settings for Image Builder to configure the ECR repository and output container images that are scanned.
-      type: object
-      additionalProperties: false
-      properties:
-        ContainerTags:
-          description: Tags for Image Builder to apply the output container image that is scanned. Tags can help you identify and manage your scanned images.
-          type: array
-          x-insertionOrder: true
-          items:
-            type: string
-        RepositoryName:
-          description: The name of the container repository that Amazon Inspector scans to identify findings for your container images. The name includes the path for the repository location. If you don't provide this information, Image Builder creates a repository in your account named image-builder-image-scanning-repository to use for vulnerability scans for your output container images.
-          type: string
     WorkflowConfiguration:
       description: The workflow configuration of the image
       type: object
@@ -1022,6 +1005,36 @@ components:
           enum:
             - CONTINUE
             - ABORT
+    EcrConfiguration:
+      description: Settings for Image Builder to configure the ECR repository and output container images that are scanned.
+      type: object
+      additionalProperties: false
+      properties:
+        ContainerTags:
+          description: Tags for Image Builder to apply the output container image that is scanned. Tags can help you identify and manage your scanned images.
+          type: array
+          x-insertionOrder: true
+          items:
+            type: string
+        RepositoryName:
+          description: The name of the container repository that Amazon Inspector scans to identify findings for your container images. The name includes the path for the repository location. If you don't provide this information, Image Builder creates a repository in your account named image-builder-image-scanning-repository to use for vulnerability scans for your output container images.
+          type: string
+    WorkflowParameterValue:
+      description: The value associated with the workflow parameter
+      type: string
+    ImageTestsConfiguration:
+      description: Image tests configuration.
+      type: object
+      additionalProperties: false
+      properties:
+        ImageTestsEnabled:
+          description: Defines if tests should be executed when building this image.
+          type: boolean
+        TimeoutMinutes:
+          description: The maximum time in minutes that tests are permitted to run.
+          type: integer
+          minimum: 60
+          maximum: 1440
     WorkflowParameter:
       description: A parameter associated with the workflow
       type: object
@@ -1034,61 +1047,58 @@ components:
           x-insertionOrder: true
           items:
             $ref: '#/components/schemas/WorkflowParameterValue'
-    WorkflowParameterValue:
-      description: The value associated with the workflow parameter
-      type: string
     Image:
       type: object
       properties:
-        Arn:
-          description: The Amazon Resource Name (ARN) of the image.
+        ImageScanningConfiguration:
+          description: Contains settings for vulnerability scans.
+          $ref: '#/components/schemas/ImageScanningConfiguration'
+        ContainerRecipeArn:
+          description: The Amazon Resource Name (ARN) of the container recipe that defines how images are configured and tested.
+          type: string
+        Workflows:
+          description: Workflows to define the image build process
+          x-insertionOrder: true
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowConfiguration'
+        ImageUri:
+          description: URI for containers created in current Region with default ECR image tag
           type: string
         Name:
           description: The name of the image.
           type: string
-        ImageTestsConfiguration:
-          description: The image tests configuration used when creating this image.
-          $ref: '#/components/schemas/ImageTestsConfiguration'
+        InfrastructureConfigurationArn:
+          description: The Amazon Resource Name (ARN) of the infrastructure configuration.
+          type: string
         ImageRecipeArn:
           description: The Amazon Resource Name (ARN) of the image recipe that defines how images are configured, tested, and assessed.
-          type: string
-        ContainerRecipeArn:
-          description: The Amazon Resource Name (ARN) of the container recipe that defines how images are configured and tested.
           type: string
         DistributionConfigurationArn:
           description: The Amazon Resource Name (ARN) of the distribution configuration.
           type: string
-        InfrastructureConfigurationArn:
-          description: The Amazon Resource Name (ARN) of the infrastructure configuration.
-          type: string
-        Workflows:
-          description: Workflows to define the image build process
-          type: array
-          x-insertionOrder: true
-          items:
-            $ref: '#/components/schemas/WorkflowConfiguration'
         ImageId:
           description: The AMI ID of the EC2 AMI in current region.
           type: string
-        ImageUri:
-          description: URI for containers created in current Region with default ECR image tag
+        ImageTestsConfiguration:
+          description: The image tests configuration used when creating this image.
+          $ref: '#/components/schemas/ImageTestsConfiguration'
+        Arn:
+          description: The Amazon Resource Name (ARN) of the image.
           type: string
         EnhancedImageMetadataEnabled:
           description: Collects additional information about the image being created, including the operating system (OS) version and package list.
           type: boolean
-        ImageScanningConfiguration:
-          description: Contains settings for vulnerability scans.
-          $ref: '#/components/schemas/ImageScanningConfiguration'
         ExecutionRole:
           description: The execution role name/ARN for the image build, if provided
           type: string
         Tags:
-          description: The tags associated with the image.
-          type: object
-          additionalProperties: false
           x-patternProperties:
             .{1,}:
               type: string
+          description: The tags associated with the image.
+          additionalProperties: false
+          type: object
       x-stackql-resource-name: image
       description: Resource schema for AWS::ImageBuilder::Image
       x-type-name: AWS::ImageBuilder::Image
@@ -1112,6 +1122,8 @@ components:
       x-tagging:
         taggable: false
       x-required-permissions:
+        read:
+          - imagebuilder:GetImage
         create:
           - ecr:BatchGetRepositoryScanningConfiguration
           - iam:GetRole
@@ -1125,15 +1137,14 @@ components:
           - imagebuilder:CreateImage
           - imagebuilder:TagResource
           - inspector2:BatchGetAccountStatus
-        read:
-          - imagebuilder:GetImage
+        list:
+          - imagebuilder:ListImages
+          - imagebuilder:ListImageBuildVersions
         delete:
           - imagebuilder:GetImage
           - imagebuilder:DeleteImage
           - imagebuilder:UnTagResource
           - imagebuilder:CancelImageCreation
-        list:
-          - imagebuilder:ListImages
     Schedule:
       description: The schedule of the image pipeline.
       type: object
@@ -1399,6 +1410,27 @@ components:
         S3KeyPrefix:
           description: S3KeyPrefix
           type: string
+    Placement:
+      description: The placement options
+      type: object
+      additionalProperties: false
+      properties:
+        AvailabilityZone:
+          description: AvailabilityZone
+          type: string
+        Tenancy:
+          description: Tenancy
+          type: string
+          enum:
+            - default
+            - dedicated
+            - host
+        HostId:
+          description: HostId
+          type: string
+        HostResourceGroupArn:
+          description: HostResourceGroupArn
+          type: string
     InfrastructureConfiguration:
       type: object
       properties:
@@ -1458,6 +1490,9 @@ components:
           x-patternProperties:
             .{1,}:
               type: string
+        Placement:
+          description: The placement option settings for the infrastructure configuration.
+          $ref: '#/components/schemas/Placement'
       required:
         - Name
         - InstanceProfileName
@@ -1823,7 +1858,10 @@ components:
       x-required-permissions:
         create:
           - iam:GetRole
-          - kms:GenerateDataKey*
+          - kms:GenerateDataKey
+          - kms:GenerateDataKeyPair
+          - kms:GenerateDataKeyPairWithoutPlaintext
+          - kms:GenerateDataKeyWithoutPlaintext
           - kms:Encrypt
           - kms:Decrypt
           - s3:GetObject
@@ -1834,12 +1872,14 @@ components:
           - imagebuilder:CreateWorkflow
         read:
           - imagebuilder:GetWorkflow
+          - kms:Decrypt
         delete:
           - imagebuilder:GetWorkflow
           - imagebuilder:UnTagResource
           - imagebuilder:DeleteWorkflow
         list:
           - imagebuilder:ListWorkflows
+          - imagebuilder:ListWorkflowBuildVersions
     CreateComponentRequest:
       properties:
         ClientToken:
@@ -1880,6 +1920,7 @@ components:
               enum:
                 - Windows
                 - Linux
+                - macOS
             Data:
               description: The data of the component.
               type: string
@@ -2041,55 +2082,55 @@ components:
         DesiredState:
           type: object
           properties:
-            Arn:
-              description: The Amazon Resource Name (ARN) of the image.
+            ImageScanningConfiguration:
+              description: Contains settings for vulnerability scans.
+              $ref: '#/components/schemas/ImageScanningConfiguration'
+            ContainerRecipeArn:
+              description: The Amazon Resource Name (ARN) of the container recipe that defines how images are configured and tested.
+              type: string
+            Workflows:
+              description: Workflows to define the image build process
+              x-insertionOrder: true
+              type: array
+              items:
+                $ref: '#/components/schemas/WorkflowConfiguration'
+            ImageUri:
+              description: URI for containers created in current Region with default ECR image tag
               type: string
             Name:
               description: The name of the image.
               type: string
-            ImageTestsConfiguration:
-              description: The image tests configuration used when creating this image.
-              $ref: '#/components/schemas/ImageTestsConfiguration'
+            InfrastructureConfigurationArn:
+              description: The Amazon Resource Name (ARN) of the infrastructure configuration.
+              type: string
             ImageRecipeArn:
               description: The Amazon Resource Name (ARN) of the image recipe that defines how images are configured, tested, and assessed.
-              type: string
-            ContainerRecipeArn:
-              description: The Amazon Resource Name (ARN) of the container recipe that defines how images are configured and tested.
               type: string
             DistributionConfigurationArn:
               description: The Amazon Resource Name (ARN) of the distribution configuration.
               type: string
-            InfrastructureConfigurationArn:
-              description: The Amazon Resource Name (ARN) of the infrastructure configuration.
-              type: string
-            Workflows:
-              description: Workflows to define the image build process
-              type: array
-              x-insertionOrder: true
-              items:
-                $ref: '#/components/schemas/WorkflowConfiguration'
             ImageId:
               description: The AMI ID of the EC2 AMI in current region.
               type: string
-            ImageUri:
-              description: URI for containers created in current Region with default ECR image tag
+            ImageTestsConfiguration:
+              description: The image tests configuration used when creating this image.
+              $ref: '#/components/schemas/ImageTestsConfiguration'
+            Arn:
+              description: The Amazon Resource Name (ARN) of the image.
               type: string
             EnhancedImageMetadataEnabled:
               description: Collects additional information about the image being created, including the operating system (OS) version and package list.
               type: boolean
-            ImageScanningConfiguration:
-              description: Contains settings for vulnerability scans.
-              $ref: '#/components/schemas/ImageScanningConfiguration'
             ExecutionRole:
               description: The execution role name/ARN for the image build, if provided
               type: string
             Tags:
-              description: The tags associated with the image.
-              type: object
-              additionalProperties: false
               x-patternProperties:
                 .{1,}:
                   type: string
+              description: The tags associated with the image.
+              additionalProperties: false
+              type: object
           x-stackQL-stringOnly: true
       x-title: CreateImageRequest
       type: object
@@ -2292,6 +2333,9 @@ components:
               x-patternProperties:
                 .{1,}:
                   type: string
+            Placement:
+              description: The placement option settings for the infrastructure configuration.
+              $ref: '#/components/schemas/Placement'
           x-stackQL-stringOnly: true
       x-title: CreateInfrastructureConfigurationRequest
       type: object
@@ -2503,7 +2547,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Uri') as uri,
                 JSON_EXTRACT(detail.Properties, '$.SupportedOsVersions') as supported_os_versions
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::ImageBuilder::Component'
@@ -2550,7 +2594,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Uri') as uri,
                     json_extract_path_text(detail.Properties, 'SupportedOsVersions') as supported_os_versions
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::ImageBuilder::Component'
@@ -2620,7 +2664,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Uri') as uri,
               JSON_EXTRACT(detail.Properties, '$.SupportedOsVersions') as supported_os_versions
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -2647,7 +2691,7 @@ components:
                 json_extract_path_text(detail.Properties, 'Uri') as uri,
                 json_extract_path_text(detail.Properties, 'SupportedOsVersions') as supported_os_versions
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -2745,7 +2789,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.WorkingDirectory') as working_directory,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::ImageBuilder::ContainerRecipe'
@@ -2798,7 +2842,7 @@ components:
                     json_extract_path_text(detail.Properties, 'WorkingDirectory') as working_directory,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::ImageBuilder::ContainerRecipe'
@@ -2871,7 +2915,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.ParentImage') as parent_image,
               JSON_EXTRACT(detail.Properties, '$.WorkingDirectory') as working_directory
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -2901,7 +2945,7 @@ components:
                 json_extract_path_text(detail.Properties, 'ParentImage') as parent_image,
                 json_extract_path_text(detail.Properties, 'WorkingDirectory') as working_directory
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -2990,7 +3034,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Distributions') as distributions,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::ImageBuilder::DistributionConfiguration'
@@ -3021,7 +3065,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Distributions') as distributions,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::ImageBuilder::DistributionConfiguration'
@@ -3083,7 +3127,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Description') as description,
               JSON_EXTRACT(detail.Properties, '$.Distributions') as distributions
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -3102,7 +3146,7 @@ components:
                 json_extract_path_text(detail.Properties, 'Description') as description,
                 json_extract_path_text(detail.Properties, 'Distributions') as distributions
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -3159,18 +3203,18 @@ components:
               SELECT
               region,
               data__Identifier,
-              JSON_EXTRACT(Properties, '$.Arn') as arn,
-              JSON_EXTRACT(Properties, '$.Name') as name,
-              JSON_EXTRACT(Properties, '$.ImageTestsConfiguration') as image_tests_configuration,
-              JSON_EXTRACT(Properties, '$.ImageRecipeArn') as image_recipe_arn,
-              JSON_EXTRACT(Properties, '$.ContainerRecipeArn') as container_recipe_arn,
-              JSON_EXTRACT(Properties, '$.DistributionConfigurationArn') as distribution_configuration_arn,
-              JSON_EXTRACT(Properties, '$.InfrastructureConfigurationArn') as infrastructure_configuration_arn,
-              JSON_EXTRACT(Properties, '$.Workflows') as workflows,
-              JSON_EXTRACT(Properties, '$.ImageId') as image_id,
-              JSON_EXTRACT(Properties, '$.ImageUri') as image_uri,
-              JSON_EXTRACT(Properties, '$.EnhancedImageMetadataEnabled') as enhanced_image_metadata_enabled,
               JSON_EXTRACT(Properties, '$.ImageScanningConfiguration') as image_scanning_configuration,
+              JSON_EXTRACT(Properties, '$.ContainerRecipeArn') as container_recipe_arn,
+              JSON_EXTRACT(Properties, '$.Workflows') as workflows,
+              JSON_EXTRACT(Properties, '$.ImageUri') as image_uri,
+              JSON_EXTRACT(Properties, '$.Name') as name,
+              JSON_EXTRACT(Properties, '$.InfrastructureConfigurationArn') as infrastructure_configuration_arn,
+              JSON_EXTRACT(Properties, '$.ImageRecipeArn') as image_recipe_arn,
+              JSON_EXTRACT(Properties, '$.DistributionConfigurationArn') as distribution_configuration_arn,
+              JSON_EXTRACT(Properties, '$.ImageId') as image_id,
+              JSON_EXTRACT(Properties, '$.ImageTestsConfiguration') as image_tests_configuration,
+              JSON_EXTRACT(Properties, '$.Arn') as arn,
+              JSON_EXTRACT(Properties, '$.EnhancedImageMetadataEnabled') as enhanced_image_metadata_enabled,
               JSON_EXTRACT(Properties, '$.ExecutionRole') as execution_role,
               JSON_EXTRACT(Properties, '$.Tags') as tags
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ImageBuilder::Image'
@@ -3181,22 +3225,22 @@ components:
               ddl: |-
                 SELECT
                 detail.region,
-                JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
-                JSON_EXTRACT(detail.Properties, '$.Name') as name,
-                JSON_EXTRACT(detail.Properties, '$.ImageTestsConfiguration') as image_tests_configuration,
-                JSON_EXTRACT(detail.Properties, '$.ImageRecipeArn') as image_recipe_arn,
-                JSON_EXTRACT(detail.Properties, '$.ContainerRecipeArn') as container_recipe_arn,
-                JSON_EXTRACT(detail.Properties, '$.DistributionConfigurationArn') as distribution_configuration_arn,
-                JSON_EXTRACT(detail.Properties, '$.InfrastructureConfigurationArn') as infrastructure_configuration_arn,
-                JSON_EXTRACT(detail.Properties, '$.Workflows') as workflows,
-                JSON_EXTRACT(detail.Properties, '$.ImageId') as image_id,
-                JSON_EXTRACT(detail.Properties, '$.ImageUri') as image_uri,
-                JSON_EXTRACT(detail.Properties, '$.EnhancedImageMetadataEnabled') as enhanced_image_metadata_enabled,
                 JSON_EXTRACT(detail.Properties, '$.ImageScanningConfiguration') as image_scanning_configuration,
+                JSON_EXTRACT(detail.Properties, '$.ContainerRecipeArn') as container_recipe_arn,
+                JSON_EXTRACT(detail.Properties, '$.Workflows') as workflows,
+                JSON_EXTRACT(detail.Properties, '$.ImageUri') as image_uri,
+                JSON_EXTRACT(detail.Properties, '$.Name') as name,
+                JSON_EXTRACT(detail.Properties, '$.InfrastructureConfigurationArn') as infrastructure_configuration_arn,
+                JSON_EXTRACT(detail.Properties, '$.ImageRecipeArn') as image_recipe_arn,
+                JSON_EXTRACT(detail.Properties, '$.DistributionConfigurationArn') as distribution_configuration_arn,
+                JSON_EXTRACT(detail.Properties, '$.ImageId') as image_id,
+                JSON_EXTRACT(detail.Properties, '$.ImageTestsConfiguration') as image_tests_configuration,
+                JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
+                JSON_EXTRACT(detail.Properties, '$.EnhancedImageMetadataEnabled') as enhanced_image_metadata_enabled,
                 JSON_EXTRACT(detail.Properties, '$.ExecutionRole') as execution_role,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::ImageBuilder::Image'
@@ -3208,18 +3252,18 @@ components:
                   SELECT
                   region,
                   data__Identifier,
-                  json_extract_path_text(Properties, 'Arn') as arn,
-                  json_extract_path_text(Properties, 'Name') as name,
-                  json_extract_path_text(Properties, 'ImageTestsConfiguration') as image_tests_configuration,
-                  json_extract_path_text(Properties, 'ImageRecipeArn') as image_recipe_arn,
-                  json_extract_path_text(Properties, 'ContainerRecipeArn') as container_recipe_arn,
-                  json_extract_path_text(Properties, 'DistributionConfigurationArn') as distribution_configuration_arn,
-                  json_extract_path_text(Properties, 'InfrastructureConfigurationArn') as infrastructure_configuration_arn,
-                  json_extract_path_text(Properties, 'Workflows') as workflows,
-                  json_extract_path_text(Properties, 'ImageId') as image_id,
-                  json_extract_path_text(Properties, 'ImageUri') as image_uri,
-                  json_extract_path_text(Properties, 'EnhancedImageMetadataEnabled') as enhanced_image_metadata_enabled,
                   json_extract_path_text(Properties, 'ImageScanningConfiguration') as image_scanning_configuration,
+                  json_extract_path_text(Properties, 'ContainerRecipeArn') as container_recipe_arn,
+                  json_extract_path_text(Properties, 'Workflows') as workflows,
+                  json_extract_path_text(Properties, 'ImageUri') as image_uri,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'InfrastructureConfigurationArn') as infrastructure_configuration_arn,
+                  json_extract_path_text(Properties, 'ImageRecipeArn') as image_recipe_arn,
+                  json_extract_path_text(Properties, 'DistributionConfigurationArn') as distribution_configuration_arn,
+                  json_extract_path_text(Properties, 'ImageId') as image_id,
+                  json_extract_path_text(Properties, 'ImageTestsConfiguration') as image_tests_configuration,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'EnhancedImageMetadataEnabled') as enhanced_image_metadata_enabled,
                   json_extract_path_text(Properties, 'ExecutionRole') as execution_role,
                   json_extract_path_text(Properties, 'Tags') as tags
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ImageBuilder::Image'
@@ -3230,22 +3274,22 @@ components:
                   ddl: |-
                     SELECT
                     detail.region,
-                    json_extract_path_text(detail.Properties, 'Arn') as arn,
-                    json_extract_path_text(detail.Properties, 'Name') as name,
-                    json_extract_path_text(detail.Properties, 'ImageTestsConfiguration') as image_tests_configuration,
-                    json_extract_path_text(detail.Properties, 'ImageRecipeArn') as image_recipe_arn,
-                    json_extract_path_text(detail.Properties, 'ContainerRecipeArn') as container_recipe_arn,
-                    json_extract_path_text(detail.Properties, 'DistributionConfigurationArn') as distribution_configuration_arn,
-                    json_extract_path_text(detail.Properties, 'InfrastructureConfigurationArn') as infrastructure_configuration_arn,
-                    json_extract_path_text(detail.Properties, 'Workflows') as workflows,
-                    json_extract_path_text(detail.Properties, 'ImageId') as image_id,
-                    json_extract_path_text(detail.Properties, 'ImageUri') as image_uri,
-                    json_extract_path_text(detail.Properties, 'EnhancedImageMetadataEnabled') as enhanced_image_metadata_enabled,
                     json_extract_path_text(detail.Properties, 'ImageScanningConfiguration') as image_scanning_configuration,
+                    json_extract_path_text(detail.Properties, 'ContainerRecipeArn') as container_recipe_arn,
+                    json_extract_path_text(detail.Properties, 'Workflows') as workflows,
+                    json_extract_path_text(detail.Properties, 'ImageUri') as image_uri,
+                    json_extract_path_text(detail.Properties, 'Name') as name,
+                    json_extract_path_text(detail.Properties, 'InfrastructureConfigurationArn') as infrastructure_configuration_arn,
+                    json_extract_path_text(detail.Properties, 'ImageRecipeArn') as image_recipe_arn,
+                    json_extract_path_text(detail.Properties, 'DistributionConfigurationArn') as distribution_configuration_arn,
+                    json_extract_path_text(detail.Properties, 'ImageId') as image_id,
+                    json_extract_path_text(detail.Properties, 'ImageTestsConfiguration') as image_tests_configuration,
+                    json_extract_path_text(detail.Properties, 'Arn') as arn,
+                    json_extract_path_text(detail.Properties, 'EnhancedImageMetadataEnabled') as enhanced_image_metadata_enabled,
                     json_extract_path_text(detail.Properties, 'ExecutionRole') as execution_role,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::ImageBuilder::Image'
@@ -3302,21 +3346,21 @@ components:
               detail.region,
               JSON_EXTRACT(json_each.value, '$.Key') as tag_key,
               JSON_EXTRACT(json_each.value, '$.Value') as tag_value,
-              JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
-              JSON_EXTRACT(detail.Properties, '$.Name') as name,
-              JSON_EXTRACT(detail.Properties, '$.ImageTestsConfiguration') as image_tests_configuration,
-              JSON_EXTRACT(detail.Properties, '$.ImageRecipeArn') as image_recipe_arn,
-              JSON_EXTRACT(detail.Properties, '$.ContainerRecipeArn') as container_recipe_arn,
-              JSON_EXTRACT(detail.Properties, '$.DistributionConfigurationArn') as distribution_configuration_arn,
-              JSON_EXTRACT(detail.Properties, '$.InfrastructureConfigurationArn') as infrastructure_configuration_arn,
-              JSON_EXTRACT(detail.Properties, '$.Workflows') as workflows,
-              JSON_EXTRACT(detail.Properties, '$.ImageId') as image_id,
-              JSON_EXTRACT(detail.Properties, '$.ImageUri') as image_uri,
-              JSON_EXTRACT(detail.Properties, '$.EnhancedImageMetadataEnabled') as enhanced_image_metadata_enabled,
               JSON_EXTRACT(detail.Properties, '$.ImageScanningConfiguration') as image_scanning_configuration,
+              JSON_EXTRACT(detail.Properties, '$.ContainerRecipeArn') as container_recipe_arn,
+              JSON_EXTRACT(detail.Properties, '$.Workflows') as workflows,
+              JSON_EXTRACT(detail.Properties, '$.ImageUri') as image_uri,
+              JSON_EXTRACT(detail.Properties, '$.Name') as name,
+              JSON_EXTRACT(detail.Properties, '$.InfrastructureConfigurationArn') as infrastructure_configuration_arn,
+              JSON_EXTRACT(detail.Properties, '$.ImageRecipeArn') as image_recipe_arn,
+              JSON_EXTRACT(detail.Properties, '$.DistributionConfigurationArn') as distribution_configuration_arn,
+              JSON_EXTRACT(detail.Properties, '$.ImageId') as image_id,
+              JSON_EXTRACT(detail.Properties, '$.ImageTestsConfiguration') as image_tests_configuration,
+              JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
+              JSON_EXTRACT(detail.Properties, '$.EnhancedImageMetadataEnabled') as enhanced_image_metadata_enabled,
               JSON_EXTRACT(detail.Properties, '$.ExecutionRole') as execution_role
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -3330,21 +3374,21 @@ components:
                 detail.region,
                 json_extract_path_text(json_each.value, 'Key') as tag_key,
                 json_extract_path_text(json_each.value, 'Value') as tag_value,
-                json_extract_path_text(detail.Properties, 'Arn') as arn,
-                json_extract_path_text(detail.Properties, 'Name') as name,
-                json_extract_path_text(detail.Properties, 'ImageTestsConfiguration') as image_tests_configuration,
-                json_extract_path_text(detail.Properties, 'ImageRecipeArn') as image_recipe_arn,
-                json_extract_path_text(detail.Properties, 'ContainerRecipeArn') as container_recipe_arn,
-                json_extract_path_text(detail.Properties, 'DistributionConfigurationArn') as distribution_configuration_arn,
-                json_extract_path_text(detail.Properties, 'InfrastructureConfigurationArn') as infrastructure_configuration_arn,
-                json_extract_path_text(detail.Properties, 'Workflows') as workflows,
-                json_extract_path_text(detail.Properties, 'ImageId') as image_id,
-                json_extract_path_text(detail.Properties, 'ImageUri') as image_uri,
-                json_extract_path_text(detail.Properties, 'EnhancedImageMetadataEnabled') as enhanced_image_metadata_enabled,
                 json_extract_path_text(detail.Properties, 'ImageScanningConfiguration') as image_scanning_configuration,
+                json_extract_path_text(detail.Properties, 'ContainerRecipeArn') as container_recipe_arn,
+                json_extract_path_text(detail.Properties, 'Workflows') as workflows,
+                json_extract_path_text(detail.Properties, 'ImageUri') as image_uri,
+                json_extract_path_text(detail.Properties, 'Name') as name,
+                json_extract_path_text(detail.Properties, 'InfrastructureConfigurationArn') as infrastructure_configuration_arn,
+                json_extract_path_text(detail.Properties, 'ImageRecipeArn') as image_recipe_arn,
+                json_extract_path_text(detail.Properties, 'DistributionConfigurationArn') as distribution_configuration_arn,
+                json_extract_path_text(detail.Properties, 'ImageId') as image_id,
+                json_extract_path_text(detail.Properties, 'ImageTestsConfiguration') as image_tests_configuration,
+                json_extract_path_text(detail.Properties, 'Arn') as arn,
+                json_extract_path_text(detail.Properties, 'EnhancedImageMetadataEnabled') as enhanced_image_metadata_enabled,
                 json_extract_path_text(detail.Properties, 'ExecutionRole') as execution_role
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -3453,7 +3497,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.ExecutionRole') as execution_role,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::ImageBuilder::ImagePipeline'
@@ -3504,7 +3548,7 @@ components:
                     json_extract_path_text(detail.Properties, 'ExecutionRole') as execution_role,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::ImageBuilder::ImagePipeline'
@@ -3576,7 +3620,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.ImageScanningConfiguration') as image_scanning_configuration,
               JSON_EXTRACT(detail.Properties, '$.ExecutionRole') as execution_role
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -3605,7 +3649,7 @@ components:
                 json_extract_path_text(detail.Properties, 'ImageScanningConfiguration') as image_scanning_configuration,
                 json_extract_path_text(detail.Properties, 'ExecutionRole') as execution_role
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -3691,7 +3735,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.AdditionalInstanceConfiguration') as additional_instance_configuration,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::ImageBuilder::ImageRecipe'
@@ -3732,7 +3776,7 @@ components:
                     json_extract_path_text(detail.Properties, 'AdditionalInstanceConfiguration') as additional_instance_configuration,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::ImageBuilder::ImageRecipe'
@@ -3799,7 +3843,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.WorkingDirectory') as working_directory,
               JSON_EXTRACT(detail.Properties, '$.AdditionalInstanceConfiguration') as additional_instance_configuration
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -3823,7 +3867,7 @@ components:
                 json_extract_path_text(detail.Properties, 'WorkingDirectory') as working_directory,
                 json_extract_path_text(detail.Properties, 'AdditionalInstanceConfiguration') as additional_instance_configuration
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -3906,7 +3950,8 @@ components:
               JSON_EXTRACT(Properties, '$.InstanceMetadataOptions') as instance_metadata_options,
               JSON_EXTRACT(Properties, '$.SnsTopicArn') as sns_topic_arn,
               JSON_EXTRACT(Properties, '$.ResourceTags') as resource_tags,
-              JSON_EXTRACT(Properties, '$.Tags') as tags
+              JSON_EXTRACT(Properties, '$.Tags') as tags,
+              JSON_EXTRACT(Properties, '$.Placement') as placement
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ImageBuilder::InfrastructureConfiguration'
               AND data__Identifier = '<Arn>'
               AND region = 'us-east-1'
@@ -3928,9 +3973,10 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.InstanceMetadataOptions') as instance_metadata_options,
                 JSON_EXTRACT(detail.Properties, '$.SnsTopicArn') as sns_topic_arn,
                 JSON_EXTRACT(detail.Properties, '$.ResourceTags') as resource_tags,
-                JSON_EXTRACT(detail.Properties, '$.Tags') as tags
+                JSON_EXTRACT(detail.Properties, '$.Tags') as tags,
+                JSON_EXTRACT(detail.Properties, '$.Placement') as placement
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::ImageBuilder::InfrastructureConfiguration'
@@ -3955,7 +4001,8 @@ components:
                   json_extract_path_text(Properties, 'InstanceMetadataOptions') as instance_metadata_options,
                   json_extract_path_text(Properties, 'SnsTopicArn') as sns_topic_arn,
                   json_extract_path_text(Properties, 'ResourceTags') as resource_tags,
-                  json_extract_path_text(Properties, 'Tags') as tags
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'Placement') as placement
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::ImageBuilder::InfrastructureConfiguration'
                   AND data__Identifier = '<Arn>'
                   AND region = 'us-east-1'
@@ -3977,9 +4024,10 @@ components:
                     json_extract_path_text(detail.Properties, 'InstanceMetadataOptions') as instance_metadata_options,
                     json_extract_path_text(detail.Properties, 'SnsTopicArn') as sns_topic_arn,
                     json_extract_path_text(detail.Properties, 'ResourceTags') as resource_tags,
-                    json_extract_path_text(detail.Properties, 'Tags') as tags
+                    json_extract_path_text(detail.Properties, 'Tags') as tags,
+                    json_extract_path_text(detail.Properties, 'Placement') as placement
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::ImageBuilder::InfrastructureConfiguration'
@@ -4048,9 +4096,10 @@ components:
               JSON_EXTRACT(detail.Properties, '$.InstanceProfileName') as instance_profile_name,
               JSON_EXTRACT(detail.Properties, '$.InstanceMetadataOptions') as instance_metadata_options,
               JSON_EXTRACT(detail.Properties, '$.SnsTopicArn') as sns_topic_arn,
-              JSON_EXTRACT(detail.Properties, '$.ResourceTags') as resource_tags
+              JSON_EXTRACT(detail.Properties, '$.ResourceTags') as resource_tags,
+              JSON_EXTRACT(detail.Properties, '$.Placement') as placement
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -4076,9 +4125,10 @@ components:
                 json_extract_path_text(detail.Properties, 'InstanceProfileName') as instance_profile_name,
                 json_extract_path_text(detail.Properties, 'InstanceMetadataOptions') as instance_metadata_options,
                 json_extract_path_text(detail.Properties, 'SnsTopicArn') as sns_topic_arn,
-                json_extract_path_text(detail.Properties, 'ResourceTags') as resource_tags
+                json_extract_path_text(detail.Properties, 'ResourceTags') as resource_tags,
+                json_extract_path_text(detail.Properties, 'Placement') as placement
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -4175,7 +4225,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.ResourceSelection') as resource_selection,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::ImageBuilder::LifecyclePolicy'
@@ -4214,7 +4264,7 @@ components:
                     json_extract_path_text(detail.Properties, 'ResourceSelection') as resource_selection,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::ImageBuilder::LifecyclePolicy'
@@ -4280,7 +4330,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.PolicyDetails') as policy_details,
               JSON_EXTRACT(detail.Properties, '$.ResourceSelection') as resource_selection
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -4303,7 +4353,7 @@ components:
                 json_extract_path_text(detail.Properties, 'PolicyDetails') as policy_details,
                 json_extract_path_text(detail.Properties, 'ResourceSelection') as resource_selection
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -4389,7 +4439,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.KmsKeyId') as kms_key_id,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::ImageBuilder::Workflow'
@@ -4430,7 +4480,7 @@ components:
                     json_extract_path_text(detail.Properties, 'KmsKeyId') as kms_key_id,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::ImageBuilder::Workflow'
@@ -4497,7 +4547,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Uri') as uri,
               JSON_EXTRACT(detail.Properties, '$.KmsKeyId') as kms_key_id
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -4521,7 +4571,7 @@ components:
                 json_extract_path_text(detail.Properties, 'Uri') as uri,
                 json_extract_path_text(detail.Properties, 'KmsKeyId') as kms_key_id
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))

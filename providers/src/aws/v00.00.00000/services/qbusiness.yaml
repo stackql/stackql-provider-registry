@@ -406,6 +406,21 @@ components:
       enum:
         - ENABLED
         - DISABLED
+    AutoSubscriptionConfiguration:
+      type: object
+      properties:
+        AutoSubscribe:
+          $ref: '#/components/schemas/AutoSubscriptionStatus'
+        DefaultSubscriptionType:
+          $ref: '#/components/schemas/SubscriptionType'
+      required:
+        - AutoSubscribe
+      additionalProperties: false
+    AutoSubscriptionStatus:
+      type: string
+      enum:
+        - ENABLED
+        - DISABLED
     EncryptionConfiguration:
       type: object
       properties:
@@ -414,6 +429,55 @@ components:
           maxLength: 2048
           minLength: 1
       additionalProperties: false
+    IdentityType:
+      type: string
+      enum:
+        - AWS_IAM_IDP_SAML
+        - AWS_IAM_IDP_OIDC
+        - AWS_IAM_IDC
+        - AWS_QUICKSIGHT_IDP
+    PersonalizationConfiguration:
+      type: object
+      properties:
+        PersonalizationControlMode:
+          $ref: '#/components/schemas/PersonalizationControlMode'
+      required:
+        - PersonalizationControlMode
+      additionalProperties: false
+    PersonalizationControlMode:
+      type: string
+      enum:
+        - ENABLED
+        - DISABLED
+    QAppsConfiguration:
+      type: object
+      properties:
+        QAppsControlMode:
+          $ref: '#/components/schemas/QAppsControlMode'
+      required:
+        - QAppsControlMode
+      additionalProperties: false
+    QAppsControlMode:
+      type: string
+      enum:
+        - ENABLED
+        - DISABLED
+    QuickSightConfiguration:
+      type: object
+      properties:
+        ClientNamespace:
+          type: string
+          maxLength: 64
+          minLength: 1
+          pattern: ^[a-zA-Z0-9._-]*$
+      required:
+        - ClientNamespace
+      additionalProperties: false
+    SubscriptionType:
+      type: string
+      enum:
+        - Q_LITE
+        - Q_BUSINESS
     Tag:
       type: object
       properties:
@@ -444,6 +508,15 @@ components:
           pattern: ^[a-zA-Z0-9][a-zA-Z0-9-]{35}$
         AttachmentsConfiguration:
           $ref: '#/components/schemas/AttachmentsConfiguration'
+        AutoSubscriptionConfiguration:
+          $ref: '#/components/schemas/AutoSubscriptionConfiguration'
+        ClientIdsForOIDC:
+          type: array
+          items:
+            type: string
+            maxLength: 255
+            minLength: 1
+            pattern: ^[a-zA-Z0-9_.:/()*?=-]*$
         CreatedAt:
           type: string
           format: date-time
@@ -459,6 +532,11 @@ components:
           pattern: ^[a-zA-Z0-9][a-zA-Z0-9_-]*$
         EncryptionConfiguration:
           $ref: '#/components/schemas/EncryptionConfiguration'
+        IamIdentityProviderArn:
+          type: string
+          maxLength: 2048
+          minLength: 20
+          pattern: ^arn:aws:iam::\d{12}:(oidc-provider|saml-provider)/[a-zA-Z0-9_\.\/@\-]+$
         IdentityCenterApplicationArn:
           type: string
           maxLength: 1224
@@ -469,6 +547,14 @@ components:
           maxLength: 1224
           minLength: 10
           pattern: ^arn:(aws|aws-us-gov|aws-cn|aws-iso|aws-iso-b):sso:::instance/(sso)?ins-[a-zA-Z0-9-.]{16}$
+        IdentityType:
+          $ref: '#/components/schemas/IdentityType'
+        PersonalizationConfiguration:
+          $ref: '#/components/schemas/PersonalizationConfiguration'
+        QAppsConfiguration:
+          $ref: '#/components/schemas/QAppsConfiguration'
+        QuickSightConfiguration:
+          $ref: '#/components/schemas/QuickSightConfiguration'
         RoleArn:
           type: string
           maxLength: 1284
@@ -478,7 +564,6 @@ components:
           $ref: '#/components/schemas/ApplicationStatus'
         Tags:
           type: array
-          x-insertionOrder: false
           items:
             $ref: '#/components/schemas/Tag'
           maxItems: 200
@@ -494,7 +579,11 @@ components:
       x-stackql-primary-identifier:
         - ApplicationId
       x-create-only-properties:
+        - ClientIdsForOIDC
         - EncryptionConfiguration
+        - IamIdentityProviderArn
+        - IdentityType
+        - QuickSightConfiguration
       x-write-only-properties:
         - IdentityCenterInstanceArn
       x-read-only-properties:
@@ -508,8 +597,17 @@ components:
         - DisplayName
       x-tagging:
         taggable: true
+        tagUpdatable: true
+        tagOnCreate: true
+        cloudFormationSystemTags: true
+        tagProperty: /properties/Tags
+        permissions:
+          - qbusiness:UntagResource
+          - qbusiness:TagResource
+          - qbusiness:ListTagsForResource
       x-required-permissions:
         create:
+          - iam:GetSAMLProvider
           - iam:PassRole
           - kms:CreateGrant
           - kms:DescribeKey
@@ -517,8 +615,12 @@ components:
           - qbusiness:GetApplication
           - qbusiness:ListTagsForResource
           - qbusiness:TagResource
+          - qbusiness:UpdateApplication
+          - quicksight:DescribeAccountSubscription
+          - quicksight:ListNamespaces
           - sso:CreateApplication
           - sso:DeleteApplication
+          - sso:DescribeInstance
           - sso:PutApplicationAccessScope
           - sso:PutApplicationAuthenticationMethod
           - sso:PutApplicationGrant
@@ -534,6 +636,7 @@ components:
           - qbusiness:UpdateApplication
           - sso:CreateApplication
           - sso:DeleteApplication
+          - sso:DescribeInstance
           - sso:PutApplicationAccessScope
           - sso:PutApplicationAuthenticationMethod
           - sso:PutApplicationGrant
@@ -544,6 +647,222 @@ components:
           - sso:DeleteApplication
         list:
           - qbusiness:ListApplications
+    ActionConfiguration:
+      type: object
+      properties:
+        Action:
+          type: string
+          pattern: ^qbusiness:[a-zA-Z]+$
+        FilterConfiguration:
+          $ref: '#/components/schemas/ActionFilterConfiguration'
+      required:
+        - Action
+      additionalProperties: false
+    ActionFilterConfiguration:
+      type: object
+      properties:
+        DocumentAttributeFilter:
+          $ref: '#/components/schemas/AttributeFilter'
+      required:
+        - DocumentAttributeFilter
+      additionalProperties: false
+    AttributeFilter:
+      type: object
+      properties:
+        AndAllFilters:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttributeFilter'
+        OrAllFilters:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttributeFilter'
+        NotFilter:
+          $ref: '#/components/schemas/AttributeFilter'
+        EqualsTo:
+          $ref: '#/components/schemas/DocumentAttribute'
+        ContainsAll:
+          $ref: '#/components/schemas/DocumentAttribute'
+        ContainsAny:
+          $ref: '#/components/schemas/DocumentAttribute'
+        GreaterThan:
+          $ref: '#/components/schemas/DocumentAttribute'
+        GreaterThanOrEquals:
+          $ref: '#/components/schemas/DocumentAttribute'
+        LessThan:
+          $ref: '#/components/schemas/DocumentAttribute'
+        LessThanOrEquals:
+          $ref: '#/components/schemas/DocumentAttribute'
+      additionalProperties: false
+    DocumentAttribute:
+      type: object
+      properties:
+        Name:
+          type: string
+          maxLength: 200
+          minLength: 1
+          pattern: ^[a-zA-Z0-9_][a-zA-Z0-9_-]*$
+        Value:
+          $ref: '#/components/schemas/DocumentAttributeValue'
+      required:
+        - Name
+        - Value
+      additionalProperties: false
+    DocumentAttributeValue:
+      oneOf:
+        - type: object
+          title: StringValue
+          properties:
+            StringValue:
+              type: string
+              maxLength: 2048
+          required:
+            - StringValue
+          additionalProperties: false
+        - type: object
+          title: StringListValue
+          properties:
+            StringListValue:
+              type: array
+              x-insertionOrder: true
+              items:
+                type: string
+                maxLength: 2048
+                minLength: 1
+          required:
+            - StringListValue
+          additionalProperties: false
+        - type: object
+          title: LongValue
+          properties:
+            LongValue:
+              type: number
+          required:
+            - LongValue
+          additionalProperties: false
+        - type: object
+          title: DateValue
+          properties:
+            DateValue:
+              type: string
+              format: date-time
+          required:
+            - DateValue
+          additionalProperties: false
+    Unit:
+      type: object
+      additionalProperties: false
+    DataAccessor:
+      type: object
+      properties:
+        ActionConfigurations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActionConfiguration'
+          maxItems: 10
+          minItems: 1
+        ApplicationId:
+          type: string
+          maxLength: 36
+          minLength: 36
+          pattern: ^[a-zA-Z0-9][a-zA-Z0-9-]{35}$
+        CreatedAt:
+          type: string
+          format: date-time
+        DataAccessorArn:
+          type: string
+          maxLength: 1284
+          minLength: 0
+          pattern: ^arn:[a-z0-9-\.]{1,63}:[a-z0-9-\.]{0,63}:[a-z0-9-\.]{0,63}:[a-z0-9-\.]{0,63}:[^/].{0,1023}$
+        DataAccessorId:
+          type: string
+          maxLength: 36
+          minLength: 36
+          pattern: ^[a-zA-Z0-9][a-zA-Z0-9-]{35}$
+        DisplayName:
+          type: string
+          maxLength: 100
+          minLength: 1
+          pattern: ^[a-zA-Z0-9][a-zA-Z0-9_-]*$
+        IdcApplicationArn:
+          type: string
+          maxLength: 1224
+          minLength: 10
+          pattern: ^arn:(aws|aws-us-gov|aws-cn|aws-iso|aws-iso-b):sso::\d{12}:application/(sso)?ins-[a-zA-Z0-9-.]{16}/apl-[a-zA-Z0-9]{16}$
+        Principal:
+          type: string
+          maxLength: 1284
+          minLength: 1
+          pattern: ^arn:aws:iam::[0-9]{12}:role/[a-zA-Z0-9_/+=,.@-]+$
+        Tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+          maxItems: 200
+          minItems: 0
+        UpdatedAt:
+          type: string
+          format: date-time
+      required:
+        - ApplicationId
+        - ActionConfigurations
+        - DisplayName
+        - Principal
+      x-stackql-resource-name: data_accessor
+      description: Definition of AWS::QBusiness::DataAccessor Resource Type
+      x-type-name: AWS::QBusiness::DataAccessor
+      x-stackql-primary-identifier:
+        - ApplicationId
+        - DataAccessorId
+      x-create-only-properties:
+        - ApplicationId
+        - Principal
+      x-read-only-properties:
+        - CreatedAt
+        - DataAccessorArn
+        - DataAccessorId
+        - IdcApplicationArn
+        - UpdatedAt
+      x-required-properties:
+        - ApplicationId
+        - ActionConfigurations
+        - DisplayName
+        - Principal
+      x-tagging:
+        taggable: true
+        tagUpdatable: true
+        tagOnCreate: true
+        cloudFormationSystemTags: true
+        tagProperty: /properties/Tags
+        permissions:
+          - qbusiness:UntagResource
+          - qbusiness:TagResource
+          - qbusiness:ListTagsForResource
+      x-required-permissions:
+        create:
+          - qbusiness:CreateDataAccessor
+          - qbusiness:GetDataAccessor
+          - qbusiness:ListTagsForResource
+          - qbusiness:TagResource
+          - sso:CreateApplication
+          - sso:PutApplicationAuthenticationMethod
+          - sso:PutApplicationGrant
+          - sso:PutApplicationAccessScope
+        read:
+          - qbusiness:GetDataAccessor
+          - qbusiness:ListTagsForResource
+        update:
+          - qbusiness:GetDataAccessor
+          - qbusiness:ListTagsForResource
+          - qbusiness:TagResource
+          - qbusiness:UntagResource
+          - qbusiness:UpdateDataAccessor
+        delete:
+          - qbusiness:DeleteDataAccessor
+          - qbusiness:GetDataAccessor
+          - sso:DeleteApplication
+        list:
+          - qbusiness:ListDataAccessors
     AttributeValueOperator:
       type: string
       enum:
@@ -613,47 +932,6 @@ components:
       required:
         - Key
       additionalProperties: false
-    DocumentAttributeValue:
-      oneOf:
-        - type: object
-          title: StringValue
-          properties:
-            StringValue:
-              type: string
-              maxLength: 2048
-          required:
-            - StringValue
-          additionalProperties: false
-        - type: object
-          title: StringListValue
-          properties:
-            StringListValue:
-              type: array
-              x-insertionOrder: true
-              items:
-                type: string
-                maxLength: 2048
-                minLength: 1
-          required:
-            - StringListValue
-          additionalProperties: false
-        - type: object
-          title: LongValue
-          properties:
-            LongValue:
-              type: number
-          required:
-            - LongValue
-          additionalProperties: false
-        - type: object
-          title: DateValue
-          properties:
-            DateValue:
-              type: string
-              format: date-time
-          required:
-            - DateValue
-          additionalProperties: false
     DocumentContentOperator:
       type: string
       enum:
@@ -672,6 +950,25 @@ components:
         - EXISTS
         - NOT_EXISTS
         - BEGINS_WITH
+    ImageExtractionStatus:
+      type: string
+      enum:
+        - ENABLED
+        - DISABLED
+    ImageExtractionConfiguration:
+      type: object
+      properties:
+        ImageExtractionStatus:
+          $ref: '#/components/schemas/ImageExtractionStatus'
+      required:
+        - ImageExtractionStatus
+      additionalProperties: false
+    MediaExtractionConfiguration:
+      type: object
+      properties:
+        ImageExtractionConfiguration:
+          $ref: '#/components/schemas/ImageExtractionConfiguration'
+      additionalProperties: false
     DocumentEnrichmentConfiguration:
       type: object
       properties:
@@ -752,6 +1049,8 @@ components:
           pattern: ^[a-zA-Z0-9][a-zA-Z0-9_-]*$
         DocumentEnrichmentConfiguration:
           $ref: '#/components/schemas/DocumentEnrichmentConfiguration'
+        MediaExtractionConfiguration:
+          $ref: '#/components/schemas/MediaExtractionConfiguration'
         IndexId:
           type: string
           maxLength: 36
@@ -997,6 +1296,68 @@ components:
           - qbusiness:GetIndex
         list:
           - qbusiness:ListIndices
+    Permission:
+      type: object
+      properties:
+        ApplicationId:
+          type: string
+          maxLength: 36
+          minLength: 36
+          pattern: ^[a-zA-Z0-9][a-zA-Z0-9-]{35}$
+        StatementId:
+          type: string
+          maxLength: 100
+          minLength: 1
+          pattern: ^[a-zA-Z0-9_-]+$
+        Actions:
+          type: array
+          items:
+            type: string
+            pattern: ^qbusiness:[a-zA-Z]+$
+          maxItems: 10
+          minItems: 1
+        Principal:
+          type: string
+          maxLength: 1284
+          minLength: 1
+          pattern: ^arn:aws:iam::[0-9]{12}:role/[a-zA-Z0-9_/+=,.@-]+$
+      required:
+        - ApplicationId
+        - StatementId
+        - Actions
+        - Principal
+      x-stackql-resource-name: permission
+      description: Definition of AWS::QBusiness::Permission Resource Type
+      x-type-name: AWS::QBusiness::Permission
+      x-stackql-primary-identifier:
+        - ApplicationId
+        - StatementId
+      x-create-only-properties:
+        - ApplicationId
+        - StatementId
+        - Actions
+        - Principal
+      x-required-properties:
+        - ApplicationId
+        - StatementId
+        - Actions
+        - Principal
+      x-tagging:
+        taggable: false
+        tagOnCreate: false
+        tagUpdatable: false
+        cloudFormationSystemTags: false
+      x-required-permissions:
+        create:
+          - qbusiness:AssociatePermission
+          - qbusiness:PutResourcePolicy
+        read:
+          - qbusiness:GetPolicy
+        delete:
+          - qbusiness:DisassociatePermission
+          - qbusiness:PutResourcePolicy
+        list:
+          - qbusiness:GetPolicy
     APISchema:
       oneOf:
         - type: object
@@ -1068,6 +1429,16 @@ components:
           maxLength: 1284
           minLength: 0
           pattern: ^arn:[a-z0-9-\.]{1,63}:[a-z0-9-\.]{0,63}:[a-z0-9-\.]{0,63}:[a-z0-9-\.]{0,63}:[^/].{0,1023}$
+        AuthorizationUrl:
+          type: string
+          maxLength: 2048
+          minLength: 1
+          pattern: ^(https?|ftp|file)://([^\s]*)$
+        TokenUrl:
+          type: string
+          maxLength: 2048
+          minLength: 1
+          pattern: ^(https?|ftp|file)://([^\s]*)$
       required:
         - RoleArn
         - SecretArn
@@ -1121,6 +1492,18 @@ components:
         - JIRA
         - ZENDESK
         - CUSTOM
+        - QUICKSIGHT
+        - SERVICENOW_NOW_PLATFORM
+        - JIRA_CLOUD
+        - SALESFORCE_CRM
+        - ZENDESK_SUITE
+        - ATLASSIAN_CONFLUENCE
+        - GOOGLE_CALENDAR
+        - MICROSOFT_TEAMS
+        - MICROSOFT_EXCHANGE
+        - PAGERDUTY_ADVANCE
+        - SMARTSHEET
+        - ASANA
     S3:
       type: object
       properties:
@@ -1178,7 +1561,6 @@ components:
           $ref: '#/components/schemas/PluginState'
         Tags:
           type: array
-          x-insertionOrder: false
           items:
             $ref: '#/components/schemas/Tag'
           maxItems: 200
@@ -1189,7 +1571,6 @@ components:
           type: string
           format: date-time
       required:
-        - ApplicationId
         - AuthConfiguration
         - DisplayName
         - Type
@@ -1209,12 +1590,19 @@ components:
         - PluginId
         - UpdatedAt
       x-required-properties:
-        - ApplicationId
         - AuthConfiguration
         - DisplayName
         - Type
       x-tagging:
         taggable: true
+        tagUpdatable: true
+        tagOnCreate: true
+        cloudFormationSystemTags: true
+        tagProperty: /properties/Tags
+        permissions:
+          - qbusiness:UntagResource
+          - qbusiness:TagResource
+          - qbusiness:ListTagsForResource
       x-required-permissions:
         create:
           - iam:PassRole
@@ -1222,7 +1610,6 @@ components:
           - qbusiness:GetPlugin
           - qbusiness:ListTagsForResource
           - qbusiness:TagResource
-          - qbusiness:UpdatePlugin
         read:
           - qbusiness:GetPlugin
           - qbusiness:ListTagsForResource
@@ -1385,6 +1772,52 @@ components:
           - qbusiness:GetRetriever
         list:
           - qbusiness:ListRetrievers
+    IdentityProviderConfiguration:
+      oneOf:
+        - type: object
+          title: SamlConfiguration
+          properties:
+            SamlConfiguration:
+              $ref: '#/components/schemas/SamlProviderConfiguration'
+          required:
+            - SamlConfiguration
+          additionalProperties: false
+        - type: object
+          title: OpenIDConnectConfiguration
+          properties:
+            OpenIDConnectConfiguration:
+              $ref: '#/components/schemas/OpenIDConnectProviderConfiguration'
+          required:
+            - OpenIDConnectConfiguration
+          additionalProperties: false
+    OpenIDConnectProviderConfiguration:
+      type: object
+      properties:
+        SecretsArn:
+          type: string
+          maxLength: 1284
+          minLength: 0
+          pattern: ^arn:[a-z0-9-\.]{1,63}:[a-z0-9-\.]{0,63}:[a-z0-9-\.]{0,63}:[a-z0-9-\.]{0,63}:[^/].{0,1023}$
+        SecretsRole:
+          type: string
+          maxLength: 1284
+          minLength: 0
+          pattern: ^arn:[a-z0-9-\.]{1,63}:[a-z0-9-\.]{0,63}:[a-z0-9-\.]{0,63}:[a-z0-9-\.]{0,63}:[^/].{0,1023}$
+      required:
+        - SecretsArn
+        - SecretsRole
+      additionalProperties: false
+    SamlProviderConfiguration:
+      type: object
+      properties:
+        AuthenticationUrl:
+          type: string
+          maxLength: 1284
+          minLength: 1
+          pattern: ^https://.*$
+      required:
+        - AuthenticationUrl
+      additionalProperties: false
     WebExperienceSamplePromptsControlMode:
       type: string
       enum:
@@ -1398,6 +1831,35 @@ components:
         - DELETING
         - FAILED
         - PENDING_AUTH_CONFIG
+    Origin:
+      type: string
+      maxLength: 64
+      minLength: 1
+      pattern: ^(http:\/\/|https:\/\/)[a-zA-Z0-9-_.]+(?::[0-9]{1,5})?$
+    CustomizationConfiguration:
+      type: object
+      properties:
+        CustomCSSUrl:
+          type: string
+          maxLength: 1284
+          minLength: 0
+          pattern: ^(https?://[a-zA-Z0-9-_.+%/]+\.css)?$
+        LogoUrl:
+          type: string
+          maxLength: 1284
+          minLength: 0
+          pattern: ^(https?://[a-zA-Z0-9-_.+%/]+\.(svg|png))?$
+        FontUrl:
+          type: string
+          maxLength: 1284
+          minLength: 0
+          pattern: ^(https?://[a-zA-Z0-9-_.+%/]+\.(ttf|woff|woff2|otf))?$
+        FaviconUrl:
+          type: string
+          maxLength: 1284
+          minLength: 0
+          pattern: ^(https?://[a-zA-Z0-9-_.+%/]+\.(svg|ico))?$
+      additionalProperties: false
     WebExperience:
       type: object
       properties:
@@ -1414,6 +1876,8 @@ components:
           maxLength: 2048
           minLength: 1
           pattern: ^(https?|ftp|file)://([^\s]*)$
+        IdentityProviderConfiguration:
+          $ref: '#/components/schemas/IdentityProviderConfiguration'
         RoleArn:
           type: string
           maxLength: 1284
@@ -1457,6 +1921,15 @@ components:
           type: string
           maxLength: 300
           minLength: 0
+        Origins:
+          type: array
+          x-insertionOrder: false
+          items:
+            $ref: '#/components/schemas/Origin'
+          maxItems: 10
+          minItems: 0
+        CustomizationConfiguration:
+          $ref: '#/components/schemas/CustomizationConfiguration'
       required:
         - ApplicationId
       x-stackql-resource-name: web_experience
@@ -1529,6 +2002,15 @@ components:
               pattern: ^[a-zA-Z0-9][a-zA-Z0-9-]{35}$
             AttachmentsConfiguration:
               $ref: '#/components/schemas/AttachmentsConfiguration'
+            AutoSubscriptionConfiguration:
+              $ref: '#/components/schemas/AutoSubscriptionConfiguration'
+            ClientIdsForOIDC:
+              type: array
+              items:
+                type: string
+                maxLength: 255
+                minLength: 1
+                pattern: ^[a-zA-Z0-9_.:/()*?=-]*$
             CreatedAt:
               type: string
               format: date-time
@@ -1544,6 +2026,11 @@ components:
               pattern: ^[a-zA-Z0-9][a-zA-Z0-9_-]*$
             EncryptionConfiguration:
               $ref: '#/components/schemas/EncryptionConfiguration'
+            IamIdentityProviderArn:
+              type: string
+              maxLength: 2048
+              minLength: 20
+              pattern: ^arn:aws:iam::\d{12}:(oidc-provider|saml-provider)/[a-zA-Z0-9_\.\/@\-]+$
             IdentityCenterApplicationArn:
               type: string
               maxLength: 1224
@@ -1554,6 +2041,14 @@ components:
               maxLength: 1224
               minLength: 10
               pattern: ^arn:(aws|aws-us-gov|aws-cn|aws-iso|aws-iso-b):sso:::instance/(sso)?ins-[a-zA-Z0-9-.]{16}$
+            IdentityType:
+              $ref: '#/components/schemas/IdentityType'
+            PersonalizationConfiguration:
+              $ref: '#/components/schemas/PersonalizationConfiguration'
+            QAppsConfiguration:
+              $ref: '#/components/schemas/QAppsConfiguration'
+            QuickSightConfiguration:
+              $ref: '#/components/schemas/QuickSightConfiguration'
             RoleArn:
               type: string
               maxLength: 1284
@@ -1563,7 +2058,6 @@ components:
               $ref: '#/components/schemas/ApplicationStatus'
             Tags:
               type: array
-              x-insertionOrder: false
               items:
                 $ref: '#/components/schemas/Tag'
               maxItems: 200
@@ -1573,6 +2067,71 @@ components:
               format: date-time
           x-stackQL-stringOnly: true
       x-title: CreateApplicationRequest
+      type: object
+      required: []
+    CreateDataAccessorRequest:
+      properties:
+        ClientToken:
+          type: string
+        RoleArn:
+          type: string
+        TypeName:
+          type: string
+        TypeVersionId:
+          type: string
+        DesiredState:
+          type: object
+          properties:
+            ActionConfigurations:
+              type: array
+              items:
+                $ref: '#/components/schemas/ActionConfiguration'
+              maxItems: 10
+              minItems: 1
+            ApplicationId:
+              type: string
+              maxLength: 36
+              minLength: 36
+              pattern: ^[a-zA-Z0-9][a-zA-Z0-9-]{35}$
+            CreatedAt:
+              type: string
+              format: date-time
+            DataAccessorArn:
+              type: string
+              maxLength: 1284
+              minLength: 0
+              pattern: ^arn:[a-z0-9-\.]{1,63}:[a-z0-9-\.]{0,63}:[a-z0-9-\.]{0,63}:[a-z0-9-\.]{0,63}:[^/].{0,1023}$
+            DataAccessorId:
+              type: string
+              maxLength: 36
+              minLength: 36
+              pattern: ^[a-zA-Z0-9][a-zA-Z0-9-]{35}$
+            DisplayName:
+              type: string
+              maxLength: 100
+              minLength: 1
+              pattern: ^[a-zA-Z0-9][a-zA-Z0-9_-]*$
+            IdcApplicationArn:
+              type: string
+              maxLength: 1224
+              minLength: 10
+              pattern: ^arn:(aws|aws-us-gov|aws-cn|aws-iso|aws-iso-b):sso::\d{12}:application/(sso)?ins-[a-zA-Z0-9-.]{16}/apl-[a-zA-Z0-9]{16}$
+            Principal:
+              type: string
+              maxLength: 1284
+              minLength: 1
+              pattern: ^arn:aws:iam::[0-9]{12}:role/[a-zA-Z0-9_/+=,.@-]+$
+            Tags:
+              type: array
+              items:
+                $ref: '#/components/schemas/Tag'
+              maxItems: 200
+              minItems: 0
+            UpdatedAt:
+              type: string
+              format: date-time
+          x-stackQL-stringOnly: true
+      x-title: CreateDataAccessorRequest
       type: object
       required: []
     CreateDataSourceRequest:
@@ -1619,6 +2178,8 @@ components:
               pattern: ^[a-zA-Z0-9][a-zA-Z0-9_-]*$
             DocumentEnrichmentConfiguration:
               $ref: '#/components/schemas/DocumentEnrichmentConfiguration'
+            MediaExtractionConfiguration:
+              $ref: '#/components/schemas/MediaExtractionConfiguration'
             IndexId:
               type: string
               maxLength: 36
@@ -1725,6 +2286,45 @@ components:
       x-title: CreateIndexRequest
       type: object
       required: []
+    CreatePermissionRequest:
+      properties:
+        ClientToken:
+          type: string
+        RoleArn:
+          type: string
+        TypeName:
+          type: string
+        TypeVersionId:
+          type: string
+        DesiredState:
+          type: object
+          properties:
+            ApplicationId:
+              type: string
+              maxLength: 36
+              minLength: 36
+              pattern: ^[a-zA-Z0-9][a-zA-Z0-9-]{35}$
+            StatementId:
+              type: string
+              maxLength: 100
+              minLength: 1
+              pattern: ^[a-zA-Z0-9_-]+$
+            Actions:
+              type: array
+              items:
+                type: string
+                pattern: ^qbusiness:[a-zA-Z]+$
+              maxItems: 10
+              minItems: 1
+            Principal:
+              type: string
+              maxLength: 1284
+              minLength: 1
+              pattern: ^arn:aws:iam::[0-9]{12}:role/[a-zA-Z0-9_/+=,.@-]+$
+          x-stackQL-stringOnly: true
+      x-title: CreatePermissionRequest
+      type: object
+      required: []
     CreatePluginRequest:
       properties:
         ClientToken:
@@ -1776,7 +2376,6 @@ components:
               $ref: '#/components/schemas/PluginState'
             Tags:
               type: array
-              x-insertionOrder: false
               items:
                 $ref: '#/components/schemas/Tag'
               maxItems: 200
@@ -1877,6 +2476,8 @@ components:
               maxLength: 2048
               minLength: 1
               pattern: ^(https?|ftp|file)://([^\s]*)$
+            IdentityProviderConfiguration:
+              $ref: '#/components/schemas/IdentityProviderConfiguration'
             RoleArn:
               type: string
               maxLength: 1284
@@ -1920,6 +2521,15 @@ components:
               type: string
               maxLength: 300
               minLength: 0
+            Origins:
+              type: array
+              x-insertionOrder: false
+              items:
+                $ref: '#/components/schemas/Origin'
+              maxItems: 10
+              minItems: 0
+            CustomizationConfiguration:
+              $ref: '#/components/schemas/CustomizationConfiguration'
           x-stackQL-stringOnly: true
       x-title: CreateWebExperienceRequest
       type: object
@@ -1998,12 +2608,19 @@ components:
               JSON_EXTRACT(Properties, '$.ApplicationArn') as application_arn,
               JSON_EXTRACT(Properties, '$.ApplicationId') as application_id,
               JSON_EXTRACT(Properties, '$.AttachmentsConfiguration') as attachments_configuration,
+              JSON_EXTRACT(Properties, '$.AutoSubscriptionConfiguration') as auto_subscription_configuration,
+              JSON_EXTRACT(Properties, '$.ClientIdsForOIDC') as client_ids_for_oid_c,
               JSON_EXTRACT(Properties, '$.CreatedAt') as created_at,
               JSON_EXTRACT(Properties, '$.Description') as description,
               JSON_EXTRACT(Properties, '$.DisplayName') as display_name,
               JSON_EXTRACT(Properties, '$.EncryptionConfiguration') as encryption_configuration,
+              JSON_EXTRACT(Properties, '$.IamIdentityProviderArn') as iam_identity_provider_arn,
               JSON_EXTRACT(Properties, '$.IdentityCenterApplicationArn') as identity_center_application_arn,
               JSON_EXTRACT(Properties, '$.IdentityCenterInstanceArn') as identity_center_instance_arn,
+              JSON_EXTRACT(Properties, '$.IdentityType') as identity_type,
+              JSON_EXTRACT(Properties, '$.PersonalizationConfiguration') as personalization_configuration,
+              JSON_EXTRACT(Properties, '$.QAppsConfiguration') as q_apps_configuration,
+              JSON_EXTRACT(Properties, '$.QuickSightConfiguration') as quick_sight_configuration,
               JSON_EXTRACT(Properties, '$.RoleArn') as role_arn,
               JSON_EXTRACT(Properties, '$.Status') as status,
               JSON_EXTRACT(Properties, '$.Tags') as tags,
@@ -2019,18 +2636,25 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.ApplicationArn') as application_arn,
                 JSON_EXTRACT(detail.Properties, '$.ApplicationId') as application_id,
                 JSON_EXTRACT(detail.Properties, '$.AttachmentsConfiguration') as attachments_configuration,
+                JSON_EXTRACT(detail.Properties, '$.AutoSubscriptionConfiguration') as auto_subscription_configuration,
+                JSON_EXTRACT(detail.Properties, '$.ClientIdsForOIDC') as client_ids_for_oid_c,
                 JSON_EXTRACT(detail.Properties, '$.CreatedAt') as created_at,
                 JSON_EXTRACT(detail.Properties, '$.Description') as description,
                 JSON_EXTRACT(detail.Properties, '$.DisplayName') as display_name,
                 JSON_EXTRACT(detail.Properties, '$.EncryptionConfiguration') as encryption_configuration,
+                JSON_EXTRACT(detail.Properties, '$.IamIdentityProviderArn') as iam_identity_provider_arn,
                 JSON_EXTRACT(detail.Properties, '$.IdentityCenterApplicationArn') as identity_center_application_arn,
                 JSON_EXTRACT(detail.Properties, '$.IdentityCenterInstanceArn') as identity_center_instance_arn,
+                JSON_EXTRACT(detail.Properties, '$.IdentityType') as identity_type,
+                JSON_EXTRACT(detail.Properties, '$.PersonalizationConfiguration') as personalization_configuration,
+                JSON_EXTRACT(detail.Properties, '$.QAppsConfiguration') as q_apps_configuration,
+                JSON_EXTRACT(detail.Properties, '$.QuickSightConfiguration') as quick_sight_configuration,
                 JSON_EXTRACT(detail.Properties, '$.RoleArn') as role_arn,
                 JSON_EXTRACT(detail.Properties, '$.Status') as status,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags,
                 JSON_EXTRACT(detail.Properties, '$.UpdatedAt') as updated_at
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::QBusiness::Application'
@@ -2045,12 +2669,19 @@ components:
                   json_extract_path_text(Properties, 'ApplicationArn') as application_arn,
                   json_extract_path_text(Properties, 'ApplicationId') as application_id,
                   json_extract_path_text(Properties, 'AttachmentsConfiguration') as attachments_configuration,
+                  json_extract_path_text(Properties, 'AutoSubscriptionConfiguration') as auto_subscription_configuration,
+                  json_extract_path_text(Properties, 'ClientIdsForOIDC') as client_ids_for_oid_c,
                   json_extract_path_text(Properties, 'CreatedAt') as created_at,
                   json_extract_path_text(Properties, 'Description') as description,
                   json_extract_path_text(Properties, 'DisplayName') as display_name,
                   json_extract_path_text(Properties, 'EncryptionConfiguration') as encryption_configuration,
+                  json_extract_path_text(Properties, 'IamIdentityProviderArn') as iam_identity_provider_arn,
                   json_extract_path_text(Properties, 'IdentityCenterApplicationArn') as identity_center_application_arn,
                   json_extract_path_text(Properties, 'IdentityCenterInstanceArn') as identity_center_instance_arn,
+                  json_extract_path_text(Properties, 'IdentityType') as identity_type,
+                  json_extract_path_text(Properties, 'PersonalizationConfiguration') as personalization_configuration,
+                  json_extract_path_text(Properties, 'QAppsConfiguration') as q_apps_configuration,
+                  json_extract_path_text(Properties, 'QuickSightConfiguration') as quick_sight_configuration,
                   json_extract_path_text(Properties, 'RoleArn') as role_arn,
                   json_extract_path_text(Properties, 'Status') as status,
                   json_extract_path_text(Properties, 'Tags') as tags,
@@ -2066,18 +2697,25 @@ components:
                     json_extract_path_text(detail.Properties, 'ApplicationArn') as application_arn,
                     json_extract_path_text(detail.Properties, 'ApplicationId') as application_id,
                     json_extract_path_text(detail.Properties, 'AttachmentsConfiguration') as attachments_configuration,
+                    json_extract_path_text(detail.Properties, 'AutoSubscriptionConfiguration') as auto_subscription_configuration,
+                    json_extract_path_text(detail.Properties, 'ClientIdsForOIDC') as client_ids_for_oid_c,
                     json_extract_path_text(detail.Properties, 'CreatedAt') as created_at,
                     json_extract_path_text(detail.Properties, 'Description') as description,
                     json_extract_path_text(detail.Properties, 'DisplayName') as display_name,
                     json_extract_path_text(detail.Properties, 'EncryptionConfiguration') as encryption_configuration,
+                    json_extract_path_text(detail.Properties, 'IamIdentityProviderArn') as iam_identity_provider_arn,
                     json_extract_path_text(detail.Properties, 'IdentityCenterApplicationArn') as identity_center_application_arn,
                     json_extract_path_text(detail.Properties, 'IdentityCenterInstanceArn') as identity_center_instance_arn,
+                    json_extract_path_text(detail.Properties, 'IdentityType') as identity_type,
+                    json_extract_path_text(detail.Properties, 'PersonalizationConfiguration') as personalization_configuration,
+                    json_extract_path_text(detail.Properties, 'QAppsConfiguration') as q_apps_configuration,
+                    json_extract_path_text(detail.Properties, 'QuickSightConfiguration') as quick_sight_configuration,
                     json_extract_path_text(detail.Properties, 'RoleArn') as role_arn,
                     json_extract_path_text(detail.Properties, 'Status') as status,
                     json_extract_path_text(detail.Properties, 'Tags') as tags,
                     json_extract_path_text(detail.Properties, 'UpdatedAt') as updated_at
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::QBusiness::Application'
@@ -2137,17 +2775,24 @@ components:
               JSON_EXTRACT(detail.Properties, '$.ApplicationArn') as application_arn,
               JSON_EXTRACT(detail.Properties, '$.ApplicationId') as application_id,
               JSON_EXTRACT(detail.Properties, '$.AttachmentsConfiguration') as attachments_configuration,
+              JSON_EXTRACT(detail.Properties, '$.AutoSubscriptionConfiguration') as auto_subscription_configuration,
+              JSON_EXTRACT(detail.Properties, '$.ClientIdsForOIDC') as client_ids_for_oid_c,
               JSON_EXTRACT(detail.Properties, '$.CreatedAt') as created_at,
               JSON_EXTRACT(detail.Properties, '$.Description') as description,
               JSON_EXTRACT(detail.Properties, '$.DisplayName') as display_name,
               JSON_EXTRACT(detail.Properties, '$.EncryptionConfiguration') as encryption_configuration,
+              JSON_EXTRACT(detail.Properties, '$.IamIdentityProviderArn') as iam_identity_provider_arn,
               JSON_EXTRACT(detail.Properties, '$.IdentityCenterApplicationArn') as identity_center_application_arn,
               JSON_EXTRACT(detail.Properties, '$.IdentityCenterInstanceArn') as identity_center_instance_arn,
+              JSON_EXTRACT(detail.Properties, '$.IdentityType') as identity_type,
+              JSON_EXTRACT(detail.Properties, '$.PersonalizationConfiguration') as personalization_configuration,
+              JSON_EXTRACT(detail.Properties, '$.QAppsConfiguration') as q_apps_configuration,
+              JSON_EXTRACT(detail.Properties, '$.QuickSightConfiguration') as quick_sight_configuration,
               JSON_EXTRACT(detail.Properties, '$.RoleArn') as role_arn,
               JSON_EXTRACT(detail.Properties, '$.Status') as status,
               JSON_EXTRACT(detail.Properties, '$.UpdatedAt') as updated_at
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -2164,22 +2809,264 @@ components:
                 json_extract_path_text(detail.Properties, 'ApplicationArn') as application_arn,
                 json_extract_path_text(detail.Properties, 'ApplicationId') as application_id,
                 json_extract_path_text(detail.Properties, 'AttachmentsConfiguration') as attachments_configuration,
+                json_extract_path_text(detail.Properties, 'AutoSubscriptionConfiguration') as auto_subscription_configuration,
+                json_extract_path_text(detail.Properties, 'ClientIdsForOIDC') as client_ids_for_oid_c,
                 json_extract_path_text(detail.Properties, 'CreatedAt') as created_at,
                 json_extract_path_text(detail.Properties, 'Description') as description,
                 json_extract_path_text(detail.Properties, 'DisplayName') as display_name,
                 json_extract_path_text(detail.Properties, 'EncryptionConfiguration') as encryption_configuration,
+                json_extract_path_text(detail.Properties, 'IamIdentityProviderArn') as iam_identity_provider_arn,
                 json_extract_path_text(detail.Properties, 'IdentityCenterApplicationArn') as identity_center_application_arn,
                 json_extract_path_text(detail.Properties, 'IdentityCenterInstanceArn') as identity_center_instance_arn,
+                json_extract_path_text(detail.Properties, 'IdentityType') as identity_type,
+                json_extract_path_text(detail.Properties, 'PersonalizationConfiguration') as personalization_configuration,
+                json_extract_path_text(detail.Properties, 'QAppsConfiguration') as q_apps_configuration,
+                json_extract_path_text(detail.Properties, 'QuickSightConfiguration') as quick_sight_configuration,
                 json_extract_path_text(detail.Properties, 'RoleArn') as role_arn,
                 json_extract_path_text(detail.Properties, 'Status') as status,
                 json_extract_path_text(detail.Properties, 'UpdatedAt') as updated_at
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
                 WHERE listing.data__TypeName = 'AWS::QBusiness::Application'
                 AND detail.data__TypeName = 'AWS::QBusiness::Application'
+                AND listing.region = 'us-east-1'
+    data_accessors:
+      name: data_accessors
+      id: aws.qbusiness.data_accessors
+      x-cfn-schema-name: DataAccessor
+      x-cfn-type-name: AWS::QBusiness::DataAccessor
+      x-identifiers:
+        - ApplicationId
+        - DataAccessorId
+      x-type: cloud_control
+      methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__DataAccessor&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::QBusiness::DataAccessor"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::QBusiness::DataAccessor"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::QBusiness::DataAccessor"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/data_accessors/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/data_accessors/methods/delete_resource'
+        update:
+          - $ref: '#/components/x-stackQL-resources/data_accessors/methods/update_resource'
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.ActionConfigurations') as action_configurations,
+              JSON_EXTRACT(Properties, '$.ApplicationId') as application_id,
+              JSON_EXTRACT(Properties, '$.CreatedAt') as created_at,
+              JSON_EXTRACT(Properties, '$.DataAccessorArn') as data_accessor_arn,
+              JSON_EXTRACT(Properties, '$.DataAccessorId') as data_accessor_id,
+              JSON_EXTRACT(Properties, '$.DisplayName') as display_name,
+              JSON_EXTRACT(Properties, '$.IdcApplicationArn') as idc_application_arn,
+              JSON_EXTRACT(Properties, '$.Principal') as principal,
+              JSON_EXTRACT(Properties, '$.Tags') as tags,
+              JSON_EXTRACT(Properties, '$.UpdatedAt') as updated_at
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::QBusiness::DataAccessor'
+              AND data__Identifier = '<ApplicationId>|<DataAccessorId>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "sqlite3"
+              ddl: |-
+                SELECT
+                detail.region,
+                JSON_EXTRACT(detail.Properties, '$.ActionConfigurations') as action_configurations,
+                JSON_EXTRACT(detail.Properties, '$.ApplicationId') as application_id,
+                JSON_EXTRACT(detail.Properties, '$.CreatedAt') as created_at,
+                JSON_EXTRACT(detail.Properties, '$.DataAccessorArn') as data_accessor_arn,
+                JSON_EXTRACT(detail.Properties, '$.DataAccessorId') as data_accessor_id,
+                JSON_EXTRACT(detail.Properties, '$.DisplayName') as display_name,
+                JSON_EXTRACT(detail.Properties, '$.IdcApplicationArn') as idc_application_arn,
+                JSON_EXTRACT(detail.Properties, '$.Principal') as principal,
+                JSON_EXTRACT(detail.Properties, '$.Tags') as tags,
+                JSON_EXTRACT(detail.Properties, '$.UpdatedAt') as updated_at
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                WHERE listing.data__TypeName = 'AWS::QBusiness::DataAccessor'
+                AND detail.data__TypeName = 'AWS::QBusiness::DataAccessor'
+                AND listing.region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'ActionConfigurations') as action_configurations,
+                  json_extract_path_text(Properties, 'ApplicationId') as application_id,
+                  json_extract_path_text(Properties, 'CreatedAt') as created_at,
+                  json_extract_path_text(Properties, 'DataAccessorArn') as data_accessor_arn,
+                  json_extract_path_text(Properties, 'DataAccessorId') as data_accessor_id,
+                  json_extract_path_text(Properties, 'DisplayName') as display_name,
+                  json_extract_path_text(Properties, 'IdcApplicationArn') as idc_application_arn,
+                  json_extract_path_text(Properties, 'Principal') as principal,
+                  json_extract_path_text(Properties, 'Tags') as tags,
+                  json_extract_path_text(Properties, 'UpdatedAt') as updated_at
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::QBusiness::DataAccessor'
+                  AND data__Identifier = '<ApplicationId>|<DataAccessorId>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    detail.region,
+                    json_extract_path_text(detail.Properties, 'ActionConfigurations') as action_configurations,
+                    json_extract_path_text(detail.Properties, 'ApplicationId') as application_id,
+                    json_extract_path_text(detail.Properties, 'CreatedAt') as created_at,
+                    json_extract_path_text(detail.Properties, 'DataAccessorArn') as data_accessor_arn,
+                    json_extract_path_text(detail.Properties, 'DataAccessorId') as data_accessor_id,
+                    json_extract_path_text(detail.Properties, 'DisplayName') as display_name,
+                    json_extract_path_text(detail.Properties, 'IdcApplicationArn') as idc_application_arn,
+                    json_extract_path_text(detail.Properties, 'Principal') as principal,
+                    json_extract_path_text(detail.Properties, 'Tags') as tags,
+                    json_extract_path_text(detail.Properties, 'UpdatedAt') as updated_at
+                    FROM aws.cloud_control.resources listing
+                    INNER JOIN aws.cloud_control.resource detail
+                    ON detail.data__Identifier = listing.Identifier
+                    AND detail.region = listing.region
+                    WHERE listing.data__TypeName = 'AWS::QBusiness::DataAccessor'
+                    AND detail.data__TypeName = 'AWS::QBusiness::DataAccessor'
+                    AND listing.region = 'us-east-1'
+    data_accessors_list_only:
+      name: data_accessors_list_only
+      id: aws.qbusiness.data_accessors_list_only
+      x-cfn-schema-name: DataAccessor
+      x-cfn-type-name: AWS::QBusiness::DataAccessor
+      x-identifiers:
+        - ApplicationId
+        - DataAccessorId
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.ApplicationId') as application_id,
+              JSON_EXTRACT(Properties, '$.DataAccessorId') as data_accessor_id
+              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::QBusiness::DataAccessor'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                json_extract_path_text(Properties, 'ApplicationId') as application_id,
+                json_extract_path_text(Properties, 'DataAccessorId') as data_accessor_id
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::QBusiness::DataAccessor'
+                AND region = 'us-east-1'
+    data_accessor_tags:
+      name: data_accessor_tags
+      id: aws.qbusiness.data_accessor_tags
+      x-cfn-schema-name: DataAccessor
+      x-cfn-type-name: AWS::QBusiness::DataAccessor
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              detail.region,
+              JSON_EXTRACT(json_each.value, '$.Key') as tag_key,
+              JSON_EXTRACT(json_each.value, '$.Value') as tag_value,
+              JSON_EXTRACT(detail.Properties, '$.ActionConfigurations') as action_configurations,
+              JSON_EXTRACT(detail.Properties, '$.ApplicationId') as application_id,
+              JSON_EXTRACT(detail.Properties, '$.CreatedAt') as created_at,
+              JSON_EXTRACT(detail.Properties, '$.DataAccessorArn') as data_accessor_arn,
+              JSON_EXTRACT(detail.Properties, '$.DataAccessorId') as data_accessor_id,
+              JSON_EXTRACT(detail.Properties, '$.DisplayName') as display_name,
+              JSON_EXTRACT(detail.Properties, '$.IdcApplicationArn') as idc_application_arn,
+              JSON_EXTRACT(detail.Properties, '$.Principal') as principal,
+              JSON_EXTRACT(detail.Properties, '$.UpdatedAt') as updated_at
+              FROM aws.cloud_control.resources listing
+              INNER JOIN aws.cloud_control.resource detail
+              ON detail.data__Identifier = listing.Identifier
+              AND detail.region = listing.region
+              ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
+              WHERE listing.data__TypeName = 'AWS::QBusiness::DataAccessor'
+              AND detail.data__TypeName = 'AWS::QBusiness::DataAccessor'
+              AND listing.region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                detail.region,
+                json_extract_path_text(json_each.value, 'Key') as tag_key,
+                json_extract_path_text(json_each.value, 'Value') as tag_value,
+                json_extract_path_text(detail.Properties, 'ActionConfigurations') as action_configurations,
+                json_extract_path_text(detail.Properties, 'ApplicationId') as application_id,
+                json_extract_path_text(detail.Properties, 'CreatedAt') as created_at,
+                json_extract_path_text(detail.Properties, 'DataAccessorArn') as data_accessor_arn,
+                json_extract_path_text(detail.Properties, 'DataAccessorId') as data_accessor_id,
+                json_extract_path_text(detail.Properties, 'DisplayName') as display_name,
+                json_extract_path_text(detail.Properties, 'IdcApplicationArn') as idc_application_arn,
+                json_extract_path_text(detail.Properties, 'Principal') as principal,
+                json_extract_path_text(detail.Properties, 'UpdatedAt') as updated_at
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
+                WHERE listing.data__TypeName = 'AWS::QBusiness::DataAccessor'
+                AND detail.data__TypeName = 'AWS::QBusiness::DataAccessor'
                 AND listing.region = 'us-east-1'
     data_sources:
       name: data_sources
@@ -2254,6 +3141,7 @@ components:
               JSON_EXTRACT(Properties, '$.Description') as description,
               JSON_EXTRACT(Properties, '$.DisplayName') as display_name,
               JSON_EXTRACT(Properties, '$.DocumentEnrichmentConfiguration') as document_enrichment_configuration,
+              JSON_EXTRACT(Properties, '$.MediaExtractionConfiguration') as media_extraction_configuration,
               JSON_EXTRACT(Properties, '$.IndexId') as index_id,
               JSON_EXTRACT(Properties, '$.RoleArn') as role_arn,
               JSON_EXTRACT(Properties, '$.Status') as status,
@@ -2278,6 +3166,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Description') as description,
                 JSON_EXTRACT(detail.Properties, '$.DisplayName') as display_name,
                 JSON_EXTRACT(detail.Properties, '$.DocumentEnrichmentConfiguration') as document_enrichment_configuration,
+                JSON_EXTRACT(detail.Properties, '$.MediaExtractionConfiguration') as media_extraction_configuration,
                 JSON_EXTRACT(detail.Properties, '$.IndexId') as index_id,
                 JSON_EXTRACT(detail.Properties, '$.RoleArn') as role_arn,
                 JSON_EXTRACT(detail.Properties, '$.Status') as status,
@@ -2287,7 +3176,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.UpdatedAt') as updated_at,
                 JSON_EXTRACT(detail.Properties, '$.VpcConfiguration') as vpc_configuration
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::QBusiness::DataSource'
@@ -2307,6 +3196,7 @@ components:
                   json_extract_path_text(Properties, 'Description') as description,
                   json_extract_path_text(Properties, 'DisplayName') as display_name,
                   json_extract_path_text(Properties, 'DocumentEnrichmentConfiguration') as document_enrichment_configuration,
+                  json_extract_path_text(Properties, 'MediaExtractionConfiguration') as media_extraction_configuration,
                   json_extract_path_text(Properties, 'IndexId') as index_id,
                   json_extract_path_text(Properties, 'RoleArn') as role_arn,
                   json_extract_path_text(Properties, 'Status') as status,
@@ -2331,6 +3221,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Description') as description,
                     json_extract_path_text(detail.Properties, 'DisplayName') as display_name,
                     json_extract_path_text(detail.Properties, 'DocumentEnrichmentConfiguration') as document_enrichment_configuration,
+                    json_extract_path_text(detail.Properties, 'MediaExtractionConfiguration') as media_extraction_configuration,
                     json_extract_path_text(detail.Properties, 'IndexId') as index_id,
                     json_extract_path_text(detail.Properties, 'RoleArn') as role_arn,
                     json_extract_path_text(detail.Properties, 'Status') as status,
@@ -2340,7 +3231,7 @@ components:
                     json_extract_path_text(detail.Properties, 'UpdatedAt') as updated_at,
                     json_extract_path_text(detail.Properties, 'VpcConfiguration') as vpc_configuration
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::QBusiness::DataSource'
@@ -2411,6 +3302,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Description') as description,
               JSON_EXTRACT(detail.Properties, '$.DisplayName') as display_name,
               JSON_EXTRACT(detail.Properties, '$.DocumentEnrichmentConfiguration') as document_enrichment_configuration,
+              JSON_EXTRACT(detail.Properties, '$.MediaExtractionConfiguration') as media_extraction_configuration,
               JSON_EXTRACT(detail.Properties, '$.IndexId') as index_id,
               JSON_EXTRACT(detail.Properties, '$.RoleArn') as role_arn,
               JSON_EXTRACT(detail.Properties, '$.Status') as status,
@@ -2419,7 +3311,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.UpdatedAt') as updated_at,
               JSON_EXTRACT(detail.Properties, '$.VpcConfiguration') as vpc_configuration
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -2441,6 +3333,7 @@ components:
                 json_extract_path_text(detail.Properties, 'Description') as description,
                 json_extract_path_text(detail.Properties, 'DisplayName') as display_name,
                 json_extract_path_text(detail.Properties, 'DocumentEnrichmentConfiguration') as document_enrichment_configuration,
+                json_extract_path_text(detail.Properties, 'MediaExtractionConfiguration') as media_extraction_configuration,
                 json_extract_path_text(detail.Properties, 'IndexId') as index_id,
                 json_extract_path_text(detail.Properties, 'RoleArn') as role_arn,
                 json_extract_path_text(detail.Properties, 'Status') as status,
@@ -2449,7 +3342,7 @@ components:
                 json_extract_path_text(detail.Properties, 'UpdatedAt') as updated_at,
                 json_extract_path_text(detail.Properties, 'VpcConfiguration') as vpc_configuration
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -2555,7 +3448,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags,
                 JSON_EXTRACT(detail.Properties, '$.UpdatedAt') as updated_at
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::QBusiness::Index'
@@ -2602,7 +3495,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Tags') as tags,
                     json_extract_path_text(detail.Properties, 'UpdatedAt') as updated_at
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::QBusiness::Index'
@@ -2675,7 +3568,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Status') as status,
               JSON_EXTRACT(detail.Properties, '$.UpdatedAt') as updated_at
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -2702,13 +3595,150 @@ components:
                 json_extract_path_text(detail.Properties, 'Status') as status,
                 json_extract_path_text(detail.Properties, 'UpdatedAt') as updated_at
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
                 WHERE listing.data__TypeName = 'AWS::QBusiness::Index'
                 AND detail.data__TypeName = 'AWS::QBusiness::Index'
                 AND listing.region = 'us-east-1'
+    permissions:
+      name: permissions
+      id: aws.qbusiness.permissions
+      x-cfn-schema-name: Permission
+      x-cfn-type-name: AWS::QBusiness::Permission
+      x-identifiers:
+        - ApplicationId
+        - StatementId
+      x-type: cloud_control
+      methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Permission&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::QBusiness::Permission"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::QBusiness::Permission"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/permissions/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/permissions/methods/delete_resource'
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.ApplicationId') as application_id,
+              JSON_EXTRACT(Properties, '$.StatementId') as statement_id,
+              JSON_EXTRACT(Properties, '$.Actions') as actions,
+              JSON_EXTRACT(Properties, '$.Principal') as principal
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::QBusiness::Permission'
+              AND data__Identifier = '<ApplicationId>|<StatementId>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "sqlite3"
+              ddl: |-
+                SELECT
+                detail.region,
+                JSON_EXTRACT(detail.Properties, '$.ApplicationId') as application_id,
+                JSON_EXTRACT(detail.Properties, '$.StatementId') as statement_id,
+                JSON_EXTRACT(detail.Properties, '$.Actions') as actions,
+                JSON_EXTRACT(detail.Properties, '$.Principal') as principal
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                WHERE listing.data__TypeName = 'AWS::QBusiness::Permission'
+                AND detail.data__TypeName = 'AWS::QBusiness::Permission'
+                AND listing.region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'ApplicationId') as application_id,
+                  json_extract_path_text(Properties, 'StatementId') as statement_id,
+                  json_extract_path_text(Properties, 'Actions') as actions,
+                  json_extract_path_text(Properties, 'Principal') as principal
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::QBusiness::Permission'
+                  AND data__Identifier = '<ApplicationId>|<StatementId>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    detail.region,
+                    json_extract_path_text(detail.Properties, 'ApplicationId') as application_id,
+                    json_extract_path_text(detail.Properties, 'StatementId') as statement_id,
+                    json_extract_path_text(detail.Properties, 'Actions') as actions,
+                    json_extract_path_text(detail.Properties, 'Principal') as principal
+                    FROM aws.cloud_control.resources listing
+                    INNER JOIN aws.cloud_control.resource detail
+                    ON detail.data__Identifier = listing.Identifier
+                    AND detail.region = listing.region
+                    WHERE listing.data__TypeName = 'AWS::QBusiness::Permission'
+                    AND detail.data__TypeName = 'AWS::QBusiness::Permission'
+                    AND listing.region = 'us-east-1'
+    permissions_list_only:
+      name: permissions_list_only
+      id: aws.qbusiness.permissions_list_only
+      x-cfn-schema-name: Permission
+      x-cfn-type-name: AWS::QBusiness::Permission
+      x-identifiers:
+        - ApplicationId
+        - StatementId
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.ApplicationId') as application_id,
+              JSON_EXTRACT(Properties, '$.StatementId') as statement_id
+              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::QBusiness::Permission'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                json_extract_path_text(Properties, 'ApplicationId') as application_id,
+                json_extract_path_text(Properties, 'StatementId') as statement_id
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::QBusiness::Permission'
+                AND region = 'us-east-1'
     plugins:
       name: plugins
       id: aws.qbusiness.plugins
@@ -2808,7 +3838,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Type') as type,
                 JSON_EXTRACT(detail.Properties, '$.UpdatedAt') as updated_at
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::QBusiness::Plugin'
@@ -2855,7 +3885,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Type') as type,
                     json_extract_path_text(detail.Properties, 'UpdatedAt') as updated_at
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::QBusiness::Plugin'
@@ -2928,7 +3958,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Type') as type,
               JSON_EXTRACT(detail.Properties, '$.UpdatedAt') as updated_at
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -2955,7 +3985,7 @@ components:
                 json_extract_path_text(detail.Properties, 'Type') as type,
                 json_extract_path_text(detail.Properties, 'UpdatedAt') as updated_at
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -3057,7 +4087,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Type') as type,
                 JSON_EXTRACT(detail.Properties, '$.UpdatedAt') as updated_at
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::QBusiness::Retriever'
@@ -3100,7 +4130,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Type') as type,
                     json_extract_path_text(detail.Properties, 'UpdatedAt') as updated_at
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::QBusiness::Retriever'
@@ -3171,7 +4201,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Type') as type,
               JSON_EXTRACT(detail.Properties, '$.UpdatedAt') as updated_at
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -3196,7 +4226,7 @@ components:
                 json_extract_path_text(detail.Properties, 'Type') as type,
                 json_extract_path_text(detail.Properties, 'UpdatedAt') as updated_at
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -3270,6 +4300,7 @@ components:
               JSON_EXTRACT(Properties, '$.ApplicationId') as application_id,
               JSON_EXTRACT(Properties, '$.CreatedAt') as created_at,
               JSON_EXTRACT(Properties, '$.DefaultEndpoint') as default_endpoint,
+              JSON_EXTRACT(Properties, '$.IdentityProviderConfiguration') as identity_provider_configuration,
               JSON_EXTRACT(Properties, '$.RoleArn') as role_arn,
               JSON_EXTRACT(Properties, '$.SamplePromptsControlMode') as sample_prompts_control_mode,
               JSON_EXTRACT(Properties, '$.Status') as status,
@@ -3279,7 +4310,9 @@ components:
               JSON_EXTRACT(Properties, '$.UpdatedAt') as updated_at,
               JSON_EXTRACT(Properties, '$.WebExperienceArn') as web_experience_arn,
               JSON_EXTRACT(Properties, '$.WebExperienceId') as web_experience_id,
-              JSON_EXTRACT(Properties, '$.WelcomeMessage') as welcome_message
+              JSON_EXTRACT(Properties, '$.WelcomeMessage') as welcome_message,
+              JSON_EXTRACT(Properties, '$.Origins') as origins,
+              JSON_EXTRACT(Properties, '$.CustomizationConfiguration') as customization_configuration
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::QBusiness::WebExperience'
               AND data__Identifier = '<ApplicationId>|<WebExperienceId>'
               AND region = 'us-east-1'
@@ -3291,6 +4324,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.ApplicationId') as application_id,
                 JSON_EXTRACT(detail.Properties, '$.CreatedAt') as created_at,
                 JSON_EXTRACT(detail.Properties, '$.DefaultEndpoint') as default_endpoint,
+                JSON_EXTRACT(detail.Properties, '$.IdentityProviderConfiguration') as identity_provider_configuration,
                 JSON_EXTRACT(detail.Properties, '$.RoleArn') as role_arn,
                 JSON_EXTRACT(detail.Properties, '$.SamplePromptsControlMode') as sample_prompts_control_mode,
                 JSON_EXTRACT(detail.Properties, '$.Status') as status,
@@ -3300,9 +4334,11 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.UpdatedAt') as updated_at,
                 JSON_EXTRACT(detail.Properties, '$.WebExperienceArn') as web_experience_arn,
                 JSON_EXTRACT(detail.Properties, '$.WebExperienceId') as web_experience_id,
-                JSON_EXTRACT(detail.Properties, '$.WelcomeMessage') as welcome_message
+                JSON_EXTRACT(detail.Properties, '$.WelcomeMessage') as welcome_message,
+                JSON_EXTRACT(detail.Properties, '$.Origins') as origins,
+                JSON_EXTRACT(detail.Properties, '$.CustomizationConfiguration') as customization_configuration
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::QBusiness::WebExperience'
@@ -3317,6 +4353,7 @@ components:
                   json_extract_path_text(Properties, 'ApplicationId') as application_id,
                   json_extract_path_text(Properties, 'CreatedAt') as created_at,
                   json_extract_path_text(Properties, 'DefaultEndpoint') as default_endpoint,
+                  json_extract_path_text(Properties, 'IdentityProviderConfiguration') as identity_provider_configuration,
                   json_extract_path_text(Properties, 'RoleArn') as role_arn,
                   json_extract_path_text(Properties, 'SamplePromptsControlMode') as sample_prompts_control_mode,
                   json_extract_path_text(Properties, 'Status') as status,
@@ -3326,7 +4363,9 @@ components:
                   json_extract_path_text(Properties, 'UpdatedAt') as updated_at,
                   json_extract_path_text(Properties, 'WebExperienceArn') as web_experience_arn,
                   json_extract_path_text(Properties, 'WebExperienceId') as web_experience_id,
-                  json_extract_path_text(Properties, 'WelcomeMessage') as welcome_message
+                  json_extract_path_text(Properties, 'WelcomeMessage') as welcome_message,
+                  json_extract_path_text(Properties, 'Origins') as origins,
+                  json_extract_path_text(Properties, 'CustomizationConfiguration') as customization_configuration
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::QBusiness::WebExperience'
                   AND data__Identifier = '<ApplicationId>|<WebExperienceId>'
                   AND region = 'us-east-1'
@@ -3338,6 +4377,7 @@ components:
                     json_extract_path_text(detail.Properties, 'ApplicationId') as application_id,
                     json_extract_path_text(detail.Properties, 'CreatedAt') as created_at,
                     json_extract_path_text(detail.Properties, 'DefaultEndpoint') as default_endpoint,
+                    json_extract_path_text(detail.Properties, 'IdentityProviderConfiguration') as identity_provider_configuration,
                     json_extract_path_text(detail.Properties, 'RoleArn') as role_arn,
                     json_extract_path_text(detail.Properties, 'SamplePromptsControlMode') as sample_prompts_control_mode,
                     json_extract_path_text(detail.Properties, 'Status') as status,
@@ -3347,9 +4387,11 @@ components:
                     json_extract_path_text(detail.Properties, 'UpdatedAt') as updated_at,
                     json_extract_path_text(detail.Properties, 'WebExperienceArn') as web_experience_arn,
                     json_extract_path_text(detail.Properties, 'WebExperienceId') as web_experience_id,
-                    json_extract_path_text(detail.Properties, 'WelcomeMessage') as welcome_message
+                    json_extract_path_text(detail.Properties, 'WelcomeMessage') as welcome_message,
+                    json_extract_path_text(detail.Properties, 'Origins') as origins,
+                    json_extract_path_text(detail.Properties, 'CustomizationConfiguration') as customization_configuration
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::QBusiness::WebExperience'
@@ -3412,6 +4454,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.ApplicationId') as application_id,
               JSON_EXTRACT(detail.Properties, '$.CreatedAt') as created_at,
               JSON_EXTRACT(detail.Properties, '$.DefaultEndpoint') as default_endpoint,
+              JSON_EXTRACT(detail.Properties, '$.IdentityProviderConfiguration') as identity_provider_configuration,
               JSON_EXTRACT(detail.Properties, '$.RoleArn') as role_arn,
               JSON_EXTRACT(detail.Properties, '$.SamplePromptsControlMode') as sample_prompts_control_mode,
               JSON_EXTRACT(detail.Properties, '$.Status') as status,
@@ -3420,9 +4463,11 @@ components:
               JSON_EXTRACT(detail.Properties, '$.UpdatedAt') as updated_at,
               JSON_EXTRACT(detail.Properties, '$.WebExperienceArn') as web_experience_arn,
               JSON_EXTRACT(detail.Properties, '$.WebExperienceId') as web_experience_id,
-              JSON_EXTRACT(detail.Properties, '$.WelcomeMessage') as welcome_message
+              JSON_EXTRACT(detail.Properties, '$.WelcomeMessage') as welcome_message,
+              JSON_EXTRACT(detail.Properties, '$.Origins') as origins,
+              JSON_EXTRACT(detail.Properties, '$.CustomizationConfiguration') as customization_configuration
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -3439,6 +4484,7 @@ components:
                 json_extract_path_text(detail.Properties, 'ApplicationId') as application_id,
                 json_extract_path_text(detail.Properties, 'CreatedAt') as created_at,
                 json_extract_path_text(detail.Properties, 'DefaultEndpoint') as default_endpoint,
+                json_extract_path_text(detail.Properties, 'IdentityProviderConfiguration') as identity_provider_configuration,
                 json_extract_path_text(detail.Properties, 'RoleArn') as role_arn,
                 json_extract_path_text(detail.Properties, 'SamplePromptsControlMode') as sample_prompts_control_mode,
                 json_extract_path_text(detail.Properties, 'Status') as status,
@@ -3447,9 +4493,11 @@ components:
                 json_extract_path_text(detail.Properties, 'UpdatedAt') as updated_at,
                 json_extract_path_text(detail.Properties, 'WebExperienceArn') as web_experience_arn,
                 json_extract_path_text(detail.Properties, 'WebExperienceId') as web_experience_id,
-                json_extract_path_text(detail.Properties, 'WelcomeMessage') as welcome_message
+                json_extract_path_text(detail.Properties, 'WelcomeMessage') as welcome_message,
+                json_extract_path_text(detail.Properties, 'Origins') as origins,
+                json_extract_path_text(detail.Properties, 'CustomizationConfiguration') as customization_configuration
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -3641,6 +4689,48 @@ paths:
               schema:
                 $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
           description: Success
+  /?Action=CreateResource&Version=2021-09-30&__DataAccessor&__detailTransformed=true:
+    parameters:
+      - $ref: '#/components/parameters/X-Amz-Content-Sha256'
+      - $ref: '#/components/parameters/X-Amz-Date'
+      - $ref: '#/components/parameters/X-Amz-Algorithm'
+      - $ref: '#/components/parameters/X-Amz-Credential'
+      - $ref: '#/components/parameters/X-Amz-Security-Token'
+      - $ref: '#/components/parameters/X-Amz-Signature'
+      - $ref: '#/components/parameters/X-Amz-SignedHeaders'
+    post:
+      operationId: CreateDataAccessor
+      parameters:
+        - description: Action Header
+          in: header
+          name: X-Amz-Target
+          required: false
+          schema:
+            default: CloudApiService.CreateResource
+            enum:
+              - CloudApiService.CreateResource
+            type: string
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            default: application/x-amz-json-1.0
+            enum:
+              - application/x-amz-json-1.0
+            type: string
+      requestBody:
+        content:
+          application/x-amz-json-1.0:
+            schema:
+              $ref: '#/components/schemas/CreateDataAccessorRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
+          description: Success
   /?Action=CreateResource&Version=2021-09-30&__DataSource&__detailTransformed=true:
     parameters:
       - $ref: '#/components/parameters/X-Amz-Content-Sha256'
@@ -3717,6 +4807,48 @@ paths:
           application/x-amz-json-1.0:
             schema:
               $ref: '#/components/schemas/CreateIndexRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
+          description: Success
+  /?Action=CreateResource&Version=2021-09-30&__Permission&__detailTransformed=true:
+    parameters:
+      - $ref: '#/components/parameters/X-Amz-Content-Sha256'
+      - $ref: '#/components/parameters/X-Amz-Date'
+      - $ref: '#/components/parameters/X-Amz-Algorithm'
+      - $ref: '#/components/parameters/X-Amz-Credential'
+      - $ref: '#/components/parameters/X-Amz-Security-Token'
+      - $ref: '#/components/parameters/X-Amz-Signature'
+      - $ref: '#/components/parameters/X-Amz-SignedHeaders'
+    post:
+      operationId: CreatePermission
+      parameters:
+        - description: Action Header
+          in: header
+          name: X-Amz-Target
+          required: false
+          schema:
+            default: CloudApiService.CreateResource
+            enum:
+              - CloudApiService.CreateResource
+            type: string
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            default: application/x-amz-json-1.0
+            enum:
+              - application/x-amz-json-1.0
+            type: string
+      requestBody:
+        content:
+          application/x-amz-json-1.0:
+            schema:
+              $ref: '#/components/schemas/CreatePermissionRequest'
         required: true
       responses:
         '200':

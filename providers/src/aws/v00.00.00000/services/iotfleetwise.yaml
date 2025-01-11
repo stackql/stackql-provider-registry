@@ -409,6 +409,14 @@ components:
               $ref: '#/components/schemas/TimestreamConfig'
           required:
             - TimestreamConfig
+        - type: object
+          title: MqttTopicConfig
+          properties:
+            MqttTopicConfig:
+              $ref: '#/components/schemas/MqttTopicConfig'
+          required:
+            - MqttTopicConfig
+          additionalProperties: false
     S3Config:
       additionalProperties: false
       type: object
@@ -446,6 +454,23 @@ components:
       required:
         - TimestreamTableArn
         - ExecutionRoleArn
+    MqttTopicConfig:
+      type: object
+      properties:
+        MqttTopicArn:
+          type: string
+          maxLength: 2048
+          minLength: 20
+          pattern: ^arn:.*
+        ExecutionRoleArn:
+          type: string
+          maxLength: 2048
+          minLength: 20
+          pattern: ^arn:(aws[a-zA-Z0-9-]*):iam::(\d{12})?:(role((\u002F)|(\u002F[\u0021-\u007F]+\u002F))[\w+=,.@-]+)$
+      required:
+        - ExecutionRoleArn
+        - MqttTopicArn
+      additionalProperties: false
     UpdateCampaignAction:
       type: string
       enum:
@@ -460,6 +485,19 @@ components:
         - WAITING_FOR_APPROVAL
         - RUNNING
         - SUSPENDED
+    ConditionBasedSignalFetchConfig:
+      type: object
+      properties:
+        ConditionExpression:
+          type: string
+          maxLength: 2048
+          minLength: 1
+        TriggerMode:
+          $ref: '#/components/schemas/TriggerMode'
+      required:
+        - ConditionExpression
+        - TriggerMode
+      additionalProperties: false
     DiagnosticsMode:
       type: string
       enum:
@@ -483,18 +521,74 @@ components:
           maximum: 4294967295
           type: number
           minimum: 0
+        DataPartitionId:
+          $ref: '#/components/schemas/DataPartitionId'
       required:
         - Name
+    SignalFetchConfig:
+      oneOf:
+        - type: object
+          title: TimeBased
+          properties:
+            TimeBased:
+              $ref: '#/components/schemas/TimeBasedSignalFetchConfig'
+          required:
+            - TimeBased
+          additionalProperties: false
+        - type: object
+          title: ConditionBased
+          properties:
+            ConditionBased:
+              $ref: '#/components/schemas/ConditionBasedSignalFetchConfig'
+          required:
+            - ConditionBased
+          additionalProperties: false
+    SignalFetchInformation:
+      type: object
+      properties:
+        FullyQualifiedName:
+          type: string
+          maxLength: 150
+          minLength: 1
+          pattern: ^[a-zA-Z0-9_.]+$
+        SignalFetchConfig:
+          $ref: '#/components/schemas/SignalFetchConfig'
+        ConditionLanguageVersion:
+          type: number
+          maximum: 1
+          minimum: 1
+        Actions:
+          type: array
+          items:
+            type: string
+            maxLength: 2048
+            minLength: 1
+          maxItems: 5
+          minItems: 1
+      required:
+        - Actions
+        - FullyQualifiedName
+        - SignalFetchConfig
+      additionalProperties: false
     TimeBasedCollectionScheme:
       additionalProperties: false
       type: object
       properties:
         PeriodMs:
-          maximum: 60000
+          maximum: 86400000
           type: number
           minimum: 10000
       required:
         - PeriodMs
+    TimeBasedSignalFetchConfig:
+      type: object
+      properties:
+        ExecutionFrequencyMs:
+          type: number
+          minimum: 1
+      required:
+        - ExecutionFrequencyMs
+      additionalProperties: false
     SpoolingMode:
       type: string
       enum:
@@ -543,16 +637,108 @@ components:
           type: number
           minimum: 0
         Expression:
-          minLength: 1
-          type: string
-          maxLength: 2048
+          $ref: '#/components/schemas/EventExpression'
         TriggerMode:
           $ref: '#/components/schemas/TriggerMode'
         ConditionLanguageVersion:
-          type: integer
-          minimum: 1
+          $ref: '#/components/schemas/LanguageVersion'
       required:
         - Expression
+    EventExpression:
+      type: string
+      minLength: 1
+      maxLength: 2048
+    LanguageVersion:
+      type: integer
+      minimum: 1
+    DataPartition:
+      type: object
+      properties:
+        Id:
+          $ref: '#/components/schemas/DataPartitionId'
+        StorageOptions:
+          $ref: '#/components/schemas/DataPartitionStorageOptions'
+        UploadOptions:
+          $ref: '#/components/schemas/DataPartitionUploadOptions'
+      required:
+        - Id
+        - StorageOptions
+      additionalProperties: false
+    DataPartitionStorageOptions:
+      type: object
+      properties:
+        MaximumSize:
+          $ref: '#/components/schemas/StorageMaximumSize'
+        MinimumTimeToLive:
+          $ref: '#/components/schemas/StorageMinimumTimeToLive'
+        StorageLocation:
+          $ref: '#/components/schemas/StorageLocation'
+      required:
+        - MaximumSize
+        - MinimumTimeToLive
+        - StorageLocation
+      additionalProperties: false
+    StorageLocation:
+      type: string
+      minLength: 1
+      maxLength: 4096
+    StorageMaximumSize:
+      type: object
+      properties:
+        Unit:
+          $ref: '#/components/schemas/StorageMaximumSizeUnit'
+        Value:
+          $ref: '#/components/schemas/StorageMaximumSizeValue'
+      required:
+        - Unit
+        - Value
+      additionalProperties: false
+    StorageMaximumSizeUnit:
+      type: string
+      enum:
+        - MB
+        - GB
+        - TB
+    StorageMaximumSizeValue:
+      type: integer
+      minimum: 1
+      maximum: 1073741824
+    StorageMinimumTimeToLive:
+      type: object
+      properties:
+        Unit:
+          $ref: '#/components/schemas/StorageMinimumTimeToLiveUnit'
+        Value:
+          $ref: '#/components/schemas/StorageMinimumTimeToLiveValue'
+      required:
+        - Unit
+        - Value
+      additionalProperties: false
+    StorageMinimumTimeToLiveUnit:
+      type: string
+      enum:
+        - HOURS
+        - DAYS
+        - WEEKS
+    StorageMinimumTimeToLiveValue:
+      type: integer
+      minimum: 1
+      maximum: 10000
+    DataPartitionUploadOptions:
+      type: object
+      properties:
+        Expression:
+          $ref: '#/components/schemas/EventExpression'
+        ConditionLanguageVersion:
+          $ref: '#/components/schemas/LanguageVersion'
+      required:
+        - Expression
+      additionalProperties: false
+    DataPartitionId:
+      type: string
+      pattern: ^[a-zA-Z0-9]+$
+      minLength: 1
+      maxLength: 128
     Tag:
       type: object
       properties:
@@ -568,6 +754,25 @@ components:
         - Key
         - Value
       additionalProperties: false
+    TimePeriod:
+      type: object
+      properties:
+        Unit:
+          $ref: '#/components/schemas/TimeUnit'
+        Value:
+          type: number
+          minimum: 1
+      required:
+        - Unit
+        - Value
+      additionalProperties: false
+    TimeUnit:
+      type: string
+      enum:
+        - MILLISECOND
+        - SECOND
+        - MINUTE
+        - HOUR
     Campaign:
       type: object
       properties:
@@ -596,6 +801,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SignalInformation'
+        SignalsToFetch:
+          type: array
+          x-insertionOrder: false
+          items:
+            $ref: '#/components/schemas/SignalFetchInformation'
+          maxItems: 10
+          minItems: 0
         DataDestinationConfigs:
           minItems: 1
           maxItems: 1
@@ -646,6 +858,14 @@ components:
           type: string
         CollectionScheme:
           $ref: '#/components/schemas/CollectionScheme'
+        DataPartitions:
+          type: array
+          items:
+            $ref: '#/components/schemas/DataPartition'
+          x-insertionOrder: true
+          uniqueItems: true
+          maxItems: 20
+          minItems: 0
         Tags:
           type: array
           items:
@@ -656,7 +876,6 @@ components:
           minItems: 0
       required:
         - Name
-        - Action
         - CollectionScheme
         - SignalCatalogArn
         - TargetArn
@@ -677,6 +896,7 @@ components:
         - Compression
         - StartTime
         - ExpiryTime
+        - DataPartitions
       x-write-only-properties:
         - Action
       x-read-only-properties:
@@ -686,7 +906,6 @@ components:
         - LastModificationTime
       x-required-properties:
         - Name
-        - Action
         - CollectionScheme
         - SignalCatalogArn
         - TargetArn
@@ -696,6 +915,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: true
         tagProperty: /properties/Tags
+        permissions:
+          - iotfleetwise:UntagResource
+          - iotfleetwise:TagResource
+          - iotfleetwise:ListTagsForResource
       x-required-permissions:
         read:
           - iotfleetwise:GetCampaign
@@ -911,6 +1134,73 @@ components:
         - Type
         - ObdSignal
       additionalProperties: false
+    CustomDecodingNetworkInterface:
+      type: object
+      properties:
+        InterfaceId:
+          type: string
+          maxLength: 50
+          minLength: 1
+        Type:
+          type: string
+          enum:
+            - CUSTOM_DECODING_INTERFACE
+        CustomDecodingInterface:
+          $ref: '#/components/schemas/CustomDecodingInterface'
+      required:
+        - InterfaceId
+        - Type
+        - CustomDecodingInterface
+      additionalProperties: false
+    CustomDecodingInterface:
+      type: object
+      properties:
+        Name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          pattern: ^[a-zA-Z\d\-_:]+$
+      required:
+        - Name
+      additionalProperties: false
+    CustomDecodingSignal:
+      type: object
+      properties:
+        Id:
+          type: string
+          maxLength: 150
+          minLength: 1
+          pattern: ^(?!.*\.\.)[a-zA-Z0-9_\-#:.]+$
+      required:
+        - Id
+      additionalProperties: false
+    CustomDecodingSignalDecoder:
+      type: object
+      properties:
+        FullyQualifiedName:
+          type: string
+          maxLength: 150
+          minLength: 1
+        Type:
+          type: string
+          enum:
+            - CUSTOM_DECODING_SIGNAL
+        InterfaceId:
+          type: string
+          maxLength: 50
+          minLength: 1
+        CustomDecodingSignal:
+          $ref: '#/components/schemas/CustomDecodingSignal'
+      required:
+        - FullyQualifiedName
+        - InterfaceId
+        - Type
+        - CustomDecodingSignal
+      additionalProperties: false
+    DefaultForUnmappedSignalsType:
+      type: string
+      enum:
+        - CUSTOM_DECODING
     DecoderManifest:
       type: object
       properties:
@@ -941,7 +1231,8 @@ components:
             oneOf:
               - $ref: '#/components/schemas/CanNetworkInterface'
               - $ref: '#/components/schemas/ObdNetworkInterface'
-          maxItems: 500
+              - $ref: '#/components/schemas/CustomDecodingNetworkInterface'
+          maxItems: 5000
           minItems: 1
         SignalDecoders:
           x-insertionOrder: false
@@ -950,10 +1241,13 @@ components:
             oneOf:
               - $ref: '#/components/schemas/CanSignalDecoder'
               - $ref: '#/components/schemas/ObdSignalDecoder'
-          maxItems: 500
+              - $ref: '#/components/schemas/CustomDecodingSignalDecoder'
+          maxItems: 5000
           minItems: 1
         Status:
           $ref: '#/components/schemas/ManifestStatus'
+        DefaultForUnmappedSignals:
+          $ref: '#/components/schemas/DefaultForUnmappedSignalsType'
         Tags:
           type: array
           items:
@@ -973,6 +1267,8 @@ components:
       x-create-only-properties:
         - Name
         - ModelManifestArn
+      x-write-only-properties:
+        - DefaultForUnmappedSignals
       x-read-only-properties:
         - Arn
         - CreationTime
@@ -986,6 +1282,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: true
         tagProperty: /properties/Tags
+        permissions:
+          - iotfleetwise:UntagResource
+          - iotfleetwise:TagResource
+          - iotfleetwise:ListTagsForResource
       x-required-permissions:
         create:
           - iotfleetwise:CreateDecoderManifest
@@ -1068,6 +1368,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: true
         tagProperty: /properties/Tags
+        permissions:
+          - iotfleetwise:UntagResource
+          - iotfleetwise:TagResource
+          - iotfleetwise:ListTagsForResource
       x-required-permissions:
         create:
           - iotfleetwise:GetFleet
@@ -1152,6 +1456,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: true
         tagProperty: /properties/Tags
+        permissions:
+          - iotfleetwise:UntagResource
+          - iotfleetwise:TagResource
+          - iotfleetwise:ListTagsForResource
       x-required-permissions:
         create:
           - iotfleetwise:CreateModelManifest
@@ -1372,7 +1680,7 @@ components:
           uniqueItems: true
           items:
             $ref: '#/components/schemas/Node'
-          maxItems: 500
+          maxItems: 5000
           minItems: 1
         Tags:
           type: array
@@ -1404,6 +1712,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: true
         tagProperty: /properties/Tags
+        permissions:
+          - iotfleetwise:UntagResource
+          - iotfleetwise:TagResource
+          - iotfleetwise:ListTagsForResource
       x-required-permissions:
         create:
           - iotfleetwise:GetSignalCatalog
@@ -1427,6 +1739,120 @@ components:
           - iotfleetwise:DeleteSignalCatalog
         list:
           - iotfleetwise:ListSignalCatalogs
+    Unit:
+      type: object
+      additionalProperties: false
+    StateTemplate:
+      type: object
+      properties:
+        Arn:
+          type: string
+        CreationTime:
+          type: string
+          format: date-time
+        Description:
+          type: string
+          maxLength: 2048
+          minLength: 1
+          pattern: ^[^\u0000-\u001F\u007F]+$
+        LastModificationTime:
+          type: string
+          format: date-time
+        Name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          pattern: ^[a-zA-Z\d\-_:]+$
+        SignalCatalogArn:
+          type: string
+        StateTemplateProperties:
+          type: array
+          x-insertionOrder: false
+          items:
+            type: string
+            maxLength: 150
+            minLength: 1
+            pattern: ^[a-zA-Z0-9_.]+$
+          maxItems: 500
+          minItems: 1
+        DataExtraDimensions:
+          type: array
+          x-insertionOrder: false
+          items:
+            type: string
+            maxLength: 150
+            minLength: 1
+            pattern: ^[a-zA-Z0-9_.]+$
+          maxItems: 5
+          minItems: 0
+        MetadataExtraDimensions:
+          type: array
+          x-insertionOrder: false
+          items:
+            type: string
+            maxLength: 150
+            minLength: 1
+            pattern: ^[a-zA-Z0-9_.]+$
+          maxItems: 5
+          minItems: 0
+        Tags:
+          type: array
+          x-insertionOrder: false
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Tag'
+          maxItems: 50
+          minItems: 0
+      required:
+        - Name
+        - SignalCatalogArn
+        - StateTemplateProperties
+      x-stackql-resource-name: state_template
+      description: Definition of AWS::IoTFleetWise::StateTemplate Resource Type
+      x-type-name: AWS::IoTFleetWise::StateTemplate
+      x-stackql-primary-identifier:
+        - Name
+      x-create-only-properties:
+        - Name
+        - SignalCatalogArn
+      x-read-only-properties:
+        - Arn
+        - CreationTime
+        - LastModificationTime
+      x-required-properties:
+        - Name
+        - SignalCatalogArn
+        - StateTemplateProperties
+      x-tagging:
+        taggable: true
+        tagOnCreate: true
+        tagUpdatable: true
+        cloudFormationSystemTags: true
+        tagProperty: /properties/Tags
+        permissions:
+          - iotfleetwise:ListTagsForResource
+          - iotfleetwise:TagResource
+          - iotfleetwise:UntagResource
+      x-required-permissions:
+        create:
+          - iotfleetwise:GetStateTemplate
+          - iotfleetwise:CreateStateTemplate
+          - iotfleetwise:ListTagsForResource
+          - iotfleetwise:TagResource
+        read:
+          - iotfleetwise:GetStateTemplate
+          - iotfleetwise:ListTagsForResource
+        update:
+          - iotfleetwise:UpdateStateTemplate
+          - iotfleetwise:GetStateTemplate
+          - iotfleetwise:ListTagsForResource
+          - iotfleetwise:TagResource
+          - iotfleetwise:UntagResource
+        delete:
+          - iotfleetwise:DeleteStateTemplate
+          - iotfleetwise:GetStateTemplate
+        list:
+          - iotfleetwise:ListStateTemplates
     VehicleAssociationBehavior:
       type: string
       enum:
@@ -1498,6 +1924,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: true
         tagProperty: /properties/Tags
+        permissions:
+          - iotfleetwise:UntagResource
+          - iotfleetwise:TagResource
+          - iotfleetwise:ListTagsForResource
       x-required-permissions:
         create:
           - iotfleetwise:GetVehicle
@@ -1559,6 +1989,13 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/SignalInformation'
+            SignalsToFetch:
+              type: array
+              x-insertionOrder: false
+              items:
+                $ref: '#/components/schemas/SignalFetchInformation'
+              maxItems: 10
+              minItems: 0
             DataDestinationConfigs:
               minItems: 1
               maxItems: 1
@@ -1609,6 +2046,14 @@ components:
               type: string
             CollectionScheme:
               $ref: '#/components/schemas/CollectionScheme'
+            DataPartitions:
+              type: array
+              items:
+                $ref: '#/components/schemas/DataPartition'
+              x-insertionOrder: true
+              uniqueItems: true
+              maxItems: 20
+              minItems: 0
             Tags:
               type: array
               items:
@@ -1661,7 +2106,8 @@ components:
                 oneOf:
                   - $ref: '#/components/schemas/CanNetworkInterface'
                   - $ref: '#/components/schemas/ObdNetworkInterface'
-              maxItems: 500
+                  - $ref: '#/components/schemas/CustomDecodingNetworkInterface'
+              maxItems: 5000
               minItems: 1
             SignalDecoders:
               x-insertionOrder: false
@@ -1670,10 +2116,13 @@ components:
                 oneOf:
                   - $ref: '#/components/schemas/CanSignalDecoder'
                   - $ref: '#/components/schemas/ObdSignalDecoder'
-              maxItems: 500
+                  - $ref: '#/components/schemas/CustomDecodingSignalDecoder'
+              maxItems: 5000
               minItems: 1
             Status:
               $ref: '#/components/schemas/ManifestStatus'
+            DefaultForUnmappedSignals:
+              $ref: '#/components/schemas/DefaultForUnmappedSignalsType'
             Tags:
               type: array
               items:
@@ -1824,7 +2273,7 @@ components:
               uniqueItems: true
               items:
                 $ref: '#/components/schemas/Node'
-              maxItems: 500
+              maxItems: 5000
               minItems: 1
             Tags:
               type: array
@@ -1836,6 +2285,81 @@ components:
               minItems: 0
           x-stackQL-stringOnly: true
       x-title: CreateSignalCatalogRequest
+      type: object
+      required: []
+    CreateStateTemplateRequest:
+      properties:
+        ClientToken:
+          type: string
+        RoleArn:
+          type: string
+        TypeName:
+          type: string
+        TypeVersionId:
+          type: string
+        DesiredState:
+          type: object
+          properties:
+            Arn:
+              type: string
+            CreationTime:
+              type: string
+              format: date-time
+            Description:
+              type: string
+              maxLength: 2048
+              minLength: 1
+              pattern: ^[^\u0000-\u001F\u007F]+$
+            LastModificationTime:
+              type: string
+              format: date-time
+            Name:
+              type: string
+              maxLength: 100
+              minLength: 1
+              pattern: ^[a-zA-Z\d\-_:]+$
+            SignalCatalogArn:
+              type: string
+            StateTemplateProperties:
+              type: array
+              x-insertionOrder: false
+              items:
+                type: string
+                maxLength: 150
+                minLength: 1
+                pattern: ^[a-zA-Z0-9_.]+$
+              maxItems: 500
+              minItems: 1
+            DataExtraDimensions:
+              type: array
+              x-insertionOrder: false
+              items:
+                type: string
+                maxLength: 150
+                minLength: 1
+                pattern: ^[a-zA-Z0-9_.]+$
+              maxItems: 5
+              minItems: 0
+            MetadataExtraDimensions:
+              type: array
+              x-insertionOrder: false
+              items:
+                type: string
+                maxLength: 150
+                minLength: 1
+                pattern: ^[a-zA-Z0-9_.]+$
+              maxItems: 5
+              minItems: 0
+            Tags:
+              type: array
+              x-insertionOrder: false
+              uniqueItems: true
+              items:
+                $ref: '#/components/schemas/Tag'
+              maxItems: 50
+              minItems: 0
+          x-stackQL-stringOnly: true
+      x-title: CreateStateTemplateRequest
       type: object
       required: []
     CreateVehicleRequest:
@@ -1962,6 +2486,7 @@ components:
               JSON_EXTRACT(Properties, '$.Description') as description,
               JSON_EXTRACT(Properties, '$.Priority') as priority,
               JSON_EXTRACT(Properties, '$.SignalsToCollect') as signals_to_collect,
+              JSON_EXTRACT(Properties, '$.SignalsToFetch') as signals_to_fetch,
               JSON_EXTRACT(Properties, '$.DataDestinationConfigs') as data_destination_configs,
               JSON_EXTRACT(Properties, '$.StartTime') as start_time,
               JSON_EXTRACT(Properties, '$.Name') as name,
@@ -1975,6 +2500,7 @@ components:
               JSON_EXTRACT(Properties, '$.TargetArn') as target_arn,
               JSON_EXTRACT(Properties, '$.Arn') as arn,
               JSON_EXTRACT(Properties, '$.CollectionScheme') as collection_scheme,
+              JSON_EXTRACT(Properties, '$.DataPartitions') as data_partitions,
               JSON_EXTRACT(Properties, '$.Tags') as tags
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::IoTFleetWise::Campaign'
               AND data__Identifier = '<Name>'
@@ -1991,6 +2517,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Description') as description,
                 JSON_EXTRACT(detail.Properties, '$.Priority') as priority,
                 JSON_EXTRACT(detail.Properties, '$.SignalsToCollect') as signals_to_collect,
+                JSON_EXTRACT(detail.Properties, '$.SignalsToFetch') as signals_to_fetch,
                 JSON_EXTRACT(detail.Properties, '$.DataDestinationConfigs') as data_destination_configs,
                 JSON_EXTRACT(detail.Properties, '$.StartTime') as start_time,
                 JSON_EXTRACT(detail.Properties, '$.Name') as name,
@@ -2004,9 +2531,10 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.TargetArn') as target_arn,
                 JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
                 JSON_EXTRACT(detail.Properties, '$.CollectionScheme') as collection_scheme,
+                JSON_EXTRACT(detail.Properties, '$.DataPartitions') as data_partitions,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::IoTFleetWise::Campaign'
@@ -2025,6 +2553,7 @@ components:
                   json_extract_path_text(Properties, 'Description') as description,
                   json_extract_path_text(Properties, 'Priority') as priority,
                   json_extract_path_text(Properties, 'SignalsToCollect') as signals_to_collect,
+                  json_extract_path_text(Properties, 'SignalsToFetch') as signals_to_fetch,
                   json_extract_path_text(Properties, 'DataDestinationConfigs') as data_destination_configs,
                   json_extract_path_text(Properties, 'StartTime') as start_time,
                   json_extract_path_text(Properties, 'Name') as name,
@@ -2038,6 +2567,7 @@ components:
                   json_extract_path_text(Properties, 'TargetArn') as target_arn,
                   json_extract_path_text(Properties, 'Arn') as arn,
                   json_extract_path_text(Properties, 'CollectionScheme') as collection_scheme,
+                  json_extract_path_text(Properties, 'DataPartitions') as data_partitions,
                   json_extract_path_text(Properties, 'Tags') as tags
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::IoTFleetWise::Campaign'
                   AND data__Identifier = '<Name>'
@@ -2054,6 +2584,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Description') as description,
                     json_extract_path_text(detail.Properties, 'Priority') as priority,
                     json_extract_path_text(detail.Properties, 'SignalsToCollect') as signals_to_collect,
+                    json_extract_path_text(detail.Properties, 'SignalsToFetch') as signals_to_fetch,
                     json_extract_path_text(detail.Properties, 'DataDestinationConfigs') as data_destination_configs,
                     json_extract_path_text(detail.Properties, 'StartTime') as start_time,
                     json_extract_path_text(detail.Properties, 'Name') as name,
@@ -2067,9 +2598,10 @@ components:
                     json_extract_path_text(detail.Properties, 'TargetArn') as target_arn,
                     json_extract_path_text(detail.Properties, 'Arn') as arn,
                     json_extract_path_text(detail.Properties, 'CollectionScheme') as collection_scheme,
+                    json_extract_path_text(detail.Properties, 'DataPartitions') as data_partitions,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::IoTFleetWise::Campaign'
@@ -2133,6 +2665,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Description') as description,
               JSON_EXTRACT(detail.Properties, '$.Priority') as priority,
               JSON_EXTRACT(detail.Properties, '$.SignalsToCollect') as signals_to_collect,
+              JSON_EXTRACT(detail.Properties, '$.SignalsToFetch') as signals_to_fetch,
               JSON_EXTRACT(detail.Properties, '$.DataDestinationConfigs') as data_destination_configs,
               JSON_EXTRACT(detail.Properties, '$.StartTime') as start_time,
               JSON_EXTRACT(detail.Properties, '$.Name') as name,
@@ -2145,9 +2678,10 @@ components:
               JSON_EXTRACT(detail.Properties, '$.DiagnosticsMode') as diagnostics_mode,
               JSON_EXTRACT(detail.Properties, '$.TargetArn') as target_arn,
               JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
-              JSON_EXTRACT(detail.Properties, '$.CollectionScheme') as collection_scheme
+              JSON_EXTRACT(detail.Properties, '$.CollectionScheme') as collection_scheme,
+              JSON_EXTRACT(detail.Properties, '$.DataPartitions') as data_partitions
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -2168,6 +2702,7 @@ components:
                 json_extract_path_text(detail.Properties, 'Description') as description,
                 json_extract_path_text(detail.Properties, 'Priority') as priority,
                 json_extract_path_text(detail.Properties, 'SignalsToCollect') as signals_to_collect,
+                json_extract_path_text(detail.Properties, 'SignalsToFetch') as signals_to_fetch,
                 json_extract_path_text(detail.Properties, 'DataDestinationConfigs') as data_destination_configs,
                 json_extract_path_text(detail.Properties, 'StartTime') as start_time,
                 json_extract_path_text(detail.Properties, 'Name') as name,
@@ -2180,9 +2715,10 @@ components:
                 json_extract_path_text(detail.Properties, 'DiagnosticsMode') as diagnostics_mode,
                 json_extract_path_text(detail.Properties, 'TargetArn') as target_arn,
                 json_extract_path_text(detail.Properties, 'Arn') as arn,
-                json_extract_path_text(detail.Properties, 'CollectionScheme') as collection_scheme
+                json_extract_path_text(detail.Properties, 'CollectionScheme') as collection_scheme,
+                json_extract_path_text(detail.Properties, 'DataPartitions') as data_partitions
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -2261,6 +2797,7 @@ components:
               JSON_EXTRACT(Properties, '$.NetworkInterfaces') as network_interfaces,
               JSON_EXTRACT(Properties, '$.SignalDecoders') as signal_decoders,
               JSON_EXTRACT(Properties, '$.Status') as status,
+              JSON_EXTRACT(Properties, '$.DefaultForUnmappedSignals') as default_for_unmapped_signals,
               JSON_EXTRACT(Properties, '$.Tags') as tags
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::IoTFleetWise::DecoderManifest'
               AND data__Identifier = '<Name>'
@@ -2279,9 +2816,10 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.NetworkInterfaces') as network_interfaces,
                 JSON_EXTRACT(detail.Properties, '$.SignalDecoders') as signal_decoders,
                 JSON_EXTRACT(detail.Properties, '$.Status') as status,
+                JSON_EXTRACT(detail.Properties, '$.DefaultForUnmappedSignals') as default_for_unmapped_signals,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::IoTFleetWise::DecoderManifest'
@@ -2302,6 +2840,7 @@ components:
                   json_extract_path_text(Properties, 'NetworkInterfaces') as network_interfaces,
                   json_extract_path_text(Properties, 'SignalDecoders') as signal_decoders,
                   json_extract_path_text(Properties, 'Status') as status,
+                  json_extract_path_text(Properties, 'DefaultForUnmappedSignals') as default_for_unmapped_signals,
                   json_extract_path_text(Properties, 'Tags') as tags
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::IoTFleetWise::DecoderManifest'
                   AND data__Identifier = '<Name>'
@@ -2320,9 +2859,10 @@ components:
                     json_extract_path_text(detail.Properties, 'NetworkInterfaces') as network_interfaces,
                     json_extract_path_text(detail.Properties, 'SignalDecoders') as signal_decoders,
                     json_extract_path_text(detail.Properties, 'Status') as status,
+                    json_extract_path_text(detail.Properties, 'DefaultForUnmappedSignals') as default_for_unmapped_signals,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::IoTFleetWise::DecoderManifest'
@@ -2387,9 +2927,10 @@ components:
               JSON_EXTRACT(detail.Properties, '$.Name') as name,
               JSON_EXTRACT(detail.Properties, '$.NetworkInterfaces') as network_interfaces,
               JSON_EXTRACT(detail.Properties, '$.SignalDecoders') as signal_decoders,
-              JSON_EXTRACT(detail.Properties, '$.Status') as status
+              JSON_EXTRACT(detail.Properties, '$.Status') as status,
+              JSON_EXTRACT(detail.Properties, '$.DefaultForUnmappedSignals') as default_for_unmapped_signals
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -2411,9 +2952,10 @@ components:
                 json_extract_path_text(detail.Properties, 'Name') as name,
                 json_extract_path_text(detail.Properties, 'NetworkInterfaces') as network_interfaces,
                 json_extract_path_text(detail.Properties, 'SignalDecoders') as signal_decoders,
-                json_extract_path_text(detail.Properties, 'Status') as status
+                json_extract_path_text(detail.Properties, 'Status') as status,
+                json_extract_path_text(detail.Properties, 'DefaultForUnmappedSignals') as default_for_unmapped_signals
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -2506,7 +3048,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.SignalCatalogArn') as signal_catalog_arn,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::IoTFleetWise::Fleet'
@@ -2541,7 +3083,7 @@ components:
                     json_extract_path_text(detail.Properties, 'SignalCatalogArn') as signal_catalog_arn,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::IoTFleetWise::Fleet'
@@ -2605,7 +3147,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.LastModificationTime') as last_modification_time,
               JSON_EXTRACT(detail.Properties, '$.SignalCatalogArn') as signal_catalog_arn
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -2626,7 +3168,7 @@ components:
                 json_extract_path_text(detail.Properties, 'LastModificationTime') as last_modification_time,
                 json_extract_path_text(detail.Properties, 'SignalCatalogArn') as signal_catalog_arn
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -2723,7 +3265,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Status') as status,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::IoTFleetWise::ModelManifest'
@@ -2762,7 +3304,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Status') as status,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::IoTFleetWise::ModelManifest'
@@ -2828,7 +3370,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.SignalCatalogArn') as signal_catalog_arn,
               JSON_EXTRACT(detail.Properties, '$.Status') as status
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -2851,7 +3393,7 @@ components:
                 json_extract_path_text(detail.Properties, 'SignalCatalogArn') as signal_catalog_arn,
                 json_extract_path_text(detail.Properties, 'Status') as status
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -2946,7 +3488,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.Nodes') as nodes,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::IoTFleetWise::SignalCatalog'
@@ -2983,7 +3525,7 @@ components:
                     json_extract_path_text(detail.Properties, 'Nodes') as nodes,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::IoTFleetWise::SignalCatalog'
@@ -3048,7 +3590,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.NodeCounts') as node_counts,
               JSON_EXTRACT(detail.Properties, '$.Nodes') as nodes
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -3070,12 +3612,243 @@ components:
                 json_extract_path_text(detail.Properties, 'NodeCounts') as node_counts,
                 json_extract_path_text(detail.Properties, 'Nodes') as nodes
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
                 WHERE listing.data__TypeName = 'AWS::IoTFleetWise::SignalCatalog'
                 AND detail.data__TypeName = 'AWS::IoTFleetWise::SignalCatalog'
+                AND listing.region = 'us-east-1'
+    state_templates:
+      name: state_templates
+      id: aws.iotfleetwise.state_templates
+      x-cfn-schema-name: StateTemplate
+      x-cfn-type-name: AWS::IoTFleetWise::StateTemplate
+      x-identifiers:
+        - Name
+      x-type: cloud_control
+      methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__StateTemplate&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::IoTFleetWise::StateTemplate"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_resource:
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::IoTFleetWise::StateTemplate"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete_resource:
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::IoTFleetWise::StateTemplate"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/state_templates/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/state_templates/methods/delete_resource'
+        update:
+          - $ref: '#/components/x-stackQL-resources/state_templates/methods/update_resource'
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ data__Identifier ]
+            ddl: |-
+              SELECT
+              region,
+              data__Identifier,
+              JSON_EXTRACT(Properties, '$.Arn') as arn,
+              JSON_EXTRACT(Properties, '$.CreationTime') as creation_time,
+              JSON_EXTRACT(Properties, '$.Description') as description,
+              JSON_EXTRACT(Properties, '$.LastModificationTime') as last_modification_time,
+              JSON_EXTRACT(Properties, '$.Name') as name,
+              JSON_EXTRACT(Properties, '$.SignalCatalogArn') as signal_catalog_arn,
+              JSON_EXTRACT(Properties, '$.StateTemplateProperties') as state_template_properties,
+              JSON_EXTRACT(Properties, '$.DataExtraDimensions') as data_extra_dimensions,
+              JSON_EXTRACT(Properties, '$.MetadataExtraDimensions') as metadata_extra_dimensions,
+              JSON_EXTRACT(Properties, '$.Tags') as tags
+              FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::IoTFleetWise::StateTemplate'
+              AND data__Identifier = '<Name>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "sqlite3"
+              ddl: |-
+                SELECT
+                detail.region,
+                JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
+                JSON_EXTRACT(detail.Properties, '$.CreationTime') as creation_time,
+                JSON_EXTRACT(detail.Properties, '$.Description') as description,
+                JSON_EXTRACT(detail.Properties, '$.LastModificationTime') as last_modification_time,
+                JSON_EXTRACT(detail.Properties, '$.Name') as name,
+                JSON_EXTRACT(detail.Properties, '$.SignalCatalogArn') as signal_catalog_arn,
+                JSON_EXTRACT(detail.Properties, '$.StateTemplateProperties') as state_template_properties,
+                JSON_EXTRACT(detail.Properties, '$.DataExtraDimensions') as data_extra_dimensions,
+                JSON_EXTRACT(detail.Properties, '$.MetadataExtraDimensions') as metadata_extra_dimensions,
+                JSON_EXTRACT(detail.Properties, '$.Tags') as tags
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                WHERE listing.data__TypeName = 'AWS::IoTFleetWise::StateTemplate'
+                AND detail.data__TypeName = 'AWS::IoTFleetWise::StateTemplate'
+                AND listing.region = 'us-east-1'
+              fallback:
+                predicate: sqlDialect == "postgres" && requiredParams == [ data__Identifier ]
+                ddl: |-
+                  SELECT
+                  region,
+                  data__Identifier,
+                  json_extract_path_text(Properties, 'Arn') as arn,
+                  json_extract_path_text(Properties, 'CreationTime') as creation_time,
+                  json_extract_path_text(Properties, 'Description') as description,
+                  json_extract_path_text(Properties, 'LastModificationTime') as last_modification_time,
+                  json_extract_path_text(Properties, 'Name') as name,
+                  json_extract_path_text(Properties, 'SignalCatalogArn') as signal_catalog_arn,
+                  json_extract_path_text(Properties, 'StateTemplateProperties') as state_template_properties,
+                  json_extract_path_text(Properties, 'DataExtraDimensions') as data_extra_dimensions,
+                  json_extract_path_text(Properties, 'MetadataExtraDimensions') as metadata_extra_dimensions,
+                  json_extract_path_text(Properties, 'Tags') as tags
+                  FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::IoTFleetWise::StateTemplate'
+                  AND data__Identifier = '<Name>'
+                  AND region = 'us-east-1'
+                fallback:
+                  predicate: sqlDialect == "postgres"
+                  ddl: |-
+                    SELECT
+                    detail.region,
+                    json_extract_path_text(detail.Properties, 'Arn') as arn,
+                    json_extract_path_text(detail.Properties, 'CreationTime') as creation_time,
+                    json_extract_path_text(detail.Properties, 'Description') as description,
+                    json_extract_path_text(detail.Properties, 'LastModificationTime') as last_modification_time,
+                    json_extract_path_text(detail.Properties, 'Name') as name,
+                    json_extract_path_text(detail.Properties, 'SignalCatalogArn') as signal_catalog_arn,
+                    json_extract_path_text(detail.Properties, 'StateTemplateProperties') as state_template_properties,
+                    json_extract_path_text(detail.Properties, 'DataExtraDimensions') as data_extra_dimensions,
+                    json_extract_path_text(detail.Properties, 'MetadataExtraDimensions') as metadata_extra_dimensions,
+                    json_extract_path_text(detail.Properties, 'Tags') as tags
+                    FROM aws.cloud_control.resources listing
+                    INNER JOIN aws.cloud_control.resource detail
+                    ON detail.data__Identifier = listing.Identifier
+                    AND detail.region = listing.region
+                    WHERE listing.data__TypeName = 'AWS::IoTFleetWise::StateTemplate'
+                    AND detail.data__TypeName = 'AWS::IoTFleetWise::StateTemplate'
+                    AND listing.region = 'us-east-1'
+    state_templates_list_only:
+      name: state_templates_list_only
+      id: aws.iotfleetwise.state_templates_list_only
+      x-cfn-schema-name: StateTemplate
+      x-cfn-type-name: AWS::IoTFleetWise::StateTemplate
+      x-identifiers:
+        - Name
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.Name') as name
+              FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::IoTFleetWise::StateTemplate'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                json_extract_path_text(Properties, 'Name') as name
+                FROM aws.cloud_control.resources WHERE data__TypeName = 'AWS::IoTFleetWise::StateTemplate'
+                AND region = 'us-east-1'
+    state_template_tags:
+      name: state_template_tags
+      id: aws.iotfleetwise.state_template_tags
+      x-cfn-schema-name: StateTemplate
+      x-cfn-type-name: AWS::IoTFleetWise::StateTemplate
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              detail.region,
+              JSON_EXTRACT(json_each.value, '$.Key') as tag_key,
+              JSON_EXTRACT(json_each.value, '$.Value') as tag_value,
+              JSON_EXTRACT(detail.Properties, '$.Arn') as arn,
+              JSON_EXTRACT(detail.Properties, '$.CreationTime') as creation_time,
+              JSON_EXTRACT(detail.Properties, '$.Description') as description,
+              JSON_EXTRACT(detail.Properties, '$.LastModificationTime') as last_modification_time,
+              JSON_EXTRACT(detail.Properties, '$.Name') as name,
+              JSON_EXTRACT(detail.Properties, '$.SignalCatalogArn') as signal_catalog_arn,
+              JSON_EXTRACT(detail.Properties, '$.StateTemplateProperties') as state_template_properties,
+              JSON_EXTRACT(detail.Properties, '$.DataExtraDimensions') as data_extra_dimensions,
+              JSON_EXTRACT(detail.Properties, '$.MetadataExtraDimensions') as metadata_extra_dimensions
+              FROM aws.cloud_control.resources listing
+              INNER JOIN aws.cloud_control.resource detail
+              ON detail.data__Identifier = listing.Identifier
+              AND detail.region = listing.region
+              ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
+              WHERE listing.data__TypeName = 'AWS::IoTFleetWise::StateTemplate'
+              AND detail.data__TypeName = 'AWS::IoTFleetWise::StateTemplate'
+              AND listing.region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                detail.region,
+                json_extract_path_text(json_each.value, 'Key') as tag_key,
+                json_extract_path_text(json_each.value, 'Value') as tag_value,
+                json_extract_path_text(detail.Properties, 'Arn') as arn,
+                json_extract_path_text(detail.Properties, 'CreationTime') as creation_time,
+                json_extract_path_text(detail.Properties, 'Description') as description,
+                json_extract_path_text(detail.Properties, 'LastModificationTime') as last_modification_time,
+                json_extract_path_text(detail.Properties, 'Name') as name,
+                json_extract_path_text(detail.Properties, 'SignalCatalogArn') as signal_catalog_arn,
+                json_extract_path_text(detail.Properties, 'StateTemplateProperties') as state_template_properties,
+                json_extract_path_text(detail.Properties, 'DataExtraDimensions') as data_extra_dimensions,
+                json_extract_path_text(detail.Properties, 'MetadataExtraDimensions') as metadata_extra_dimensions
+                FROM aws.cloud_control.resources listing
+                INNER JOIN aws.cloud_control.resource detail
+                ON detail.data__Identifier = listing.Identifier
+                AND detail.region = listing.region
+                ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
+                WHERE listing.data__TypeName = 'AWS::IoTFleetWise::StateTemplate'
+                AND detail.data__TypeName = 'AWS::IoTFleetWise::StateTemplate'
                 AND listing.region = 'us-east-1'
     vehicles:
       name: vehicles
@@ -3167,7 +3940,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.ModelManifestArn') as model_manifest_arn,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::IoTFleetWise::Vehicle'
@@ -3206,7 +3979,7 @@ components:
                     json_extract_path_text(detail.Properties, 'ModelManifestArn') as model_manifest_arn,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::IoTFleetWise::Vehicle'
@@ -3272,7 +4045,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.LastModificationTime') as last_modification_time,
               JSON_EXTRACT(detail.Properties, '$.ModelManifestArn') as model_manifest_arn
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -3295,7 +4068,7 @@ components:
                 json_extract_path_text(detail.Properties, 'LastModificationTime') as last_modification_time,
                 json_extract_path_text(detail.Properties, 'ModelManifestArn') as model_manifest_arn
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -3647,6 +4420,48 @@ paths:
           application/x-amz-json-1.0:
             schema:
               $ref: '#/components/schemas/CreateSignalCatalogRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/x-cloud-control-schemas/ProgressEvent'
+          description: Success
+  /?Action=CreateResource&Version=2021-09-30&__StateTemplate&__detailTransformed=true:
+    parameters:
+      - $ref: '#/components/parameters/X-Amz-Content-Sha256'
+      - $ref: '#/components/parameters/X-Amz-Date'
+      - $ref: '#/components/parameters/X-Amz-Algorithm'
+      - $ref: '#/components/parameters/X-Amz-Credential'
+      - $ref: '#/components/parameters/X-Amz-Security-Token'
+      - $ref: '#/components/parameters/X-Amz-Signature'
+      - $ref: '#/components/parameters/X-Amz-SignedHeaders'
+    post:
+      operationId: CreateStateTemplate
+      parameters:
+        - description: Action Header
+          in: header
+          name: X-Amz-Target
+          required: false
+          schema:
+            default: CloudApiService.CreateResource
+            enum:
+              - CloudApiService.CreateResource
+            type: string
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            default: application/x-amz-json-1.0
+            enum:
+              - application/x-amz-json-1.0
+            type: string
+      requestBody:
+        content:
+          application/x-amz-json-1.0:
+            schema:
+              $ref: '#/components/schemas/CreateStateTemplateRequest'
         required: true
       responses:
         '200':

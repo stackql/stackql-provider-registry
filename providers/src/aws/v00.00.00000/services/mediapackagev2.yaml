@@ -396,6 +396,11 @@ components:
           type: string
           description: <p>The ingest domain URL where the source stream should be sent.</p>
       additionalProperties: false
+    InputType:
+      type: string
+      enum:
+        - HLS
+        - CMAF
     Tag:
       type: object
       properties:
@@ -434,10 +439,16 @@ components:
           items:
             $ref: '#/components/schemas/IngestEndpoint'
           description: <p>The list of ingest endpoints.</p>
+        InputType:
+          $ref: '#/components/schemas/InputType'
         ModifiedAt:
           type: string
           description: <p>The date and time the channel was modified.</p>
           format: date-time
+        IngestEndpointUrls:
+          type: array
+          items:
+            type: string
         Tags:
           type: array
           x-insertionOrder: false
@@ -457,10 +468,12 @@ components:
       x-create-only-properties:
         - ChannelGroupName
         - ChannelName
+        - InputType
       x-read-only-properties:
         - Arn
         - CreatedAt
         - IngestEndpoints
+        - IngestEndpointUrls
         - ModifiedAt
       x-required-properties:
         - ChannelGroupName
@@ -471,6 +484,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: false
         tagProperty: /properties/Tags
+        permissions:
+          - mediapackagev2:TagResource
+          - mediapackagev2:UntagResource
+          - mediapackagev2:ListTagsForResource
       x-required-permissions:
         create:
           - mediapackagev2:TagResource
@@ -543,6 +560,10 @@ components:
         tagUpdatable: true
         cloudFormationSystemTags: false
         tagProperty: /properties/Tags
+        permissions:
+          - mediapackagev2:TagResource
+          - mediapackagev2:UntagResource
+          - mediapackagev2:ListTagsForResource
       x-required-permissions:
         create:
           - mediapackagev2:TagResource
@@ -670,6 +691,7 @@ components:
         - FAIRPLAY
         - PLAYREADY
         - WIDEVINE
+        - IRDETO
     Encryption:
       type: object
       description: <p>The parameters for encrypting content.</p>
@@ -717,6 +739,13 @@ components:
         CmafEncryptionMethod:
           $ref: '#/components/schemas/CmafEncryptionMethod'
       additionalProperties: false
+    EndpointErrorCondition:
+      type: string
+      enum:
+        - STALE_MANIFEST
+        - INCOMPLETE_MANIFEST
+        - MISSING_DRM_KEY
+        - SLATE_INPUT
     FilterConfiguration:
       type: object
       description: <p>Filter configuration includes settings for manifest filtering, start and end times, and time delay that apply to all of your egress requests for this manifest. </p>
@@ -739,6 +768,35 @@ components:
           maximum: 1209600
           minimum: 0
           description: <p>Optionally specify the time delay for all of your manifest egress requests. Enter a value that is smaller than your endpoint's startover window. When you include time delay, note that you cannot use time delay query parameters for this manifest's endpoint URL.</p>
+        ClipStartTime:
+          type: string
+          description: <p>Optionally specify the clip start time for all of your manifest egress requests. When you include clip start time, note that you cannot use clip start time query parameters for this manifest's endpoint URL.</p>
+          format: date-time
+      additionalProperties: false
+    ForceEndpointErrorConfiguration:
+      type: object
+      description: <p>The failover settings for the endpoint.</p>
+      properties:
+        EndpointErrorConditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/EndpointErrorCondition'
+          description: |-
+            <p>The failover settings for the endpoint. The options are:</p>
+                     <ul>
+                        <li>
+                           <p>
+                              <code>STALE_MANIFEST</code> - The manifest stalled and there a no new segments or parts.</p>
+                        </li>
+                        <li>
+                           <p>
+                              <code>INCOMPLETE_MANIFEST</code> - There is a gap in the manifest.</p>
+                        </li>
+                        <li>
+                           <p>
+                              <code>MISSING_DRM_KEY</code> - Key rotation is enabled but we're unable to fetch the key for the current key period.</p>
+                        </li>
+                     </ul>
       additionalProperties: false
     DashManifestConfiguration:
       type: object
@@ -818,6 +876,8 @@ components:
           $ref: '#/components/schemas/ScteHls'
         FilterConfiguration:
           $ref: '#/components/schemas/FilterConfiguration'
+        StartTag:
+          $ref: '#/components/schemas/StartTag'
       required:
         - ManifestName
       additionalProperties: false
@@ -855,6 +915,8 @@ components:
           $ref: '#/components/schemas/ScteHls'
         FilterConfiguration:
           $ref: '#/components/schemas/FilterConfiguration'
+        StartTag:
+          $ref: '#/components/schemas/StartTag'
       required:
         - ManifestName
       additionalProperties: false
@@ -991,6 +1053,19 @@ components:
         - RoleArn
         - Url
       additionalProperties: false
+    StartTag:
+      type: object
+      description: <p>To insert an EXT-X-START tag in your HLS playlist, specify a StartTag configuration object with a valid TimeOffset. When you do, you can also optionally specify whether to include a PRECISE value in the EXT-X-START tag.</p>
+      properties:
+        TimeOffset:
+          type: number
+          description: <p>Specify the value for TIME-OFFSET within your EXT-X-START tag. Enter a signed floating point value which, if positive, must be less than the configured manifest duration minus three times the configured segment target duration. If negative, the absolute value must be larger than three times the configured segment target duration, and the absolute value must be smaller than the configured manifest duration.</p>
+        Precise:
+          type: boolean
+          description: <p>Specify the value for PRECISE within your EXT-X-START tag. Leave blank, or choose false, to use the default value NO. Choose yes to use the value YES.</p>
+      required:
+        - TimeOffset
+      additionalProperties: false
     TsEncryptionMethod:
       type: string
       enum:
@@ -1028,6 +1103,8 @@ components:
           maxLength: 1024
           minLength: 0
           description: <p>Enter any descriptive text that helps you to identify the origin endpoint.</p>
+        ForceEndpointErrorConfiguration:
+          $ref: '#/components/schemas/ForceEndpointErrorConfiguration'
         HlsManifests:
           type: array
           items:
@@ -1054,6 +1131,18 @@ components:
           maximum: 1209600
           minimum: 60
           description: <p>The size of the window (in seconds) to create a window of the live stream that's available for on-demand viewing. Viewers can start-over or catch-up on content that falls within the window. The maximum startover window is 1,209,600 seconds (14 days).</p>
+        DashManifestUrls:
+          type: array
+          items:
+            type: string
+        HlsManifestUrls:
+          type: array
+          items:
+            type: string
+        LowLatencyHlsManifestUrls:
+          type: array
+          items:
+            type: string
         Tags:
           type: array
           x-insertionOrder: false
@@ -1063,6 +1152,7 @@ components:
         - ChannelGroupName
         - ChannelName
         - OriginEndpointName
+        - ContainerType
       x-stackql-resource-name: origin_endpoint
       description: <p>Represents an origin endpoint that is associated with a channel, offering a dynamically repackaged version of its content through various streaming media protocols. The content can be efficiently disseminated to end-users via a Content Delivery Network (CDN), like Amazon CloudFront.</p>
       x-type-name: AWS::MediaPackageV2::OriginEndpoint
@@ -1079,6 +1169,9 @@ components:
       x-read-only-properties:
         - Arn
         - CreatedAt
+        - DashManifestUrls
+        - HlsManifestUrls
+        - LowLatencyHlsManifestUrls
         - ModifiedAt
         - LowLatencyHlsManifests/*/Url
         - HlsManifests/*/Url
@@ -1086,12 +1179,17 @@ components:
         - ChannelGroupName
         - ChannelName
         - OriginEndpointName
+        - ContainerType
       x-tagging:
         taggable: true
         tagOnCreate: true
         tagUpdatable: true
         cloudFormationSystemTags: false
         tagProperty: /properties/Tags
+        permissions:
+          - mediapackagev2:TagResource
+          - mediapackagev2:UntagResource
+          - mediapackagev2:ListTagsForResource
       x-required-permissions:
         create:
           - mediapackagev2:TagResource
@@ -1208,10 +1306,16 @@ components:
               items:
                 $ref: '#/components/schemas/IngestEndpoint'
               description: <p>The list of ingest endpoints.</p>
+            InputType:
+              $ref: '#/components/schemas/InputType'
             ModifiedAt:
               type: string
               description: <p>The date and time the channel was modified.</p>
               format: date-time
+            IngestEndpointUrls:
+              type: array
+              items:
+                type: string
             Tags:
               type: array
               x-insertionOrder: false
@@ -1338,6 +1442,8 @@ components:
               maxLength: 1024
               minLength: 0
               description: <p>Enter any descriptive text that helps you to identify the origin endpoint.</p>
+            ForceEndpointErrorConfiguration:
+              $ref: '#/components/schemas/ForceEndpointErrorConfiguration'
             HlsManifests:
               type: array
               items:
@@ -1364,6 +1470,18 @@ components:
               maximum: 1209600
               minimum: 60
               description: <p>The size of the window (in seconds) to create a window of the live stream that's available for on-demand viewing. Viewers can start-over or catch-up on content that falls within the window. The maximum startover window is 1,209,600 seconds (14 days).</p>
+            DashManifestUrls:
+              type: array
+              items:
+                type: string
+            HlsManifestUrls:
+              type: array
+              items:
+                type: string
+            LowLatencyHlsManifestUrls:
+              type: array
+              items:
+                type: string
             Tags:
               type: array
               x-insertionOrder: false
@@ -1484,7 +1602,9 @@ components:
               JSON_EXTRACT(Properties, '$.CreatedAt') as created_at,
               JSON_EXTRACT(Properties, '$.Description') as description,
               JSON_EXTRACT(Properties, '$.IngestEndpoints') as ingest_endpoints,
+              JSON_EXTRACT(Properties, '$.InputType') as input_type,
               JSON_EXTRACT(Properties, '$.ModifiedAt') as modified_at,
+              JSON_EXTRACT(Properties, '$.IngestEndpointUrls') as ingest_endpoint_urls,
               JSON_EXTRACT(Properties, '$.Tags') as tags
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::MediaPackageV2::Channel'
               AND data__Identifier = '<Arn>'
@@ -1500,10 +1620,12 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.CreatedAt') as created_at,
                 JSON_EXTRACT(detail.Properties, '$.Description') as description,
                 JSON_EXTRACT(detail.Properties, '$.IngestEndpoints') as ingest_endpoints,
+                JSON_EXTRACT(detail.Properties, '$.InputType') as input_type,
                 JSON_EXTRACT(detail.Properties, '$.ModifiedAt') as modified_at,
+                JSON_EXTRACT(detail.Properties, '$.IngestEndpointUrls') as ingest_endpoint_urls,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::MediaPackageV2::Channel'
@@ -1521,7 +1643,9 @@ components:
                   json_extract_path_text(Properties, 'CreatedAt') as created_at,
                   json_extract_path_text(Properties, 'Description') as description,
                   json_extract_path_text(Properties, 'IngestEndpoints') as ingest_endpoints,
+                  json_extract_path_text(Properties, 'InputType') as input_type,
                   json_extract_path_text(Properties, 'ModifiedAt') as modified_at,
+                  json_extract_path_text(Properties, 'IngestEndpointUrls') as ingest_endpoint_urls,
                   json_extract_path_text(Properties, 'Tags') as tags
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::MediaPackageV2::Channel'
                   AND data__Identifier = '<Arn>'
@@ -1537,10 +1661,12 @@ components:
                     json_extract_path_text(detail.Properties, 'CreatedAt') as created_at,
                     json_extract_path_text(detail.Properties, 'Description') as description,
                     json_extract_path_text(detail.Properties, 'IngestEndpoints') as ingest_endpoints,
+                    json_extract_path_text(detail.Properties, 'InputType') as input_type,
                     json_extract_path_text(detail.Properties, 'ModifiedAt') as modified_at,
+                    json_extract_path_text(detail.Properties, 'IngestEndpointUrls') as ingest_endpoint_urls,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::MediaPackageV2::Channel'
@@ -1603,9 +1729,11 @@ components:
               JSON_EXTRACT(detail.Properties, '$.CreatedAt') as created_at,
               JSON_EXTRACT(detail.Properties, '$.Description') as description,
               JSON_EXTRACT(detail.Properties, '$.IngestEndpoints') as ingest_endpoints,
-              JSON_EXTRACT(detail.Properties, '$.ModifiedAt') as modified_at
+              JSON_EXTRACT(detail.Properties, '$.InputType') as input_type,
+              JSON_EXTRACT(detail.Properties, '$.ModifiedAt') as modified_at,
+              JSON_EXTRACT(detail.Properties, '$.IngestEndpointUrls') as ingest_endpoint_urls
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -1625,9 +1753,11 @@ components:
                 json_extract_path_text(detail.Properties, 'CreatedAt') as created_at,
                 json_extract_path_text(detail.Properties, 'Description') as description,
                 json_extract_path_text(detail.Properties, 'IngestEndpoints') as ingest_endpoints,
-                json_extract_path_text(detail.Properties, 'ModifiedAt') as modified_at
+                json_extract_path_text(detail.Properties, 'InputType') as input_type,
+                json_extract_path_text(detail.Properties, 'ModifiedAt') as modified_at,
+                json_extract_path_text(detail.Properties, 'IngestEndpointUrls') as ingest_endpoint_urls
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -1720,7 +1850,7 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.ModifiedAt') as modified_at,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::MediaPackageV2::ChannelGroup'
@@ -1755,7 +1885,7 @@ components:
                     json_extract_path_text(detail.Properties, 'ModifiedAt') as modified_at,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::MediaPackageV2::ChannelGroup'
@@ -1819,7 +1949,7 @@ components:
               JSON_EXTRACT(detail.Properties, '$.EgressDomain') as egress_domain,
               JSON_EXTRACT(detail.Properties, '$.ModifiedAt') as modified_at
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -1840,7 +1970,7 @@ components:
                 json_extract_path_text(detail.Properties, 'EgressDomain') as egress_domain,
                 json_extract_path_text(detail.Properties, 'ModifiedAt') as modified_at
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
@@ -1999,12 +2129,16 @@ components:
               JSON_EXTRACT(Properties, '$.CreatedAt') as created_at,
               JSON_EXTRACT(Properties, '$.DashManifests') as dash_manifests,
               JSON_EXTRACT(Properties, '$.Description') as description,
+              JSON_EXTRACT(Properties, '$.ForceEndpointErrorConfiguration') as force_endpoint_error_configuration,
               JSON_EXTRACT(Properties, '$.HlsManifests') as hls_manifests,
               JSON_EXTRACT(Properties, '$.LowLatencyHlsManifests') as low_latency_hls_manifests,
               JSON_EXTRACT(Properties, '$.ModifiedAt') as modified_at,
               JSON_EXTRACT(Properties, '$.OriginEndpointName') as origin_endpoint_name,
               JSON_EXTRACT(Properties, '$.Segment') as segment,
               JSON_EXTRACT(Properties, '$.StartoverWindowSeconds') as startover_window_seconds,
+              JSON_EXTRACT(Properties, '$.DashManifestUrls') as dash_manifest_urls,
+              JSON_EXTRACT(Properties, '$.HlsManifestUrls') as hls_manifest_urls,
+              JSON_EXTRACT(Properties, '$.LowLatencyHlsManifestUrls') as low_latency_hls_manifest_urls,
               JSON_EXTRACT(Properties, '$.Tags') as tags
               FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::MediaPackageV2::OriginEndpoint'
               AND data__Identifier = '<Arn>'
@@ -2021,15 +2155,19 @@ components:
                 JSON_EXTRACT(detail.Properties, '$.CreatedAt') as created_at,
                 JSON_EXTRACT(detail.Properties, '$.DashManifests') as dash_manifests,
                 JSON_EXTRACT(detail.Properties, '$.Description') as description,
+                JSON_EXTRACT(detail.Properties, '$.ForceEndpointErrorConfiguration') as force_endpoint_error_configuration,
                 JSON_EXTRACT(detail.Properties, '$.HlsManifests') as hls_manifests,
                 JSON_EXTRACT(detail.Properties, '$.LowLatencyHlsManifests') as low_latency_hls_manifests,
                 JSON_EXTRACT(detail.Properties, '$.ModifiedAt') as modified_at,
                 JSON_EXTRACT(detail.Properties, '$.OriginEndpointName') as origin_endpoint_name,
                 JSON_EXTRACT(detail.Properties, '$.Segment') as segment,
                 JSON_EXTRACT(detail.Properties, '$.StartoverWindowSeconds') as startover_window_seconds,
+                JSON_EXTRACT(detail.Properties, '$.DashManifestUrls') as dash_manifest_urls,
+                JSON_EXTRACT(detail.Properties, '$.HlsManifestUrls') as hls_manifest_urls,
+                JSON_EXTRACT(detail.Properties, '$.LowLatencyHlsManifestUrls') as low_latency_hls_manifest_urls,
                 JSON_EXTRACT(detail.Properties, '$.Tags') as tags
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 WHERE listing.data__TypeName = 'AWS::MediaPackageV2::OriginEndpoint'
@@ -2048,12 +2186,16 @@ components:
                   json_extract_path_text(Properties, 'CreatedAt') as created_at,
                   json_extract_path_text(Properties, 'DashManifests') as dash_manifests,
                   json_extract_path_text(Properties, 'Description') as description,
+                  json_extract_path_text(Properties, 'ForceEndpointErrorConfiguration') as force_endpoint_error_configuration,
                   json_extract_path_text(Properties, 'HlsManifests') as hls_manifests,
                   json_extract_path_text(Properties, 'LowLatencyHlsManifests') as low_latency_hls_manifests,
                   json_extract_path_text(Properties, 'ModifiedAt') as modified_at,
                   json_extract_path_text(Properties, 'OriginEndpointName') as origin_endpoint_name,
                   json_extract_path_text(Properties, 'Segment') as segment,
                   json_extract_path_text(Properties, 'StartoverWindowSeconds') as startover_window_seconds,
+                  json_extract_path_text(Properties, 'DashManifestUrls') as dash_manifest_urls,
+                  json_extract_path_text(Properties, 'HlsManifestUrls') as hls_manifest_urls,
+                  json_extract_path_text(Properties, 'LowLatencyHlsManifestUrls') as low_latency_hls_manifest_urls,
                   json_extract_path_text(Properties, 'Tags') as tags
                   FROM aws.cloud_control.resource WHERE data__TypeName = 'AWS::MediaPackageV2::OriginEndpoint'
                   AND data__Identifier = '<Arn>'
@@ -2070,15 +2212,19 @@ components:
                     json_extract_path_text(detail.Properties, 'CreatedAt') as created_at,
                     json_extract_path_text(detail.Properties, 'DashManifests') as dash_manifests,
                     json_extract_path_text(detail.Properties, 'Description') as description,
+                    json_extract_path_text(detail.Properties, 'ForceEndpointErrorConfiguration') as force_endpoint_error_configuration,
                     json_extract_path_text(detail.Properties, 'HlsManifests') as hls_manifests,
                     json_extract_path_text(detail.Properties, 'LowLatencyHlsManifests') as low_latency_hls_manifests,
                     json_extract_path_text(detail.Properties, 'ModifiedAt') as modified_at,
                     json_extract_path_text(detail.Properties, 'OriginEndpointName') as origin_endpoint_name,
                     json_extract_path_text(detail.Properties, 'Segment') as segment,
                     json_extract_path_text(detail.Properties, 'StartoverWindowSeconds') as startover_window_seconds,
+                    json_extract_path_text(detail.Properties, 'DashManifestUrls') as dash_manifest_urls,
+                    json_extract_path_text(detail.Properties, 'HlsManifestUrls') as hls_manifest_urls,
+                    json_extract_path_text(detail.Properties, 'LowLatencyHlsManifestUrls') as low_latency_hls_manifest_urls,
                     json_extract_path_text(detail.Properties, 'Tags') as tags
                     FROM aws.cloud_control.resources listing
-                    LEFT OUTER JOIN aws.cloud_control.resource detail
+                    INNER JOIN aws.cloud_control.resource detail
                     ON detail.data__Identifier = listing.Identifier
                     AND detail.region = listing.region
                     WHERE listing.data__TypeName = 'AWS::MediaPackageV2::OriginEndpoint'
@@ -2142,14 +2288,18 @@ components:
               JSON_EXTRACT(detail.Properties, '$.CreatedAt') as created_at,
               JSON_EXTRACT(detail.Properties, '$.DashManifests') as dash_manifests,
               JSON_EXTRACT(detail.Properties, '$.Description') as description,
+              JSON_EXTRACT(detail.Properties, '$.ForceEndpointErrorConfiguration') as force_endpoint_error_configuration,
               JSON_EXTRACT(detail.Properties, '$.HlsManifests') as hls_manifests,
               JSON_EXTRACT(detail.Properties, '$.LowLatencyHlsManifests') as low_latency_hls_manifests,
               JSON_EXTRACT(detail.Properties, '$.ModifiedAt') as modified_at,
               JSON_EXTRACT(detail.Properties, '$.OriginEndpointName') as origin_endpoint_name,
               JSON_EXTRACT(detail.Properties, '$.Segment') as segment,
-              JSON_EXTRACT(detail.Properties, '$.StartoverWindowSeconds') as startover_window_seconds
+              JSON_EXTRACT(detail.Properties, '$.StartoverWindowSeconds') as startover_window_seconds,
+              JSON_EXTRACT(detail.Properties, '$.DashManifestUrls') as dash_manifest_urls,
+              JSON_EXTRACT(detail.Properties, '$.HlsManifestUrls') as hls_manifest_urls,
+              JSON_EXTRACT(detail.Properties, '$.LowLatencyHlsManifestUrls') as low_latency_hls_manifest_urls
               FROM aws.cloud_control.resources listing
-              LEFT OUTER JOIN aws.cloud_control.resource detail
+              INNER JOIN aws.cloud_control.resource detail
               ON detail.data__Identifier = listing.Identifier
               AND detail.region = listing.region
               ,json_each(JSON_EXTRACT(detail.Properties, '$.Tags'))
@@ -2170,14 +2320,18 @@ components:
                 json_extract_path_text(detail.Properties, 'CreatedAt') as created_at,
                 json_extract_path_text(detail.Properties, 'DashManifests') as dash_manifests,
                 json_extract_path_text(detail.Properties, 'Description') as description,
+                json_extract_path_text(detail.Properties, 'ForceEndpointErrorConfiguration') as force_endpoint_error_configuration,
                 json_extract_path_text(detail.Properties, 'HlsManifests') as hls_manifests,
                 json_extract_path_text(detail.Properties, 'LowLatencyHlsManifests') as low_latency_hls_manifests,
                 json_extract_path_text(detail.Properties, 'ModifiedAt') as modified_at,
                 json_extract_path_text(detail.Properties, 'OriginEndpointName') as origin_endpoint_name,
                 json_extract_path_text(detail.Properties, 'Segment') as segment,
-                json_extract_path_text(detail.Properties, 'StartoverWindowSeconds') as startover_window_seconds
+                json_extract_path_text(detail.Properties, 'StartoverWindowSeconds') as startover_window_seconds,
+                json_extract_path_text(detail.Properties, 'DashManifestUrls') as dash_manifest_urls,
+                json_extract_path_text(detail.Properties, 'HlsManifestUrls') as hls_manifest_urls,
+                json_extract_path_text(detail.Properties, 'LowLatencyHlsManifestUrls') as low_latency_hls_manifest_urls
                 FROM aws.cloud_control.resources listing
-                LEFT OUTER JOIN aws.cloud_control.resource detail
+                INNER JOIN aws.cloud_control.resource detail
                 ON detail.data__Identifier = listing.Identifier
                 AND detail.region = listing.region
                 ,json_array_elements_text(json_extract_path_text(detail.Properties, 'Tags'))
