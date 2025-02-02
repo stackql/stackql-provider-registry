@@ -1,0 +1,139 @@
+name: Integration Testing and Analysis
+
+on:
+  push:
+    tags:
+      - robot*
+      - regression*
+      - integration*
+
+env:
+  GO_VERSION: '^1.22'
+  STACKQL_CORE_REPOSITORY: ${{ vars.STACKQL_CORE_REPOSITORY != '' && vars.STACKQL_CORE_REPOSITORY || 'stackql/stackql' }}
+  STACKQL_CORE_REF: ${{ vars.STACKQL_CORE_REF != '' && vars.STACKQL_CORE_REF || 'main' }}
+  STACKQL_ANY_SDK_REPOSITORY: ${{ vars.STACKQL_ANY_SDK_REPOSITORY != '' && vars.STACKQL_ANY_SDK_REPOSITORY || 'stackql/any-sdk' }}
+  STACKQL_ANY_SDK_REF: ${{ vars.STACKQL_ANY_SDK_REF != '' && vars.STACKQL_ANY_SDK_REF || 'main' }}
+
+jobs:
+  build-and-deploy:
+    name: build-and-deploy
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_DEFAULT_REGION: us-west-1
+      REG_MAX_VERSIONS: 3
+      REG_MAX_AGE_MONTHS: 6   
+      REG_WEBSITE_DIR: _deno_website
+      REG_PROVIDER_PATH: providers/dist
+      REG_ARTIFACT_REPO_BUCKET: stackql-registry-artifacts
+      REG_DENO_DEPLOY_ASSET_REPO: deno-deploy-registry
+      REG_DENO_DEPLOY_API_DEV: stackql-dev-registry
+      REG_DENO_DEPLOY_API_PROD: stackql-registry
+
+    steps:
+      - uses: actions/checkout@v4.1.1
+        name: "[SETUP] checkout repo"
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go 1.x
+        uses: actions/setup-go@v5.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+          cache: true
+        id: go
+
+      - name: Download core
+        uses: actions/checkout@v4.1.1
+        with:
+          repository: ${{ env.STACKQL_CORE_REPOSITORY }}
+          ref: ${{ env.STACKQL_CORE_REF }}
+          token: ${{ secrets.CI_STACKQL_PACKAGE_DOWNLOAD_TOKEN  }}
+          path: stackql-core
+
+      - name: Download any-sdk
+        uses: actions/checkout@v4.1.1
+        with:
+          repository: ${{ env.STACKQL_ANY_SDK_REPOSITORY }}
+          ref: ${{ env.STACKQL_ANY_SDK_REF }}
+          token: ${{ secrets.CI_STACKQL_PACKAGE_DOWNLOAD_TOKEN  }}
+          path: stackql-any-sdk
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5.0.0
+        with:
+          python-version: '3.11'
+
+      - name: Add dependencies
+        working-directory: stackql-core
+        run: |
+          sudo apt-get install -y jq
+          pip3 install -r cicd/requirements.txt
+
+      - name: Build stackql from core source
+        working-directory: stackql-core
+        run: |
+          go get ./...
+          python3 cicd/python/build.py --build
+
+      - name: Parse tag
+        id: parse_tag
+        run: |
+          tag_obj="$(python3 stackql-core/cicd/python/tag_parse.py '${{ github.ref_name }}' --parse-registry-tag)"
+          echo "tag_obj: $tag_obj"
+          {
+            echo "PARSED_TAG_IS_ROBOT=$(echo $tag_obj | jq -r '.is_robot')"
+            echo "PARSED_TAG_IS_REGRESSION=$(echo $tag_obj | jq -r '.is_regression')"
+          } | tee -a "$GITHUB_ENV"
+
+
+      - name: Prepare load balancing materials
+        working-directory: stackql-core
+        run: |
+          python3 test/python/tcp_lb.py --generate-hosts-entries | sudo tee -a /etc/hosts
+          python3 test/python/tcp_lb.py --generate-nginx-lb > test/tcp/reverse-proxy/nginx/dynamic-sni-proxy.conf
+
+      
+      - name: Install and run nginx load balancer
+        working-directory: stackql-core
+        run: |
+          sudo apt-get install -y curl gnupg2 ca-certificates lsb-release ubuntu-keyring
+          curl https://nginx.org/keys/nginx_signing.key | gpg --dearmor \
+            | sudo tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null
+          gpg --dry-run --quiet --no-keyring --import --import-options import-show /usr/share/keyrings/nginx-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] \
+            http://nginx.org/packages/ubuntu $(lsb_release -cs) nginx" \
+                | sudo tee /etc/apt/sources.list.d/nginx.list
+          sudo apt-get update
+          sudo apt-get install nginx
+          sudo nginx -c "$(pwd)/test/tcp/reverse-proxy/nginx/dynamic-sni-proxy.conf"
+      
+      - name: Create materials for core tests
+        working-directory: stackql-core
+        run: |
+          openssl req -x509 -keyout test/server/mtls/credentials/pg_server_key.pem -out test/server/mtls/credentials/pg_server_cert.pem -config test/server/mtls/openssl.cnf -days 365
+          openssl req -x509 -keyout test/server/mtls/credentials/pg_client_key.pem -out test/server/mtls/credentials/pg_client_cert.pem -config test/server/mtls/openssl.cnf -days 365
+          openssl req -x509 -keyout test/server/mtls/credentials/pg_rubbish_key.pem -out test/server/mtls/credentials/pg_rubbish_cert.pem -config test/server/mtls/openssl.cnf -days 365 
+
+      - name: Run core robot functional tests
+        if: success()
+        working-directory: stackql-core
+        run: |
+          providerRoot="$(realpath $(pwd)/../providers)"
+          sundryCfg='SUNDRY_CONFIG:{"registry_path": "'"${providerRoot}"'"}'
+          robot \
+            --variable "${sundryCfg}" \
+            --variable SHOULD_RUN_DOCKER_EXTERNAL_TESTS:true \
+            --include registry \
+            -d test/robot/reports \
+            test/robot/functional
+      
+      - name: Output from functional tests
+        if: always()
+        run: |
+          cat stackql-core/test/robot/reports/output.xml
+          
+      
