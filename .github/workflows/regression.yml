@@ -93,6 +93,7 @@ jobs:
       - name: Prepare load balancing materials
         working-directory: stackql-core
         run: |
+          sudo cp /etc/hosts /etc/hosts.bak
           python3 test/python/tcp_lb.py --generate-hosts-entries | sudo tee -a /etc/hosts
           python3 test/python/tcp_lb.py --generate-nginx-lb > test/tcp/reverse-proxy/nginx/dynamic-sni-proxy.conf
 
@@ -135,5 +136,51 @@ jobs:
         if: always()
         run: |
           cat stackql-core/test/robot/reports/output.xml
-          
       
+      - name: Post core test cleanup
+        run: |
+          pgrep -f flask | xargs kill -9 || true
+      
+      - name: Run local registry mocked robot functional tests
+        if: success()
+        run: |
+          providerRoot="$(realpath $(pwd)/providers)"
+          sundryCfg='SUNDRY_CONFIG:{"registry_path": "'"${providerRoot}"'"}'
+          robot \
+            --variable "${sundryCfg}" \
+            --variable SHOULD_RUN_DOCKER_EXTERNAL_TESTS:true \
+            -d test/robot/reports \
+            test/robot/stackql/mocked
+      
+      - name: Output from local registry mocked functional tests
+        if: always()
+        run: |
+          cat test/robot/reports/output.xml
+      
+      - name: Post registry mocked test cleanup
+        run: |
+          pgrep -f flask | xargs kill -9 || true
+          sudo nginx -s stop || true
+          sudo cp /etc/hosts.bak /etc/hosts || true
+          rm -f test/robot/reports/*.xml || true
+      
+      - name: Run live robot functional tests
+        if: success()
+        id: live_integration_tests
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.CI_SCENARIO_GCP_RO_SECRET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.CI_SCENARIO_RO_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CI_SCENARIO_RO_AWS_SECRET_ACCESS_KEY }}
+        run: |
+          providerRoot="$(realpath $(pwd)/providers)"
+          sundryCfg='SUNDRY_CONFIG:{"registry_path": "'"${providerRoot}"'"}'
+          robot \
+            --variable "${sundryCfg}" \
+            --variable SHOULD_RUN_DOCKER_EXTERNAL_TESTS:true \
+            -d test/robot/reports \
+            test/robot/stackql/live
+      
+      - name: Output from live functional tests
+        if: always()
+        run: |
+          cat test/robot/reports/output.xml
