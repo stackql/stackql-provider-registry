@@ -118,6 +118,34 @@ jobs:
           openssl req -x509 -keyout test/server/mtls/credentials/pg_server_key.pem -out test/server/mtls/credentials/pg_server_cert.pem -config test/server/mtls/openssl.cnf -days 365
           openssl req -x509 -keyout test/server/mtls/credentials/pg_client_key.pem -out test/server/mtls/credentials/pg_client_cert.pem -config test/server/mtls/openssl.cnf -days 365
           openssl req -x509 -keyout test/server/mtls/credentials/pg_rubbish_key.pem -out test/server/mtls/credentials/pg_rubbish_cert.pem -config test/server/mtls/openssl.cnf -days 365 
+      
+    
+      - name: Start Core Test Mocks
+        working-directory: stackql-core
+        run: |
+          pgrep -f flask | xargs kill -9 || true
+          flask --app=./test/python/flask/gcp/app          run --cert=./test/server/mtls/credentials/pg_server_cert.pem --key=./test/server/mtls/credentials/pg_server_key.pem --host 0.0.0.0 --port 1080 & 
+          flask --app=./test/python/flask/oauth2/token_srv run --cert=./test/server/mtls/credentials/pg_server_cert.pem --key=./test/server/mtls/credentials/pg_server_key.pem --host 0.0.0.0 --port 2091 & 
+    
+      - name: Run core mocked testing
+        working-directory: stackql-core
+        run: |
+          export GCP_SERVICE_ACCOUNT_KEY="$(cat test/assets/credentials/dummy/google/functional-test-dummy-sa-key.json)"
+          bucketsListIDs="$(${{ github.workspace }}/build/anysdk query \
+            --svc-file-path="test/registry-mocked/src/googleapis.com/v0.1.2/services/storage-v1.yaml" \
+            --tls.allowInsecure \
+            --prov-file-path="test/registry-mocked/src/googleapis.com/v0.1.2/provider.yaml" \
+            --resource buckets \
+            --method list \
+            --parameters '{ "project": "stackql-demo" }' \
+            | jq -r '.items[].id')" 
+          matchingBuckets="$(echo "${bucketsListIDs}" | grep "stackql-demo" )"
+          if [ "${matchingBuckets}" = "" ]; then
+            echo "Core Test Failed with no matching buckets"
+            exit 1
+          else
+            echo "Core Test passed with matching buckets: $matchingBuckets"
+          fi
 
       - name: Run core robot functional tests
         if: success()
@@ -164,9 +192,9 @@ jobs:
           sudo cp /etc/hosts.bak /etc/hosts || true
           rm -f test/robot/reports/*.xml || true
       
-      - name: Run live robot functional tests
+      - name: Run live readonly robot functional tests
         if: success()
-        id: live_integration_tests
+        id: live_integration_tests_readonly
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.CI_SCENARIO_GCP_RO_SECRET }}
           AWS_ACCESS_KEY_ID: ${{ secrets.CI_SCENARIO_RO_AWS_ACCESS_KEY_ID }}
@@ -178,9 +206,30 @@ jobs:
             --variable "${sundryCfg}" \
             --variable SHOULD_RUN_DOCKER_EXTERNAL_TESTS:true \
             -d test/robot/reports \
-            test/robot/stackql/live
+            test/robot/stackql/live/readonly
       
-      - name: Output from live functional tests
+      - name: Output from live readonly functional tests
+        if: always()
+        run: |
+          cat test/robot/reports/output.xml
+      
+      - name: Run live readwrite robot functional tests
+        if: success()
+        id: live_integration_tests_readwrite
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.CI_SCENARIO_GCP_RW_SECRET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.CI_SCENARIO_RW_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CI_SCENARIO_RW_AWS_SECRET_ACCESS_KEY }}
+        run: |
+          providerRoot="$(realpath $(pwd)/providers)"
+          sundryCfg='SUNDRY_CONFIG:{"registry_path": "'"${providerRoot}"'"}'
+          robot \
+            --variable "${sundryCfg}" \
+            --variable SHOULD_RUN_DOCKER_EXTERNAL_TESTS:true \
+            -d test/robot/reports \
+            test/robot/stackql/live/readwrite
+      
+      - name: Output from live readwrite functional tests
         if: always()
         run: |
           cat test/robot/reports/output.xml
