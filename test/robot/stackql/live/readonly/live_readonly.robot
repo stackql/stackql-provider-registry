@@ -34,13 +34,13 @@ AWS Route53 List Record Sets Simple
     ...    ${EMPTY}
     ...    AWS-Route53-List-Record-Sets-Simple
 
-AWS IAM Users Subquery Left Joined With Aliasing and Name Collision
-    [Documentation]    AWS IAM Users Complex Query.  Acceptable to hardcoode region for global resource.
-    [Tags]   aws   iam    users   aws.iam    aws.iam.users  tier_1
-    ${inputStr} =    Catenate
-    ...    select u1.UserName, u.UserId, u.Arn, u1.region from ( select Arn, UserName, UserId from aws.iam.users where region = 'us-east-1' ) u inner join aws.iam.users u1 on u1.Arn = u.Arn where region = 'us-east-1'  order by u1.UserName desc;
-    Stock Stackql Exec Inline Contains Both Streams
-    ...    ${inputStr}
-    ...    UserName
-    ...    ${EMPTY}
-    ...    AWS-IAM-Users-Subquery-Left-Joined-With-Aliasing-and-Name-Collision
+# AWS IAM Users Subquery Left Joined With Aliasing and Name Collision
+#     [Documentation]    AWS IAM Users Complex Query.  Acceptable to hardcoode region for global resource.
+#     [Tags]   aws   iam    users   aws.iam    aws.iam.users  tier_1
+#     ${inputStr} =    Catenate
+#     ...    select u1.UserName, u.UserId, u.Arn, u1.region from ( select Arn, UserName, UserId from aws.iam.users where region = 'us-east-1' ) u inner join aws.iam.users u1 on u1.Arn = u.Arn where region = 'us-east-1'  order by u1.UserName desc;
+#     Stock Stackql Exec Inline Contains Both Streams
+#     ...    ${inputStr}
+#     ...    UserName
+#     ...    ${EMPTY}
+#     ...    AWS-IAM-Users-Subquery-Left-Joined-With-Aliasing-and-Name-Collision

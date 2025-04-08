@@ -1,10 +1,16 @@
 
 import json
+import os
+from copy import deepcopy
 
 
 _EMPTY_GCS_BUCKET_CHECK = """|------|----------------|----------------|
 | name | softDeleteTime | hardDeleteTime |
 |------|----------------|----------------|"""
+
+_REPOSITORY_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", ".."))
+_CORE_REPOSITORY_ROOT = os.path.abspath(os.path.join(_REPOSITORY_ROOT, "stackql-core"))
+_REGISTRY_PATH = os.path.abspath(os.path.join(_REPOSITORY_ROOT, "providers"))
 
 def _get_expected_gcs_bucket_check(
     gcs_bucket_name: str,
@@ -34,5 +40,7 @@ def get_variables(
         "GCP_PROJECT": sundry_config_dict["GCP_PROJECT"],
         "AWS_RECORD_SET_ID": sundry_config_dict["AWS_RECORD_SET_ID"],
         "AWS_RECORD_SET_REGION": sundry_config_dict["AWS_RECORD_SET_REGION"],
-
+        "REPOSITORY_ROOT": _REPOSITORY_ROOT,
+        "registry_path": _REGISTRY_PATH,
+        "CORE_REPOSITORY_ROOT": _CORE_REPOSITORY_ROOT,
     }

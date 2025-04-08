@@ -12,7 +12,10 @@ ${CORE_PREFIX}                         stackql-core
 ${SUNDRY_CONFIG}=  SEPARATOR=
 ...    {
 ...        "GCS_BUCKET_NAME": "stackql-demo-bucket-01",
-...        "GCS_PROJECT": "stackql-demo"
+...        "GCP_PROJECT": "stackql-demo",
+...        "AWS_RECORD_SET_ID": "A00000001AAAAAAAAAAAA",
+...        "AWS_RECORD_SET_REGION": "us-east-1",
+...        "registry_path": "${CURDIR}${/}..${/}..${/}..${/}..${/}..${/}providers"
 ...    }
 
 *** Settings ***
@@ -27,7 +30,6 @@ Library           OperatingSystem
 Library           String
 Library           ${CORE_LIB_HOME}/StackQLInterfaces.py    ${EXECUTION_PLATFORM}    ${SQL_BACKEND}    ${CONCURRENCY_LIMIT}
 Library           ${CORE_LIB_HOME}/CloudIntegration.py
-Tags              live  readonly    live_readonly
 
 *** Keywords ***
 

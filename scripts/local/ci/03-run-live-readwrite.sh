@@ -6,7 +6,7 @@ SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 REPOSITORY_ROOT_DIR="$(realpath ${SCRIPT_DIR}/../../..)"
 
-_SEC_FILE="${REPOSITORY_ROOT_DIR}/scripts/sec/sec.sh"
+_SEC_FILE="${REPOSITORY_ROOT_DIR}/scripts/sec/sec-readwrite.sh"
 
 if [ -f "${_SEC_FILE}" ]; then
   source "${_SEC_FILE}"
