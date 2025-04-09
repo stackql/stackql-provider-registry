@@ -1,0 +1,310 @@
+name: Integration Testing and Analysis
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+  push:
+    branches:
+      - main
+      - dev
+    tags:
+      - robot*
+      - regression*
+      - integration*
+
+env:
+  GO_VERSION: '^1.22'
+  STACKQL_CORE_REPOSITORY: ${{ vars.STACKQL_CORE_REPOSITORY != '' && vars.STACKQL_CORE_REPOSITORY || 'stackql/stackql' }}
+  STACKQL_CORE_REF: ${{ vars.STACKQL_CORE_REF != '' && vars.STACKQL_CORE_REF || 'main' }}
+  STACKQL_ANY_SDK_REPOSITORY: ${{ vars.STACKQL_ANY_SDK_REPOSITORY != '' && vars.STACKQL_ANY_SDK_REPOSITORY || 'stackql/any-sdk' }}
+  STACKQL_ANY_SDK_REF: ${{ vars.STACKQL_ANY_SDK_REF != '' && vars.STACKQL_ANY_SDK_REF || 'main' }}
+
+jobs:
+  regression-testing:
+    name: regression-testing
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_DEFAULT_REGION: us-west-1
+      REG_MAX_VERSIONS: 3
+      REG_MAX_AGE_MONTHS: 6   
+      REG_WEBSITE_DIR: _deno_website
+      REG_PROVIDER_PATH: providers/dist
+      REG_ARTIFACT_REPO_BUCKET: stackql-registry-artifacts
+      REG_DENO_DEPLOY_ASSET_REPO: deno-deploy-registry
+      REG_DENO_DEPLOY_API_DEV: stackql-dev-registry
+      REG_DENO_DEPLOY_API_PROD: stackql-registry
+
+    steps:
+      - uses: actions/checkout@v4.1.1
+        name: "[SETUP] checkout repo"
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go 1.x
+        uses: actions/setup-go@v5.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+          cache: true
+        id: go
+
+      - name: Download core
+        uses: actions/checkout@v4.1.1
+        with:
+          repository: ${{ env.STACKQL_CORE_REPOSITORY }}
+          ref: ${{ env.STACKQL_CORE_REF }}
+          token: ${{ secrets.CI_STACKQL_PACKAGE_DOWNLOAD_TOKEN  }}
+          path: stackql-core
+
+      - name: Download any-sdk
+        uses: actions/checkout@v4.1.1
+        with:
+          repository: ${{ env.STACKQL_ANY_SDK_REPOSITORY }}
+          ref: ${{ env.STACKQL_ANY_SDK_REF }}
+          token: ${{ secrets.CI_STACKQL_PACKAGE_DOWNLOAD_TOKEN  }}
+          path: stackql-any-sdk
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5.0.0
+        with:
+          python-version: '3.11'
+
+      - name: Add dependencies
+        working-directory: stackql-core
+        run: |
+          sudo apt-get install -y jq
+          pip3 install -r cicd/requirements.txt
+
+      - name: Build stackql from core source
+        working-directory: stackql-core
+        run: |
+          go get ./...
+          python3 cicd/python/build.py --build
+
+      - name: Build any-sdk cli from source
+        working-directory: stackql-any-sdk
+        run: |
+
+          go get ./...
+
+          go build -x -v \
+            -o build/anysdk ./cmd/interrogate
+
+      - name: Parse tag
+        id: parse_tag
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            tag_obj="$(python3 stackql-core/cicd/python/tag_parse.py '${{ github.ref_name }}' --parse-registry-tag)"
+            echo "tag_obj: $tag_obj"
+            {
+              echo "PARSED_TAG_IS_ROBOT=$(echo $tag_obj | jq -r '.is_robot')"
+              echo "PARSED_TAG_IS_REGRESSION=$(echo $tag_obj | jq -r '.is_regression')"
+            } | tee -a "$GITHUB_ENV"
+          else
+            {
+            echo "IS_BRANCH=true"
+            } >> $GITHUB_ENV
+          fi
+
+
+      - name: Generate rewritten registry for simulations
+        working-directory: stackql-core
+        run: |
+          python3 test/python/registry-rewrite.py
+
+
+      - name: Prepare load balancing materials
+        working-directory: stackql-core
+        run: |
+          sudo cp /etc/hosts /etc/hosts.bak
+          python3 test/python/tcp_lb.py --generate-hosts-entries | sudo tee -a /etc/hosts
+          python3 test/python/tcp_lb.py --generate-nginx-lb > test/tcp/reverse-proxy/nginx/dynamic-sni-proxy.conf
+
+      
+      - name: Install and run nginx load balancer
+        working-directory: stackql-core
+        run: |
+          sudo apt-get install -y curl gnupg2 ca-certificates lsb-release ubuntu-keyring
+          curl https://nginx.org/keys/nginx_signing.key | gpg --dearmor \
+            | sudo tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null
+          gpg --dry-run --quiet --no-keyring --import --import-options import-show /usr/share/keyrings/nginx-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] \
+            http://nginx.org/packages/ubuntu $(lsb_release -cs) nginx" \
+                | sudo tee /etc/apt/sources.list.d/nginx.list
+          sudo apt-get update
+          sudo apt-get install nginx
+          sudo nginx -c "$(pwd)/test/tcp/reverse-proxy/nginx/dynamic-sni-proxy.conf"
+      
+      - name: Create materials for core tests
+        working-directory: stackql-core
+        run: |
+          openssl req -x509 -keyout test/server/mtls/credentials/pg_server_key.pem -out test/server/mtls/credentials/pg_server_cert.pem -config test/server/mtls/openssl.cnf -days 365
+          openssl req -x509 -keyout test/server/mtls/credentials/pg_client_key.pem -out test/server/mtls/credentials/pg_client_cert.pem -config test/server/mtls/openssl.cnf -days 365
+          openssl req -x509 -keyout test/server/mtls/credentials/pg_rubbish_key.pem -out test/server/mtls/credentials/pg_rubbish_cert.pem -config test/server/mtls/openssl.cnf -days 365 
+      
+    
+      - name: Start Core Test Mocks
+        working-directory: stackql-core
+        run: |
+          pgrep -f flask | xargs kill -9 || true
+          flask --app=./test/python/flask/gcp/app          run --cert=./test/server/mtls/credentials/pg_server_cert.pem --key=./test/server/mtls/credentials/pg_server_key.pem --host 0.0.0.0 --port 1080 & 
+          flask --app=./test/python/flask/oauth2/token_srv run --cert=./test/server/mtls/credentials/pg_server_cert.pem --key=./test/server/mtls/credentials/pg_server_key.pem --host 0.0.0.0 --port 2091 & 
+    
+      - name: Run any-sdk cli mocked testing
+        working-directory: stackql-core
+        run: |
+          export GCP_SERVICE_ACCOUNT_KEY="$(cat test/assets/credentials/dummy/google/functional-test-dummy-sa-key.json)"
+          bucketsListIDs="$(${{ github.workspace }}/stackql-any-sdk/build/anysdk query \
+            --svc-file-path="test/registry-mocked/src/googleapis.com/v0.1.2/services/storage-v1.yaml" \
+            --tls.allowInsecure \
+            --prov-file-path="test/registry-mocked/src/googleapis.com/v0.1.2/provider.yaml" \
+            --resource buckets \
+            --method list \
+            --parameters '{ "project": "stackql-demo" }' \
+            | jq -r '.items[].id')" 
+          matchingBuckets="$(echo "${bucketsListIDs}" | grep "stackql-demo" )"
+          if [ "${matchingBuckets}" = "" ]; then
+            echo "Core Test Failed with no matching buckets"
+            exit 1
+          else
+            echo "Core Test passed with matching buckets: $matchingBuckets"
+          fi
+
+      - name: Run core proxied robot functional tests against local registry
+        if: success()
+        working-directory: stackql-core
+        run: |
+          providerRoot="$(realpath $(pwd)/../providers)"
+          sundryCfg='SUNDRY_CONFIG:{"registry_path": "'"${providerRoot}"'"}'
+          robot \
+            --variable "${sundryCfg}" \
+            --variable SHOULD_RUN_DOCKER_EXTERNAL_TESTS:true \
+            --include registry \
+            -d test/robot/reports \
+            test/robot/functional  || true
+      
+      - name: Output from core proxied functional tests
+        if: always()
+        run: |
+          cat stackql-core/test/robot/reports/output.xml
+          python3 scripts/cicd/python/robot-parse.py  --robot-output-file stackql-core/test/robot/reports/output.xml > stackql-core/test/robot/reports/proxied_parsed_output.json
+
+      - name: Upload core traffic lights
+        uses: actions/upload-artifact@v4.3.1
+        if: success()
+        with:
+          name: proxied-core-traffic-lights
+          path: stackql-core/test/robot/reports/proxied_parsed_output.json
+        
+      
+      - name: Post core test cleanup
+        run: |
+          pgrep -f flask | xargs kill -9 || true
+      
+      - name: Run local registry mocked robot functional tests
+        if: success()
+        run: |
+          providerRoot="$(realpath $(pwd)/providers)"
+          sundryCfg='SUNDRY_CONFIG:{"registry_path": "'"${providerRoot}"'"}'
+          robot \
+            --variable "${sundryCfg}" \
+            --variable SHOULD_RUN_DOCKER_EXTERNAL_TESTS:true \
+            -d test/robot/reports/mocked \
+            test/robot/stackql/mocked || true
+      
+      - name: Output from local registry mocked functional tests
+        if: always()
+        run: |
+          cat test/robot/reports/mocked/output.xml
+          python3 scripts/cicd/python/robot-parse.py  --robot-output-file test/robot/reports/mocked/output.xml > test/robot/reports/mocked/parsed_output.json
+
+      - name: Upload local registry mocked traffic lights
+        uses: actions/upload-artifact@v4.3.1
+        if: success()
+        with:
+          name: local-registry-mocked-traffic-lights
+          path: test/robot/reports/mocked/parsed_output.json
+      
+      - name: Post registry mocked test cleanup
+        run: |
+          pgrep -f flask | xargs kill -9 || true
+          sudo nginx -s stop || true
+          sudo cp /etc/hosts.bak /etc/hosts || true
+          rm -f test/robot/reports/*.xml || true
+      
+      - name: Run live readonly robot functional tests
+        if: success()
+        id: live_integration_tests_readonly
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.CI_SCENARIO_GCP_RO_SECRET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.CI_SCENARIO_RO_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CI_SCENARIO_RO_AWS_SECRET_ACCESS_KEY }}
+        run: |
+          providerRoot="$(realpath $(pwd)/providers)"
+          sundryCfg='SUNDRY_CONFIG:{"registry_path": "'"${providerRoot}"'", "GCS_BUCKET_NAME": "stackql-demo-bucket-02", "GCP_PROJECT": "stackql-demo", "AWS_RECORD_SET_ID": "A00000001AAAAAAAAAAAA", "AWS_RECORD_SET_REGION": "us-east-1"}'
+          robot \
+            --variable "${sundryCfg}" \
+            --variable SHOULD_RUN_DOCKER_EXTERNAL_TESTS:true \
+            -d test/robot/reports/readonly \
+            test/robot/stackql/live/readonly || true
+      
+      - name: Output from live readonly functional tests
+        if: always()
+        run: |
+          cat test/robot/reports/readonly/output.xml
+          python3 scripts/cicd/python/robot-parse.py  --robot-output-file test/robot/reports/readonly/output.xml > test/robot/reports/readonly/parsed_output.json
+
+      - name: Upload readonly traffic lights
+        uses: actions/upload-artifact@v4.3.1
+        if: success()
+        with:
+          name: local-registry-readonly-traffic-lights
+          path: test/robot/reports/readonly/parsed_output.json
+      
+      - name: Run live readwrite robot functional tests
+        if: github.ref_type == 'tag'
+        id: live_integration_tests_readwrite
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.CI_SCENARIO_GCP_RW_SECRET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.CI_SCENARIO_RW_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CI_SCENARIO_RW_AWS_SECRET_ACCESS_KEY }}
+        run: |
+          providerRoot="$(realpath $(pwd)/providers)"
+          sundryCfg='SUNDRY_CONFIG:{"registry_path": "'"${providerRoot}"'", "GCS_BUCKET_NAME": "stackql-demo-bucket-02", "GCP_PROJECT": "stackql-demo", "AWS_RECORD_SET_ID": "A00000001AAAAAAAAAAAA", "AWS_RECORD_SET_REGION": "us-east-1"}'
+          robot \
+            --variable "${sundryCfg}" \
+            --variable SHOULD_RUN_DOCKER_EXTERNAL_TESTS:true \
+            -d test/robot/reports/readwrite \
+            test/robot/stackql/live/readwrite || true
+      
+      - name: Output from live readwrite functional tests
+        if: github.ref_type == 'tag'
+        run: |
+          cat test/robot/reports/readwrite/output.xml
+          python3 scripts/cicd/python/robot-parse.py  --robot-output-file test/robot/reports/readwrite/output.xml > test/robot/reports/readwrite/parsed_output.json
+
+      - name: Upload readonly traffic lights
+        uses: actions/upload-artifact@v4.3.1
+        if: success()
+        with:
+          name: local-registry-readwrite-traffic-lights
+          path: test/robot/reports/readwrite/parsed_output.json
+
+      - name: Display traffic lights
+        run: |
+          for i in $(ls test/robot/reports/*/parsed_output.json); do
+            echo "Traffic light for $i"
+            if [ -f "$i" ]; then
+              python3 scripts/cicd/python/display-parsed.py  --traffic-light-file $i
+            else
+              echo "File $i does not exist 🛑"
+            fi
+          done
+          echo "Traffic light for proxied"
+          python3 scripts/cicd/python/display-parsed.py  --traffic-light-file  stackql-core/test/robot/reports/proxied_parsed_output.json
+          echo "traffic lights completed"
