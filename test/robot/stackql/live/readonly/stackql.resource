@@ -11,8 +11,8 @@ ${USE_STACKQL_PREINSTALLED}            false   # to be overridden from command l
 ${CORE_PREFIX}                         stackql-core
 ${SUNDRY_CONFIG}=  SEPARATOR=
 ...    {
-...        "GCS_BUCKET_NAME": "stackql-demo-bucket-01",
-...        "GCP_PROJECT": "stackql-demo",
+...        "GCS_BUCKET_NAME": "stackql-robot-bucket-01",
+...        "GCP_PROJECT": "stackql-robot",
 ...        "AWS_RECORD_SET_ID": "A00000001AAAAAAAAAAAA",
 ...        "AWS_RECORD_SET_REGION": "us-east-1",
 ...        "registry_path": "${CURDIR}${/}..${/}..${/}..${/}..${/}..${/}providers"
