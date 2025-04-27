@@ -1,7 +1,7 @@
 *** Variables ***
 ${REPOSITORY_ROOT}                     ${CURDIR}${/}..${/}..${/}..${/}..
 ${CORE_REPOSITORY_ROOT}                ${REPOSITORY_ROOT}${/}stackql-core
-${CORE_LIB_HOME}                       ${CORE_REPOSITORY_ROOT}${/}test${/}robot${/}lib
+${CORE_LIB_HOME}                       ${CORE_REPOSITORY_ROOT}${/}test${/}python${/}stackql_test_tooling
 ${LOCAL_LIB_HOME}                      ${CURDIR}${/}..${/}..${/}lib
 ${EXECUTION_PLATFORM}                  native   # to be overridden from command line, eg "docker"
 ${SQL_BACKEND}                         sqlite_embedded   # to be overridden from command line, eg "postgres_tcp"
@@ -11,21 +11,22 @@ ${CONCURRENCY_LIMIT}                   1       # to be overridden from command l
 ${USE_STACKQL_PREINSTALLED}            false   # to be overridden from command line, with string "true"
 ${SUNDRY_CONFIG}                       {}  # to be overridden from command line, with string value
 ${CORE_PREFIX}                         stackql-core
+${CWD_FOR_EXEC}                        ${CORE_REPOSITORY_ROOT}  # works for self repository, can be overwritten when shared
+${WEB_SERVICE_LIBRARY}                 stackql_test_tooling.web_service_keywords
+${STACKQL_INTERFACE_LIBRARY}           stackql_test_tooling.StackQLInterfaces
+${CLOUD_INTEGRATION_LIBRARY}           stackql_test_tooling.CloudIntegration
 
 *** Settings ***
 Library           Process
 Library           OperatingSystem 
-Variables         ${CORE_LIB_HOME}/stackql_context.py    ${EXECUTION_PLATFORM}    ${SQL_BACKEND}    ${USE_STACKQL_PREINSTALLED}
+Variables         ${CORE_LIB_HOME}${/}stackql_context.py    ${CORE_REPOSITORY_ROOT}    ${EXECUTION_PLATFORM}    ${SQL_BACKEND}    ${USE_STACKQL_PREINSTALLED}
 ...               ${SUNDRY_CONFIG}
 Library           Process
 Library           OperatingSystem
 Library           String
-Library           ${CORE_LIB_HOME}/StackQLInterfaces.py    ${EXECUTION_PLATFORM}    ${SQL_BACKEND}    ${CONCURRENCY_LIMIT}
-Library           ${CORE_LIB_HOME}/CloudIntegration.py
-Library           ${CORE_LIB_HOME}/web_service_keywords.py
-...               app_root=${CORE_PREFIX}/test/python/flask
-...               tls_key_path=${CORE_PREFIX}/test/server/mtls/credentials/pg_server_key.pem
-...               tls_cert_path=${CORE_PREFIX}/test/server/mtls/credentials/pg_server_cert.pem
+Library           ${STACKQL_INTERFACE_LIBRARY}    ${EXECUTION_PLATFORM}    ${SQL_BACKEND}    ${CONCURRENCY_LIMIT}
+Library           ${CLOUD_INTEGRATION_LIBRARY}
+Library           ${WEB_SERVICE_LIBRARY}          ${CWD_FOR_EXEC}
 
 *** Keywords ***
 

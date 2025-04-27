@@ -6,14 +6,16 @@ SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 REPOSITORY_ROOT_DIR="$(realpath ${SCRIPT_DIR}/../../..)"
 
-_SEC_FILE="${REPOSITORY_ROOT_DIR}/scripts/sec/sec-readwrite.sh"
+STACKQL_CORE_DIR="${REPOSITORY_ROOT_DIR}/stackql-core"
+
+_SEC_FILE="${REPOSITORY_ROOT_DIR}/scripts/sec/sec-rw-stackql.sh"
 
 if [ -f "${_SEC_FILE}" ]; then
   source "${_SEC_FILE}"
 fi
 
-if [ -f "scripts/sec/aws-ro-stackql.sh" ]; then
-  source "scripts/sec/aws-ro-stackql.sh"
+if [ -f "scripts/sec/sec-ro-stackql.sh" ]; then
+  source "scripts/sec/sec-ro-stackql.sh"
 fi
 
 if [ "${AWS_ACCESS_KEY_ID}" = "" ]; then
@@ -33,7 +35,9 @@ fi
 
 cd "${REPOSITORY_ROOT_DIR}"
 
-source "${REPOSITORY_ROOT_DIR}/.venv/bin/activate"
+source "${STACKQL_CORE_DIR}/.venv/bin/activate"
+
+export PYTHONPATH="${PYTHONPATH}:${STACKQL_CORE_DIR}/test/python"
 
 robot -d test/robot/reports/readonly test/robot/stackql/live/readonly
 

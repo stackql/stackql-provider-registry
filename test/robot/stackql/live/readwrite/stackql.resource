@@ -1,5 +1,7 @@
 *** Variables ***
-${CORE_LIB_HOME}                       ${CURDIR}${/}..${/}..${/}..${/}..${/}..${/}stackql-core${/}test${/}robot${/}lib
+${REPOSITORY_ROOT}                     ${CURDIR}${/}..${/}..${/}..${/}..${/}..
+${CORE_REPOSITORY_ROOT}                ${REPOSITORY_ROOT}${/}stackql-core
+${CORE_LIB_HOME}                       ${CORE_REPOSITORY_ROOT}${/}test${/}python${/}stackql_test_tooling
 ${EXECUTION_PLATFORM}                  native   # to be overridden from command line, eg "docker"
 ${SQL_BACKEND}                         sqlite_embedded   # to be overridden from command line, eg "postgres_tcp"
 ${IS_WSL}                              false   # to be overridden from command line, with string "true"
@@ -15,18 +17,23 @@ ${SUNDRY_CONFIG}=  SEPARATOR=
 ...        "AWS_RECORD_SET_REGION": "us-east-1",
 ...        "registry_path": "${CURDIR}${/}..${/}..${/}..${/}..${/}..${/}providers"
 ...    }
+${CWD_FOR_EXEC}                        ${CORE_REPOSITORY_ROOT}  # works for self repository, can be overwritten when shared
+${WEB_SERVICE_LIBRARY}                 stackql_test_tooling.web_service_keywords
+${STACKQL_INTERFACE_LIBRARY}           stackql_test_tooling.StackQLInterfaces
+${CLOUD_INTEGRATION_LIBRARY}           stackql_test_tooling.CloudIntegration
 
 *** Settings ***
 Library           Process
 Library           OperatingSystem
 Variables         ${CURDIR}${/}readwrite_variables.py    ${SUNDRY_CONFIG}
-Variables         ${CORE_LIB_HOME}${/}stackql_context.py    ${EXECUTION_PLATFORM}    ${SQL_BACKEND}    ${USE_STACKQL_PREINSTALLED}
+Variables         ${CORE_LIB_HOME}${/}stackql_context.py    ${CORE_REPOSITORY_ROOT}    ${EXECUTION_PLATFORM}    ${SQL_BACKEND}    ${USE_STACKQL_PREINSTALLED}
 ...               ${SUNDRY_CONFIG}
 Library           Process
 Library           OperatingSystem
 Library           String
-Library           ${CORE_LIB_HOME}/StackQLInterfaces.py    ${EXECUTION_PLATFORM}    ${SQL_BACKEND}    ${CONCURRENCY_LIMIT}
-Library           ${CORE_LIB_HOME}/CloudIntegration.py
+Library           ${STACKQL_INTERFACE_LIBRARY}    ${EXECUTION_PLATFORM}    ${SQL_BACKEND}    ${CONCURRENCY_LIMIT}
+Library           ${CLOUD_INTEGRATION_LIBRARY}
+Library           ${WEB_SERVICE_LIBRARY}          ${CWD_FOR_EXEC}
 
 *** Keywords ***
 

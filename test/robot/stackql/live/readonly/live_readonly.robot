@@ -18,6 +18,21 @@ Simple Google Buckets List With Date Logic Contains Exemplifies Use of SQLite Ma
     ...    ${EMPTY}
     ...    Google-Buckets-List-With-Date-Logic-Contains-Exemplifies-Use-of-SQLite-Math-Functions
 
+Simple Google IAM Service Accounts List
+    Pass Execution If    "${SQL_BACKEND}" == "postgres_tcp"    This is a valid case where the test is targetted at SQLite only
+    [Tags]   google   iam    service_accounts   gooogle.iam    google.iam.service_accounts    tier_1
+    ${inputStr}=    Catenate
+    ...    select email 
+    ...    from google.iam.service_accounts 
+    ...    where projectsId = 'stackql-robot' 
+    ...    order by email desc
+    ...    ;
+    Stock Stackql Exec Inline Contains Both Streams
+    ...    ${inputStr}
+    ...    stackql\-robot\-rw\-sa@stackql\-robot.iam.gserviceaccount.com
+    ...    ${EMPTY}
+    ...    Google-Buckets-List-With-Date-Logic-Contains-Exemplifies-Use-of-SQLite-Math-Functions
+
 AWS Route53 List Record Sets Simple
     [Documentation]    It is fine for this to dump 404 infor to stderr. So long as the empty reusult is represented with a header row, all good.
     [Tags]   aws   route53    resource_record_sets   aws.route53    aws.route53.resource_record_sets    tier_1
