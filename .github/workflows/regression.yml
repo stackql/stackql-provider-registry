@@ -15,6 +15,7 @@ on:
       - integration*
 
 env:
+  IS_TAG: ${{ github.ref_type == 'tag' }}
   GO_VERSION: '^1.22'
   STACKQL_CORE_REPOSITORY: ${{ vars.STACKQL_CORE_REPOSITORY != '' && vars.STACKQL_CORE_REPOSITORY || 'stackql/stackql' }}
   STACKQL_CORE_REF: ${{ vars.STACKQL_CORE_REF != '' && vars.STACKQL_CORE_REF || 'main' }}
@@ -22,9 +23,54 @@ env:
   STACKQL_ANY_SDK_REF: ${{ vars.STACKQL_ANY_SDK_REF != '' && vars.STACKQL_ANY_SDK_REF || 'main' }}
 
 jobs:
+
+  test_python_package_build:
+    # id: test_python_package_build
+    name: Test Python Package Build
+    runs-on: ubuntu-22.04
+    timeout-minutes: ${{ vars.DEFAULT_JOB_TIMEOUT_MIN == '' && 120 || vars.DEFAULT_JOB_TIMEOUT_MIN }}
+    steps:
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v4.1.1
+      with:
+        repository: ${{ env.STACKQL_CORE_REPOSITORY }}
+        ref: ${{ env.STACKQL_CORE_REF }}
+        token: ${{ secrets.CI_STACKQL_PACKAGE_DOWNLOAD_TOKEN  }}
+        path: stackql-core-pkg
+
+    - name: Setup Python
+      uses: actions/setup-python@v5.0.0
+      with:
+        cache: pip
+        python-version: '3.12' 
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: 1.8.3
+        virtualenvs-create: true
+        virtualenvs-in-project: false
+        virtualenvs-path: stackql-core-pkg/my-custom-path
+        installer-parallel: true
+
+    
+    - name: Build package
+      working-directory: stackql-core-pkg
+      run: |
+        cicd/util/01-build-robot-lib.sh
+    
+    - name: Upload python package artifact
+      uses: actions/upload-artifact@v4.3.1
+      with:
+        name: python-package-dist-folder
+        path: stackql-core-pkg/test/dist
+
   regression-testing:
     name: regression-testing
     runs-on: ubuntu-latest
+    needs: test_python_package_build
+    timeout-minutes: ${{ vars.DEFAULT_JOB_TIMEOUT_MIN == '' && 120 || vars.DEFAULT_JOB_TIMEOUT_MIN }}
     permissions:
       id-token: write
       contents: read
@@ -72,7 +118,20 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5.0.0
         with:
-          python-version: '3.11'
+          python-version: '3.12'
+    
+      - name: Download python package dist folder
+        uses: actions/download-artifact@v4.1.2
+        with:
+          name: python-package-dist-folder
+          path: test/dist
+
+      - name: Install python testing package
+        run: |
+          echo "Inspecting python package"
+          for file in test/dist/*.whl; do
+            pip3 install "$file" --force-reinstall
+          done
 
       - name: Add dependencies
         working-directory: stackql-core
@@ -115,15 +174,15 @@ jobs:
       - name: Generate rewritten registry for simulations
         working-directory: stackql-core
         run: |
-          python3 test/python/registry-rewrite.py
+          python3 test/python/stackql_test_tooling/registry_rewrite.py --srcdir "$(pwd)/test/registry/src" --destdir "$(pwd)/test/registry-mocked/src"
 
 
       - name: Prepare load balancing materials
         working-directory: stackql-core
         run: |
           sudo cp /etc/hosts /etc/hosts.bak
-          python3 test/python/tcp_lb.py --generate-hosts-entries | sudo tee -a /etc/hosts
-          python3 test/python/tcp_lb.py --generate-nginx-lb > test/tcp/reverse-proxy/nginx/dynamic-sni-proxy.conf
+          python3 test/python/stackql_test_tooling/tcp_lb.py --generate-hosts-entries | sudo tee -a /etc/hosts
+          python3 test/python/stackql_test_tooling/tcp_lb.py --generate-nginx-lb > test/tcp/reverse-proxy/nginx/dynamic-sni-proxy.conf
 
       
       - name: Install and run nginx load balancer
@@ -152,8 +211,8 @@ jobs:
         working-directory: stackql-core
         run: |
           pgrep -f flask | xargs kill -9 || true
-          flask --app=./test/python/flask/gcp/app          run --cert=./test/server/mtls/credentials/pg_server_cert.pem --key=./test/server/mtls/credentials/pg_server_key.pem --host 0.0.0.0 --port 1080 & 
-          flask --app=./test/python/flask/oauth2/token_srv run --cert=./test/server/mtls/credentials/pg_server_cert.pem --key=./test/server/mtls/credentials/pg_server_key.pem --host 0.0.0.0 --port 2091 & 
+          flask --app=./test/python/stackql_test_tooling/flask/gcp/app          run --cert=./test/server/mtls/credentials/pg_server_cert.pem --key=./test/server/mtls/credentials/pg_server_key.pem --host 0.0.0.0 --port 1080 & 
+          flask --app=./test/python/stackql_test_tooling/flask/oauth2/token_srv run --cert=./test/server/mtls/credentials/pg_server_cert.pem --key=./test/server/mtls/credentials/pg_server_key.pem --host 0.0.0.0 --port 2091 & 
     
       - name: Run any-sdk cli mocked testing
         working-directory: stackql-core
@@ -181,12 +240,22 @@ jobs:
         run: |
           providerRoot="$(realpath $(pwd)/../providers)"
           sundryCfg='SUNDRY_CONFIG:{"registry_path": "'"${providerRoot}"'"}'
-          robot \
-            --variable "${sundryCfg}" \
-            --variable SHOULD_RUN_DOCKER_EXTERNAL_TESTS:true \
-            --include registry \
-            -d test/robot/reports \
-            test/robot/functional  || true
+          # Only tag runs non blocking on fail, hard stop on fail for branch checks
+          if [ "${{ env.IS_TAG }}" = "true" ]; then
+            robot \
+              --variable "${sundryCfg}" \
+              --variable SHOULD_RUN_DOCKER_EXTERNAL_TESTS:true \
+              --include registry \
+              -d test/robot/reports \
+              test/robot/functional  || true
+          else
+            robot \
+              --variable "${sundryCfg}" \
+              --variable SHOULD_RUN_DOCKER_EXTERNAL_TESTS:true \
+              --include registry \
+              -d test/robot/reports \
+              test/robot/functional
+          fi
       
       - name: Output from core proxied functional tests
         if: always()
@@ -211,11 +280,20 @@ jobs:
         run: |
           providerRoot="$(realpath $(pwd)/providers)"
           sundryCfg='SUNDRY_CONFIG:{"registry_path": "'"${providerRoot}"'"}'
-          robot \
-            --variable "${sundryCfg}" \
-            --variable SHOULD_RUN_DOCKER_EXTERNAL_TESTS:true \
-            -d test/robot/reports/mocked \
-            test/robot/stackql/mocked || true
+          # Only tag runs non blocking on fail, hard stop on fail for branch checks
+          if [ "${{ env.IS_TAG }}" = "true" ]; then
+            robot \
+              --variable "${sundryCfg}" \
+              --variable SHOULD_RUN_DOCKER_EXTERNAL_TESTS:true \
+              -d test/robot/reports/mocked \
+              test/robot/stackql/mocked || true
+          else
+            robot \
+              --variable "${sundryCfg}" \
+              --variable SHOULD_RUN_DOCKER_EXTERNAL_TESTS:true \
+              -d test/robot/reports/mocked \
+              test/robot/stackql/mocked
+          fi
       
       - name: Output from local registry mocked functional tests
         if: always()
