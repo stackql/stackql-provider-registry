@@ -15,7 +15,7 @@ if [ ! -d "${STACKQL_CORE_DIR}/.venv" ]; then
   >&2 echo "Virtual environment created."
 fi
 
-source "${REPOSITORY_ROOT_DIR}/.venv/bin/activate"
+source "${STACKQL_CORE_DIR}/.venv/bin/activate"
 
 pip install -r "${STACKQL_CORE_DIR}/cicd/requirements.txt"
 
@@ -25,7 +25,7 @@ cd "${STACKQL_CORE_DIR}"
 
 python cicd/python/build.py --build
 
-python test/python/registry-rewrite.py
+python test/python/stackql_test_tooling/registry_rewrite.py --srcdir "$(pwd)/test/registry/src" --destdir "$(pwd)/test/registry-mocked/src"
 
 openssl req -x509 -keyout test/server/mtls/credentials/pg_server_key.pem -out test/server/mtls/credentials/pg_server_cert.pem -config test/server/mtls/openssl.cnf -days 365
 openssl req -x509 -keyout test/server/mtls/credentials/pg_client_key.pem -out test/server/mtls/credentials/pg_client_cert.pem -config test/server/mtls/openssl.cnf -days 365
