@@ -1,0 +1,1292 @@
+openapi: 3.0.0
+servers:
+- url: https://{endpoint}.snowflakecomputing.com
+  description: Multi-tenant Snowflake endpoint
+  variables:
+    endpoint:
+      default: orgid-acctid
+      description: Organization and Account Name
+info:
+  version: 2.0.0
+  title: Snowflake SQL API
+  description: 'The Snowflake SQL API is a REST API that you can use to access and
+    update data in a Snowflake database. '
+  contact:
+    name: Snowflake, Inc.
+    url: https://snowflake.com
+    email: support@snowflake.com
+paths:
+  /api/v2/statements:
+    parameters:
+    - $ref: '#/components/parameters/requestId'
+    - $ref: '#/components/parameters/async'
+    - $ref: '#/components/parameters/nullable'
+    - $ref: '#/components/parameters/accept'
+    - $ref: '#/components/parameters/userAgent'
+    - $ref: '#/components/parameters/snowflakeAuthorizationTokenType'
+    post:
+      operationId: SubmitStatement
+      summary: Submits a SQL statement for execution.
+      description: Submits one or more statements for execution. You can specify that
+        the statement should be executed asynchronously.
+      tags:
+      - statements
+      security:
+      - keyPair: []
+      - ExternalOAuth: []
+      - snowflakeOAuth: []
+      requestBody:
+        required: true
+        description: Specifies the SQL statement to execute and the statement context.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                statement:
+                  description: 'SQL statement or batch of SQL statements to execute.
+                    You can specify query, DML and DDL statements. The following statements
+                    are not supported: PUT, GET, USE, ALTER SESSION, BEGIN, COMMIT,
+                    ROLLBACK, statements that set session variables, and statements
+                    that create temporary tables and stages.'
+                  type: string
+                timeout:
+                  description: Timeout in seconds for statement execution. If the
+                    execution of a statement takes longer than the specified timeout,
+                    the execution is automatically canceled. To set the timeout to
+                    the maximum value (604800 seconds), set timeout to 0.
+                  type: integer
+                  format: int64
+                  minimum: 0
+                  example: 10
+                database:
+                  description: Database in which the statement should be executed.
+                    The value in this field is case-sensitive.
+                  type: string
+                  example: TESTDB
+                schema:
+                  description: Schema in which the statement should be executed. The
+                    value in this field is case-sensitive.
+                  type: string
+                  example: TESTSCHEMA
+                warehouse:
+                  description: Warehouse to use when executing the statement. The
+                    value in this field is case-sensitive.
+                  type: string
+                  example: TESTWH
+                role:
+                  description: Role to use when executing the statement. The value
+                    in this field is case-sensitive.
+                  type: string
+                  example: TESTROLE
+                bindings:
+                  description: Values of bind variables in the SQL statement. When
+                    executing the statement, Snowflake replaces placeholders ('?'
+                    and ':name') in the statement with these specified values.
+                  type: object
+                  properties: {}
+                  example:
+                    '1':
+                      type: FIXED
+                      value: '123'
+                    '2':
+                      type: TEXT
+                      value: teststring
+                parameters:
+                  description: Session parameters that should be set before executing
+                    the statement.
+                  type: object
+                  properties:
+                    timezone:
+                      description: Time zone to use when executing the statement.
+                      type: string
+                      example: america/los_angeles
+                    query_tag:
+                      description: Query tag that you want to associate with the SQL
+                        statement.
+                      type: string
+                      example: tag-1234
+                    binary_output_format:
+                      description: Output format for binary values.
+                      type: string
+                      example: HEX
+                    date_output_format:
+                      description: Output format for DATE values.
+                      type: string
+                      example: YYYY-MM-DD
+                    time_output_format:
+                      description: Output format for TIME values.
+                      type: string
+                      example: HH24:MI:SS.FF6
+                    timestamp_output_format:
+                      description: Output format for TIMESTAMP values.
+                      type: string
+                      example: YYYY-MM-DDTHH24:MI:SS.FF6
+                    timestamp_ltz_output_format:
+                      description: Output format for TIMESTAMP_LTZ values.
+                      type: string
+                      example: YYYY-MM-DDTHH24:MI:SS.FF6
+                    timestamp_ntz_output_format:
+                      description: Output format for TIMESTAMP_NTZ values.
+                      type: string
+                      example: YYYY-MM-DDTHH24:MI:SS.FF6
+                    timestamp_tz_output_format:
+                      description: Output format for TIMESTAMP_TZ values.
+                      type: string
+                      example: YYYY-MM-DDTHH24:MI:SS.FF6 TZHTZM
+                    multi_statement_count:
+                      description: Number of statements to execute when using multi-statement
+                        capability. 0 implies variable number of statements. Negative
+                        numbers are not allowed.
+                      type: integer
+                      example: 4
+                      default: 1
+            example:
+              statement: select * from T where c1=?
+              timeout: 10
+              database: TESTDB
+              schema: TESTSCHEMA
+              warehouse: TESTWH
+              bindings:
+                '1':
+                  type: FIXED
+                  value: '123'
+      responses:
+        '200':
+          description: The statement was executed successfully, and the response includes
+            any data requested.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultSet'
+          headers:
+            link:
+              $ref: '#/components/headers/Link'
+          links:
+            GetStatementStatus:
+              operationId: GetStatementStatus
+              parameters:
+                statementHandle: $response.body#/resultMetaData.statementHandle
+            CancelStatement:
+              operationId: CancelStatement
+              parameters:
+                statementHandle: $response.body#/resultMetaData.statementHandle
+        '202':
+          description: The execution of the statement is still in progress. Use GET
+            /statements/ and specify the statement handle to check the status of the
+            statement execution.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryStatus'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+        '405':
+          $ref: '#/components/responses/405MethodNotAllowed'
+        '408':
+          description: The execution of the statement exceeded the timeout period.
+            The execution of the statement was cancelled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryStatus'
+        '415':
+          $ref: '#/components/responses/415UnsupportedMediaType'
+        '422':
+          description: An error occurred when executing the statement. Check the error
+            code and error message for details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryFailureStatus'
+        '429':
+          $ref: '#/components/responses/429LimitExceeded'
+        '500':
+          $ref: '#/components/responses/500InternalServerError'
+        '503':
+          $ref: '#/components/responses/503ServiceUnavailable'
+        '504':
+          $ref: '#/components/responses/504GatewayTimeout'
+  /api/v2/statements/{statementHandle}:
+    parameters:
+    - $ref: '#/components/parameters/statementHandle'
+    - $ref: '#/components/parameters/requestId'
+    - $ref: '#/components/parameters/partition'
+    - $ref: '#/components/parameters/accept'
+    - $ref: '#/components/parameters/userAgent'
+    - $ref: '#/components/parameters/snowflakeAuthorizationTokenType'
+    get:
+      operationId: GetStatementStatus
+      summary: Checks the status of the execution of a statement
+      description: Checks the status of the execution of the statement with the specified
+        statement handle. If the statement was executed successfully, the operation
+        returns the requested partition of the result set.
+      tags:
+      - statements
+      security:
+      - keyPair: []
+      - ExternalOAuth: []
+      - snowflakeOAuth: []
+      responses:
+        '200':
+          description: The statement was executed successfully, and the response includes
+            any data requested.
+          headers:
+            link:
+              $ref: '#/components/headers/Link'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultSet'
+        '202':
+          description: The execution of the statement is still in progress. Use this
+            method again to check the status of the statement execution.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryStatus'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+        '405':
+          $ref: '#/components/responses/405MethodNotAllowed'
+        '415':
+          $ref: '#/components/responses/415UnsupportedMediaType'
+        '422':
+          description: An error occurred when executing the statement. Check the error
+            code and error message for details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryFailureStatus'
+        '429':
+          $ref: '#/components/responses/429LimitExceeded'
+        '500':
+          $ref: '#/components/responses/500InternalServerError'
+        '503':
+          $ref: '#/components/responses/503ServiceUnavailable'
+        '504':
+          $ref: '#/components/responses/504GatewayTimeout'
+  /api/v2/statements/{statementHandle}/cancel:
+    parameters:
+    - $ref: '#/components/parameters/statementHandle'
+    - $ref: '#/components/parameters/requestId'
+    - $ref: '#/components/parameters/accept'
+    - $ref: '#/components/parameters/userAgent'
+    - $ref: '#/components/parameters/snowflakeAuthorizationTokenType'
+    post:
+      operationId: CancelStatement
+      summary: Cancels the execution of a statement.
+      security:
+      - keyPair: []
+      - ExternalOAuth: []
+      - snowflakeOAuth: []
+      description: Cancels the execution of the statement with the specified statement
+        handle.
+      tags:
+      - statements
+      responses:
+        '200':
+          description: The execution of the statement was successfully canceled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelStatus'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+        '405':
+          $ref: '#/components/responses/405MethodNotAllowed'
+        '422':
+          description: An error occurred when cancelling the execution of the statement.
+            Check the error code and error message for details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelStatus'
+        '500':
+          $ref: '#/components/responses/500InternalServerError'
+        '503':
+          $ref: '#/components/responses/503ServiceUnavailable'
+        '504':
+          $ref: '#/components/responses/504GatewayTimeout'
+components:
+  schemas:
+    QueryStatus:
+      type: object
+      properties:
+        code:
+          type: string
+        sqlState:
+          type: string
+        message:
+          type: string
+        statementHandle:
+          type: string
+          format: uuid
+        createdOn:
+          type: integer
+          format: int64
+          description: Timestamp that specifies when the statement execution started.
+            The timestamp is expressed in milliseconds since the epoch.
+          example: 1597090533987
+        statementStatusUrl:
+          type: string
+          format: uri
+          description: URL that you can use to check the status of the execution of
+            the statement and the result set.
+      required:
+      - statementHandle
+      example:
+        code: '000000'
+        sqlState: '00000'
+        message: successfully executed
+        statementHandle: e4ce975e-f7ff-4b5e-b15e-bf25f59371ae
+        createdOn: 1597090533987
+    QueryFailureStatus:
+      type: object
+      properties:
+        code:
+          type: string
+        sqlState:
+          type: string
+        message:
+          type: string
+        statementHandle:
+          type: string
+          format: uuid
+        createdOn:
+          type: integer
+          format: int64
+          description: "Timestamp that specifies when the statement execution started.\u200C\
+            \ The timestamp is expressed in milliseconds since the epoch."
+          example: 1597090533987
+        statementStatusUrl:
+          type: string
+          format: uri
+      required:
+      - message
+      - statementHandle
+      example:
+        code: '000123'
+        sqlState: '42601'
+        message: SQL compilation error
+        statementHandle: e4ce975e-f7ff-4b5e-b15e-bf25f59371ae
+        createdOn: 1597090533987
+    CancelStatus:
+      type: object
+      properties:
+        code:
+          type: string
+        sqlState:
+          type: string
+        message:
+          type: string
+        statementHandle:
+          type: string
+          format: uuid
+        statementStatusUrl:
+          type: string
+          format: uri
+      required:
+      - statementHandle
+      example:
+        message: successfully canceled
+        statementHandle: 536fad38-b564-4dc5-9892-a4543504df6c
+    ResultSet:
+      type: object
+      properties:
+        code:
+          type: string
+          example: '000123'
+        sqlState:
+          type: string
+          example: '42601'
+        message:
+          type: string
+          example: successfully executed
+        statementHandle:
+          type: string
+          format: uuid
+          example: 536fad38-b564-4dc5-9892-a4543504df6c
+        createdOn:
+          type: integer
+          format: int64
+          description: "Timestamp that specifies when the statement execution started.\u200C\
+            \ The timestamp is expressed in milliseconds since the epoch.\u200C"
+          example: 1597090533987
+        statementStatusUrl:
+          type: string
+          format: uri
+        resultSetMetaData:
+          type: object
+          properties:
+            format:
+              type: string
+              enum:
+              - jsonv2
+              description: For v2 endpoints the only possible value for this field
+                is jsonv2.
+              example: jsonv2
+            numRows:
+              type: integer
+              format: int64
+              description: The total number of rows of results.
+              example: 100
+            rowType:
+              type: array
+              minItems: 1
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  type:
+                    type: string
+                  length:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                  precision:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                  scale:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                  nullable:
+                    type: boolean
+              example:
+              - name: ROWNUM
+                type: FIXED
+                length: 0
+                precision: 38
+                scale: 0
+                nullable: false
+              - name: ACCOUNT_ID
+                type: FIXED
+                length: 0
+                precision: 38
+                scale: 0
+                nullable: false
+              - name: ACCOUNT_NAME
+                type: TEXT
+                length: 1024
+                precision: 0
+                scale: 0
+                nullable: false
+              - name: ADDRESS
+                type: TEXT
+                length: 16777216
+                precision: 0
+                scale: 0
+                nullable: true
+              - name: ZIP
+                type: TEXT
+                length: 100
+                precision: 0
+                scale: 0
+                nullable: true
+              - name: CREATED_ON
+                type: TIMESTAMP_NTZ
+                length: 0
+                precision: 0
+                scale: 3
+                nullable: false
+            partitionInfo:
+              description: Partition information
+              type: array
+              minItems: 0
+              items:
+                type: object
+                properties:
+                  rowCount:
+                    type: integer
+                    format: int64
+                    description: Number of rows in the partition.
+                    minimum: 0
+                    example: 1324
+                  compressedSize:
+                    type: integer
+                    format: int64
+                    description: the partition size before the decompression. This
+                      may or may not be present in the partitionInfo. Uncompressed
+                      size would always be there.
+                    minimum: 0
+                    example: 37436824
+                  uncompressedSize:
+                    type: integer
+                    format: int64
+                    description: the partition size after the decompression
+                    minimum: 0
+                    example: 1343787384
+            nullable:
+              description: false if null is replaced with a string 'null' otherwise
+                false
+              type: boolean
+            parameters:
+              type: object
+              properties:
+                binary_output_format:
+                  type: string
+                  example: HEX
+                date_output_format:
+                  type: string
+                  example: YYYY-MM-DD
+                time_output_format:
+                  type: string
+                  example: HH24:MI:SS
+                timestamp_output_format:
+                  type: string
+                  example: YYYY-MM-DD HH24:MI:SS.FF6
+                timestamp_ltz_output_format:
+                  type: string
+                  example: YYYY-MM-DD HH24:MI:SS.FF6
+                timestamp_ntz_output_format:
+                  type: string
+                  example: YYYY-MM-DD HH24:MI:SS.FF6
+                timestamp_tz_output_format:
+                  type: string
+                  example: YYYY-MM-DDTHH24:MI:SS.FF6 TZHTZM
+                multi_statement_count:
+                  type: integer
+                  example: 4
+        data:
+          description: Result set data.
+          type: array
+          minItems: 0
+          items:
+            type: array
+            minItems: 0
+            items:
+              type: string
+              nullable: true
+              minItems: 0
+          example:
+          - - customer1
+            - 1234 A Avenue
+            - '98765'
+            - '2019-08-10 23:56:34.123'
+          - - customer2
+            - 987 B Street
+            - '98765'
+            - '2019-08-11 09:45:12.890'
+          - - customer3
+            - 8777 C Blvd
+            - '98765'
+            - '2019-08-12 10:23:51.999'
+          - - customer4
+            - 64646 D Circle
+            - '98765'
+            - '2019-08-13 01:54:32.000'
+        stats:
+          type: object
+          description: these stats might not be available for each request.
+          properties:
+            numRowsInserted:
+              type: integer
+              format: int64
+              description: Number of rows that were inserted.
+              minimum: 0
+              example: 12
+            numRowsUpdated:
+              type: integer
+              format: int64
+              description: Number of rows that were updated.
+              minimum: 0
+              example: 9
+            numRowsDeleted:
+              type: integer
+              format: int64
+              description: Number of rows that were deleted.
+              minimum: 0
+              example: 8
+            numDuplicateRowsUpdated:
+              type: integer
+              format: int64
+              description: Number of duplicate rows that were updated.
+              minimum: 0
+              example: 20
+    Identifier:
+      type: string
+      description: 'A Snowflake object identifier. If the identifier contains spaces
+        or special characters,  the entire string must be enclosed in double quotes.  Identifiers
+        enclosed in double quotes are also case-sensitive.
+
+        '
+      pattern: ^"([^"]|"")+"|[a-zA-Z_][a-zA-Z0-9_$]*$
+      example: TEST_NAME
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Error message returned by the server
+        code:
+          type: string
+          description: Error code.
+        error_code:
+          type: string
+          description: Error code, same as `code` above. This property has been deprecated
+            and will be removed in a future release, but is temporarily supported
+            for for short-term backward compatibility.
+        request_id:
+          type: string
+          description: Unique request ID.
+      example:
+        message: Compilation error!
+        error_code: '390189'
+        request_id: 01afef9d-0607-0550-0001-dd270c3902d7
+    SuccessResponse:
+      type: object
+      description: Schema for all the success responses returned by the server.
+      properties:
+        status:
+          type: string
+          description: Message returned by the server.
+      example:
+        status: Request successfully completed
+    SuccessAcceptedResponse:
+      type: object
+      description: Schema for a request in progress response returned by the server.
+      properties:
+        code:
+          type: string
+          description: Message code returned by the server.
+        message:
+          type: string
+          description: Message returned by the server
+        resultHandler:
+          type: string
+          description: Opaque result ID used for checking for request completion through
+            one or more subsequent completion check operations.
+      example:
+        code: '392604'
+        message: Request execution in progress. Use the provided location header or
+          result handler ID to perform query monitoring and management.
+    PointOfTime:
+      type: object
+      description: Point of time.
+      required:
+      - point_of_time_type
+      properties:
+        point_of_time_type:
+          description: 'Type of the point of time. Possible values include:
+
+            - `timestamp`: Exact time using the standard timezone format. Example:
+            `2023-09-15 10:59:43`. - `offset`: Interval relative to ''now.'' Example:
+            `1 day`. - `statement`: ID of a query statement to use as the reference
+            point for <a href=https://docs.snowflake.com/en/sql-reference/sql/create-clone#time-travel-parameters>Time
+            Travel</a>.
+
+            For more information, see https://docs.snowflake.com/en/sql-reference/data-types-datetime.'
+          type: string
+          examples:
+            timestamp:
+              value: '2023-09-15 10:59:43'
+            offset:
+              value: 20 ms
+        reference:
+          type: string
+          description: Relation to the point of time. Currently, the API supports
+            `at` and `before`.
+      discriminator:
+        propertyName: point_of_time_type
+        mapping:
+          timestamp: PointOfTimeTimestamp
+          offset: PointOfTimeOffset
+          statement: PointOfTimeStatement
+    PointOfTimeTimestamp:
+      description: Point of time identified by a timestamp.
+      allOf:
+      - $ref: '#/components/schemas/PointOfTime'
+      properties:
+        timestamp:
+          type: string
+          description: Timestamp of the point of time.
+    PointOfTimeOffset:
+      description: Point of time identified by an offset in reference to the current
+        time, such as `10 min`.
+      allOf:
+      - $ref: '#/components/schemas/PointOfTime'
+      examples:
+        month:
+          value: 2 months
+        milliseconds:
+          value: 20 ms
+      properties:
+        offset:
+          type: string
+          description: 'Offset from the point of time. Example: `1 year`'
+    PointOfTimeStatement:
+      description: Point of time indicating when a statement was executed.
+      allOf:
+      - $ref: '#/components/schemas/PointOfTime'
+      properties:
+        statement:
+          type: string
+          description: Statement of the point of time.
+    Parameter:
+      description: Snowflake parameter defined at the system, account, user, session,
+        or object level.
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          description: Parameter name.
+        value:
+          type: string
+          description: Parameter value.
+        defaultValue:
+          type: string
+          description: Default parameter value.
+        dataType:
+          type: string
+          description: Data type of the parameter value. Either BOOLEAN, NUMBER, FLOAT,
+            or STRING.
+        level:
+          type: string
+          description: Level at which parameter is defined.
+        description:
+          type: string
+          description: Parameter description.
+      example:
+        name: SAMPLE_SNOWAPI_PARAM
+        value: true
+        defaultValue: false
+        dataType: boolean
+        level: ACCOUNT
+        description: Sample snowflake parameter.
+    TargetLag:
+      type: object
+      description: Specifies the schedule for periodically refreshing the dynamic
+        table.
+      properties:
+        type:
+          description: Type of lag, can be either USER_DEFINED or DOWNSTREAM.
+          type: string
+      discriminator:
+        propertyName: type
+        mapping:
+          USER_DEFINED: UserDefinedLag
+          DOWNSTREAM: DownstreamLag
+    UserDefinedLag:
+      description: User-defined target lag.
+      allOf:
+      - $ref: '#/components/schemas/TargetLag'
+      properties:
+        seconds:
+          type: integer
+          format: int64
+          description: Target lag time in seconds.
+      example:
+        seconds: 3600
+      required:
+      - seconds
+    DownstreamLag:
+      description: Downstream target lag
+      allOf:
+      - $ref: '#/components/schemas/TargetLag'
+  parameters:
+    requestId:
+      name: requestId
+      in: query
+      schema:
+        type: string
+        format: uuid
+      required: false
+      allowEmptyValue: false
+      description: Unique ID of the API request. This ensures that the execution is
+        idempotent. If not specified, a new UUID is generated and assigned.
+    async:
+      name: async
+      in: query
+      schema:
+        type: boolean
+        example: true
+      required: false
+      description: Set to true to execute the statement asynchronously and return
+        the statement handle. If the parameter is not specified or is set to false,
+        a statement is executed and the first result is returned if the execution
+        is completed in 45 seconds. If the statement execution takes longer to complete,
+        the statement handle is returned.
+    partition:
+      name: partition
+      in: query
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+        example: 2
+      required: false
+      description: Number of the partition of results to return. The number can range
+        from 0 to the total number of partitions minus 1.
+    nullable:
+      name: nullable
+      in: query
+      schema:
+        type: boolean
+        example: true
+      required: false
+      description: Set to true to execute the statement to generate the result set
+        including null. If the parameter is set to false, the result set value null
+        will be replaced with a string 'null'.
+    statementHandle:
+      name: statementHandle
+      in: path
+      schema:
+        type: string
+        format: uuid
+        example: e4ce975e-f7ff-4b5e-b15e-bf25f59371ae
+      required: true
+      allowEmptyValue: false
+      description: The handle of the statement that you want to use (e.g. to fetch
+        the result set or cancel execution).
+    userAgent:
+      name: User-Agent
+      in: header
+      schema:
+        type: string
+        example: myApplication/1.0
+      required: true
+      allowEmptyValue: false
+      description: "Set this to the name and version of your application (e.g. \u201C\
+        applicationName/applicationVersion\u201D). You must use a value that complies\
+        \ with RFC 7231."
+    accept:
+      name: Accept
+      in: header
+      schema:
+        type: string
+        example: application/json
+      required: false
+      allowEmptyValue: false
+      description: The response payload format. The schema should be specified in
+        resultSetMetaData in the request payload.
+    acceptEncoding:
+      name: Accept-Encoding
+      in: header
+      schema:
+        type: string
+        example: gzip
+      required: false
+      allowEmptyValue: false
+      description: The response payload encoding. Optional.
+    snowflakeAuthorizationTokenType:
+      name: X-Snowflake-Authorization-Token-Type
+      in: header
+      schema:
+        type: string
+        example: KEYPAIR_JWT
+      required: false
+      allowEmptyValue: true
+      description: Specify the authorization token type for the Authorization header.
+        KEYPAIR_JWT is for Keypair JWT or OAUTH for oAuth token. If not specified,
+        OAUTH is assumed.
+    database:
+      name: database
+      description: Identifier (i.e. name) for the database to which the resource belongs.
+        You can use the `/api/v2/databases` GET request to get a list of available
+        databases.
+      required: true
+      in: path
+      schema:
+        example: TEST_DB
+        $ref: '#/components/schemas/Identifier'
+    schema:
+      name: schema
+      description: Identifier (i.e. name) for the schema to which the resource belongs.
+        You can use the `/api/v2/databases/{database}/schemas` GET request to get
+        a list of available schemas for the specified database.
+      required: true
+      in: path
+      schema:
+        example: TEST_SCHEMA
+        $ref: '#/components/schemas/Identifier'
+    application:
+      name: application
+      description: Identifier (i.e. name) for the application to which the resource
+        belongs. You can use the `/api/v2/applications/{application}` GET request
+        to get a list of available applications.
+      required: true
+      in: path
+      schema:
+        example: TEST_APPLICATION
+        $ref: '#/components/schemas/Identifier'
+    name:
+      name: name
+      description: Identifier (i.e. name) for the resource.
+      required: true
+      in: path
+      schema:
+        example: TEST_NAME
+        $ref: '#/components/schemas/Identifier'
+    nameWithArgs:
+      name: nameWithArgs
+      description: Function's name with Args
+      required: true
+      in: path
+      schema:
+        type: string
+        example: foo(a number, b number)
+    createMode:
+      name: createMode
+      description: 'Query parameter allowing support for different modes of resource
+        creation. Possible values include:
+
+        - `errorIfExists`: Throws an error if you try to create a resource that already
+        exists.
+
+        - `orReplace`: Automatically replaces the existing resource with the current
+        one.
+
+        - `ifNotExists`: Creates a new resource when an alter is requested for a non-existent
+        resource.'
+      in: query
+      schema:
+        type: string
+        enum:
+        - errorIfExists
+        - orReplace
+        - ifNotExists
+        example: ifNotExists
+        default: errorIfExists
+    mode:
+      name: mode
+      description: 'Query parameter determines whether the revoke operation succeeds
+        or fails for the privileges, based on the whether the privileges had been
+        re-granted to another role.
+
+        - restrict: If the privilege being revoked has been re-granted to another
+        role, the REVOKE command fails.
+
+        - cascade: If the privilege being revoked has been re-granted, the REVOKE
+        command recursively revokes these dependent grants. If the same privilege
+        on an object has been granted to the target role by a different grantor (parallel
+        grant), that grant is not affected and the target role retains the privilege.'
+      in: query
+      schema:
+        type: string
+        enum:
+        - restrict
+        - cascade
+        example: restrict
+    ifExists:
+      name: ifExists
+      description: 'Query parameter that specifies how to handle the request for a
+        resource that does not exist:
+
+        - `true`: The endpoint does not throw an error if the resource does not exist.
+        It returns a 200 success response, but does not take any action on the resource.
+
+        - `false`: The endpoint throws an error if the resource doesn''t exist.'
+      in: query
+      schema:
+        type: boolean
+        example: true
+        default: false
+    like:
+      name: like
+      description: Query parameter to filter the command output by resource name.
+        Uses case-insensitive pattern matching, with support for SQL wildcard characters.
+      in: query
+      schema:
+        type: string
+        example: test_%
+    pattern:
+      name: pattern
+      description: A query parameter that filters the command output by a regular
+        expression pattern.
+      in: query
+      schema:
+        type: string
+        example: .*data_0.*
+    startsWith:
+      name: startsWith
+      description: Query parameter to filter the command output based on the string
+        of characters that appear at the beginning of the object name. Uses case-sensitive
+        pattern matching.
+      in: query
+      schema:
+        type: string
+        example: test
+    rootOnly:
+      name: rootOnly
+      description: Query parameter to filter the command output to return only root
+        resources (resources with no predecessors).
+      in: query
+      schema:
+        type: boolean
+        example: false
+        default: false
+    showLimit:
+      name: showLimit
+      description: Query parameter to limit the maximum number of rows returned by
+        a command.
+      in: query
+      schema:
+        type: integer
+        example: 10
+        minimum: 1
+        maximum: 10000
+    fromName:
+      name: fromName
+      description: Query parameter to enable fetching rows only following the first
+        row whose object name matches the specified string. Case-sensitive and does
+        not have to be the full name.
+      in: query
+      schema:
+        type: string
+        example: from_test
+    copyGrants:
+      name: copyGrants
+      description: Query parameter to enable copy grants when creating the object.
+      in: query
+      schema:
+        type: boolean
+        example: false
+        default: false
+    asyncExec:
+      name: asyncExec
+      in: query
+      description: Asynchronous execution enable/disable. Default is disable.
+      schema:
+        type: boolean
+        default: false
+    sessionId:
+      name: sessionId
+      description: Unique ID for the current session.
+      required: true
+      in: path
+      schema:
+        type: integer
+        format: uuid
+        example: 524514326772799
+    content-type:
+      name: Content-Type
+      description: Type of content for the resource. Currently supports `application/json`.
+      in: header
+      schema:
+        type: string
+        enum:
+        - application/json
+    x-snowflake-authorization-token-type:
+      name: X-Snowflake-Authorization-Token-Type
+      description: Type of the Snowflake authorization token. Currently, keypair-jwt
+        (`KEYPAIR_JWT`) and OAuth tokens are supported.
+      in: header
+      schema:
+        type: string
+        enum:
+        - KEYPAIR_JWT
+        - OAUTH
+    x-sfc-session:
+      name: X-Sfc-Session
+      description: Token for the current Snowflake session.
+      in: header
+      required: false
+      schema:
+        type: string
+        description: Snowflake session token.
+        example: ver:3-hint:1000-ABCD=
+  securitySchemes:
+    KeyPair:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Set `X-Snowflake-Authorization-Token-Type` to `KEYPAIR_JWT` if
+        the token is a key-pair authentication JWT.
+    ExternalOAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Configure External Oauth with Snowflake (see <a href=https://docs.snowflake.com/en/user-guide/oauth-ext-overview>External
+        OAuth overview</a>.) Set `X-Snowflake-Authorization-Token-Type` to `OAUTH`
+        and set the Token to the auth token received from the external Auth server.
+    SnowflakeOAuth:
+      type: oauth2
+      flows:
+        implicit:
+          authorizationUrl: /oauth/authorize
+          scopes: {}
+      description: Set `X-Snowflake-Authorization-Token-Type` to `OAUTH` if the token
+        is snowflakeOAuth
+  responses:
+    400BadRequest:
+      description: Bad Request. The request payload is invalid or malformed. This
+        happens if the application didn't send the correct request payload. The response
+        body may include the error code and message indicating the actual cause. The
+        application must reconstruct the request body for retry.
+    401Unauthorized:
+      description: Unauthorized. The request is not authorized. This happens if the
+        attached access token is invalid or missing. The response body may include
+        the error code and message indicating the actual cause, e.g., expired, invalid
+        token. The application must obtain a new access token for retry.
+    403Forbidden:
+      description: Forbidden. The request is forbidden. This happens if the request
+        is made even if the API is not enabled.
+    404NotFound:
+      description: Not Found. The request endpoint is not valid. This happens if the
+        API endpoint is wrong. For example, if the application hits /api/api/hello
+        which doesn't exist, it will receive this code.
+    405MethodNotAllowed:
+      description: Method Not Allowed. The request method doesn't match the supported
+        API. This happens, for example, if the application calls the API with GET
+        method but the endpoint accepts only POST. The application must change a method
+        for retry.
+    415UnsupportedMediaType:
+      description: The request header Content-Type includes unsupported media type.
+        The API supports application/json only. If none specified, the request payload
+        is taken as JSON, but if any other media type is specified, this error is
+        returned.
+    429LimitExceeded:
+      description: Limit Exceeded. The number of requests hit the rate limit. The
+        application must slow down the frequency of hitting the API endpoints.
+    500InternalServerError:
+      description: Internal Server Error. The server hits an unrecoverable system
+        error. The response body may include the error code and message for further
+        guidance. The application owner may need to reach out the customer support.
+    503ServiceUnavailable:
+      description: Service Unavailable. The request was not processed due to server
+        side timeouts. The application may retry with backoff. The jittered backoff
+        is recommended. https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+    504GatewayTimeout:
+      description: Gateway Timeout. The request was not processed due to server side
+        timeouts. The application may retry with backoff. The jittered backoff is
+        recommended. https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+    200SuccessResponse:
+      description: Successful request.
+      headers:
+        X-Snowflake-Request-ID:
+          $ref: '#/components/headers/X-Snowflake-Request-ID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SuccessResponse'
+    201SuccessCreatedResponse:
+      description: Successfully created a new resource on the server.
+      headers:
+        X-Snowflake-Request-ID:
+          $ref: '#/components/headers/X-Snowflake-Request-ID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SuccessResponse'
+    202SuccessAcceptedResponse:
+      headers:
+        Location:
+          schema:
+            type: string
+            description: Relative path for checking request status or getting the
+              result, if available.
+        X-Snowflake-Request-ID:
+          $ref: '#/components/headers/X-Snowflake-Request-ID'
+      description: Successfully accepted the request, but it is not completed yet.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SuccessAcceptedResponse'
+    408RequestTimeout:
+      description: Request Timeout. This indicates that the request from the client
+        timed out and was not completed by the server.
+      headers:
+        X-Snowflake-Request-ID:
+          $ref: '#/components/headers/X-Snowflake-Request-ID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    409Conflict:
+      description: Conflict. The requested operation could not be performed due to
+        a conflicting state that could not be resolved. This usually happens when
+        a CREATE request was performed when there is a pre-existing resource with
+        the same name, and also without one of the options orReplace/ifNotExists.
+      headers:
+        X-Snowflake-Request-ID:
+          $ref: '#/components/headers/X-Snowflake-Request-ID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    410Gone:
+      description: Gone. This error is primarily intended to assist the task of web
+        maintenance by notifying the recipient that the resource is intentionally
+        unavailable.
+      headers:
+        X-Snowflake-Request-ID:
+          $ref: '#/components/headers/X-Snowflake-Request-ID'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  headers:
+    Link:
+      schema:
+        type: string
+        description: Links to the partition of results (e.g. the first partition,
+          the last partition, etc.). The header can include multiple 'url' entries
+          with different 'rel' attribute values that specify the partition to return
+          ('first', 'next', 'prev', and 'last').
+        example: </api/statements/e127cc7c-7812-4e72-9a55-3b4d4f969840/fetch?partition=1>;rel="last",</api/statements/e127cc7c-7812-4e72-9a55-3b4d4f969840/fetch?partition=1>;rel="next",</api/statements/e127cc7c-7812-4e72-9a55-3b4d4f969840/fetch?partition=0>;rel="first"
+    X-Snowflake-Request-ID:
+      description: Unique ID of the API request.
+      schema:
+        type: string
+        format: uuid
+  x-stackQL-resources:
+    statements:
+      methods:
+        submit_statement:
+          operation:
+            $ref: '#/paths/~1api~1v2~1statements/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        get_statement_status:
+          operation:
+            $ref: '#/paths/~1api~1v2~1statements~1{statementHandle}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        cancel_statement:
+          operation:
+            $ref: '#/paths/~1api~1v2~1statements~1{statementHandle}~1cancel/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+        - $ref: '#/components/x-stackQL-resources/statements/methods/submit_statement'
+        - $ref: '#/components/x-stackQL-resources/statements/methods/get_statement_status'
+        insert: []
+        update: []
+        delete: []
+        replace: []
+      id: snowflake.sqlapi.statements
+      name: statements
+      title: Statements
+security:
+- keyPair: []
+- ExternalOAuth: []
+- snowflakeOAuth: []
+externalDocs:
+  url: https://docs.snowflake.com/en/developer-guide/sql-api/index.html
