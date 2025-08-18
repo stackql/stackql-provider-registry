@@ -1,0 +1,129 @@
+name: AOT Provider Analysis
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+  push:
+    branches:
+      - main
+      - dev
+    tags:
+      - aot*
+
+env:
+  IS_TAG: ${{ github.ref_type == 'tag' }}
+  GO_VERSION: '~1.22'
+  STACKQL_CORE_REPOSITORY: ${{ vars.STACKQL_CORE_REPOSITORY != '' && vars.STACKQL_CORE_REPOSITORY || 'stackql/stackql' }}
+  STACKQL_CORE_REF: ${{ vars.STACKQL_CORE_REF != '' && vars.STACKQL_CORE_REF || 'main' }}
+  STACKQL_ANY_SDK_REPOSITORY: ${{ vars.STACKQL_ANY_SDK_REPOSITORY != '' && vars.STACKQL_ANY_SDK_REPOSITORY || 'stackql/any-sdk' }}
+  STACKQL_ANY_SDK_REF: ${{ vars.STACKQL_ANY_SDK_REF != '' && vars.STACKQL_ANY_SDK_REF || 'main' }}
+
+jobs:
+
+  aot-testing:
+    name: aot-testing
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ vars.DEFAULT_JOB_TIMEOUT_MIN == '' && 120 || vars.DEFAULT_JOB_TIMEOUT_MIN }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_DEFAULT_REGION: us-west-1
+      REG_MAX_VERSIONS: 3
+      REG_MAX_AGE_MONTHS: 6   
+      REG_WEBSITE_DIR: _deno_website
+      REG_PROVIDER_PATH: providers/dist
+      REG_ARTIFACT_REPO_BUCKET: stackql-registry-artifacts
+      REG_DENO_DEPLOY_ASSET_REPO: deno-deploy-registry
+      REG_DENO_DEPLOY_API_DEV: stackql-dev-registry
+      REG_DENO_DEPLOY_API_PROD: stackql-registry
+
+    steps:
+      - uses: actions/checkout@v4.1.1
+        name: "[SETUP] checkout repo"
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go 1.x
+        uses: actions/setup-go@v5.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+          cache: true
+        id: go
+
+      - name: Download core
+        uses: actions/checkout@v4.1.1
+        with:
+          repository: ${{ env.STACKQL_CORE_REPOSITORY }}
+          ref: ${{ env.STACKQL_CORE_REF }}
+          token: ${{ secrets.CI_STACKQL_PACKAGE_DOWNLOAD_TOKEN  }}
+          path: stackql-core
+
+      - name: Download any-sdk
+        uses: actions/checkout@v4.1.1
+        with:
+          repository: ${{ env.STACKQL_ANY_SDK_REPOSITORY }}
+          ref: ${{ env.STACKQL_ANY_SDK_REF }}
+          token: ${{ secrets.CI_STACKQL_PACKAGE_DOWNLOAD_TOKEN  }}
+          path: stackql-any-sdk
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Add dependencies
+        working-directory: stackql-core
+        run: |
+          sudo apt-get install -y jq
+          pip3 install -r cicd/requirements.txt
+
+      - name: Build stackql from core source
+        working-directory: stackql-core
+        run: |
+          go get ./...
+          python3 cicd/python/build.py --build
+
+      - name: Build any-sdk cli from source
+        working-directory: stackql-any-sdk
+        run: |
+
+          go get ./...
+
+          go build -x -v \
+            -o build/anysdk ./cmd/interrogate
+
+      - name: Parse tag
+        id: parse_tag
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            tag_obj="$(python3 stackql-core/cicd/python/tag_parse.py '${{ github.ref_name }}' --parse-registry-tag)"
+            echo "tag_obj: $tag_obj"
+            {
+              echo "PARSED_TAG_IS_ROBOT=$(echo $tag_obj | jq -r '.is_robot')"
+              echo "PARSED_TAG_IS_REGRESSION=$(echo $tag_obj | jq -r '.is_regression')"
+            } | tee -a "$GITHUB_ENV"
+          else
+            {
+            echo "IS_BRANCH=true"
+            } >> $GITHUB_ENV
+          fi
+
+      - name: Run any-sdk cli mocked testing
+        run: |
+          rc='0'
+          for subdir in ./providers/src/*/ ; do
+              echo "Processing provider subdirectory: $subdir" 1>&2
+              # Add commands to execute within each subdirectory here
+              ${{ github.workspace }}/stackql-any-sdk/build/anysdk aot ./providers "${subdir}/v00.00.00000/provider.yaml"
+              if [ "$?" -ne "0" ]; then
+                rc='1'
+              fi
+          done
+          if [ "$rc" -ne "0" ]; then
+            echo "AnySDK AOT build failed"
+            exit 1
+          fi
