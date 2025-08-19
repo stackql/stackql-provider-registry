@@ -1,0 +1,144 @@
+name: AOT Provider Analysis
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+  push:
+    branches:
+      - main
+      - dev
+    tags:
+      - aot*
+
+env:
+  IS_TAG: ${{ github.ref_type == 'tag' }}
+  GO_VERSION: '~1.22'
+  STACKQL_CORE_REPOSITORY: ${{ vars.STACKQL_CORE_REPOSITORY != '' && vars.STACKQL_CORE_REPOSITORY || 'stackql/stackql' }}
+  STACKQL_CORE_REF: ${{ vars.STACKQL_CORE_REF != '' && vars.STACKQL_CORE_REF || 'main' }}
+  STACKQL_ANY_SDK_REPOSITORY: ${{ vars.STACKQL_ANY_SDK_REPOSITORY != '' && vars.STACKQL_ANY_SDK_REPOSITORY || 'stackql/any-sdk' }}
+  STACKQL_ANY_SDK_REF: ${{ vars.STACKQL_ANY_SDK_REF != '' && vars.STACKQL_ANY_SDK_REF || 'main' }}
+
+jobs:
+
+  aot-testing:
+    name: aot-testing
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ vars.DEFAULT_JOB_TIMEOUT_MIN == '' && 120 || vars.DEFAULT_JOB_TIMEOUT_MIN }}
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_DEFAULT_REGION: us-west-1
+      REG_MAX_VERSIONS: 3
+      REG_MAX_AGE_MONTHS: 6   
+      REG_WEBSITE_DIR: _deno_website
+      REG_PROVIDER_PATH: providers/dist
+      REG_ARTIFACT_REPO_BUCKET: stackql-registry-artifacts
+      REG_DENO_DEPLOY_ASSET_REPO: deno-deploy-registry
+      REG_DENO_DEPLOY_API_DEV: stackql-dev-registry
+      REG_DENO_DEPLOY_API_PROD: stackql-registry
+
+    steps:
+      - uses: actions/checkout@v4.1.1
+        name: "[SETUP] checkout repo"
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go 1.x
+        uses: actions/setup-go@v5.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+          cache: true
+        id: go
+
+      - name: Download core
+        uses: actions/checkout@v4.1.1
+        with:
+          repository: ${{ env.STACKQL_CORE_REPOSITORY }}
+          ref: ${{ env.STACKQL_CORE_REF }}
+          token: ${{ secrets.CI_STACKQL_PACKAGE_DOWNLOAD_TOKEN  }}
+          path: stackql-core
+
+      - name: Download any-sdk
+        uses: actions/checkout@v4.1.1
+        with:
+          repository: ${{ env.STACKQL_ANY_SDK_REPOSITORY }}
+          ref: ${{ env.STACKQL_ANY_SDK_REF }}
+          token: ${{ secrets.CI_STACKQL_PACKAGE_DOWNLOAD_TOKEN  }}
+          path: stackql-any-sdk
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Add dependencies
+        working-directory: stackql-core
+        run: |
+          sudo apt-get install -y jq
+          pip3 install -r cicd/requirements.txt
+
+      - name: Build stackql from core source
+        working-directory: stackql-core
+        run: |
+          go get ./...
+          python3 cicd/python/build.py --build
+
+      - name: Build any-sdk cli from source
+        working-directory: stackql-any-sdk
+        run: |
+
+          go get ./...
+
+          go build -x -v \
+            -o build/anysdk ./cmd/interrogate
+
+      - name: Run any-sdk cli AOT provider analysis
+        run: |
+          rc='0'
+          for sd in ./providers/src/*/ ; do
+            echo ""
+            subdir="$(realpath "${sd}")"
+            providerID="$(basename "${subdir}")"
+            echo "Processing provider '${providerID}' at subdirectory: '${subdir}'" 1>&2
+            echo ""
+            ./scripts/cicd/shell/aot-analysis/01-aot-analysis-compact.sh ${{ github.workspace }}/stackql-any-sdk/build/anysdk "${providerID}" "${subdir}/v00.00.00000/provider.yaml" &
+            echo ""
+          done
+          echo ""
+          echo "All tasks initiated. Waiting for them to complete..."
+          # wait for all background jobs to finish
+          wait
+          echo ""
+          echo "All tasks completed."
+          echo ""
+          for logFile in ./test/log/*.log ; do
+            echo ""
+            echo "contents of ${logFile}:"
+            echo ""
+            cat "${logFile}"
+            echo ""
+          done
+          for rcf in ./test/log/rc_* ; do 
+            thisrc="$(cat "${rcf}")"
+            if [ "$thisrc" != "0" ]; then
+              echo "AOT analysis failure detected for: '${rcf}'" 1>&2
+              rc='1'
+            fi
+          done
+          if [ "$rc" -ne "0" ]; then
+            echo "overall anysdk CLI AOT provider analysis failed" 1>&2
+            exit 1
+          else
+            echo "overall anysdk CLI AOT provider analysis succeeded" 1>&2
+          fi
+
+      - name: Upload AOT analysis logs
+        uses: actions/upload-artifact@v4.3.1
+        if: success()
+        with:
+          name: aot_analysis_logs
+          path: ./test/log
