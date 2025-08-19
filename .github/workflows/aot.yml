@@ -96,44 +96,49 @@ jobs:
           go build -x -v \
             -o build/anysdk ./cmd/interrogate
 
-      - name: Parse tag
-        id: parse_tag
-        run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            tag_obj="$(python3 stackql-core/cicd/python/tag_parse.py '${{ github.ref_name }}' --parse-registry-tag)"
-            echo "tag_obj: $tag_obj"
-            {
-              echo "PARSED_TAG_IS_ROBOT=$(echo $tag_obj | jq -r '.is_robot')"
-              echo "PARSED_TAG_IS_REGRESSION=$(echo $tag_obj | jq -r '.is_regression')"
-            } | tee -a "$GITHUB_ENV"
-          else
-            {
-            echo "IS_BRANCH=true"
-            } >> $GITHUB_ENV
-          fi
-
       - name: Run any-sdk cli AOT provider analysis
         run: |
           rc='0'
           for sd in ./providers/src/*/ ; do
-              echo ""
-              subdir="$(realpath "${sd}")"
-              providerID="$(basename "${subdir}")"
-              echo "Processing provider '${providerID}' at subdirectory: '${subdir}'" 1>&2
-              echo ""
-              ${{ github.workspace }}/stackql-any-sdk/build/anysdk aot ./providers "${subdir}/v00.00.00000/provider.yaml" -v
-              echo ""
-              if [ "$?" -ne "0" ]; then
-                echo "AOT analysis failed for provider: '${providerID}'" 1>&2
-                rc='1'
-              else
-                echo "AOT analysis succeeded for provider: '${providerID}'" 1>&2
-              fi
+            echo ""
+            subdir="$(realpath "${sd}")"
+            providerID="$(basename "${subdir}")"
+            echo "Processing provider '${providerID}' at subdirectory: '${subdir}'" 1>&2
+            echo ""
+            ./scripts/cicd/shell/aot-analysis/01-aot-analysis-compact.sh ${{ github.workspace }}/stackql-any-sdk/build/anysdk "${providerID}" "${subdir}/v00.00.00000/provider.yaml" &
+            echo ""
           done
           echo ""
+          echo "All tasks initiated. Waiting for them to complete..."
+          # wait for all background jobs to finish
+          wait
+          echo ""
+          echo "All tasks completed."
+          echo ""
+          for logFile in ./test/log/*.log ; do
+            echo ""
+            echo "contents of ${logFile}:"
+            echo ""
+            cat "${logFile}"
+            echo ""
+          done
+          for rcf in ./test/log/rc_* ; do 
+            thisrc="$(cat "${rcf}")"
+            if [ "$thisrc" != "0" ]; then
+              echo "AOT analysis failure detected for: '${rcf}'" 1>&2
+              rc='1'
+            fi
+          done
           if [ "$rc" -ne "0" ]; then
             echo "overall anysdk CLI AOT provider analysis failed" 1>&2
             exit 1
           else
             echo "overall anysdk CLI AOT provider analysis succeeded" 1>&2
           fi
+
+      - name: Upload AOT analysis logs
+        uses: actions/upload-artifact@v4.3.1
+        if: success()
+        with:
+          name: aot_analysis_logs
+          path: ./test/log
