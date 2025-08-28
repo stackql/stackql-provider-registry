@@ -10,8 +10,8 @@ info:
     to automate the deployment and validation of your workloads against best
     practices and recommendations.
   version: v1
-  x-discovery-doc-revision: '20241023'
-  x-generated-date: '2024-11-06'
+  x-discovery-doc-revision: '20250813'
+  x-generated-date: '2025-08-28'
 externalDocs:
   url: https://cloud.google.com/workload-manager/docs
 servers:
@@ -168,7 +168,7 @@ components:
             type: string
     Evaluation:
       id: Evaluation
-      description: LINT.IfChange Message describing Evaluation object
+      description: Message describing Evaluation object
       type: object
       properties:
         name:
@@ -221,9 +221,35 @@ components:
         customRulesBucket:
           description: The Cloud Storage bucket name for custom rules.
           type: string
+        evaluationType:
+          description: Evaluation type
+          type: string
+          enumDescriptions:
+            - Not specified
+            - SAP best practices
+            - SQL best practices
+            - Customized best practices
+            - SCC IaC (Infra as Code) best practices.
+          enumDeprecated:
+            - false
+            - false
+            - false
+            - false
+            - true
+          enum:
+            - EVALUATION_TYPE_UNSPECIFIED
+            - SAP
+            - SQL_SERVER
+            - OTHER
+            - SCC_IAC
         bigQueryDestination:
           description: Optional. BigQuery destination
           $ref: '#/components/schemas/BigQueryDestination'
+        kmsKey:
+          description: >-
+            Optional. Immutable. Customer-managed encryption key name, in the
+            format projects/*/locations/*/keyRings/*/cryptoKeys/*.
+          type: string
     ResourceFilter:
       id: ResourceFilter
       description: Message describing resource filters
@@ -392,6 +418,21 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Notice'
+        engine:
+          description: Optional. Engine
+          type: string
+          enumDescriptions:
+            - The original CG
+            - SlimCG / Scanner
+            - Evaluation Engine V2
+          enum:
+            - ENGINE_UNSPECIFIED
+            - ENGINE_SCANNER
+            - V2
+        resultSummary:
+          description: Output only. [Output only] Result summary for the execution
+          readOnly: true
+          $ref: '#/components/schemas/Summary'
     RuleExecutionResult:
       id: RuleExecutionResult
       description: Message for execution result summary per rule
@@ -465,6 +506,28 @@ components:
           description: Output only. Message of the notice
           readOnly: true
           type: string
+    Summary:
+      id: Summary
+      description: Message for execution summary
+      type: object
+      properties:
+        failures:
+          description: Output only. Number of failures
+          readOnly: true
+          type: string
+          format: int64
+        newFailures:
+          description: >-
+            Output only. Number of new failures compared to the previous
+            execution
+          readOnly: true
+          type: string
+          format: int64
+        newFixes:
+          description: Output only. Number of new fixes compared to the previous execution
+          readOnly: true
+          type: string
+          format: int64
     RunEvaluationRequest:
       id: RunEvaluationRequest
       description: Message for creating a Execution
@@ -801,6 +864,12 @@ components:
         sqlserverValidation:
           description: The insights data for the sqlserver workload validation.
           $ref: '#/components/schemas/SqlserverValidation'
+        torsoValidation:
+          description: The insights data for workload validation of torso workloads.
+          $ref: '#/components/schemas/TorsoValidation'
+        agentStatus:
+          description: The insights data for the agent status.
+          $ref: '#/components/schemas/AgentStatus'
         instanceId:
           description: Required. The instance id where the insight is generated from
           type: string
@@ -905,6 +974,9 @@ components:
         workloadProperties:
           description: Optional. The properties of the workload.
           $ref: '#/components/schemas/SapDiscoveryWorkloadProperties'
+        useDrReconciliation:
+          description: Optional. Whether to use DR reconciliation or not.
+          type: boolean
     SapDiscoveryMetadata:
       id: SapDiscoveryMetadata
       description: Message describing SAP discovery system metadata
@@ -973,7 +1045,12 @@ components:
             configurations.
           type: array
           items:
-            $ref: '#/components/schemas/SapDiscoveryComponent'
+            $ref: '#/components/schemas/SapDiscoveryComponentReplicationSite'
+        region:
+          description: >-
+            Optional. The region this component's resources are primarily
+            located in.
+          type: string
     SapDiscoveryResource:
       id: SapDiscoveryResource
       description: Message describing a resource.
@@ -1116,6 +1193,16 @@ components:
         isDrSite:
           description: Optional. Instance is part of a DR site.
           type: boolean
+        diskMounts:
+          description: Optional. Disk mounts on the instance.
+          type: array
+          items:
+            $ref: >-
+              #/components/schemas/SapDiscoveryResourceInstancePropertiesDiskMount
+        osKernelVersion:
+          description: Optional. The kernel version of the instance.
+          $ref: >-
+            #/components/schemas/SapDiscoveryResourceInstancePropertiesKernelVersion
     SapDiscoveryResourceInstancePropertiesAppInstance:
       id: SapDiscoveryResourceInstancePropertiesAppInstance
       description: Fields to describe an SAP application server instance.
@@ -1126,6 +1213,69 @@ components:
           type: string
         number:
           description: Optional. Instance number of the SAP application instance.
+          type: string
+    SapDiscoveryResourceInstancePropertiesDiskMount:
+      id: SapDiscoveryResourceInstancePropertiesDiskMount
+      description: Disk mount on the instance.
+      type: object
+      properties:
+        name:
+          description: Optional. Name of the disk.
+          type: string
+        mountPoint:
+          description: Optional. Filesystem mount point.
+          type: string
+        diskNames:
+          description: Optional. Names of the disks providing this mount point.
+          type: array
+          items:
+            type: string
+    SapDiscoveryResourceInstancePropertiesKernelVersion:
+      id: SapDiscoveryResourceInstancePropertiesKernelVersion
+      description: KernelVersion encapsulates the kernel version data for the system.
+      type: object
+      properties:
+        rawString:
+          description: Optional. Raw string of the kernel version.
+          type: string
+        osKernel:
+          description: >-
+            Optional. Captures the OS-specific kernel version, the portion of
+            the string up to the first dash.
+          $ref: >-
+            #/components/schemas/SapDiscoveryResourceInstancePropertiesKernelVersionVersion
+        distroKernel:
+          description: >-
+            Optional. Captures the distro-specific kernel version, the portion
+            of the string following the first dash.
+          $ref: >-
+            #/components/schemas/SapDiscoveryResourceInstancePropertiesKernelVersionVersion
+    SapDiscoveryResourceInstancePropertiesKernelVersionVersion:
+      id: SapDiscoveryResourceInstancePropertiesKernelVersionVersion
+      description: Version is reported as Major.Minor.Build.Patch.
+      type: object
+      properties:
+        major:
+          description: Optional. The major version number.
+          type: integer
+          format: int32
+        minor:
+          description: Optional. The minor version number.
+          type: integer
+          format: int32
+        build:
+          description: Optional. The build version number.
+          type: integer
+          format: int32
+        patch:
+          description: Optional. The patch version number.
+          type: integer
+          format: int32
+        remainder:
+          description: >-
+            Optional. A catch-all for any unparsed version components. This is
+            in case the number of points in the version string exceeds the
+            expected count of 4.
           type: string
     SapDiscoveryComponentApplicationProperties:
       id: SapDiscoveryComponentApplicationProperties
@@ -1187,11 +1337,17 @@ components:
             - SAP HANA
             - SAP MAX_DB
             - IBM DB2
+            - Oracle Database
+            - Microsoft SQL Server
+            - SAP Sybase ASE
           enum:
             - DATABASE_TYPE_UNSPECIFIED
             - HANA
             - MAX_DB
             - DB2
+            - ORACLE
+            - SQLSERVER
+            - ASE
         primaryInstanceUri:
           description: Required. URI of the recognized primary instance of the database.
           type: string
@@ -1211,6 +1367,22 @@ components:
         databaseSid:
           description: Optional. SID of the system database.
           type: string
+        landscapeId:
+          description: Optional. Landscape ID from the HANA nameserver.
+          type: string
+    SapDiscoveryComponentReplicationSite:
+      id: SapDiscoveryComponentReplicationSite
+      description: A replication site used in Disaster Recovery (DR) configurations.
+      type: object
+      properties:
+        sourceSite:
+          description: >-
+            Optional. The name of the source site from which this one
+            replicates.
+          type: string
+        component:
+          description: Optional. The system component for the site.
+          $ref: '#/components/schemas/SapDiscoveryComponent'
     SapDiscoveryWorkloadProperties:
       id: SapDiscoveryWorkloadProperties
       description: A set of properties describing an SAP workload.
@@ -1339,11 +1511,680 @@ components:
           type: object
           additionalProperties:
             type: string
+    TorsoValidation:
+      id: TorsoValidation
+      description: The schema of torso workload validation data.
+      type: object
+      properties:
+        workloadType:
+          description: Required. workload_type specifies the type of torso workload.
+          type: string
+          enumDescriptions:
+            - Unspecified workload type.
+            - MySQL workload.
+            - Oracle workload.
+            - Redis workload.
+          enum:
+            - WORKLOAD_TYPE_UNSPECIFIED
+            - MYSQL
+            - ORACLE
+            - REDIS
+        validationDetails:
+          description: >-
+            Required. validation_details contains the pairs of validation data:
+            field name & field value.
+          type: object
+          additionalProperties:
+            type: string
+        agentVersion:
+          description: >-
+            Required. agent_version lists the version of the agent that
+            collected this data.
+          type: string
+        projectId:
+          description: >-
+            Required. project_id lists the human readable cloud project that the
+            data comes from.
+          type: string
+        instanceName:
+          description: >-
+            Required. instance_name lists the human readable name of the
+            instance that the data comes from.
+          type: string
+    AgentStatus:
+      id: AgentStatus
+      description: The schema of agent status data.
+      type: object
+      properties:
+        installedVersion:
+          description: Output only. The installed version of the agent on the host.
+          readOnly: true
+          type: string
+        availableVersion:
+          description: >-
+            Output only. The available version of the agent in artifact
+            registry.
+          readOnly: true
+          type: string
+        systemdServiceEnabled:
+          description: Output only. Whether the agent service is enabled in systemd.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - The state is unspecified and has not been checked yet.
+            - The state is successful (enabled, granted, fully functional).
+            - The state is failed (disabled, denied, not fully functional).
+            - >-
+              There was an internal error while checking the state, state is
+              unknown.
+          enum:
+            - UNSPECIFIED_STATE
+            - SUCCESS_STATE
+            - FAILURE_STATE
+            - ERROR_STATE
+        systemdServiceRunning:
+          description: Output only. Whether the agent service is running in systemd.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - The state is unspecified and has not been checked yet.
+            - The state is successful (enabled, granted, fully functional).
+            - The state is failed (disabled, denied, not fully functional).
+            - >-
+              There was an internal error while checking the state, state is
+              unknown.
+          enum:
+            - UNSPECIFIED_STATE
+            - SUCCESS_STATE
+            - FAILURE_STATE
+            - ERROR_STATE
+        configurationFilePath:
+          description: Output only. The path to the agent configuration file.
+          readOnly: true
+          type: string
+        configurationValid:
+          description: Output only. Whether the agent configuration is valid.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - The state is unspecified and has not been checked yet.
+            - The state is successful (enabled, granted, fully functional).
+            - The state is failed (disabled, denied, not fully functional).
+            - >-
+              There was an internal error while checking the state, state is
+              unknown.
+          enum:
+            - UNSPECIFIED_STATE
+            - SUCCESS_STATE
+            - FAILURE_STATE
+            - ERROR_STATE
+        configurationErrorMessage:
+          description: >-
+            Output only. The error message for the agent configuration if
+            invalid.
+          readOnly: true
+          type: string
+        services:
+          description: Output only. The services (process metrics, host metrics, etc.).
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentStatusServiceStatus'
+        references:
+          description: Output only. Optional references to public documentation.
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentStatusReference'
+        agentName:
+          description: Output only. The name of the agent.
+          readOnly: true
+          type: string
+        cloudApiAccessFullScopesGranted:
+          description: Output only. Whether the agent has full access to Cloud APIs.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - The state is unspecified and has not been checked yet.
+            - The state is successful (enabled, granted, fully functional).
+            - The state is failed (disabled, denied, not fully functional).
+            - >-
+              There was an internal error while checking the state, state is
+              unknown.
+          enum:
+            - UNSPECIFIED_STATE
+            - SUCCESS_STATE
+            - FAILURE_STATE
+            - ERROR_STATE
+        kernelVersion:
+          description: Output only. The kernel version of the system.
+          readOnly: true
+          $ref: >-
+            #/components/schemas/SapDiscoveryResourceInstancePropertiesKernelVersion
+        instanceUri:
+          description: >-
+            Output only. The URI of the instance. Format:
+            projects//zones//instances/
+          readOnly: true
+          type: string
+    AgentStatusServiceStatus:
+      id: AgentStatusServiceStatus
+      description: The status of a service (process metrics, host metrics, etc.).
+      type: object
+      properties:
+        name:
+          description: Output only. The name of the service.
+          readOnly: true
+          type: string
+        state:
+          description: >-
+            Output only. The state of the service (enabled or disabled in the
+            configuration).
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - The state is unspecified and has not been checked yet.
+            - The state is successful (enabled, granted, fully functional).
+            - The state is failed (disabled, denied, not fully functional).
+            - >-
+              There was an internal error while checking the state, state is
+              unknown.
+          enum:
+            - UNSPECIFIED_STATE
+            - SUCCESS_STATE
+            - FAILURE_STATE
+            - ERROR_STATE
+        fullyFunctional:
+          description: >-
+            Output only. Whether the service is fully functional (all checks
+            passed).
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - The state is unspecified and has not been checked yet.
+            - The state is successful (enabled, granted, fully functional).
+            - The state is failed (disabled, denied, not fully functional).
+            - >-
+              There was an internal error while checking the state, state is
+              unknown.
+          enum:
+            - UNSPECIFIED_STATE
+            - SUCCESS_STATE
+            - FAILURE_STATE
+            - ERROR_STATE
+        errorMessage:
+          description: >-
+            Output only. The error message for the service if it is not fully
+            functional.
+          readOnly: true
+          type: string
+        iamPermissions:
+          description: Output only. The permissions required for the service.
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentStatusIAMPermission'
+        configValues:
+          description: Output only. The configuration values for the service.
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentStatusConfigValue'
+        unspecifiedStateMessage:
+          description: >-
+            Output only. The message to display when the service state is
+            unspecified.
+          readOnly: true
+          type: string
+    AgentStatusIAMPermission:
+      id: AgentStatusIAMPermission
+      description: The IAM permission status.
+      type: object
+      properties:
+        name:
+          description: Output only. The name of the permission.
+          readOnly: true
+          type: string
+        granted:
+          description: Output only. Whether the permission is granted.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - The state is unspecified and has not been checked yet.
+            - The state is successful (enabled, granted, fully functional).
+            - The state is failed (disabled, denied, not fully functional).
+            - >-
+              There was an internal error while checking the state, state is
+              unknown.
+          enum:
+            - UNSPECIFIED_STATE
+            - SUCCESS_STATE
+            - FAILURE_STATE
+            - ERROR_STATE
+    AgentStatusConfigValue:
+      id: AgentStatusConfigValue
+      description: The configuration value.
+      type: object
+      properties:
+        name:
+          description: Output only. The name of the configuration value.
+          readOnly: true
+          type: string
+        value:
+          description: Output only. The value of the configuration value.
+          readOnly: true
+          type: string
+        isDefault:
+          description: >-
+            Output only. Whether the configuration value is the default value or
+            overridden.
+          readOnly: true
+          type: boolean
+    AgentStatusReference:
+      id: AgentStatusReference
+      description: The reference to public documentation.
+      type: object
+      properties:
+        name:
+          description: Output only. The name of the reference.
+          readOnly: true
+          type: string
+        url:
+          description: Output only. The URL of the reference.
+          readOnly: true
+          type: string
     WriteInsightResponse:
       id: WriteInsightResponse
       description: The response for write insights request.
       type: object
       properties: {}
+    ListDiscoveredProfilesResponse:
+      id: ListDiscoveredProfilesResponse
+      description: List discovered profile Response returns discovered profiles from agents
+      type: object
+      properties:
+        workloadProfiles:
+          description: Output only. The list of workload profiles
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadProfile'
+        unreachable:
+          description: Locations that could not be reached.
+          type: array
+          items:
+            type: string
+        nextPageToken:
+          description: >-
+            Output only. A token identifying a page of results the server should
+            return
+          readOnly: true
+          type: string
+    WorkloadProfile:
+      id: WorkloadProfile
+      description: workload resource
+      type: object
+      properties:
+        name:
+          description: >-
+            Identifier. name of resource names have the form
+            'projects/{project_id}/locations/{location}/workloadProfiles/{workload_id}'
+          type: string
+        labels:
+          description: >-
+            Optional. such as name, description, version. More example can be
+            found in deployment
+          type: object
+          additionalProperties:
+            type: string
+        refreshedTime:
+          description: Required. time when the workload data was refreshed
+          type: string
+          format: google-datetime
+        workloadType:
+          description: Required. The type of the workload
+          type: string
+          enumDescriptions:
+            - unspecified workload type
+            - running sap workload s4/hana
+          enum:
+            - WORKLOAD_TYPE_UNSPECIFIED
+            - S4_HANA
+        sapWorkload:
+          description: The sap workload content
+          $ref: '#/components/schemas/SapWorkload'
+    SapWorkload:
+      id: SapWorkload
+      description: The body of sap workload
+      type: object
+      properties:
+        metadata:
+          description: Output only. The metadata for SAP workload.
+          readOnly: true
+          type: object
+          additionalProperties:
+            type: string
+        database:
+          description: Output only. the database componment
+          readOnly: true
+          $ref: '#/components/schemas/SapComponent'
+        application:
+          description: Output only. the acsc componment
+          readOnly: true
+          $ref: '#/components/schemas/SapComponent'
+        products:
+          description: Output only. the products on this workload.
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        architecture:
+          description: Output only. the architecture
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - Unspecified architecture.
+            - Invaliad architecture.
+            - A centralized system.
+            - A distributed system.
+            - A distributed with HA system.
+            - A standalone database system.
+            - A standalone database with HA system.
+          enum:
+            - ARCHITECTURE_UNSPECIFIED
+            - INVALID
+            - CENTRALIZED
+            - DISTRIBUTED
+            - DISTRIBUTED_HA
+            - STANDALONE_DATABASE
+            - STANDALONE_DATABASE_HA
+    SapComponent:
+      id: SapComponent
+      description: The component of sap workload
+      type: object
+      properties:
+        sid:
+          description: Output only. sid is the sap component identificator
+          readOnly: true
+          type: string
+        resources:
+          description: Output only. resources in the component
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/CloudResource'
+        topologyType:
+          description: The detected topology of the component.
+          type: string
+          enumDescriptions:
+            - Unspecified topology.
+            - A scale-up single node system.
+            - A scale-out multi-node system.
+          enum:
+            - TOPOLOGY_TYPE_UNSPECIFIED
+            - TOPOLOGY_SCALE_UP
+            - TOPOLOGY_SCALE_OUT
+        haHosts:
+          description: >-
+            A list of host URIs that are part of the HA configuration if
+            present. An empty list indicates the component is not configured for
+            HA.
+          type: array
+          items:
+            type: string
+        databaseProperties:
+          description: Output only. All instance properties.
+          readOnly: true
+          $ref: '#/components/schemas/DatabaseProperties'
+    CloudResource:
+      id: CloudResource
+      description: The resource on GCP
+      type: object
+      properties:
+        name:
+          description: Output only. resource name
+          readOnly: true
+          type: string
+        kind:
+          description: >-
+            Output only. ComputeInstance, ComputeDisk, VPC, Bare Metal server,
+            etc.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - Unspecified resource kind.
+            - This is a compute instance.
+            - This is a compute disk.
+            - This is a compute address.
+            - This is a filestore instance.
+            - This is a compute health check.
+            - This is a compute forwarding rule.
+            - This is a compute backend service.
+            - This is a compute subnetwork.
+            - This is a compute network.
+            - This is a public accessible IP Address.
+            - This is a compute instance group.
+          enum:
+            - RESOURCE_KIND_UNSPECIFIED
+            - RESOURCE_KIND_INSTANCE
+            - RESOURCE_KIND_DISK
+            - RESOURCE_KIND_ADDRESS
+            - RESOURCE_KIND_FILESTORE
+            - RESOURCE_KIND_HEALTH_CHECK
+            - RESOURCE_KIND_FORWARDING_RULE
+            - RESOURCE_KIND_BACKEND_SERVICE
+            - RESOURCE_KIND_SUBNETWORK
+            - RESOURCE_KIND_NETWORK
+            - RESOURCE_KIND_PUBLIC_ADDRESS
+            - RESOURCE_KIND_INSTANCE_GROUP
+        instanceProperties:
+          description: Output only. All instance properties.
+          readOnly: true
+          $ref: '#/components/schemas/InstanceProperties'
+    InstanceProperties:
+      id: InstanceProperties
+      description: Instance Properties.
+      type: object
+      properties:
+        status:
+          description: Optional. Instance status.
+          type: string
+        machineType:
+          description: Optional. Instance machine type.
+          type: string
+        instanceNumber:
+          description: Optional. Instance number.
+          type: string
+        upcomingMaintenanceEvent:
+          description: Optional. the next maintenance event on VM
+          $ref: '#/components/schemas/UpcomingMaintenanceEvent'
+        sapInstanceProperties:
+          description: Optional. SAP Instance properties.
+          $ref: '#/components/schemas/SapInstanceProperties'
+        roles:
+          description: Optional. Instance roles.
+          type: array
+          items:
+            type: string
+            enumDescriptions:
+              - Unspecified role.
+              - ASCS role.
+              - ERS role.
+              - APP server.
+              - HANA primary role.
+              - HANA secondary role.
+            enum:
+              - INSTANCE_ROLE_UNSPECIFIED
+              - INSTANCE_ROLE_ASCS
+              - INSTANCE_ROLE_ERS
+              - INSTANCE_ROLE_APP_SERVER
+              - INSTANCE_ROLE_HANA_PRIMARY
+              - INSTANCE_ROLE_HANA_SECONDARY
+    UpcomingMaintenanceEvent:
+      id: UpcomingMaintenanceEvent
+      description: Maintenance Event
+      type: object
+      properties:
+        startTime:
+          description: Optional. Start time
+          type: string
+          format: google-datetime
+        endTime:
+          description: Optional. End time
+          type: string
+          format: google-datetime
+        maintenanceStatus:
+          description: Optional. Maintenance status
+          type: string
+        type:
+          description: Optional. Type
+          type: string
+        onHostMaintenance:
+          description: >-
+            Optional. Instance maintenance behavior. Could be "MIGRATE" or
+            "TERMINATE".
+          type: string
+    SapInstanceProperties:
+      id: SapInstanceProperties
+      description: SAP instance properties.
+      type: object
+      properties:
+        numbers:
+          description: Optional. SAP Instance numbers. They are from '00' to '99'.
+          type: array
+          items:
+            type: string
+        agentStates:
+          description: Optional. Sap Instance Agent status.
+          $ref: '#/components/schemas/AgentStates'
+    AgentStates:
+      id: AgentStates
+      description: Agent status.
+      type: object
+      properties:
+        installedVersion:
+          description: Optional. The installed version of the agent on the host.
+          type: string
+        availableVersion:
+          description: Optional. The available version of the agent in artifact registry.
+          type: string
+        isFullyEnabled:
+          description: >-
+            Optional. Whether the agent is fully enabled. If false, the agent is
+            has some issues.
+          type: boolean
+        processMetrics:
+          description: Optional. The Process metrics of the agent.
+          $ref: '#/components/schemas/ServiceStates'
+        systemDiscovery:
+          description: Optional. The System discovery metrics of the agent.
+          $ref: '#/components/schemas/ServiceStates'
+        hanaMonitoring:
+          description: Optional. HANA monitoring metrics of the agent.
+          $ref: '#/components/schemas/ServiceStates'
+    ServiceStates:
+      id: ServiceStates
+      description: The state of the service.
+      type: object
+      properties:
+        state:
+          description: Output only. The overall state of the service.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - The state is unspecified.
+            - The state means the service has config errors.
+            - The state means the service has IAM permission errors.
+            - The state means the service has functionality errors.
+            - The state means the service has no error.
+            - The state means the service disabled.
+          enum:
+            - STATE_UNSPECIFIED
+            - CONFIG_FAILURE
+            - IAM_FAILURE
+            - FUNCTIONALITY_FAILURE
+            - ENABLED
+            - DISABLED
+        iamPermissions:
+          description: Optional. Output only. The IAM permissions for the service.
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/IAMPermission'
+    IAMPermission:
+      id: IAMPermission
+      description: The IAM permission status.
+      type: object
+      properties:
+        name:
+          description: Output only. The name of the permission.
+          readOnly: true
+          type: string
+        granted:
+          description: Output only. Whether the permission is granted.
+          readOnly: true
+          type: boolean
+    DatabaseProperties:
+      id: DatabaseProperties
+      description: Database Properties.
+      type: object
+      properties:
+        backupProperties:
+          description: Output only. Backup properties.
+          readOnly: true
+          $ref: '#/components/schemas/BackupProperties'
+        databaseType:
+          description: Output only. Type of the database. HANA, DB2, etc.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - unspecified
+            - SAP HANA
+            - SAP MAX_DB
+            - IBM DB2
+            - Oracle Database
+            - Microsoft SQL Server
+            - SAP Sybase ASE
+          enum:
+            - DATABASE_TYPE_UNSPECIFIED
+            - HANA
+            - MAX_DB
+            - DB2
+            - ORACLE
+            - SQLSERVER
+            - ASE
+    BackupProperties:
+      id: BackupProperties
+      description: Backup properties.
+      type: object
+      properties:
+        latestBackupTime:
+          description: The time when the latest backup was performed.
+          type: string
+          format: google-datetime
+        latestBackupStatus:
+          description: Output only. The state of the latest backup.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - unspecified
+            - SUCCESS state
+            - FAILURE state
+          enum:
+            - BACKUP_STATE_UNSPECIFIED
+            - BACKUP_STATE_SUCCESS
+            - BACKUP_STATE_FAILURE
+    Product:
+      id: Product
+      description: Product contains the details of a product.
+      type: object
+      properties:
+        name:
+          description: Optional. Name of the product.
+          type: string
+        version:
+          description: Optional. Version of the product.
+          type: string
     OperationMetadata:
       id: OperationMetadata
       description: Represents the metadata of the long-running operation.
@@ -1694,8 +2535,36 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        delete:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1insights~1{insightsId}/delete
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
       sqlVerbs:
         select: []
+        insert: []
+        update: []
+        replace: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/insights/methods/delete'
+    discoveredprofiles:
+      id: google.workloadmanager.discoveredprofiles
+      name: discoveredprofiles
+      title: Discoveredprofiles
+      methods:
+        list:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1discoveredprofiles/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.workloadProfiles
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/discoveredprofiles/methods/list'
         insert: []
         update: []
         replace: []
@@ -1746,6 +2615,10 @@ paths:
             format: int32
         - in: query
           name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: extraLocationTypes
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}:
@@ -1902,7 +2775,7 @@ paths:
         the operation completed despite cancellation. On successful
         cancellation, the operation is not deleted; instead, it becomes an
         operation with an Operation.error value with a google.rpc.Status.code of
-        1, corresponding to `Code.CANCELLED`.
+        `1`, corresponding to `Code.CANCELLED`.
       operationId: workloadmanager.projects.locations.operations.cancel
       requestBody:
         content:
@@ -2415,6 +3288,10 @@ paths:
           name: customRulesBucket
           schema:
             type: string
+        - in: query
+          name: evaluationType
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}/insights:writeInsight:
     parameters: *ref_1
     post:
@@ -2446,5 +3323,83 @@ paths:
         - in: path
           name: locationsId
           required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/insights/{insightsId}:
+    parameters: *ref_1
+    delete:
+      description: Delete the data insights from workload manager data warehouse.
+      operationId: workloadmanager.projects.locations.insights.delete
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Empty'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: insightsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: requestId
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/discoveredprofiles:
+    parameters: *ref_1
+    get:
+      description: List discovered workload profiles
+      operationId: workloadmanager.projects.locations.discoveredprofiles.list
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListDiscoveredProfilesResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: filter
           schema:
             type: string

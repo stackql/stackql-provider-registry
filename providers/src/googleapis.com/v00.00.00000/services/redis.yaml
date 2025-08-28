@@ -7,8 +7,8 @@ info:
   title: Google Cloud Memorystore for Redis API
   description: Creates and manages Redis instances on the Google Cloud Platform.
   version: v1
-  x-discovery-doc-revision: '20241024'
-  x-generated-date: '2024-11-06'
+  x-discovery-doc-revision: '20250819'
+  x-generated-date: '2025-08-28'
 externalDocs:
   url: https://cloud.google.com/memorystore/docs/redis/
 servers:
@@ -229,6 +229,15 @@ components:
       description: A cluster instance.
       type: object
       properties:
+        gcsSource:
+          description: >-
+            Optional. Backups stored in Cloud Storage buckets. The Cloud Storage
+            buckets need to be the same region as the clusters. Read permission
+            is required to import from the provided Cloud Storage objects.
+          $ref: '#/components/schemas/GcsBackupSource'
+        managedBackupSource:
+          description: Optional. Backups generated and managed by memorystore service.
+          $ref: '#/components/schemas/ManagedBackupSource'
         name:
           description: >-
             Required. Identifier. Unique name of the resource in this scope
@@ -395,6 +404,14 @@ components:
             maintenance schedule.
           readOnly: true
           $ref: '#/components/schemas/ClusterMaintenanceSchedule'
+        satisfiesPzs:
+          description: Optional. Output only. Reserved for future use.
+          readOnly: true
+          type: boolean
+        satisfiesPzi:
+          description: Optional. Output only. Reserved for future use.
+          readOnly: true
+          type: boolean
         pscServiceAttachments:
           description: Output only. Service attachment details to configure Psc connections
           readOnly: true
@@ -402,10 +419,84 @@ components:
           items:
             $ref: '#/components/schemas/PscServiceAttachment'
         clusterEndpoints:
-          description: Optional. A list of cluster enpoints.
+          description: Optional. A list of cluster endpoints.
           type: array
           items:
             $ref: '#/components/schemas/ClusterEndpoint'
+        simulateMaintenanceEvent:
+          description: Optional. Input only. Simulate a maintenance event.
+          type: boolean
+        backupCollection:
+          description: >-
+            Optional. Output only. The backup collection full resource name.
+            Example:
+            projects/{project}/locations/{location}/backupCollections/{collection}
+          readOnly: true
+          type: string
+        kmsKey:
+          description: >-
+            Optional. The KMS key used to encrypt the at-rest data of the
+            cluster.
+          type: string
+        ondemandMaintenance:
+          description: >-
+            Optional. Input only. Ondemand maintenance for the cluster. This
+            field can be used to trigger ondemand critical update on the
+            cluster.
+          deprecated: true
+          type: boolean
+        automatedBackupConfig:
+          description: Optional. The automated backup config for the cluster.
+          $ref: '#/components/schemas/AutomatedBackupConfig'
+        encryptionInfo:
+          description: >-
+            Output only. Encryption information of the data at rest of the
+            cluster.
+          readOnly: true
+          $ref: '#/components/schemas/EncryptionInfo'
+        asyncClusterEndpointsDeletionEnabled:
+          description: >-
+            Optional. If true, cluster endpoints that are created and registered
+            by customers can be deleted asynchronously. That is, such a cluster
+            endpoint can be de-registered before the forwarding rules in the
+            cluster endpoint are deleted.
+          type: boolean
+        allowFewerZonesDeployment:
+          description: >-
+            Optional. Immutable. Allows customers to specify if they are okay
+            with deploying a multi-zone cluster in less than 3 zones. Once set,
+            if there is a zonal outage during the cluster creation, the cluster
+            will only be deployed in 2 zones, and stay within the 2 zones for
+            its lifecycle.
+          type: boolean
+    GcsBackupSource:
+      id: GcsBackupSource
+      description: >-
+        Backups stored in Cloud Storage buckets. The Cloud Storage buckets need
+        to be the same region as the clusters.
+      type: object
+      properties:
+        uris:
+          description: >-
+            Optional. URIs of the Cloud Storage objects to import. Example:
+            gs://bucket1/object1, gs://bucket2/folder2/object2
+          type: array
+          items:
+            type: string
+    ManagedBackupSource:
+      id: ManagedBackupSource
+      description: Backups that generated and managed by memorystore.
+      type: object
+      properties:
+        backup:
+          description: >-
+            Optional. Example:
+            //redis.googleapis.com/projects/{project}/locations/{location}/backupCollections/{collection}/backups/{backup}
+            A shorter version (without the prefix) of the backup name is also
+            supported, like
+            projects/{project}/locations/{location}/backupCollections/{collection}/backups/{backup_id}
+            In this case, it assumes the backup is under redis.googleapis.com.
+          type: string
     PscConfig:
       id: PscConfig
       type: object
@@ -444,6 +535,13 @@ components:
       description: Details of consumer resources in a PSC connection.
       type: object
       properties:
+        port:
+          description: >-
+            Output only. port will only be set for Primary/Reader or Discovery
+            endpoint.
+          readOnly: true
+          type: integer
+          format: int32
         pscConnectionId:
           description: >-
             Required. The PSC connection id of the forwarding rule connected to
@@ -534,6 +632,21 @@ components:
           description: Target number of replica nodes per shard.
           type: integer
           format: int32
+        targetNodeType:
+          description: Target node type for redis cluster.
+          type: string
+          enumDescriptions:
+            - Node type unspecified
+            - Redis shared core nano node_type.
+            - Redis highmem medium node_type.
+            - Redis highmem xlarge node_type.
+            - Redis standard small node_type.
+          enum:
+            - NODE_TYPE_UNSPECIFIED
+            - REDIS_SHARED_CORE_NANO
+            - REDIS_HIGHMEM_MEDIUM
+            - REDIS_HIGHMEM_XLARGE
+            - REDIS_STANDARD_SMALL
     ClusterPersistenceConfig:
       id: ClusterPersistenceConfig
       description: Configuration of the persistence functionality.
@@ -648,7 +761,8 @@ components:
       type: object
       properties:
         clusterRole:
-          description: The role of the cluster in cross cluster replication.
+          description: Output only. The role of the cluster in cross cluster replication.
+          readOnly: true
           type: string
           enumDescriptions:
             - Cluster role is not set. The behavior is equivalent to NONE.
@@ -712,8 +826,9 @@ components:
       properties:
         cluster:
           description: >-
-            The full resource path of the remote cluster in the format:
-            projects//locations//clusters/
+            Output only. The full resource path of the remote cluster in the
+            format: projects//locations//clusters/
+          readOnly: true
           type: string
         uid:
           description: Output only. The unique identifier of the remote cluster.
@@ -773,7 +888,9 @@ components:
       type: object
       properties:
         day:
-          description: Allows to define schedule that runs specified day of the week.
+          description: >-
+            Optional. Allows to define schedule that runs specified day of the
+            week.
           type: string
           enumDescriptions:
             - The day of the week is unspecified.
@@ -794,7 +911,7 @@ components:
             - SATURDAY
             - SUNDAY
         startTime:
-          description: Start time of the window in UTC.
+          description: Optional. Start time of the window in UTC.
           $ref: '#/components/schemas/TimeOfDay'
     TimeOfDay:
       id: TimeOfDay
@@ -833,7 +950,7 @@ components:
           format: int32
     ClusterMaintenanceSchedule:
       id: ClusterMaintenanceSchedule
-      description: Upcoming maitenance schedule.
+      description: Upcoming maintenance schedule.
       type: object
       properties:
         startTime:
@@ -895,8 +1012,8 @@ components:
       properties:
         connections:
           description: >-
-            A group of PSC connections. They are created in the same VPC
-            network, one for each service attachment in the cluster.
+            Required. A group of PSC connections. They are created in the same
+            VPC network, one for each service attachment in the cluster.
           type: array
           items:
             $ref: '#/components/schemas/ConnectionDetail'
@@ -905,11 +1022,200 @@ components:
       description: Detailed information of each PSC connection.
       type: object
       properties:
+        pscAutoConnection:
+          description: >-
+            Detailed information of a PSC connection that is created through
+            service connectivity automation.
+          $ref: '#/components/schemas/PscAutoConnection'
         pscConnection:
           description: >-
             Detailed information of a PSC connection that is created by the
             customer who owns the cluster.
           $ref: '#/components/schemas/PscConnection'
+    PscAutoConnection:
+      id: PscAutoConnection
+      description: >-
+        Details of consumer resources in a PSC connection that is created
+        through Service Connectivity Automation.
+      type: object
+      properties:
+        pscConnectionId:
+          description: >-
+            Output only. The PSC connection id of the forwarding rule connected
+            to the service attachment.
+          readOnly: true
+          type: string
+        address:
+          description: >-
+            Output only. The IP allocated on the consumer network for the PSC
+            forwarding rule.
+          readOnly: true
+          type: string
+        forwardingRule:
+          description: >-
+            Output only. The URI of the consumer side forwarding rule. Example:
+            projects/{projectNumOrId}/regions/us-east1/forwardingRules/{resourceId}.
+          readOnly: true
+          type: string
+        projectId:
+          description: >-
+            Required. The consumer project_id where the forwarding rule is
+            created from.
+          type: string
+        network:
+          description: >-
+            Required. The consumer network where the IP address resides, in the
+            form of projects/{project_id}/global/networks/{network_id}.
+          type: string
+        serviceAttachment:
+          description: >-
+            Output only. The service attachment which is the target of the PSC
+            connection, in the form of
+            projects/{project-id}/regions/{region}/serviceAttachments/{service-attachment-id}.
+          readOnly: true
+          type: string
+        pscConnectionStatus:
+          description: >-
+            Output only. The status of the PSC connection. Please note that this
+            value is updated periodically. Please use Private Service Connect
+            APIs for the latest status.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - PSC connection status is not specified.
+            - The connection is active
+            - Connection not found
+          enum:
+            - PSC_CONNECTION_STATUS_UNSPECIFIED
+            - PSC_CONNECTION_STATUS_ACTIVE
+            - PSC_CONNECTION_STATUS_NOT_FOUND
+        connectionType:
+          description: Output only. Type of the PSC connection.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - Cluster endpoint Type is not set
+            - >-
+              Cluster endpoint that will be used as for cluster topology
+              discovery.
+            - >-
+              Cluster endpoint that will be used as primary endpoint to access
+              primary.
+            - >-
+              Cluster endpoint that will be used as reader endpoint to access
+              replicas.
+          enum:
+            - CONNECTION_TYPE_UNSPECIFIED
+            - CONNECTION_TYPE_DISCOVERY
+            - CONNECTION_TYPE_PRIMARY
+            - CONNECTION_TYPE_READER
+    AutomatedBackupConfig:
+      id: AutomatedBackupConfig
+      description: The automated backup config for a cluster.
+      type: object
+      properties:
+        fixedFrequencySchedule:
+          description: Optional. Trigger automated backups at a fixed frequency.
+          $ref: '#/components/schemas/FixedFrequencySchedule'
+        automatedBackupMode:
+          description: >-
+            Optional. The automated backup mode. If the mode is disabled, the
+            other fields will be ignored.
+          type: string
+          enumDescriptions:
+            - Default value. Automated backup config is not specified.
+            - Automated backup config disabled.
+            - Automated backup config enabled.
+          enum:
+            - AUTOMATED_BACKUP_MODE_UNSPECIFIED
+            - DISABLED
+            - ENABLED
+        retention:
+          description: >-
+            Optional. How long to keep automated backups before the backups are
+            deleted. The value should be between 1 day and 365 days. If not
+            specified, the default value is 35 days.
+          type: string
+          format: google-duration
+    FixedFrequencySchedule:
+      id: FixedFrequencySchedule
+      description: >-
+        This schedule allows the backup to be triggered at a fixed frequency
+        (currently only daily is supported).
+      type: object
+      properties:
+        startTime:
+          description: >-
+            Required. The start time of every automated backup in UTC. It must
+            be set to the start of an hour. This field is required.
+          $ref: '#/components/schemas/TimeOfDay'
+    EncryptionInfo:
+      id: EncryptionInfo
+      description: >-
+        EncryptionInfo describes the encryption information of a cluster or a
+        backup.
+      type: object
+      properties:
+        encryptionType:
+          description: Output only. Type of encryption.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - >-
+              Encryption type not specified. Defaults to
+              GOOGLE_DEFAULT_ENCRYPTION.
+            - >-
+              The data is encrypted at rest with a key that is fully managed by
+              Google. No key version will be populated. This is the default
+              state.
+            - >-
+              The data is encrypted at rest with a key that is managed by the
+              customer. KMS key versions will be populated.
+          enum:
+            - TYPE_UNSPECIFIED
+            - GOOGLE_DEFAULT_ENCRYPTION
+            - CUSTOMER_MANAGED_ENCRYPTION
+        kmsKeyVersions:
+          description: >-
+            Output only. KMS key versions that are being used to protect the
+            data at-rest.
+          readOnly: true
+          type: array
+          items:
+            type: string
+        kmsKeyPrimaryState:
+          description: >-
+            Output only. The state of the primary version of the KMS key
+            perceived by the system. This field is not populated in backups.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - The default value. This value is unused.
+            - The KMS key is enabled and correctly configured.
+            - Permission denied on the KMS key.
+            - The KMS key is disabled.
+            - The KMS key is destroyed.
+            - The KMS key is scheduled to be destroyed.
+            - The EKM key is unreachable.
+            - Billing is disabled for the project.
+            - All other unknown failures.
+          enum:
+            - KMS_KEY_STATE_UNSPECIFIED
+            - ENABLED
+            - PERMISSION_DENIED
+            - DISABLED
+            - DESTROYED
+            - DESTROY_SCHEDULED
+            - EKM_KEY_UNREACHABLE_DETECTED
+            - BILLING_DISABLED
+            - UNKNOWN_FAILURE
+        lastUpdateTime:
+          description: >-
+            Output only. The most recent time when the encryption info was
+            updated.
+          readOnly: true
+          type: string
+          format: google-datetime
     CertificateAuthority:
       id: CertificateAuthority
       description: Redis cluster certificate authority
@@ -970,6 +1276,260 @@ components:
             `2012-11-15T16:19:00.094Z`.
           type: string
           format: google-datetime
+    ListBackupCollectionsResponse:
+      id: ListBackupCollectionsResponse
+      description: Response for [ListBackupCollections].
+      type: object
+      properties:
+        backupCollections:
+          description: >-
+            A list of backupCollections in the project. If the `location_id` in
+            the parent field of the request is "-", all regions available to the
+            project are queried, and the results aggregated. If in such an
+            aggregated query a location is unavailable, a placeholder
+            backupCollection entry is included in the response with the `name`
+            field set to a value of the form
+            `projects/{project_id}/locations/{location_id}/backupCollections/`-
+            and the `status` field set to ERROR and `status_message` field set
+            to "location not available for ListBackupCollections".
+          type: array
+          items:
+            $ref: '#/components/schemas/BackupCollection'
+        nextPageToken:
+          description: >-
+            Token to retrieve the next page of results, or empty if there are no
+            more results in the list.
+          type: string
+        unreachable:
+          description: Locations that could not be reached.
+          type: array
+          items:
+            type: string
+    BackupCollection:
+      id: BackupCollection
+      description: BackupCollection of a cluster.
+      type: object
+      properties:
+        name:
+          description: Identifier. Full resource path of the backup collection.
+          type: string
+        clusterUid:
+          description: Output only. The cluster uid of the backup collection.
+          readOnly: true
+          type: string
+        cluster:
+          description: >-
+            Output only. The full resource path of the cluster the backup
+            collection belongs to. Example:
+            projects/{project}/locations/{location}/clusters/{cluster}
+          readOnly: true
+          type: string
+        kmsKey:
+          description: >-
+            Output only. The KMS key used to encrypt the backups under this
+            backup collection.
+          readOnly: true
+          type: string
+        uid:
+          description: >-
+            Output only. System assigned unique identifier of the backup
+            collection.
+          readOnly: true
+          type: string
+        createTime:
+          description: Output only. The time when the backup collection was created.
+          readOnly: true
+          type: string
+          format: google-datetime
+        totalBackupSizeBytes:
+          description: Output only. Total size of all backups in the backup collection.
+          readOnly: true
+          type: string
+          format: int64
+        totalBackupCount:
+          description: Output only. Total number of backups in the backup collection.
+          readOnly: true
+          type: string
+          format: int64
+        lastBackupTime:
+          description: >-
+            Output only. The last time a backup was created in the backup
+            collection.
+          readOnly: true
+          type: string
+          format: google-datetime
+    ListBackupsResponse:
+      id: ListBackupsResponse
+      description: Response for [ListBackups].
+      type: object
+      properties:
+        backups:
+          description: A list of backups in the project.
+          type: array
+          items:
+            $ref: '#/components/schemas/Backup'
+        nextPageToken:
+          description: >-
+            Token to retrieve the next page of results, or empty if there are no
+            more results in the list.
+          type: string
+        unreachable:
+          description: Backups that could not be reached.
+          type: array
+          items:
+            type: string
+    Backup:
+      id: Backup
+      description: Backup of a cluster.
+      type: object
+      properties:
+        name:
+          description: >-
+            Identifier. Full resource path of the backup. the last part of the
+            name is the backup id with the following format:
+            [YYYYMMDDHHMMSS]_[Shorted Cluster UID] OR customer specified while
+            backup cluster. Example: 20240515123000_1234
+          type: string
+        createTime:
+          description: Output only. The time when the backup was created.
+          readOnly: true
+          type: string
+          format: google-datetime
+        cluster:
+          description: Output only. Cluster resource path of this backup.
+          readOnly: true
+          type: string
+        clusterUid:
+          description: Output only. Cluster uid of this backup.
+          readOnly: true
+          type: string
+        totalSizeBytes:
+          description: Output only. Total size of the backup in bytes.
+          readOnly: true
+          type: string
+          format: int64
+        expireTime:
+          description: Output only. The time when the backup will expire.
+          readOnly: true
+          type: string
+          format: google-datetime
+        engineVersion:
+          description: Output only. redis-7.2, valkey-7.5
+          readOnly: true
+          type: string
+        backupFiles:
+          description: Output only. List of backup files of the backup.
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/BackupFile'
+        nodeType:
+          description: Output only. Node type of the cluster.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - Node type unspecified
+            - Redis shared core nano node_type.
+            - Redis highmem medium node_type.
+            - Redis highmem xlarge node_type.
+            - Redis standard small node_type.
+          enum:
+            - NODE_TYPE_UNSPECIFIED
+            - REDIS_SHARED_CORE_NANO
+            - REDIS_HIGHMEM_MEDIUM
+            - REDIS_HIGHMEM_XLARGE
+            - REDIS_STANDARD_SMALL
+        replicaCount:
+          description: Output only. Number of replicas for the cluster.
+          readOnly: true
+          type: integer
+          format: int32
+        shardCount:
+          description: Output only. Number of shards for the cluster.
+          readOnly: true
+          type: integer
+          format: int32
+        backupType:
+          description: Output only. Type of the backup.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - The default value, not set.
+            - On-demand backup.
+            - Automated backup.
+          enum:
+            - BACKUP_TYPE_UNSPECIFIED
+            - ON_DEMAND
+            - AUTOMATED
+        state:
+          description: Output only. State of the backup.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - The default value, not set.
+            - The backup is being created.
+            - The backup is active to be used.
+            - The backup is being deleted.
+            - >-
+              The backup is currently suspended due to reasons like project
+              deletion, billing account closure, etc.
+          enum:
+            - STATE_UNSPECIFIED
+            - CREATING
+            - ACTIVE
+            - DELETING
+            - SUSPENDED
+        encryptionInfo:
+          description: Output only. Encryption information of the backup.
+          readOnly: true
+          $ref: '#/components/schemas/EncryptionInfo'
+        uid:
+          description: Output only. System assigned unique identifier of the backup.
+          readOnly: true
+          type: string
+    BackupFile:
+      id: BackupFile
+      description: Backup is consisted of multiple backup files.
+      type: object
+      properties:
+        fileName:
+          description: 'Output only. e.g: .rdb'
+          readOnly: true
+          type: string
+        sizeBytes:
+          description: Output only. Size of the backup file in bytes.
+          readOnly: true
+          type: string
+          format: int64
+        createTime:
+          description: Output only. The time when the backup file was created.
+          readOnly: true
+          type: string
+          format: google-datetime
+    ExportBackupRequest:
+      id: ExportBackupRequest
+      description: Request for [ExportBackup].
+      type: object
+      properties:
+        gcsBucket:
+          description: Google Cloud Storage bucket, like "my-bucket".
+          type: string
+    BackupClusterRequest:
+      id: BackupClusterRequest
+      description: Request for [BackupCluster].
+      type: object
+      properties:
+        ttl:
+          description: >-
+            Optional. TTL for the backup to expire. Value range is 1 day to 100
+            years. If not specified, the default value is 100 years.
+          type: string
+          format: google-duration
+        backupId:
+          description: >-
+            Optional. The id of the backup to be created. If not specified, the
+            default value ([YYYYMMDDHHMMSS]_[Shortened Cluster UID] is used.
+          type: string
     ListInstancesResponse:
       id: ListInstancesResponse
       description: Response for ListInstances.
@@ -1041,12 +1601,12 @@ components:
           type: string
         redisVersion:
           description: >-
-            Optional. The version of Redis software. If not provided, latest
-            supported version will be used. Currently, the supported values are:
-            * `REDIS_3_2` for Redis 3.2 compatibility * `REDIS_4_0` for Redis
-            4.0 compatibility (default) * `REDIS_5_0` for Redis 5.0
-            compatibility * `REDIS_6_X` for Redis 6.x compatibility *
-            `REDIS_7_0` for Redis 7.0 compatibility
+            Optional. The version of Redis software. If not provided, the
+            default version will be used. Currently, the supported values are: *
+            `REDIS_3_2` for Redis 3.2 compatibility * `REDIS_4_0` for Redis 4.0
+            compatibility * `REDIS_5_0` for Redis 5.0 compatibility *
+            `REDIS_6_X` for Redis 6.x compatibility * `REDIS_7_0` for Redis 7.0
+            compatibility (default) * `REDIS_7_2` for Redis 7.2 compatibility
           type: string
         reservedIpRange:
           description: >-
@@ -1311,6 +1871,14 @@ components:
           description: Optional. Output only. Reserved for future use.
           readOnly: true
           type: boolean
+        tags:
+          description: >-
+            Optional. Input only. Immutable. Tag keys/values directly bound to
+            this resource. For example: "123/environment": "production",
+            "123/costCenter": "marketing"
+          type: object
+          additionalProperties:
+            type: string
     TlsCertificate:
       id: TlsCertificate
       description: TlsCertificate Resource
@@ -1668,7 +2236,8 @@ components:
       id: DatabaseResourceFeed
       description: >-
         DatabaseResourceFeed is the top level proto to be used to ingest
-        different database resource level events into Condor platform.
+        different database resource level events into Condor platform. Next ID:
+        11
       type: object
       properties:
         resourceId:
@@ -1690,12 +2259,16 @@ components:
             - Database resource monitoring data
             - Database resource security health signal data
             - Database resource recommendation signal data
+            - Database config based signal data
+            - Database resource metadata from BackupDR
           enum:
             - FEEDTYPE_UNSPECIFIED
             - RESOURCE_METADATA
             - OBSERVABILITY_DATA
             - SECURITY_FINDING_DATA
             - RECOMMENDATION_SIGNAL_DATA
+            - CONFIG_BASED_SIGNAL_DATA
+            - BACKUPDR_METADATA
         resourceMetadata:
           $ref: '#/components/schemas/DatabaseResourceMetadata'
         resourceHealthSignalData:
@@ -1704,6 +2277,22 @@ components:
           $ref: '#/components/schemas/DatabaseResourceRecommendationSignalData'
         observabilityMetricData:
           $ref: '#/components/schemas/ObservabilityMetricData'
+        configBasedSignalData:
+          description: >-
+            Config based signal data is used to ingest signals that are
+            generated based on the configuration of the database resource.
+          $ref: '#/components/schemas/ConfigBasedSignalData'
+        backupdrMetadata:
+          description: BackupDR metadata is used to ingest metadata from BackupDR.
+          $ref: '#/components/schemas/BackupDRMetadata'
+        skipIngestion:
+          description: >-
+            Optional. If true, the feed won't be ingested by DB Center. This
+            indicates that the feed is intentionally skipped. For example,
+            BackupDR feeds are only needed for resources integrated with DB
+            Center (e.g., CloudSQL, AlloyDB). Feeds for non-integrated resources
+            (e.g., Compute Engine, Persistent Disk) can be skipped.
+          type: boolean
     DatabaseResourceId:
       id: DatabaseResourceId
       description: >-
@@ -1748,17 +2337,22 @@ components:
         resourceType:
           description: >-
             Required. The type of resource this ID is identifying. Ex
-            redis.googleapis.com/Instance, redis.googleapis.com/Cluster,
-            alloydb.googleapis.com/Cluster, alloydb.googleapis.com/Instance,
-            spanner.googleapis.com/Instance, spanner.googleapis.com/Database,
-            firestore.googleapis.com/Database, sqladmin.googleapis.com/Instance,
+            go/keep-sorted start alloydb.googleapis.com/Cluster,
+            alloydb.googleapis.com/Instance,
             bigtableadmin.googleapis.com/Cluster,
-            bigtableadmin.googleapis.com/Instance REQUIRED Please refer
-            go/condor-common-datamodel
+            bigtableadmin.googleapis.com/Instance
+            compute.googleapis.com/Instance firestore.googleapis.com/Database,
+            redis.googleapis.com/Instance, redis.googleapis.com/Cluster,
+            oracledatabase.googleapis.com/CloudExadataInfrastructure
+            oracledatabase.googleapis.com/CloudVmCluster
+            oracledatabase.googleapis.com/AutonomousDatabase
+            spanner.googleapis.com/Instance, spanner.googleapis.com/Database,
+            sqladmin.googleapis.com/Instance, go/keep-sorted end REQUIRED Please
+            refer go/condor-common-datamodel
           type: string
     DatabaseResourceMetadata:
       id: DatabaseResourceMetadata
-      description: 'Common model for database resource instance metadata. Next ID: 23'
+      description: 'Common model for database resource instance metadata. Next ID: 26'
       type: object
       properties:
         id:
@@ -1848,7 +2442,7 @@ components:
           description: The type of the instance. Specified at creation time.
           type: string
           enumDescriptions:
-            - ''
+            - Unspecified.
             - For rest of the other categories.
             - A regular primary database instance.
             - A cluster or an instance acting as a secondary.
@@ -1857,6 +2451,7 @@ components:
             - A regular primary database instance.
             - A cluster or an instance acting as a secondary.
             - An instance acting as a read-replica.
+            - An instance acting as an external primary.
             - For rest of the other categories.
           enumDeprecated:
             - true
@@ -1865,6 +2460,7 @@ components:
             - true
             - true
             - true
+            - false
             - false
             - false
             - false
@@ -1879,6 +2475,7 @@ components:
             - SUB_RESOURCE_TYPE_PRIMARY
             - SUB_RESOURCE_TYPE_SECONDARY
             - SUB_RESOURCE_TYPE_READ_REPLICA
+            - SUB_RESOURCE_TYPE_EXTERNAL_PRIMARY
             - SUB_RESOURCE_TYPE_OTHER
         product:
           description: The product this resource represents.
@@ -1923,6 +2520,32 @@ components:
             - EDITION_UNSPECIFIED
             - EDITION_ENTERPRISE
             - EDITION_ENTERPRISE_PLUS
+        suspensionReason:
+          description: Optional. Suspension reason for the resource.
+          type: string
+          enumDescriptions:
+            - Suspension reason is unspecified.
+            - Wipeout hide event.
+            - Wipeout purge event.
+            - Billing disabled for project
+            - Abuse detected for resource
+            - Encryption key inaccessible.
+            - Replicated cluster encryption key inaccessible.
+          enum:
+            - SUSPENSION_REASON_UNSPECIFIED
+            - WIPEOUT_HIDE_EVENT
+            - WIPEOUT_PURGE_EVENT
+            - BILLING_DISABLED
+            - ABUSER_DETECTED
+            - ENCRYPTION_KEY_INACCESSIBLE
+            - REPLICATED_CLUSTER_ENCRYPTION_KEY_INACCESSIBLE
+        gcbdrConfiguration:
+          description: GCBDR configuration for the resource.
+          deprecated: true
+          $ref: '#/components/schemas/GCBDRConfiguration'
+        backupdrConfiguration:
+          description: Optional. BackupDR Configuration for the resource.
+          $ref: '#/components/schemas/BackupDRConfiguration'
     Product:
       id: Product
       description: Product specification for Condor resources.
@@ -1944,10 +2567,12 @@ components:
             - On premises database product.
             - Memorystore product area in GCP
             - Bigtable product area in GCP
+            - Firestore product area in GCP.
+            - Compute Engine self managed databases
+            - Oracle product area in GCP
             - >-
               Other refers to rest of other product type. This is to be when
               product type is known, but it is not present in this enum.
-            - Firestore product area in GCP.
           enumDeprecated:
             - false
             - false
@@ -1957,6 +2582,8 @@ components:
             - false
             - false
             - true
+            - false
+            - false
             - false
             - false
             - false
@@ -1972,8 +2599,10 @@ components:
             - ON_PREM
             - PRODUCT_TYPE_MEMORYSTORE
             - PRODUCT_TYPE_BIGTABLE
-            - PRODUCT_TYPE_OTHER
             - PRODUCT_TYPE_FIRESTORE
+            - PRODUCT_TYPE_COMPUTE_ENGINE
+            - PRODUCT_TYPE_ORACLE_ON_GCP
+            - PRODUCT_TYPE_OTHER
         engine:
           description: The specific engine that the underlying database is running.
           type: string
@@ -1996,6 +2625,9 @@ components:
               engine is known, but it is not present in this enum.
             - Firestore with native mode.
             - Firestore with datastore mode.
+            - Firestore with MongoDB compatibility mode.
+            - Oracle Exadata engine.
+            - Oracle Autonomous DB Serverless engine.
           enumDeprecated:
             - false
             - false
@@ -2006,6 +2638,9 @@ components:
             - true
             - false
             - true
+            - false
+            - false
+            - false
             - false
             - false
             - false
@@ -2030,11 +2665,20 @@ components:
             - ENGINE_OTHER
             - ENGINE_FIRESTORE_WITH_NATIVE_MODE
             - ENGINE_FIRESTORE_WITH_DATASTORE_MODE
+            - ENGINE_FIRESTORE_WITH_MONGODB_COMPATIBILITY_MODE
+            - ENGINE_EXADATA_ORACLE
+            - ENGINE_ADB_SERVERLESS_ORACLE
         version:
           description: >-
             Version of the underlying database engine. Example values: For
             MySQL, it could be "8.0", "5.7" etc.. For Postgres, it could be
             "14", "15" etc..
+          type: string
+        minorVersion:
+          description: >-
+            Minor version of the underlying database engine. Example values: For
+            MySQL, it could be "8.0.32", "5.7.32" etc.. For Postgres, it could
+            be "14.3", "15.3" etc..
           type: string
     AvailabilityConfiguration:
       id: AvailabilityConfiguration
@@ -2121,6 +2765,7 @@ components:
             - DURATION
             - RETENTION_UNIT_OTHER
         timeBasedRetention:
+          deprecated: true
           type: string
           format: google-duration
         quantityBasedRetention:
@@ -2238,6 +2883,9 @@ components:
         backupRun:
           description: Information about the last backup attempt for this database
           $ref: '#/components/schemas/BackupRun'
+        isDeletionProtectionEnabled:
+          description: Whether deletion protection is enabled for this internal resource.
+          type: boolean
     Entitlement:
       id: Entitlement
       description: >-
@@ -2249,11 +2897,24 @@ components:
           description: An enum that represents the type of this entitlement.
           type: string
           enumDescriptions:
-            - ''
-            - The root entitlement representing Gemini package ownership.
+            - The entitlement type is unspecified.
+            - >-
+              The root entitlement representing Gemini package ownership.This
+              will no longer be supported in the future.
+            - >-
+              The entitlement representing Native Tier, This will be the default
+              Entitlement going forward with GCA Enablement.
+            - The entitlement representing GCA-Standard Tier.
+          enumDeprecated:
+            - false
+            - true
+            - false
+            - false
           enum:
             - ENTITLEMENT_TYPE_UNSPECIFIED
             - GEMINI
+            - NATIVE
+            - GCA_STANDARD
         entitlementState:
           description: The current state of user's accessibility to a feature/benefit.
           type: string
@@ -2291,20 +2952,27 @@ components:
       properties:
         cpuCount:
           description: >-
-            The number of CPUs. TODO(b/342344482, b/342346271) add proto
-            validations again after bug fix.
+            The number of CPUs. Deprecated. Use vcpu_count instead.
+            TODO(b/342344482) add proto validations again after bug fix.
+          deprecated: true
           type: integer
           format: int32
         memorySizeInBytes:
           description: >-
-            Memory size in bytes. TODO(b/342344482, b/342346271) add proto
-            validations again after bug fix.
+            Memory size in bytes. TODO(b/342344482) add proto validations again
+            after bug fix.
           type: string
           format: int64
         shardCount:
           description: Optional. Number of shards (if applicable).
           type: integer
           format: int32
+        vcpuCount:
+          description: >-
+            Optional. The number of vCPUs. TODO(b/342344482) add proto
+            validations again after bug fix.
+          type: number
+          format: double
     Tags:
       id: Tags
       description: >-
@@ -2318,6 +2986,24 @@ components:
           type: object
           additionalProperties:
             type: string
+    GCBDRConfiguration:
+      id: GCBDRConfiguration
+      description: GCBDR Configuration for the resource.
+      type: object
+      properties:
+        gcbdrManaged:
+          description: Whether the resource is managed by GCBDR.
+          type: boolean
+    BackupDRConfiguration:
+      id: BackupDRConfiguration
+      description: >-
+        BackupDRConfiguration to capture the backup and disaster recovery
+        details of database resource.
+      type: object
+      properties:
+        backupdrManaged:
+          description: Indicates if the resource is managed by BackupDR.
+          type: boolean
     DatabaseResourceHealthSignalData:
       id: DatabaseResourceHealthSignalData
       description: Common model for database resource health signal data.
@@ -2644,12 +3330,70 @@ components:
               Detects if database instance data exported to a Cloud Storage
               bucket that is owned by the organization and is publicly
               accessible.
+            - >-
+              Detects if a database instance is using a weak password hash
+              algorithm.
+            - Detects if a database instance has no user password policy set.
+            - Detects if a database instance/cluster has a hot node.
+            - >-
+              Detects if a database instance has no point in time recovery
+              enabled.
+            - Detects if a database instance/cluster is suspended.
+            - >-
+              Detects that expensive commands are being run on a database
+              instance impacting overall performance.
+            - >-
+              Indicates that the instance does not have a maintenance policy
+              configured.
+            - Deletion Protection Disabled for the resource
+            - Indicates that the instance has inefficient queries detected.
+            - Indicates that the instance has read intensive workload.
+            - Indicates that the instance is nearing memory limit.
+            - >-
+              Indicates that the instance's max server memory is configured
+              higher than the recommended value.
+            - >-
+              Indicates that the database has large rows beyond the recommended
+              limit.
+            - Heavy write pressure on the database rows.
+            - Heavy read pressure on the database rows.
+            - Encryption org policy not satisfied.
+            - Location org policy not satisfied.
+            - Outdated DB minor version.
+            - Schema not optimized.
+            - High number of idle connections.
+            - Replication delay.
+            - Outdated version.
+            - Outdated client.
           enumDeprecated:
             - false
             - false
             - false
             - true
             - true
+            - true
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
             - false
             - false
             - false
@@ -2804,6 +3548,34 @@ components:
             - SIGNAL_TYPE_USER_GRANTED_ALL_PERMISSIONS
             - SIGNAL_TYPE_DATA_EXPORT_TO_EXTERNAL_CLOUD_STORAGE_BUCKET
             - SIGNAL_TYPE_DATA_EXPORT_TO_PUBLIC_CLOUD_STORAGE_BUCKET
+            - SIGNAL_TYPE_WEAK_PASSWORD_HASH_ALGORITHM
+            - SIGNAL_TYPE_NO_USER_PASSWORD_POLICY
+            - SIGNAL_TYPE_HOT_NODE
+            - SIGNAL_TYPE_NO_POINT_IN_TIME_RECOVERY
+            - SIGNAL_TYPE_RESOURCE_SUSPENDED
+            - SIGNAL_TYPE_EXPENSIVE_COMMANDS
+            - SIGNAL_TYPE_NO_MAINTENANCE_POLICY_CONFIGURED
+            - SIGNAL_TYPE_NO_DELETION_PROTECTION
+            - SIGNAL_TYPE_INEFFICIENT_QUERY
+            - SIGNAL_TYPE_READ_INTENSIVE_WORKLOAD
+            - SIGNAL_TYPE_MEMORY_LIMIT
+            - SIGNAL_TYPE_MAX_SERVER_MEMORY
+            - SIGNAL_TYPE_LARGE_ROWS
+            - SIGNAL_TYPE_HIGH_WRITE_PRESSURE
+            - SIGNAL_TYPE_HIGH_READ_PRESSURE
+            - SIGNAL_TYPE_ENCRYPTION_ORG_POLICY_NOT_SATISFIED
+            - SIGNAL_TYPE_LOCATION_ORG_POLICY_NOT_SATISFIED
+            - SIGNAL_TYPE_OUTDATED_MINOR_VERSION
+            - SIGNAL_TYPE_SCHEMA_NOT_OPTIMIZED
+            - SIGNAL_TYPE_MANY_IDLE_CONNECTIONS
+            - SIGNAL_TYPE_REPLICATION_LAG
+            - SIGNAL_TYPE_OUTDATED_VERSION
+            - SIGNAL_TYPE_OUTDATED_CLIENT
+        location:
+          description: >-
+            This is used to identify the location of the resource. Example:
+            "us-central1"
+          type: string
     Compliance:
       id: Compliance
       description: >-
@@ -3002,12 +3774,70 @@ components:
               Detects if database instance data exported to a Cloud Storage
               bucket that is owned by the organization and is publicly
               accessible.
+            - >-
+              Detects if a database instance is using a weak password hash
+              algorithm.
+            - Detects if a database instance has no user password policy set.
+            - Detects if a database instance/cluster has a hot node.
+            - >-
+              Detects if a database instance has no point in time recovery
+              enabled.
+            - Detects if a database instance/cluster is suspended.
+            - >-
+              Detects that expensive commands are being run on a database
+              instance impacting overall performance.
+            - >-
+              Indicates that the instance does not have a maintenance policy
+              configured.
+            - Deletion Protection Disabled for the resource
+            - Indicates that the instance has inefficient queries detected.
+            - Indicates that the instance has read intensive workload.
+            - Indicates that the instance is nearing memory limit.
+            - >-
+              Indicates that the instance's max server memory is configured
+              higher than the recommended value.
+            - >-
+              Indicates that the database has large rows beyond the recommended
+              limit.
+            - Heavy write pressure on the database rows.
+            - Heavy read pressure on the database rows.
+            - Encryption org policy not satisfied.
+            - Location org policy not satisfied.
+            - Outdated DB minor version.
+            - Schema not optimized.
+            - High number of idle connections.
+            - Replication delay.
+            - Outdated version.
+            - Outdated client.
           enumDeprecated:
             - false
             - false
             - false
             - true
             - true
+            - true
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
+            - false
             - false
             - false
             - false
@@ -3162,6 +3992,29 @@ components:
             - SIGNAL_TYPE_USER_GRANTED_ALL_PERMISSIONS
             - SIGNAL_TYPE_DATA_EXPORT_TO_EXTERNAL_CLOUD_STORAGE_BUCKET
             - SIGNAL_TYPE_DATA_EXPORT_TO_PUBLIC_CLOUD_STORAGE_BUCKET
+            - SIGNAL_TYPE_WEAK_PASSWORD_HASH_ALGORITHM
+            - SIGNAL_TYPE_NO_USER_PASSWORD_POLICY
+            - SIGNAL_TYPE_HOT_NODE
+            - SIGNAL_TYPE_NO_POINT_IN_TIME_RECOVERY
+            - SIGNAL_TYPE_RESOURCE_SUSPENDED
+            - SIGNAL_TYPE_EXPENSIVE_COMMANDS
+            - SIGNAL_TYPE_NO_MAINTENANCE_POLICY_CONFIGURED
+            - SIGNAL_TYPE_NO_DELETION_PROTECTION
+            - SIGNAL_TYPE_INEFFICIENT_QUERY
+            - SIGNAL_TYPE_READ_INTENSIVE_WORKLOAD
+            - SIGNAL_TYPE_MEMORY_LIMIT
+            - SIGNAL_TYPE_MAX_SERVER_MEMORY
+            - SIGNAL_TYPE_LARGE_ROWS
+            - SIGNAL_TYPE_HIGH_WRITE_PRESSURE
+            - SIGNAL_TYPE_HIGH_READ_PRESSURE
+            - SIGNAL_TYPE_ENCRYPTION_ORG_POLICY_NOT_SATISFIED
+            - SIGNAL_TYPE_LOCATION_ORG_POLICY_NOT_SATISFIED
+            - SIGNAL_TYPE_OUTDATED_MINOR_VERSION
+            - SIGNAL_TYPE_SCHEMA_NOT_OPTIMIZED
+            - SIGNAL_TYPE_MANY_IDLE_CONNECTIONS
+            - SIGNAL_TYPE_REPLICATION_LAG
+            - SIGNAL_TYPE_OUTDATED_VERSION
+            - SIGNAL_TYPE_OUTDATED_CLIENT
         lastRefreshTime:
           description: Required. last time recommendationw as refreshed
           type: string
@@ -3251,6 +4104,13 @@ components:
               Storage utilization for a resource. The value is a fraction
               between 0.0 and 1.0 (may momentarily exceed 1.0 in some cases).
             - Sotrage used by a resource.
+            - >-
+              Node count for a resource. It represents the number of node units
+              in a bigtable/spanner instance.
+            - Memory used by a resource (in bytes).
+            - >-
+              Processing units used by a resource. It represents the number of
+              processing units in a spanner instance.
           enum:
             - METRIC_TYPE_UNSPECIFIED
             - CPU_UTILIZATION
@@ -3258,6 +4118,9 @@ components:
             - NETWORK_CONNECTIONS
             - STORAGE_UTILIZATION
             - STORAGE_USED_BYTES
+            - NODE_COUNT
+            - MEMORY_USED_BYTES
+            - PROCESSING_UNIT_COUNT
         aggregationType:
           description: Required. Type of aggregation performed on the metric.
           type: string
@@ -3301,6 +4164,74 @@ components:
         boolValue:
           description: For boolean value
           type: boolean
+    ConfigBasedSignalData:
+      id: ConfigBasedSignalData
+      description: >-
+        Config based signal data. This is used to send signals to Condor which
+        are based on the DB level configurations. These will be used to send
+        signals for self managed databases.
+      type: object
+      properties:
+        resourceId:
+          description: Database resource id.
+          $ref: '#/components/schemas/DatabaseResourceId'
+        fullResourceName:
+          description: Required. Full Resource name of the source resource.
+          type: string
+        lastRefreshTime:
+          description: Required. Last time signal was refreshed
+          type: string
+          format: google-datetime
+        signalType:
+          description: Required. Signal type of the signal
+          type: string
+          enumDescriptions:
+            - Unspecified signal type.
+            - Outdated Minor Version
+            - Represents database auditing is disabled.
+            - >-
+              Represents if a database has a password configured for the root
+              account or not.
+            - Represents if a resource is exposed to public access.
+            - >-
+              Represents if a resources requires all incoming connections to use
+              SSL or not.
+          enum:
+            - SIGNAL_TYPE_UNSPECIFIED
+            - SIGNAL_TYPE_OUTDATED_MINOR_VERSION
+            - SIGNAL_TYPE_DATABASE_AUDITING_DISABLED
+            - SIGNAL_TYPE_NO_ROOT_PASSWORD
+            - SIGNAL_TYPE_EXPOSED_TO_PUBLIC_ACCESS
+            - SIGNAL_TYPE_UNENCRYPTED_CONNECTIONS
+        signalBoolValue:
+          description: Signal data for boolean signals.
+          type: boolean
+    BackupDRMetadata:
+      id: BackupDRMetadata
+      description: >-
+        BackupDRMetadata contains information about the backup and disaster
+        recovery metadata of a database resource.
+      type: object
+      properties:
+        resourceId:
+          description: Required. Database resource id.
+          $ref: '#/components/schemas/DatabaseResourceId'
+        lastRefreshTime:
+          description: Required. Last time backup configuration was refreshed.
+          type: string
+          format: google-datetime
+        backupConfiguration:
+          description: Backup configuration for this instance.
+          $ref: '#/components/schemas/BackupConfiguration'
+        backupRun:
+          description: Latest backup run information for this instance.
+          $ref: '#/components/schemas/BackupRun'
+        backupdrConfiguration:
+          description: BackupDR configuration for this instance.
+          $ref: '#/components/schemas/BackupDRConfiguration'
+        fullResourceName:
+          description: Required. Full resource name of this instance.
+          type: string
     OperationMetadata:
       id: OperationMetadata
       description: Pre-defined metadata fields.
@@ -3594,6 +4525,13 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        backup:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1clusters~1{clustersId}:backup/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
       sqlVerbs:
         select:
           - $ref: '#/components/x-stackQL-resources/clusters/methods/get'
@@ -3625,6 +4563,77 @@ components:
         update: []
         replace: []
         delete: []
+    backup_collections:
+      id: google.redis.backup_collections
+      name: backup_collections
+      title: Backup_collections
+      methods:
+        list:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1backupCollections/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.backupCollections
+        get:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1backupCollections~1{backupCollectionsId}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/backup_collections/methods/get'
+          - $ref: '#/components/x-stackQL-resources/backup_collections/methods/list'
+        insert: []
+        update: []
+        replace: []
+        delete: []
+    backups:
+      id: google.redis.backups
+      name: backups
+      title: Backups
+      methods:
+        list:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1backupCollections~1{backupCollectionsId}~1backups/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.backups
+        get:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1backupCollections~1{backupCollectionsId}~1backups~1{backupsId}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1backupCollections~1{backupCollectionsId}~1backups~1{backupsId}/delete
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        export:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1backupCollections~1{backupCollectionsId}~1backups~1{backupsId}:export/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/backups/methods/get'
+          - $ref: '#/components/x-stackQL-resources/backups/methods/list'
+        insert: []
+        update: []
+        replace: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/backups/methods/delete'
     instances:
       id: google.redis.instances
       name: instances
@@ -3778,6 +4787,10 @@ paths:
             format: int32
         - in: query
           name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: extraLocationTypes
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}:
@@ -3934,7 +4947,7 @@ paths:
         the operation completed despite cancellation. On successful
         cancellation, the operation is not deleted; instead, it becomes an
         operation with an Operation.error value with a google.rpc.Status.code of
-        1, corresponding to `Code.CANCELLED`.
+        `1`, corresponding to `Code.CANCELLED`.
       operationId: redis.projects.locations.operations.cancel
       security:
         - Oauth2:
@@ -4239,6 +5252,293 @@ paths:
             type: string
         - in: path
           name: clustersId
+          required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/clusters/{clustersId}:backup:
+    parameters: *ref_1
+    post:
+      description: >-
+        Backup Redis Cluster. If this is the first time a backup is being
+        created, a backup collection will be created at the backend, and this
+        backup belongs to this collection. Both collection and backup will have
+        a resource name. Backup will be executed for each shard. A replica
+        (primary if nonHA) will be selected to perform the execution. Backup
+        call will be rejected if there is an ongoing backup or update operation.
+        Be aware that during preview, if the cluster's internal software version
+        is too old, critical update will be performed before actual backup. Once
+        the internal software version is updated to the minimum version required
+        by the backup feature, subsequent backups will not require critical
+        update. After preview, there will be no critical update needed for
+        backup.
+      operationId: redis.projects.locations.clusters.backup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BackupClusterRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: clustersId
+          required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/backupCollections:
+    parameters: *ref_1
+    get:
+      description: >-
+        Lists all backup collections owned by a consumer project in either the
+        specified location (region) or all locations. If `location_id` is
+        specified as `-` (wildcard), then all regions available to the project
+        are queried, and the results are aggregated.
+      operationId: redis.projects.locations.backupCollections.list
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListBackupCollectionsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/backupCollections/{backupCollectionsId}:
+    parameters: *ref_1
+    get:
+      description: Get a backup collection.
+      operationId: redis.projects.locations.backupCollections.get
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupCollection'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: backupCollectionsId
+          required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/backupCollections/{backupCollectionsId}/backups:
+    parameters: *ref_1
+    get:
+      description: Lists all backups owned by a backup collection.
+      operationId: redis.projects.locations.backupCollections.backups.list
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListBackupsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: backupCollectionsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/backupCollections/{backupCollectionsId}/backups/{backupsId}:
+    parameters: *ref_1
+    get:
+      description: Gets the details of a specific backup.
+      operationId: redis.projects.locations.backupCollections.backups.get
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Backup'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: backupCollectionsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: backupsId
+          required: true
+          schema:
+            type: string
+    delete:
+      description: Deletes a specific backup.
+      operationId: redis.projects.locations.backupCollections.backups.delete
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: backupCollectionsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: backupsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: requestId
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/backupCollections/{backupCollectionsId}/backups/{backupsId}:export:
+    parameters: *ref_1
+    post:
+      description: Exports a specific backup to a customer target Cloud Storage URI.
+      operationId: redis.projects.locations.backupCollections.backups.export
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportBackupRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: backupCollectionsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: backupsId
           required: true
           schema:
             type: string

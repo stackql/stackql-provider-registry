@@ -7,8 +7,8 @@ info:
   title: Cloud Dataproc API
   description: Manages Hadoop-based clusters and jobs on Google Cloud Platform.
   version: v1
-  x-discovery-doc-revision: '20241025'
-  x-generated-date: '2024-11-06'
+  x-discovery-doc-revision: '20250813'
+  x-generated-date: '2025-08-28'
 externalDocs:
   url: https://cloud.google.com/dataproc/
 servers:
@@ -157,6 +157,11 @@ components:
             underscores (_), and hyphens (-). The maximum length is 40
             characters.
           type: string
+        requestorId:
+          description: >-
+            Optional. The requestor ID is used to identify if the request comes
+            from a GCA investigation or the old Ask Gemini Experience. 
+          type: string
     AutoscalingPolicy:
       id: AutoscalingPolicy
       description: Describes an autoscaling policy for Dataproc cluster autoscaler.
@@ -204,6 +209,21 @@ components:
           type: object
           additionalProperties:
             type: string
+        clusterType:
+          description: >-
+            Optional. The type of the clusters for which this autoscaling policy
+            is to be configured.
+          type: string
+          enumDescriptions:
+            - Not set.
+            - Standard dataproc cluster with a minimum of two primary workers.
+            - >-
+              Clusters that can use only secondary workers and be scaled down to
+              zero secondary worker nodes.
+          enum:
+            - CLUSTER_TYPE_UNSPECIFIED
+            - STANDARD
+            - ZERO_SCALE
     BasicAutoscalingAlgorithm:
       id: BasicAutoscalingAlgorithm
       description: Basic algorithm for autoscaling.
@@ -691,6 +711,9 @@ components:
           description: Output only. Snapshot of current workload resource usage.
           readOnly: true
           $ref: '#/components/schemas/UsageSnapshot'
+        propertiesInfo:
+          description: Optional. Properties of the workload organized by origin.
+          $ref: '#/components/schemas/PropertiesInfo'
     UsageMetrics:
       id: UsageMetrics
       description: >-
@@ -722,6 +745,14 @@ components:
         acceleratorType:
           description: Optional. Accelerator type being used, if any
           type: string
+        milliSlotSeconds:
+          description: Optional. Slot usage in (milliSlot x seconds).
+          type: string
+          format: int64
+        updateTime:
+          description: Optional. The timestamp of the usage metrics.
+          type: string
+          format: google-datetime
     UsageSnapshot:
       id: UsageSnapshot
       description: >-
@@ -771,6 +802,35 @@ components:
           description: Optional. The timestamp of the usage snapshot.
           type: string
           format: google-datetime
+        milliSlot:
+          description: Optional. Milli (one-thousandth) Slot usage of the workload.
+          type: string
+          format: int64
+    PropertiesInfo:
+      id: PropertiesInfo
+      description: Properties of the workload organized by origin.
+      type: object
+      properties:
+        autotuningProperties:
+          description: Output only. Properties set by autotuning engine.
+          readOnly: true
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ValueInfo'
+    ValueInfo:
+      id: ValueInfo
+      description: Annotatated property value.
+      type: object
+      properties:
+        value:
+          description: Property value.
+          type: string
+        annotation:
+          description: Annotation, comment or explanation why the property was set.
+          type: string
+        overriddenValue:
+          description: Optional. Value which was replaced by the corresponding component.
+          type: string
     RuntimeConfig:
       id: RuntimeConfig
       description: Runtime configuration for a workload.
@@ -834,11 +894,15 @@ components:
               - Scaling recommendations such as initialExecutors.
               - Adding hints for potential relation broadcasts.
               - Memory management for workloads.
+              - No autotuning.
+              - Automatic selection of scenarios.
             enum:
               - SCENARIO_UNSPECIFIED
               - SCALING
               - BROADCAST_HASH_JOIN
               - MEMORY
+              - NONE
+              - AUTO
     EnvironmentConfig:
       id: EnvironmentConfig
       description: Environment configuration for a workload.
@@ -915,6 +979,42 @@ components:
             temporary buckets. This field requires a Cloud Storage bucket name,
             not a gs://... URI to a Cloud Storage bucket.
           type: string
+        authenticationConfig:
+          description: >-
+            Optional. Authentication configuration used to set the default
+            identity for the workload execution. The config specifies the type
+            of identity (service account or user) that will be used by workloads
+            to access resources on the project(s).
+          $ref: '#/components/schemas/AuthenticationConfig'
+    AuthenticationConfig:
+      id: AuthenticationConfig
+      description: >-
+        Authentication configuration for a workload is used to set the default
+        identity for the workload execution. The config specifies the type of
+        identity (service account or user) that will be used by workloads to
+        access resources on the project(s).
+      type: object
+      properties:
+        userWorkloadAuthenticationType:
+          description: >-
+            Optional. Authentication type for the user workload running in
+            containers.
+          type: string
+          enumDescriptions:
+            - >-
+              If AuthenticationType is unspecified then END_USER_CREDENTIALS is
+              used for 3.0 and newer runtimes, and SERVICE_ACCOUNT is used for
+              older runtimes.
+            - >-
+              Use service account credentials for authenticating to other
+              services.
+            - >-
+              Use OAuth credentials associated with the workload creator/user
+              for authenticating to other services.
+          enum:
+            - AUTHENTICATION_TYPE_UNSPECIFIED
+            - SERVICE_ACCOUNT
+            - END_USER_CREDENTIALS
     PeripheralsConfig:
       id: PeripheralsConfig
       description: Auxiliary services configuration for a workload.
@@ -1063,6 +1163,12 @@ components:
           $ref: '#/components/schemas/StreamingQueryData'
         streamingQueryProgress:
           $ref: '#/components/schemas/StreamingQueryProgress'
+        nativeBuildInfoUiData:
+          description: Native Build Info
+          $ref: '#/components/schemas/NativeBuildInfoUiData'
+        nativeSqlExecutionUiData:
+          description: Native SQL Execution Info
+          $ref: '#/components/schemas/NativeSqlExecutionUiData'
     ApplicationInfo:
       id: ApplicationInfo
       description: High level information corresponding to an application.
@@ -2740,6 +2846,68 @@ components:
           type: object
           additionalProperties:
             type: string
+    NativeBuildInfoUiData:
+      id: NativeBuildInfoUiData
+      type: object
+      properties:
+        buildInfo:
+          description: Optional. Build related details.
+          type: array
+          items:
+            $ref: '#/components/schemas/BuildInfo'
+        buildClass:
+          description: Optional. Build class of Native.
+          type: string
+    BuildInfo:
+      id: BuildInfo
+      description: Native Build Info
+      type: object
+      properties:
+        buildKey:
+          description: Optional. Build key.
+          type: string
+        buildValue:
+          description: Optional. Build value.
+          type: string
+    NativeSqlExecutionUiData:
+      id: NativeSqlExecutionUiData
+      description: Native SQL Execution Data
+      type: object
+      properties:
+        executionId:
+          description: Required. Execution ID of the Native SQL Execution.
+          type: string
+          format: int64
+        description:
+          description: Optional. Description of the execution.
+          type: string
+        numNativeNodes:
+          description: Optional. Number of nodes in Native.
+          type: integer
+          format: int32
+        numFallbackNodes:
+          description: Optional. Number of nodes fallen back to Spark.
+          type: integer
+          format: int32
+        fallbackDescription:
+          description: Optional. Description of the fallback.
+          type: string
+        fallbackNodeToReason:
+          description: Optional. Fallback node to reason.
+          type: array
+          items:
+            $ref: '#/components/schemas/FallbackReason'
+    FallbackReason:
+      id: FallbackReason
+      description: Native SQL Execution Data
+      type: object
+      properties:
+        fallbackNode:
+          description: Optional. Fallback node information.
+          type: string
+        fallbackReason:
+          description: Optional. Fallback to Spark reason.
+          type: string
     WriteSparkApplicationContextResponse:
       id: WriteSparkApplicationContextResponse
       description: Response returned as an acknowledgement of receipt of data.
@@ -3210,6 +3378,33 @@ components:
       description: The cluster config.
       type: object
       properties:
+        clusterType:
+          description: Optional. The type of the cluster.
+          type: string
+          enumDescriptions:
+            - Not set.
+            - Standard dataproc cluster with a minimum of two primary workers.
+            - >-
+              https://cloud.google.com/dataproc/docs/concepts/configuring-clusters/single-node-clusters
+            - >-
+              Clusters that can use only secondary workers and be scaled down to
+              zero secondary worker nodes.
+          enum:
+            - CLUSTER_TYPE_UNSPECIFIED
+            - STANDARD
+            - SINGLE_NODE
+            - ZERO_SCALE
+        clusterTier:
+          description: Optional. The cluster tier.
+          type: string
+          enumDescriptions:
+            - Not set. Works the same as CLUSTER_TIER_STANDARD.
+            - Standard Dataproc cluster.
+            - Premium Dataproc cluster.
+          enum:
+            - CLUSTER_TIER_UNSPECIFIED
+            - CLUSTER_TIER_STANDARD
+            - CLUSTER_TIER_PREMIUM
         configBucket:
           description: >-
             Optional. A Cloud Storage bucket used to stage job dependencies,
@@ -3445,6 +3640,15 @@ components:
             Confidential VMs
             (https://cloud.google.com/compute/confidential-vm/docs).
           $ref: '#/components/schemas/ConfidentialInstanceConfig'
+        resourceManagerTags:
+          description: >-
+            Optional. Resource manager tags
+            (https://cloud.google.com/resource-manager/docs/tags/tags-creating-and-managing)
+            to add to all instances (see Use secure tags in Dataproc
+            (https://cloud.google.com/dataproc/docs/guides/attach-secure-tags)).
+          type: object
+          additionalProperties:
+            type: string
     ReservationAffinity:
       id: ReservationAffinity
       description: Reservation Affinity for consuming Zonal reservation.
@@ -3680,7 +3884,9 @@ components:
           type: string
     DiskConfig:
       id: DiskConfig
-      description: Specifies the config of disk options for a group of VM instances.
+      description: >-
+        Specifies the config of boot disk and attached disk options for a group
+        of VM instances.
       type: object
       properties:
         bootDiskType:
@@ -3718,7 +3924,7 @@ components:
           description: >-
             Optional. Indicates how many IOPS to provision for the disk. This
             sets the number of I/O operations per second that the disk can
-            handle. Note: This field is only supported if boot_disk_type is
+            handle. This field is supported only if boot_disk_type is
             hyperdisk-balanced.
           type: string
           format: int64
@@ -3726,8 +3932,8 @@ components:
           description: >-
             Optional. Indicates how much throughput to provision for the disk.
             This sets the number of throughput mb per second that the disk can
-            handle. Values must be greater than or equal to 1. Note: This field
-            is only supported if boot_disk_type is hyperdisk-balanced.
+            handle. Values must be greater than or equal to 1. This field is
+            supported only if boot_disk_type is hyperdisk-balanced.
           type: string
           format: int64
     ManagedGroupConfig:
@@ -3932,6 +4138,7 @@ components:
                 (https://cloud.google.com/dataproc/docs/concepts/versioning/dataproc-version-clusters#supported-dataproc-image-versions).
                 It cannot be activated on clusters created with supported
                 Dataproc on Compute Engine image versions.
+              - Delta Lake.
               - Docker
               - The Druid query engine. (alpha)
               - Flink
@@ -3940,15 +4147,18 @@ components:
               - Hudi.
               - Iceberg.
               - The Jupyter Notebook.
+              - The Pig component.
               - The Presto query engine.
               - The Trino query engine.
               - The Ranger service.
               - The Solr service.
               - The Zeppelin notebook.
               - The Zookeeper service.
+              - The Jupyter Kernel Gateway.
             enum:
               - COMPONENT_UNSPECIFIED
               - ANACONDA
+              - DELTA
               - DOCKER
               - DRUID
               - FLINK
@@ -3957,12 +4167,14 @@ components:
               - HUDI
               - ICEBERG
               - JUPYTER
+              - PIG
               - PRESTO
               - TRINO
               - RANGER
               - SOLR
               - ZEPPELIN
               - ZOOKEEPER
+              - JUPYTER_KERNEL_GATEWAY
     NodeInitializationAction:
       id: NodeInitializationAction
       description: >-
@@ -4175,6 +4387,32 @@ components:
             Optional. The lifetime duration of cluster. The cluster will be
             auto-deleted at the end of this period. Minimum value is 10 minutes;
             maximum value is 14 days (see JSON representation of Duration
+            (https://developers.google.com/protocol-buffers/docs/proto3#json)).
+          type: string
+          format: google-duration
+        idleStopTtl:
+          description: >-
+            Optional. The duration to keep the cluster started while idling
+            (when no jobs are running). Passing this threshold will cause the
+            cluster to be stopped. Minimum value is 5 minutes; maximum value is
+            14 days (see JSON representation of Duration
+            (https://developers.google.com/protocol-buffers/docs/proto3#json)).
+          type: string
+          format: google-duration
+        autoStopTime:
+          description: >-
+            Optional. The time when cluster will be auto-stopped (see JSON
+            representation of Timestamp
+            (https://developers.google.com/protocol-buffers/docs/proto3#json)).
+          type: string
+          format: google-datetime
+        autoStopTtl:
+          description: >-
+            Optional. The lifetime duration of the cluster. The cluster will be
+            auto-stopped at the end of this period, calculated from the time of
+            submission of the create or update cluster request. Minimum value is
+            10 minutes; maximum value is 14 days (see JSON representation of
+            Duration
             (https://developers.google.com/protocol-buffers/docs/proto3#json)).
           type: string
           format: google-duration
@@ -4502,7 +4740,7 @@ components:
             For example, if one or more spark:executive metrics are listed as
             metric overrides, other SPARK metrics are not collected. The
             collection of the metrics for other enabled custom metric sources is
-            unaffected. For example, if both SPARK andd YARN metric sources are
+            unaffected. For example, if both SPARK and YARN metric sources are
             enabled, and overrides are provided for Spark metrics only, all YARN
             metrics are collected.
           type: array
@@ -4676,6 +4914,10 @@ components:
             - The cluster is currently stopped. It is not ready for use.
             - The cluster is being started. It is not ready for use.
             - The cluster is being repaired. It is not ready for use.
+            - >-
+              Cluster creation is currently waiting for resources to be
+              available. Once all resources are available, it will transition to
+              CREATING and then RUNNING.
           enum:
             - UNKNOWN
             - CREATING
@@ -4688,6 +4930,7 @@ components:
             - STOPPED
             - STARTING
             - REPAIRING
+            - SCHEDULED
         detail:
           description: Optional. Output only. Details of cluster's state.
           readOnly: true
@@ -5903,7 +6146,7 @@ components:
       type: object
       properties:
         name:
-          description: Required. The resource name of the session.
+          description: Identifier. The resource name of the session.
           type: string
         uuid:
           description: >-
@@ -6357,7 +6600,7 @@ components:
       type: object
       properties:
         name:
-          description: Required. The resource name of the session template.
+          description: Required. Identifier. The resource name of the session template.
           type: string
         description:
           description: Optional. Brief description of the template.
@@ -7470,6 +7713,12 @@ components:
             - Update node group label operation type.
             - Start node group operation type.
             - Stop node group operation type.
+            - >-
+              This operation type is used to update the metadata config of a
+              node group. We update the metadata of the VMs in the node group
+              and await for intended config change to be completed at the node
+              group level. Currently, only the identity config update is
+              supported.
           enum:
             - NODE_GROUP_OPERATION_TYPE_UNSPECIFIED
             - CREATE
@@ -7480,6 +7729,7 @@ components:
             - UPDATE_LABELS
             - START
             - STOP
+            - UPDATE_METADATA_CONFIG
         description:
           description: Output only. Short description of operation.
           readOnly: true
@@ -13175,6 +13425,11 @@ paths:
           name: pageToken
           schema:
             type: string
+        - in: query
+          name: jobIds
+          schema:
+            type: string
+            format: int64
   /v1/projects/{projectsId}/locations/{locationsId}/sessions/{sessionsId}/sparkApplications/{sparkApplicationsId}:accessJob:
     parameters: *ref_1
     get:
@@ -13283,6 +13538,11 @@ paths:
           schema:
             type: string
             format: google-fieldmask
+        - in: query
+          name: stageIds
+          schema:
+            type: string
+            format: int64
   /v1/projects/{projectsId}/locations/{locationsId}/sessions/{sessionsId}/sparkApplications/{sparkApplicationsId}:searchStageAttempts:
     parameters: *ref_1
     get:
@@ -13661,6 +13921,10 @@ paths:
           name: pageToken
           schema:
             type: string
+        - in: query
+          name: operationIds
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}/sessions/{sessionsId}/sparkApplications/{sparkApplicationsId}:accessSqlQuery:
     parameters: *ref_1
     get:
@@ -13907,6 +14171,11 @@ paths:
           name: parent
           schema:
             type: string
+        - in: query
+          name: jobIds
+          schema:
+            type: string
+            format: int64
   /v1/projects/{projectsId}/locations/{locationsId}/sessions/{sessionsId}/sparkApplications/{sparkApplicationsId}:summarizeStages:
     parameters: *ref_1
     get:
@@ -13950,6 +14219,11 @@ paths:
           name: parent
           schema:
             type: string
+        - in: query
+          name: stageIds
+          schema:
+            type: string
+            format: int64
   /v1/projects/{projectsId}/locations/{locationsId}/sessions/{sessionsId}/sparkApplications/{sparkApplicationsId}:summarizeStageAttemptTasks:
     parameters: *ref_1
     get:

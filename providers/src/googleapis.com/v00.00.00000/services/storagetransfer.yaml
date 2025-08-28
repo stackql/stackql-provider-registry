@@ -9,8 +9,8 @@ info:
     Transfers data from external data sources to a Google Cloud Storage bucket
     or between Google Cloud Storage buckets. 
   version: v1
-  x-discovery-doc-revision: '20241026'
-  x-generated-date: '2024-11-06'
+  x-discovery-doc-revision: '20250801'
+  x-generated-date: '2025-08-28'
 externalDocs:
   url: https://cloud.google.com/storage-transfer/docs
 servers:
@@ -187,6 +187,21 @@ components:
         projectId:
           description: The ID of the Google Cloud project that owns the job.
           type: string
+        serviceAccount:
+          description: >-
+            Optional. The user-managed service account to which to delegate
+            service agent permissions. You can grant Cloud Storage bucket
+            permissions to this service account instead of to the Transfer
+            Service service agent. Format is
+            `projects/-/serviceAccounts/ACCOUNT_EMAIL_OR_UNIQUEID` Either the
+            service account email
+            (`SERVICE_ACCOUNT_NAME@PROJECT_ID.iam.gserviceaccount.com`) or the
+            unique ID (`123456789012345678901`) are accepted in the string. The
+            `-` wildcard character is required; replacing it with a project ID
+            is invalid. See
+            https://cloud.google.com//storage-transfer/docs/delegate-service-agent-permissions
+            for required permissions.
+          type: string
         transferSpec:
           description: Transfer specification.
           $ref: '#/components/schemas/TransferSpec'
@@ -262,31 +277,31 @@ components:
       type: object
       properties:
         gcsDataSink:
-          description: A Cloud Storage data sink.
+          description: Optional. A Cloud Storage data sink.
           $ref: '#/components/schemas/GcsData'
         posixDataSink:
-          description: A POSIX Filesystem data sink.
+          description: Optional. A POSIX Filesystem data sink.
           $ref: '#/components/schemas/PosixFilesystem'
         gcsDataSource:
-          description: A Cloud Storage data source.
+          description: Optional. A Cloud Storage data source.
           $ref: '#/components/schemas/GcsData'
         awsS3DataSource:
-          description: An AWS S3 data source.
+          description: Optional. An AWS S3 data source.
           $ref: '#/components/schemas/AwsS3Data'
         httpDataSource:
-          description: An HTTP URL data source.
+          description: Optional. An HTTP URL data source.
           $ref: '#/components/schemas/HttpData'
         posixDataSource:
-          description: A POSIX Filesystem data source.
+          description: Optional. A POSIX Filesystem data source.
           $ref: '#/components/schemas/PosixFilesystem'
         azureBlobStorageDataSource:
-          description: An Azure Blob Storage data source.
+          description: Optional. An Azure Blob Storage data source.
           $ref: '#/components/schemas/AzureBlobStorageData'
         awsS3CompatibleDataSource:
-          description: An AWS S3 compatible data source.
+          description: Optional. An AWS S3 compatible data source.
           $ref: '#/components/schemas/AwsS3CompatibleData'
         hdfsDataSource:
-          description: An HDFS cluster data source.
+          description: Optional. An HDFS cluster data source.
           $ref: '#/components/schemas/HdfsData'
         gcsIntermediateDataLocation:
           description: >-
@@ -479,8 +494,9 @@ components:
         listUrl:
           description: >-
             Required. The URL that points to the file that stores the object
-            list entries. This file must allow public access. Currently, only
-            URLs with HTTP and HTTPS schemes are supported.
+            list entries. This file must allow public access. The URL is either
+            an HTTP/HTTPS address (e.g. `https://example.com/urllist.tsv`) or a
+            Cloud Storage path (e.g. `gs://my-bucket/urllist.tsv`).
           type: string
     AzureBlobStorageData:
       id: AzureBlobStorageData
@@ -525,6 +541,12 @@ components:
             specify azure_credentials. Format:
             `projects/{project_number}/secrets/{secret_name}`
           type: string
+        federatedIdentityConfig:
+          description: >-
+            Optional. Federated identity config of a user registered Azure
+            application. If `federated_identity_config` is specified, do not
+            specify azure_credentials or credentials_secret.
+          $ref: '#/components/schemas/FederatedIdentityConfig'
     AzureCredentials:
       id: AzureCredentials
       description: >-
@@ -539,6 +561,28 @@ components:
             about SAS, see [Grant limited access to Azure Storage resources
             using shared access signatures
             (SAS)](https://docs.microsoft.com/en-us/azure/storage/common/storage-sas-overview).
+          type: string
+    FederatedIdentityConfig:
+      id: FederatedIdentityConfig
+      description: >-
+        The identity of an Azure application through which Storage Transfer
+        Service can authenticate requests using Azure workload identity
+        federation. Storage Transfer Service can issue requests to Azure Storage
+        through registered Azure applications, eliminating the need to pass
+        credentials to Storage Transfer Service directly. To configure federated
+        identity, see [Configure access to Microsoft Azure
+        Storage](https://cloud.google.com/storage-transfer/docs/source-microsoft-azure#option_3_authenticate_using_federated_identity).
+      type: object
+      properties:
+        clientId:
+          description: >-
+            Required. The client (application) ID of the application with
+            federated credentials.
+          type: string
+        tenantId:
+          description: >-
+            Required. The tenant (directory) ID of the application with
+            federated credentials.
           type: string
     AwsS3CompatibleData:
       id: AwsS3CompatibleData
@@ -653,8 +697,14 @@ components:
         modification time" refers to the time of the last change to the object's
         content or metadata — specifically, this is the `updated` property of
         Cloud Storage objects, the `LastModified` field of S3 objects, and the
-        `Last-Modified` header of Azure blobs. Transfers with a PosixFilesystem
-        source or destination don't support `ObjectConditions`.
+        `Last-Modified` header of Azure blobs. For S3 objects, the
+        `LastModified` value is the time the object begins uploading. If the
+        object meets your "last modification time" criteria, but has not
+        finished uploading, the object is not transferred. See [Transfer from
+        Amazon S3 to Cloud
+        Storage](https://cloud.google.com/storage-transfer/docs/create-transfers/agentless/s3#transfer_options)
+        for more information. Transfers with a PosixFilesystem source or
+        destination don't support `ObjectConditions`.
       type: object
       properties:
         minTimeElapsedSinceLastModification:
@@ -761,7 +811,7 @@ components:
           description: >-
             When to overwrite objects that already exist in the sink. The
             default is that only objects that are different from the source are
-            ovewritten. If true, all objects in the sink whose name matches an
+            overwritten. If true, all objects in the sink whose name matches an
             object in the source are overwritten with the source object.
           type: boolean
         deleteObjectsUniqueInSink:
@@ -1075,7 +1125,7 @@ components:
               - Default value. This value is unused.
               - Listing objects in a bucket.
               - Deleting objects at the source or the destination.
-              - Copying objects to Google Cloud Storage.
+              - Copying objects to the destination.
             enum:
               - LOGGABLE_ACTION_UNSPECIFIED
               - FIND
@@ -1096,10 +1146,14 @@ components:
               - >-
                 `LoggableAction` terminated in an error state. `FAILED` actions
                 are logged as ERROR.
+              - >-
+                The `COPY` action was skipped for this file. Only supported for
+                agent-based transfers. `SKIPPED` actions are logged as INFO.
             enum:
               - LOGGABLE_ACTION_STATE_UNSPECIFIED
               - SUCCEEDED
               - FAILED
+              - SKIPPED
         enableOnpremGcsTransferLogs:
           description: >-
             For PosixFilesystem transfers, enables [file system transfer
@@ -1154,7 +1208,7 @@ components:
             Combined with schedule_end_date, `end_time_of_day` specifies the end
             date and time for starting new transfer operations. This field must
             be greater than or equal to the timestamp corresponding to the
-            combintation of schedule_start_date and start_time_of_day, and is
+            combination of schedule_start_date and start_time_of_day, and is
             subject to the following: * If `end_time_of_day` is not set and
             `schedule_end_date` is set, then a default value of `23:59:59` is
             used for `end_time_of_day`. * If `end_time_of_day` is set and
@@ -1717,11 +1771,12 @@ components:
       properties:
         url:
           description: >-
-            Required. A URL that refers to the target (a data source, a data
+            Output only. A URL that refers to the target (a data source, a data
             sink, or an object) with which the error is associated.
+          readOnly: true
           type: string
         errorDetails:
-          description: A list of messages that carry the error details.
+          description: Optional. A list of messages that carry the error details.
           type: array
           items:
             type: string

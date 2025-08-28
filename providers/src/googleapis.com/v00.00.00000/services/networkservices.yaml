@@ -7,8 +7,8 @@ info:
   title: Network Services API
   description: ''
   version: v1
-  x-discovery-doc-revision: '20241010'
-  x-generated-date: '2024-11-06'
+  x-discovery-doc-revision: '20250730'
+  x-generated-date: '2025-08-28'
 externalDocs:
   url: https://cloud.google.com/networking
 servers:
@@ -202,10 +202,10 @@ components:
             type: string
         forwardingRules:
           description: >-
-            Required. A list of references to the forwarding rules to which this
-            service extension is attached to. At least one forwarding rule is
-            required. There can be only one `LBTrafficExtension` resource per
-            forwarding rule.
+            Optional. A list of references to the forwarding rules to which this
+            service extension is attached. At least one forwarding rule is
+            required. Only one `LbTrafficExtension` resource can be associated
+            with a forwarding rule.
           type: array
           items:
             type: string
@@ -224,7 +224,7 @@ components:
           description: >-
             Required. All backend services and forwarding rules referenced by
             this extension must share the same load balancing scheme. Supported
-            values: `INTERNAL_MANAGED`, `EXTERNAL_MANAGED`. For more
+            values: `INTERNAL_MANAGED` and `EXTERNAL_MANAGED`. For more
             information, refer to [Backend services
             overview](https://cloud.google.com/load-balancing/docs/backend-service).
           type: string
@@ -240,13 +240,19 @@ components:
             - EXTERNAL_MANAGED
         metadata:
           description: >-
-            Optional. The metadata provided here is included in the
-            `ProcessingRequest.metadata_context.filter_metadata` map field. The
-            metadata is available under the key
+            Optional. The metadata provided here is included as part of the
+            `metadata_context` (of type `google.protobuf.Struct`) in the
+            `ProcessingRequest` message sent to the extension server. The
+            metadata applies to all extensions in all extensions chains in this
+            resource. The metadata is available under the key
             `com.google.lb_traffic_extension.`. The following variables are
             supported in the metadata: `{forwarding_rule_id}` - substituted with
-            the forwarding rule's fully qualified resource name. This field is
-            not supported for plugin extensions and must not be set.
+            the forwarding rule's fully qualified resource name. This field must
+            not be set if at least one of the extension chains contains plugin
+            extensions. Setting it results in a validation error. You can set
+            metadata at either the resource level or the extension level. The
+            extension level metadata is recommended because you can pass a
+            different set of metadata through each extension to the backend.
           type: object
           additionalProperties:
             type: any
@@ -276,8 +282,8 @@ components:
             Required. A set of extensions to execute for the matching request.
             At least one extension is required. Up to 3 extensions can be
             defined for each extension chain for `LbTrafficExtension` resource.
-            `LbRouteExtension` chains are limited to 1 extension per extension
-            chain.
+            `LbRouteExtension` and `LbEdgeExtension` chains are limited to 1
+            extension per extension chain.
           type: array
           items:
             $ref: '#/components/schemas/ExtensionChainExtension'
@@ -310,32 +316,38 @@ components:
           description: >-
             Optional. The `:authority` header in the gRPC request sent from
             Envoy to the extension service. Required for Callout extensions.
-            This field is not supported for plugin extensions and must not be
-            set.
+            This field is not supported for plugin extensions. Setting it
+            results in a validation error.
           type: string
         service:
           description: >-
-            Required. The reference to the service that runs the extension.
-            Currently only callout extensions are supported here. To configure a
-            callout extension, `service` must be a fully-qualified reference to
-            a [backend
+            Required. The reference to the service that runs the extension. To
+            configure a callout extension, `service` must be a fully-qualified
+            reference to a [backend
             service](https://cloud.google.com/compute/docs/reference/rest/v1/backendServices)
             in the format:
             `https://www.googleapis.com/compute/v1/projects/{project}/regions/{region}/backendServices/{backendService}`
             or
             `https://www.googleapis.com/compute/v1/projects/{project}/global/backendServices/{backendService}`.
-            To configure a plugin extension, this must be a reference to a [wasm
-            plugin](https://cloud.google.com/service-extensions/docs/reference/rest/v1beta1/projects.locations.wasmPlugins)
+            To configure a plugin extension, `service` must be a reference to a
+            [`WasmPlugin`
+            resource](https://cloud.google.com/service-extensions/docs/reference/rest/v1beta1/projects.locations.wasmPlugins)
             in the format:
             `projects/{project}/locations/{location}/wasmPlugins/{plugin}` or
             `//networkservices.googleapis.com/projects/{project}/locations/{location}/wasmPlugins/{wasmPlugin}`.
+            Plugin extensions are currently supported for the
+            `LbTrafficExtension`, the `LbRouteExtension`, and the
+            `LbEdgeExtension` resources.
           type: string
         supportedEvents:
           description: >-
             Optional. A set of events during request or response processing for
-            which this extension is called. This field is required for the
-            `LbTrafficExtension` resource. It must not be set for the
-            `LbRouteExtension` resource.
+            which this extension is called. For the `LbTrafficExtension`
+            resource, this field is required. For the `LbRouteExtension`
+            resource, this field is optional. If unspecified, `REQUEST_HEADERS`
+            event is assumed as supported. For the `LbEdgeExtension` resource,
+            this field is required and must only contain `REQUEST_HEADERS`
+            event.
           type: array
           items:
             type: string
@@ -370,9 +382,9 @@ components:
         timeout:
           description: >-
             Optional. Specifies the timeout for each individual message on the
-            stream. The timeout must be between 10-1000 milliseconds. Required
-            for callout extensions. This field is not supported for plugin
-            extensions and must not be set.
+            stream. The timeout must be between `10`-`10000` milliseconds.
+            Required for callout extensions. This field is not supported for
+            plugin extensions. Setting it results in a validation error.
           type: string
           format: google-duration
         failOpen:
@@ -406,8 +418,16 @@ components:
             `com.google.lb_traffic_extension.lbtrafficextension1.chain1.ext1`.
             The following variables are supported in the metadata:
             `{forwarding_rule_id}` - substituted with the forwarding rule's
-            fully qualified resource name. This field is not supported for
-            plugin extensions and must not be set.
+            fully qualified resource name. This field must not be set for plugin
+            extensions. Setting it results in a validation error. You can set
+            metadata at either the resource level or the extension level. The
+            extension level metadata is recommended because you can pass a
+            different set of metadata through each extension to the backend.
+            This field is subject to following limitations: * The total size of
+            the metadata must be less than 1KiB. * The total number of keys in
+            the metadata must be less than 16. * The length of each key must be
+            less than 64 characters. * The length of each value must be less
+            than 1024 characters. * All values must be strings.
           type: object
           additionalProperties:
             type: any
@@ -468,9 +488,9 @@ components:
         forwardingRules:
           description: >-
             Required. A list of references to the forwarding rules to which this
-            service extension is attached to. At least one forwarding rule is
-            required. There can be only one `LbRouteExtension` resource per
-            forwarding rule.
+            service extension is attached. At least one forwarding rule is
+            required. Only one `LbRouteExtension` resource can be associated
+            with a forwarding rule.
           type: array
           items:
             type: string
@@ -508,16 +528,170 @@ components:
             Optional. The metadata provided here is included as part of the
             `metadata_context` (of type `google.protobuf.Struct`) in the
             `ProcessingRequest` message sent to the extension server. The
-            metadata is available under the namespace
+            metadata applies to all extensions in all extensions chains in this
+            resource. The metadata is available under the key
             `com.google.lb_route_extension.`. The following variables are
-            supported in the metadata Struct: `{forwarding_rule_id}` -
-            substituted with the forwarding rule's fully qualified resource
-            name. This field is not supported for plugin extensions and must not
-            be set.
+            supported in the metadata: `{forwarding_rule_id}` - substituted with
+            the forwarding rule's fully qualified resource name. This field must
+            not be set if at least one of the extension chains contains plugin
+            extensions. Setting it results in a validation error. You can set
+            metadata at either the resource level or the extension level. The
+            extension level metadata is recommended because you can pass a
+            different set of metadata through each extension to the backend.
           type: object
           additionalProperties:
             type: any
             description: Properties of the object.
+    ListAuthzExtensionsResponse:
+      id: ListAuthzExtensionsResponse
+      description: Message for response to listing `AuthzExtension` resources.
+      type: object
+      properties:
+        authzExtensions:
+          description: The list of `AuthzExtension` resources.
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthzExtension'
+        nextPageToken:
+          description: A token identifying a page of results that the server returns.
+          type: string
+        unreachable:
+          description: Locations that could not be reached.
+          type: array
+          items:
+            type: string
+    AuthzExtension:
+      id: AuthzExtension
+      description: >-
+        `AuthzExtension` is a resource that allows traffic forwarding to a
+        callout backend service to make an authorization decision.
+      type: object
+      properties:
+        name:
+          description: >-
+            Required. Identifier. Name of the `AuthzExtension` resource in the
+            following format:
+            `projects/{project}/locations/{location}/authzExtensions/{authz_extension}`.
+          type: string
+        createTime:
+          description: Output only. The timestamp when the resource was created.
+          readOnly: true
+          type: string
+          format: google-datetime
+        updateTime:
+          description: Output only. The timestamp when the resource was updated.
+          readOnly: true
+          type: string
+          format: google-datetime
+        description:
+          description: Optional. A human-readable description of the resource.
+          type: string
+        labels:
+          description: >-
+            Optional. Set of labels associated with the `AuthzExtension`
+            resource. The format must comply with [the requirements for
+            labels](/compute/docs/labeling-resources#requirements) for Google
+            Cloud resources.
+          type: object
+          additionalProperties:
+            type: string
+        loadBalancingScheme:
+          description: >-
+            Required. All backend services and forwarding rules referenced by
+            this extension must share the same load balancing scheme. Supported
+            values: `INTERNAL_MANAGED`, `EXTERNAL_MANAGED`. For more
+            information, refer to [Backend services
+            overview](https://cloud.google.com/load-balancing/docs/backend-service).
+          type: string
+          enumDescriptions:
+            - Default value. Do not use.
+            - Signifies that this is used for Internal HTTP(S) Load Balancing.
+            - >-
+              Signifies that this is used for External Managed HTTP(S) Load
+              Balancing.
+          enum:
+            - LOAD_BALANCING_SCHEME_UNSPECIFIED
+            - INTERNAL_MANAGED
+            - EXTERNAL_MANAGED
+        authority:
+          description: >-
+            Required. The `:authority` header in the gRPC request sent from
+            Envoy to the extension service.
+          type: string
+        service:
+          description: >-
+            Required. The reference to the service that runs the extension. To
+            configure a callout extension, `service` must be a fully-qualified
+            reference to a [backend
+            service](https://cloud.google.com/compute/docs/reference/rest/v1/backendServices)
+            in the format:
+            `https://www.googleapis.com/compute/v1/projects/{project}/regions/{region}/backendServices/{backendService}`
+            or
+            `https://www.googleapis.com/compute/v1/projects/{project}/global/backendServices/{backendService}`.
+          type: string
+        timeout:
+          description: >-
+            Required. Specifies the timeout for each individual message on the
+            stream. The timeout must be between 10-10000 milliseconds.
+          type: string
+          format: google-duration
+        failOpen:
+          description: >-
+            Optional. Determines how the proxy behaves if the call to the
+            extension fails or times out. When set to `TRUE`, request or
+            response processing continues without error. Any subsequent
+            extensions in the extension chain are also executed. When set to
+            `FALSE` or the default setting of `FALSE` is used, one of the
+            following happens: * If response headers have not been delivered to
+            the downstream client, a generic 500 error is returned to the
+            client. The error response can be tailored by configuring a custom
+            error response in the load balancer. * If response headers have been
+            delivered, then the HTTP stream to the downstream client is reset.
+          type: boolean
+        metadata:
+          description: >-
+            Optional. The metadata provided here is included as part of the
+            `metadata_context` (of type `google.protobuf.Struct`) in the
+            `ProcessingRequest` message sent to the extension server. The
+            metadata is available under the namespace
+            `com.google.authz_extension.`. The following variables are supported
+            in the metadata Struct: `{forwarding_rule_id}` - substituted with
+            the forwarding rule's fully qualified resource name.
+          type: object
+          additionalProperties:
+            type: any
+            description: Properties of the object.
+        forwardHeaders:
+          description: >-
+            Optional. List of the HTTP headers to forward to the extension (from
+            the client). If omitted, all headers are sent. Each element is a
+            string indicating the header name.
+          type: array
+          items:
+            type: string
+        wireFormat:
+          description: >-
+            Optional. The format of communication supported by the callout
+            extension. If not specified, the default value `EXT_PROC_GRPC` is
+            used.
+          type: string
+          enumDescriptions:
+            - Not specified.
+            - >-
+              The extension service uses ext_proc gRPC API over a gRPC stream.
+              This is the default value if the wire format is not specified. The
+              backend service for the extension must use HTTP2 or H2C as the
+              protocol. All `supported_events` for a client request are sent as
+              part of the same gRPC stream.
+            - >-
+              The extension service uses Envoy's `ext_authz` gRPC API. The
+              backend service for the extension must use HTTP2, or H2C as the
+              protocol. `EXT_AUTHZ_GRPC` is only supported for `AuthzExtension`
+              resources.
+          enum:
+            - WIRE_FORMAT_UNSPECIFIED
+            - EXT_PROC_GRPC
+            - EXT_AUTHZ_GRPC
     ListEndpointPoliciesResponse:
       id: ListEndpointPoliciesResponse
       description: Response returned by the ListEndpointPolicies method.
@@ -535,6 +709,14 @@ components:
             results, call this method again using the value of `next_page_token`
             as `page_token`.
           type: string
+        unreachable:
+          description: >-
+            Unreachable resources. Populated when the request opts into
+            return_partial_success and reading across collections e.g. when
+            attempting to list all resources across all supported locations.
+          type: array
+          items:
+            type: string
     EndpointPolicy:
       id: EndpointPolicy
       description: >-
@@ -720,29 +902,46 @@ components:
             results, call this method again using the value of `next_page_token`
             as `page_token`.
           type: string
+        unreachable:
+          description: >-
+            Unreachable resources. Populated when the request attempts to list
+            all resources across all supported locations, while some locations
+            are temporarily unavailable.
+          type: array
+          items:
+            type: string
     WasmPluginVersion:
       id: WasmPluginVersion
       description: >-
-        A single immutable version of a `WasmPlugin`. Defines the Wasm module
-        used and optionally its runtime config.
+        A single immutable version of a `WasmPlugin` resource. Defines the Wasm
+        module used and optionally its runtime config.
       type: object
       properties:
         pluginConfigData:
           description: >-
-            Configuration for the Wasm plugin. The configuration is provided to
-            the Wasm plugin at runtime through the `ON_CONFIGURE` callback. When
-            a new `WasmPluginVersion` resource is created, the digest of the
-            contents is saved in the `plugin_config_digest` field.
+            Configuration for the plugin. The configuration is provided to the
+            plugin at runtime through the `ON_CONFIGURE` callback. When a new
+            `WasmPluginVersion` resource is created, the digest of the contents
+            is saved in the `plugin_config_digest` field.
           type: string
           format: byte
         pluginConfigUri:
           description: >-
-            URI of the Wasm plugin configuration stored in the Artifact
-            Registry. The configuration is provided to the plugin at runtime
-            through the `ON_CONFIGURE` callback. The container image must
-            contain only a single file with the name `plugin.config`. When a new
-            `WasmPluginVersion` resource is created, the digest of the container
-            image is saved in the `plugin_config_digest` field.
+            URI of the plugin configuration stored in the Artifact Registry. The
+            configuration is provided to the plugin at runtime through the
+            `ON_CONFIGURE` callback. The URI can refer to one of the following
+            repository formats: * Container images: the `plugin_config_uri` must
+            point to a container that contains a single file with the name
+            `plugin.config`. When a new `WasmPluginVersion` resource is created,
+            the digest of the image is saved in the `plugin_config_digest`
+            field. When pulling a container image from Artifact Registry, the
+            digest value is used instead of an image tag. * Generic artifacts:
+            the `plugin_config_uri` must be in this format:
+            `projects/{project}/locations/{location}/repositories/{repository}/
+            genericArtifacts/{package}:{version}`. The specified package and
+            version must contain a file with the name `plugin.config`. When a
+            new `WasmPluginVersion` resource is created, the checksum of the
+            contents of the file is saved in the `plugin_config_digest` field.
           type: string
         name:
           description: >-
@@ -773,26 +972,37 @@ components:
             type: string
         imageUri:
           description: >-
-            Optional. URI of the container image containing the Wasm plugin,
-            stored in the Artifact Registry. When a new `WasmPluginVersion`
-            resource is created, the digest of the container image is saved in
-            the `image_digest` field. When downloading an image, the digest
-            value is used instead of an image tag.
+            Optional. URI of the image containing the Wasm module, stored in
+            Artifact Registry. The URI can refer to one of the following
+            repository formats: * Container images: the `image_uri` must point
+            to a container that contains a single file with the name
+            `plugin.wasm`. When a new `WasmPluginVersion` resource is created,
+            the digest of the image is saved in the `image_digest` field. When
+            pulling a container image from Artifact Registry, the digest value
+            is used instead of an image tag. * Generic artifacts: the
+            `image_uri` must be in this format:
+            `projects/{project}/locations/{location}/repositories/{repository}/
+            genericArtifacts/{package}:{version}`. The specified package and
+            version must contain a file with the name `plugin.wasm`. When a new
+            `WasmPluginVersion` resource is created, the checksum of the
+            contents of the file is saved in the `image_digest` field.
           type: string
         imageDigest:
           description: >-
-            Output only. The resolved digest for the image specified in `image`.
-            The digest is resolved during the creation of `WasmPluginVersion`
-            resource. This field holds the digest value regardless of whether a
-            tag or digest was originally specified in the `image` field.
+            Output only. This field holds the digest (usually checksum) value
+            for the plugin image. The value is calculated based on the
+            `image_uri` field. If the `image_uri` field refers to a container
+            image, the digest value is obtained from the container image. If the
+            `image_uri` field refers to a generic artifact, the digest value is
+            calculated based on the contents of the file.
           readOnly: true
           type: string
         pluginConfigDigest:
           description: >-
             Output only. This field holds the digest (usually checksum) value
             for the plugin configuration. The value is calculated based on the
-            contents of the `plugin_config_data` or the container image defined
-            by the `plugin_config_uri` field.
+            contents of `plugin_config_data` field or the image defined by the
+            `plugin_config_uri` field.
           readOnly: true
           type: string
     ListWasmPluginsResponse:
@@ -812,6 +1022,14 @@ components:
             results, call this method again using the value of `next_page_token`
             as `page_token`.
           type: string
+        unreachable:
+          description: >-
+            Unreachable resources. Populated when the request attempts to list
+            all resources across all supported locations, while some locations
+            are temporarily unavailable.
+          type: array
+          items:
+            type: string
     WasmPlugin:
       id: WasmPlugin
       description: >-
@@ -855,31 +1073,32 @@ components:
         logConfig:
           description: >-
             Optional. Specifies the logging options for the activity performed
-            by this `WasmPlugin`. If logging is enabled, plugin logs are
-            exported to Cloud Logging. Note that the settings relate to the logs
-            generated by using logging statements in your Wasm code.
+            by this plugin. If logging is enabled, plugin logs are exported to
+            Cloud Logging. Note that the settings relate to the logs generated
+            by using logging statements in your Wasm code.
           $ref: '#/components/schemas/WasmPluginLogConfig'
         versions:
           description: >-
-            Optional. All versions of this `WasmPlugin` in the key-value format.
-            The key is the resource ID, the value is the `VersionDetails`.
-            Allows to create or update `WasmPlugin` and its WasmPluginVersions
-            in a single request. When the `main_version_id` field is not empty
-            it must point to one of the VersionDetails in the map. If provided
-            in the update request, the new versions replace the previous set.
-            Any version omitted from the `versions` will be removed. Since the
-            `WasmPluginVersion` resource is immutable, if the WasmPluginVersion
-            with the same name already exists and differs the Update request
-            will fail. Note: In the GET request, this field is populated only if
-            the GetWasmPluginRequest.view is set to WASM_PLUGIN_VIEW_FULL.
+            Optional. All versions of this `WasmPlugin` resource in the
+            key-value format. The key is the resource ID, and the value is the
+            `VersionDetails` object. Lets you create or update a `WasmPlugin`
+            resource and its versions in a single request. When the
+            `main_version_id` field is not empty, it must point to one of the
+            `VersionDetails` objects in the map. If provided in a `PATCH`
+            request, the new versions replace the previous set. Any version
+            omitted from the `versions` field is removed. Because the
+            `WasmPluginVersion` resource is immutable, if a `WasmPluginVersion`
+            resource with the same name already exists and differs, the request
+            fails. Note: In a `GET` request, this field is populated only if the
+            field `GetWasmPluginRequest.view` is set to `WASM_PLUGIN_VIEW_FULL`.
           type: object
           additionalProperties:
             $ref: '#/components/schemas/WasmPluginVersionDetails'
         usedBy:
           description: >-
-            Output only. List of all [Service
-            Extensions](https://cloud.google.com/service-extensions/docs/overview)
-            that use this `WasmPlugin`.
+            Output only. List of all
+            [extensions](https://cloud.google.com/service-extensions/docs/overview)
+            that use this `WasmPlugin` resource.
           readOnly: true
           type: array
           items:
@@ -887,15 +1106,14 @@ components:
     WasmPluginLogConfig:
       id: WasmPluginLogConfig
       description: >-
-        Specifies the logging options for the activity performed by this
-        `WasmPlugin`. If logging is enabled, plugin logs are exported to Cloud
-        Logging.
+        Specifies the logging options for the activity performed by this plugin.
+        If logging is enabled, plugin logs are exported to Cloud Logging.
       type: object
       properties:
         enable:
           description: >-
             Optional. Specifies whether to enable logging for activity by this
-            `WasmPlugin`. Defaults to `false`.
+            plugin. Defaults to `false`.
           type: boolean
         sampleRate:
           description: >-
@@ -904,21 +1122,21 @@ components:
             activity is reported. A floating point value between `0.0` and `1.0`
             indicates that a percentage of log messages is stored. The default
             value when logging is enabled is `1.0`. The value of the field must
-            be between `0` and `1` (inclusive). This field can only be specified
-            if logging is enabled for this `WasmPlugin`.
+            be between `0` and `1` (inclusive). This field can be specified only
+            if logging is enabled for this plugin.
           type: number
           format: float
         minLogLevel:
           description: >-
-            Non-empty default. Specificies the lowest level of the plugin logs
+            Non-empty default. Specifies the lowest level of the plugin logs
             that are exported to Cloud Logging. This setting relates to the logs
             generated by using logging statements in your Wasm code. This field
-            is can be set only if logging is enabled for the `WasmPlugin`
-            resource. If the field is not provided when logging is enabled, it
-            is set to `INFO` by default.
+            is can be set only if logging is enabled for the plugin. If the
+            field is not provided when logging is enabled, it is set to `INFO`
+            by default.
           type: string
           enumDescriptions:
-            - Unspecified value.
+            - Unspecified value. Defaults to `LogLevel.INFO`.
             - Report logs with TRACE level and above.
             - Report logs with DEBUG level and above.
             - Report logs with INFO level and above.
@@ -942,20 +1160,29 @@ components:
       properties:
         pluginConfigData:
           description: >-
-            Configuration for the Wasm plugin. The configuration is provided to
-            the Wasm plugin at runtime through the `ON_CONFIGURE` callback. When
-            a new `WasmPluginVersion` version is created, the digest of the
-            contents is saved in the `plugin_config_digest` field.
+            Configuration for the plugin. The configuration is provided to the
+            plugin at runtime through the `ON_CONFIGURE` callback. When a new
+            `WasmPluginVersion` version is created, the digest of the contents
+            is saved in the `plugin_config_digest` field.
           type: string
           format: byte
         pluginConfigUri:
           description: >-
-            URI of the WasmPlugin configuration stored in the Artifact Registry.
-            The configuration is provided to the Wasm plugin at runtime through
-            the `ON_CONFIGURE` callback. The container image must contain only a
-            single file with the name `plugin.config`. When a new
-            `WasmPluginVersion` resource is created, the digest of the container
-            image is saved in the `plugin_config_digest` field.
+            URI of the plugin configuration stored in the Artifact Registry. The
+            configuration is provided to the plugin at runtime through the
+            `ON_CONFIGURE` callback. The URI can refer to one of the following
+            repository formats: * Container images: the `plugin_config_uri` must
+            point to a container that contains a single file with the name
+            `plugin.config`. When a new `WasmPluginVersion` resource is created,
+            the digest of the image is saved in the `plugin_config_digest`
+            field. When pulling a container image from Artifact Registry, the
+            digest value is used instead of an image tag. * Generic artifacts:
+            the `plugin_config_uri` must be in this format:
+            `projects/{project}/locations/{location}/repositories/{repository}/
+            genericArtifacts/{package}:{version}`. The specified package and
+            version must contain a file with the name `plugin.config`. When a
+            new `WasmPluginVersion` resource is created, the checksum of the
+            contents of the file is saved in the `plugin_config_digest` field.
           type: string
         createTime:
           description: Output only. The timestamp when the resource was created.
@@ -979,37 +1206,48 @@ components:
             type: string
         imageUri:
           description: >-
-            Optional. URI of the container image containing the Wasm module,
-            stored in the Artifact Registry. The container image must contain
-            only a single file with the name `plugin.wasm`. When a new
-            `WasmPluginVersion` resource is created, the URI gets resolved to an
-            image digest and saved in the `image_digest` field.
+            Optional. URI of the image containing the Wasm module, stored in
+            Artifact Registry. The URI can refer to one of the following
+            repository formats: * Container images: the `image_uri` must point
+            to a container that contains a single file with the name
+            `plugin.wasm`. When a new `WasmPluginVersion` resource is created,
+            the digest of the image is saved in the `image_digest` field. When
+            pulling a container image from Artifact Registry, the digest value
+            is used instead of an image tag. * Generic artifacts: the
+            `image_uri` must be in this format:
+            `projects/{project}/locations/{location}/repositories/{repository}/
+            genericArtifacts/{package}:{version}`. The specified package and
+            version must contain a file with the name `plugin.wasm`. When a new
+            `WasmPluginVersion` resource is created, the checksum of the
+            contents of the file is saved in the `image_digest` field.
           type: string
         imageDigest:
           description: >-
-            Output only. The resolved digest for the image specified in `image`.
-            The digest is resolved during the creation of a `WasmPluginVersion`
-            resource. This field holds the digest value regardless of whether a
-            tag or digest was originally specified in the `image` field.
+            Output only. This field holds the digest (usually checksum) value
+            for the plugin image. The value is calculated based on the
+            `image_uri` field. If the `image_uri` field refers to a container
+            image, the digest value is obtained from the container image. If the
+            `image_uri` field refers to a generic artifact, the digest value is
+            calculated based on the contents of the file.
           readOnly: true
           type: string
         pluginConfigDigest:
           description: >-
             Output only. This field holds the digest (usually checksum) value
             for the plugin configuration. The value is calculated based on the
-            contents of the `plugin_config_data` or the container image defined
-            by the `plugin_config_uri` field.
+            contents of `plugin_config_data` field or the image defined by the
+            `plugin_config_uri` field.
           readOnly: true
           type: string
     WasmPluginUsedBy:
       id: WasmPluginUsedBy
-      description: Defines a resource that uses the `WasmPlugin`.
+      description: Defines a resource that uses the `WasmPlugin` resource.
       type: object
       properties:
         name:
           description: >-
             Output only. Full name of the resource
-            https://google.aip.dev/122#full-resource-names, e.g.
+            https://google.aip.dev/122#full-resource-names, for example
             `//networkservices.googleapis.com/projects/{project}/locations/{location}/lbRouteExtensions/{extension}`
           readOnly: true
           type: string
@@ -1042,7 +1280,6 @@ components:
         balancer. It captures the ip:port over which the services are exposed by
         the proxy, along with any policy configurations. Routes have reference
         to to Gateways to dictate how requests should be routed by this Gateway.
-        Next id: 33
       type: object
       properties:
         name:
@@ -1105,7 +1342,7 @@ components:
           description: >-
             Required. One or more port numbers (1-65535), on which the Gateway
             will receive traffic. The proxy binds to the specified ports.
-            Gateways of type 'SECURE_WEB_GATEWAY' are limited to 1 port.
+            Gateways of type 'SECURE_WEB_GATEWAY' are limited to 5 ports.
             Gateways of type 'OPEN_MESH' listen on 0.0.0.0 for IPv4 and :: for
             IPv6 and support multiple ports.
           type: array
@@ -1117,7 +1354,7 @@ components:
             Optional. Scope determines how configuration across multiple Gateway
             instances are merged. The configuration for multiple Gateway
             instances with the same scope will be merged as presented as a
-            single coniguration to the proxy/load balancer. Max length 64
+            single configuration to the proxy/load balancer. Max length 64
             characters. Scope should start with a letter and can only have
             letters, numbers, hyphens.
           type: string
@@ -1224,6 +1461,14 @@ components:
             results, call this method again using the value of `next_page_token`
             as `page_token`.
           type: string
+        unreachable:
+          description: >-
+            Unreachable resources. Populated when the request opts into
+            return_partial_success and reading across collections e.g. when
+            attempting to list all resources across all supported locations.
+          type: array
+          items:
+            type: string
     GrpcRoute:
       id: GrpcRoute
       description: >-
@@ -1585,7 +1830,8 @@ components:
           description: >-
             Required. The cookie TTL value for the Set-Cookie header generated
             by the data plane. The lifetime of the cookie may be set to a value
-            from 1 to 86400 seconds (24 hours) inclusive.
+            from 0 to 86400 seconds (24 hours) inclusive. Set this to 0s to use
+            a session cookie and disable cookie expiration.
           type: string
           format: google-duration
     ListHttpRoutesResponse:
@@ -1605,6 +1851,14 @@ components:
             results, call this method again using the value of `next_page_token`
             as `page_token`.
           type: string
+        unreachable:
+          description: >-
+            Unreachable resources. Populated when the request opts into
+            return_partial_success and reading across collections e.g. when
+            attempting to list all resources across all supported locations.
+          type: array
+          items:
+            type: string
     HttpRoute:
       id: HttpRoute
       description: >-
@@ -2166,7 +2420,8 @@ components:
         Specifies the policy on how requests are shadowed to a separate mirrored
         destination service. The proxy does not wait for responses from the
         shadow service. Prior to sending traffic to the shadow service, the
-        host/authority header is suffixed with -shadow.
+        host/authority header is suffixed with -shadow. Mirroring is currently
+        not supported for Cloud Run destinations.
       type: object
       properties:
         destination:
@@ -2250,7 +2505,8 @@ components:
           description: >-
             Required. The cookie TTL value for the Set-Cookie header generated
             by the data plane. The lifetime of the cookie may be set to a value
-            from 1 to 86400 seconds (24 hours) inclusive.
+            from 0 to 86400 seconds (24 hours) inclusive. Set this to 0s to use
+            a session cookie and disable cookie expiration.
           type: string
           format: google-duration
     HttpRouteHttpDirectResponse:
@@ -2290,6 +2546,14 @@ components:
             results, call this method again using the value of `next_page_token`
             as `page_token`.
           type: string
+        unreachable:
+          description: >-
+            Unreachable resources. Populated when the request opts into
+            return_partial_success and reading across collections e.g. when
+            attempting to list all resources across all supported locations.
+          type: array
+          items:
+            type: string
     TcpRoute:
       id: TcpRoute
       description: >-
@@ -2461,6 +2725,14 @@ components:
             results, call this method again using the value of `next_page_token`
             as `page_token`.
           type: string
+        unreachable:
+          description: >-
+            Unreachable resources. Populated when the request opts into
+            return_partial_success and reading across collections e.g. when
+            attempting to list all resources across all supported locations.
+          type: array
+          items:
+            type: string
     TlsRoute:
       id: TlsRoute
       description: >-
@@ -2535,6 +2807,7 @@ components:
           description: >-
             Required. RouteMatch defines the predicate used to match requests to
             a given action. Multiple match types are "OR"ed for evaluation.
+            Atleast one RouteMatch must be supplied.
           type: array
           items:
             $ref: '#/components/schemas/TlsRouteRouteMatch'
@@ -2545,9 +2818,7 @@ components:
       id: TlsRouteRouteMatch
       description: >-
         RouteMatch defines the predicate used to match requests to a given
-        action. Multiple match types are "AND"ed for evaluation. If no
-        routeMatch field is specified, this rule will unconditionally match
-        traffic.
+        action. Multiple match types are "AND"ed for evaluation.
       type: object
       properties:
         sniHost:
@@ -2600,7 +2871,7 @@ components:
           type: string
         weight:
           description: >-
-            Optional. Specifies the proportion of requests forwareded to the
+            Optional. Specifies the proportion of requests forwarded to the
             backend referenced by the service_name field. This is computed as: -
             weight/Sum(weights in destinations) Weights in all destinations does
             not need to sum up to 100.
@@ -2623,17 +2894,29 @@ components:
             results, call this method again using the value of `next_page_token`
             as `page_token`.
           type: string
+        unreachable:
+          description: >-
+            Unreachable resources. Populated when the request attempts to list
+            all resources across all supported locations, while some locations
+            are temporarily unavailable.
+          type: array
+          items:
+            type: string
     ServiceBinding:
       id: ServiceBinding
       description: >-
-        ServiceBinding is the resource that defines a Service Directory Service
-        to be used in a BackendService resource.
+        ServiceBinding can be used to: - Bind a Service Directory Service to be
+        used in a BackendService resource. This feature will be deprecated soon.
+        - Bind a Private Service Connect producer service to be used in consumer
+        Cloud Service Mesh or Application Load Balancers. - Bind a Cloud Run
+        service to be used in consumer Cloud Service Mesh or Application Load
+        Balancers.
       type: object
       properties:
         name:
           description: >-
             Identifier. Name of the ServiceBinding resource. It matches pattern
-            `projects/*/locations/global/serviceBindings/service_binding_name`.
+            `projects/*/locations/*/serviceBindings/`.
           type: string
         description:
           description: >-
@@ -2652,16 +2935,21 @@ components:
           format: google-datetime
         service:
           description: >-
-            Required. The full Service Directory Service name of the format
-            projects/*/locations/*/namespaces/*/services/*
+            Optional. The full Service Directory Service name of the format
+            `projects/*/locations/*/namespaces/*/services/*`. This field is for
+            Service Directory integration which will be deprecated soon.
+          deprecated: true
           type: string
         serviceId:
           description: >-
             Output only. The unique identifier of the Service Directory Service
-            against which the Service Binding resource is validated. This is
+            against which the ServiceBinding resource is validated. This is
             populated when the Service Binding resource is used in another
-            resource (like Backend Service). This is of the UUID4 format.
+            resource (like Backend Service). This is of the UUID4 format. This
+            field is for Service Directory integration which will be deprecated
+            soon.
           readOnly: true
+          deprecated: true
           type: string
         labels:
           description: >-
@@ -2687,6 +2975,14 @@ components:
             results, call this method again using the value of `next_page_token`
             as `page_token`.
           type: string
+        unreachable:
+          description: >-
+            Unreachable resources. Populated when the request opts into
+            `return_partial_success` and reading across collections e.g. when
+            attempting to list all resources across all supported locations.
+          type: array
+          items:
+            type: string
     Mesh:
       id: Mesh
       description: >-
@@ -2769,6 +3065,14 @@ components:
             results, call this method again using the value of `next_page_token`
             as `page_token`.
           type: string
+        unreachable:
+          description: >-
+            Unreachable resources. Populated when the request attempts to list
+            all resources across all supported locations, while some locations
+            are temporarily unavailable.
+          type: array
+          items:
+            type: string
     ServiceLbPolicy:
       id: ServiceLbPolicy
       description: >-
@@ -2839,6 +3143,11 @@ components:
         failoverConfig:
           description: Optional. Configuration related to health based failover.
           $ref: '#/components/schemas/ServiceLbPolicyFailoverConfig'
+        isolationConfig:
+          description: >-
+            Optional. Configuration to provide isolation support for the
+            associated Backend Service.
+          $ref: '#/components/schemas/ServiceLbPolicyIsolationConfig'
     ServiceLbPolicyAutoCapacityDrain:
       id: ServiceLbPolicyAutoCapacityDrain
       description: >-
@@ -2872,6 +3181,147 @@ components:
             for others.
           type: integer
           format: int32
+    ServiceLbPolicyIsolationConfig:
+      id: ServiceLbPolicyIsolationConfig
+      description: >-
+        Configuration to provide isolation support for the associated Backend
+        Service.
+      type: object
+      properties:
+        isolationGranularity:
+          description: Optional. The isolation granularity of the load balancer.
+          type: string
+          enumDescriptions:
+            - >-
+              No isolation is configured for the backend service. Traffic can
+              overflow based on the load balancing algorithm.
+            - >-
+              Traffic for this service will be isolated at the cloud region
+              level.
+          enum:
+            - ISOLATION_GRANULARITY_UNSPECIFIED
+            - REGION
+        isolationMode:
+          description: Optional. The isolation mode of the load balancer.
+          type: string
+          enumDescriptions:
+            - No isolation mode is configured for the backend service.
+            - Traffic will be sent to the nearest region.
+            - >-
+              Traffic will fail if no serving backends are available in the same
+              region as the load balancer.
+          enum:
+            - ISOLATION_MODE_UNSPECIFIED
+            - NEAREST
+            - STRICT
+    GatewayRouteView:
+      id: GatewayRouteView
+      description: GatewayRouteView defines view-only resource for Routes to a Gateway
+      type: object
+      properties:
+        name:
+          description: >-
+            Output only. Identifier. Full path name of the GatewayRouteView
+            resource. Format:
+            projects/{project_number}/locations/{location}/gateways/{gateway}/routeViews/{route_view}
+          readOnly: true
+          type: string
+        routeProjectNumber:
+          description: Output only. Project number where the route exists.
+          readOnly: true
+          type: string
+          format: int64
+        routeLocation:
+          description: Output only. Location where the route exists.
+          readOnly: true
+          type: string
+        routeType:
+          description: >-
+            Output only. Type of the route: HttpRoute,GrpcRoute,TcpRoute, or
+            TlsRoute
+          readOnly: true
+          type: string
+        routeId:
+          description: Output only. The resource id for the route.
+          readOnly: true
+          type: string
+    MeshRouteView:
+      id: MeshRouteView
+      description: MeshRouteView defines view-only resource for Routes to a Mesh
+      type: object
+      properties:
+        name:
+          description: >-
+            Output only. Identifier. Full path name of the MeshRouteView
+            resource. Format:
+            projects/{project_number}/locations/{location}/meshes/{mesh}/routeViews/{route_view}
+          readOnly: true
+          type: string
+        routeProjectNumber:
+          description: Output only. Project number where the route exists.
+          readOnly: true
+          type: string
+          format: int64
+        routeLocation:
+          description: Output only. Location where the route exists.
+          readOnly: true
+          type: string
+        routeType:
+          description: >-
+            Output only. Type of the route: HttpRoute,GrpcRoute,TcpRoute, or
+            TlsRoute
+          readOnly: true
+          type: string
+        routeId:
+          description: Output only. The resource id for the route.
+          readOnly: true
+          type: string
+    ListGatewayRouteViewsResponse:
+      id: ListGatewayRouteViewsResponse
+      description: Response returned by the ListGatewayRouteViews method.
+      type: object
+      properties:
+        gatewayRouteViews:
+          description: List of GatewayRouteView resources.
+          type: array
+          items:
+            $ref: '#/components/schemas/GatewayRouteView'
+        nextPageToken:
+          description: >-
+            A token, which can be sent as `page_token` to retrieve the next
+            page. If this field is omitted, there are no subsequent pages.
+          type: string
+        unreachable:
+          description: >-
+            Unreachable resources. Populated when the request attempts to list
+            all resources across all supported locations, while some locations
+            are temporarily unavailable.
+          type: array
+          items:
+            type: string
+    ListMeshRouteViewsResponse:
+      id: ListMeshRouteViewsResponse
+      description: Response returned by the ListMeshRouteViews method.
+      type: object
+      properties:
+        meshRouteViews:
+          description: List of MeshRouteView resources.
+          type: array
+          items:
+            $ref: '#/components/schemas/MeshRouteView'
+        nextPageToken:
+          description: >-
+            A token, which can be sent as `page_token` to retrieve the next
+            page. If this field is omitted, there are no subsequent pages.
+          type: string
+        unreachable:
+          description: >-
+            Unreachable resources. Populated when the request attempts to list
+            all resources across all supported locations, while some locations
+            are temporarily unavailable.
+          type: array
+          items:
+            type: string
     ListLocationsResponse:
       id: ListLocationsResponse
       description: The response message for Locations.ListLocations.
@@ -3297,7 +3747,7 @@ components:
     LoggingConfig:
       id: LoggingConfig
       description: >-
-        The configuration for Platform Telemetry logging for Eventarc Avdvanced
+        The configuration for Platform Telemetry logging for Eventarc Advanced
         resources.
       type: object
       properties:
@@ -3603,6 +4053,58 @@ components:
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/lb_route_extensions/methods/delete
+    authz_extensions:
+      id: google.networkservices.authz_extensions
+      name: authz_extensions
+      title: Authz_extensions
+      methods:
+        list:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1authzExtensions/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.authzExtensions
+        create:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1authzExtensions/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        get:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1authzExtensions~1{authzExtensionsId}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        patch:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1authzExtensions~1{authzExtensionsId}/patch
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1authzExtensions~1{authzExtensionsId}/delete
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/authz_extensions/methods/get'
+          - $ref: '#/components/x-stackQL-resources/authz_extensions/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/authz_extensions/methods/create'
+        update:
+          - $ref: '#/components/x-stackQL-resources/authz_extensions/methods/patch'
+        replace: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/authz_extensions/methods/delete'
     endpoint_policies:
       id: google.networkservices.endpoint_policies
       name: endpoint_policies
@@ -3803,6 +4305,34 @@ components:
         replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/gateways/methods/delete'
+    route_views:
+      id: google.networkservices.route_views
+      name: route_views
+      title: Route_views
+      methods:
+        get:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1meshes~1{meshesId}~1routeViews~1{routeViewsId}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        list:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1meshes~1{meshesId}~1routeViews/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.meshRouteViews
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/route_views/methods/get'
+          - $ref: '#/components/x-stackQL-resources/route_views/methods/list'
+        insert: []
+        update: []
+        replace: []
+        delete: []
     grpc_routes:
       id: google.networkservices.grpc_routes
       name: grpc_routes
@@ -4038,6 +4568,13 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        patch:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1serviceBindings~1{serviceBindingsId}/patch
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
         delete:
           operation:
             $ref: >-
@@ -4051,7 +4588,8 @@ components:
           - $ref: '#/components/x-stackQL-resources/service_bindings/methods/list'
         insert:
           - $ref: '#/components/x-stackQL-resources/service_bindings/methods/create'
-        update: []
+        update:
+          - $ref: '#/components/x-stackQL-resources/service_bindings/methods/patch'
         replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/service_bindings/methods/delete'
@@ -4320,6 +4858,10 @@ paths:
           name: pageToken
           schema:
             type: string
+        - in: query
+          name: extraLocationTypes
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}:
     parameters: *ref_1
     get:
@@ -4474,7 +5016,7 @@ paths:
         the operation completed despite cancellation. On successful
         cancellation, the operation is not deleted; instead, it becomes an
         operation with an Operation.error value with a google.rpc.Status.code of
-        1, corresponding to `Code.CANCELLED`.
+        `1`, corresponding to `Code.CANCELLED`.
       operationId: networkservices.projects.locations.operations.cancel
       requestBody:
         content:
@@ -4907,6 +5449,203 @@ paths:
           name: requestId
           schema:
             type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/authzExtensions:
+    parameters: *ref_1
+    get:
+      description: Lists `AuthzExtension` resources in a given project and location.
+      operationId: networkservices.projects.locations.authzExtensions.list
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAuthzExtensionsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: filter
+          schema:
+            type: string
+        - in: query
+          name: orderBy
+          schema:
+            type: string
+    post:
+      description: Creates a new `AuthzExtension` resource in a given project and location.
+      operationId: networkservices.projects.locations.authzExtensions.create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthzExtension'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: authzExtensionId
+          schema:
+            type: string
+        - in: query
+          name: requestId
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/authzExtensions/{authzExtensionsId}:
+    parameters: *ref_1
+    get:
+      description: Gets details of the specified `AuthzExtension` resource.
+      operationId: networkservices.projects.locations.authzExtensions.get
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthzExtension'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: authzExtensionsId
+          required: true
+          schema:
+            type: string
+    patch:
+      description: Updates the parameters of the specified `AuthzExtension` resource.
+      operationId: networkservices.projects.locations.authzExtensions.patch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthzExtension'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: authzExtensionsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: updateMask
+          schema:
+            type: string
+            format: google-fieldmask
+        - in: query
+          name: requestId
+          schema:
+            type: string
+    delete:
+      description: Deletes the specified `AuthzExtension` resource.
+      operationId: networkservices.projects.locations.authzExtensions.delete
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: authzExtensionsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: requestId
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}/endpointPolicies:
     parameters: *ref_1
     get:
@@ -4944,6 +5683,10 @@ paths:
           name: pageToken
           schema:
             type: string
+        - in: query
+          name: returnPartialSuccess
+          schema:
+            type: boolean
     post:
       description: Creates a new EndpointPolicy in a given project and location.
       operationId: networkservices.projects.locations.endpointPolicies.create
@@ -5600,6 +6343,86 @@ paths:
           required: true
           schema:
             type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/gateways/{gatewaysId}/routeViews/{routeViewsId}:
+    parameters: *ref_1
+    get:
+      description: Get a single RouteView of a Gateway.
+      operationId: networkservices.projects.locations.gateways.routeViews.get
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayRouteView'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: gatewaysId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: routeViewsId
+          required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/gateways/{gatewaysId}/routeViews:
+    parameters: *ref_1
+    get:
+      description: Lists RouteViews
+      operationId: networkservices.projects.locations.gateways.routeViews.list
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListGatewayRouteViewsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: gatewaysId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: pageToken
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}/grpcRoutes:
     parameters: *ref_1
     get:
@@ -5637,6 +6460,10 @@ paths:
           name: pageToken
           schema:
             type: string
+        - in: query
+          name: returnPartialSuccess
+          schema:
+            type: boolean
     post:
       description: Creates a new GrpcRoute in a given project and location.
       operationId: networkservices.projects.locations.grpcRoutes.create
@@ -5814,6 +6641,10 @@ paths:
           name: pageToken
           schema:
             type: string
+        - in: query
+          name: returnPartialSuccess
+          schema:
+            type: boolean
     post:
       description: Creates a new HttpRoute in a given project and location.
       operationId: networkservices.projects.locations.httpRoutes.create
@@ -5991,6 +6822,10 @@ paths:
           name: pageToken
           schema:
             type: string
+        - in: query
+          name: returnPartialSuccess
+          schema:
+            type: boolean
     post:
       description: Creates a new TcpRoute in a given project and location.
       operationId: networkservices.projects.locations.tcpRoutes.create
@@ -6168,6 +7003,10 @@ paths:
           name: pageToken
           schema:
             type: string
+        - in: query
+          name: returnPartialSuccess
+          schema:
+            type: boolean
     post:
       description: Creates a new TlsRoute in a given project and location.
       operationId: networkservices.projects.locations.tlsRoutes.create
@@ -6413,6 +7252,47 @@ paths:
           required: true
           schema:
             type: string
+    patch:
+      description: Updates the parameters of a single ServiceBinding.
+      operationId: networkservices.projects.locations.serviceBindings.patch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceBinding'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: serviceBindingsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: updateMask
+          schema:
+            type: string
+            format: google-fieldmask
     delete:
       description: Deletes a single ServiceBinding.
       operationId: networkservices.projects.locations.serviceBindings.delete
@@ -6481,6 +7361,10 @@ paths:
           name: pageToken
           schema:
             type: string
+        - in: query
+          name: returnPartialSuccess
+          schema:
+            type: boolean
     post:
       description: Creates a new Mesh in a given project and location.
       operationId: networkservices.projects.locations.meshes.create
@@ -6619,6 +7503,86 @@ paths:
         - in: path
           name: meshesId
           required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/meshes/{meshesId}/routeViews/{routeViewsId}:
+    parameters: *ref_1
+    get:
+      description: Get a single RouteView of a Mesh.
+      operationId: networkservices.projects.locations.meshes.routeViews.get
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeshRouteView'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: meshesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: routeViewsId
+          required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/meshes/{meshesId}/routeViews:
+    parameters: *ref_1
+    get:
+      description: Lists RouteViews
+      operationId: networkservices.projects.locations.meshes.routeViews.list
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMeshRouteViewsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: meshesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: pageToken
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/serviceLbPolicies:
