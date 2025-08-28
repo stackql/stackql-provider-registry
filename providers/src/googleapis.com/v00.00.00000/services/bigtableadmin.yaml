@@ -7,8 +7,8 @@ info:
   title: Cloud Bigtable Admin API
   description: Administer your Cloud Bigtable tables and instances.
   version: v2
-  x-discovery-doc-revision: '20241025'
-  x-generated-date: '2024-11-06'
+  x-discovery-doc-revision: '20250811'
+  x-generated-date: '2025-08-28'
 externalDocs:
   url: https://cloud.google.com/bigtable/
 servers:
@@ -254,6 +254,17 @@ components:
           description: Output only. Reserved for future use.
           readOnly: true
           type: boolean
+        tags:
+          description: >-
+            Optional. Input only. Immutable. Tag keys/values directly bound to
+            this resource. For example: - "123/environment": "production", -
+            "123/costCenter": "marketing" Tags and Labels (above) are both used
+            to bind metadata to resources, with different use-cases. See
+            https://cloud.google.com/resource-manager/docs/tags/tags-overview
+            for an in-depth overview on the difference between tags and labels.
+          type: object
+          additionalProperties:
+            type: string
     Cluster:
       id: Cluster
       description: >-
@@ -480,7 +491,8 @@ components:
       properties:
         name:
           description: >-
-            The unique name of the app profile. Values are of the form
+            The unique name of the app profile, up to 50 characters long. Values
+            are of the form
             `projects/{project}/instances/{instance}/appProfiles/_a-zA-Z0-9*`.
           type: string
         etag:
@@ -1084,6 +1096,84 @@ components:
           readOnly: true
           type: number
           format: float
+    LogicalView:
+      id: LogicalView
+      description: A SQL logical view object that can be referenced in SQL queries.
+      type: object
+      properties:
+        name:
+          description: >-
+            Identifier. The unique name of the logical view. Format:
+            `projects/{project}/instances/{instance}/logicalViews/{logical_view}`
+          type: string
+        query:
+          description: Required. The logical view's select query.
+          type: string
+        etag:
+          description: >-
+            Optional. The etag for this logical view. This may be sent on update
+            requests to ensure that the client has an up-to-date value before
+            proceeding. The server returns an ABORTED error on a mismatched
+            etag.
+          type: string
+        deletionProtection:
+          description: >-
+            Optional. Set to true to make the LogicalView protected against
+            deletion.
+          type: boolean
+    ListLogicalViewsResponse:
+      id: ListLogicalViewsResponse
+      description: Response message for BigtableInstanceAdmin.ListLogicalViews.
+      type: object
+      properties:
+        logicalViews:
+          description: The list of requested logical views.
+          type: array
+          items:
+            $ref: '#/components/schemas/LogicalView'
+        nextPageToken:
+          description: >-
+            A token, which can be sent as `page_token` to retrieve the next
+            page. If this field is omitted, there are no subsequent pages.
+          type: string
+    MaterializedView:
+      id: MaterializedView
+      description: A materialized view object that can be referenced in SQL queries.
+      type: object
+      properties:
+        name:
+          description: >-
+            Identifier. The unique name of the materialized view. Format:
+            `projects/{project}/instances/{instance}/materializedViews/{materialized_view}`
+          type: string
+        query:
+          description: Required. Immutable. The materialized view's select query.
+          type: string
+        etag:
+          description: >-
+            Optional. The etag for this materialized view. This may be sent on
+            update requests to ensure that the client has an up-to-date value
+            before proceeding. The server returns an ABORTED error on a
+            mismatched etag.
+          type: string
+        deletionProtection:
+          description: Set to true to make the MaterializedView protected against deletion.
+          type: boolean
+    ListMaterializedViewsResponse:
+      id: ListMaterializedViewsResponse
+      description: Response message for BigtableInstanceAdmin.ListMaterializedViews.
+      type: object
+      properties:
+        materializedViews:
+          description: The list of requested materialized views.
+          type: array
+          items:
+            $ref: '#/components/schemas/MaterializedView'
+        nextPageToken:
+          description: >-
+            A token, which can be sent as `page_token` to retrieve the next
+            page. If this field is omitted, there are no subsequent pages.
+          type: string
     CreateTableRequest:
       id: CreateTableRequest
       description: >-
@@ -1196,6 +1286,55 @@ components:
             If specified, automated backups are enabled for this table.
             Otherwise, automated backups are disabled.
           $ref: '#/components/schemas/AutomatedBackupPolicy'
+        tieredStorageConfig:
+          description: >-
+            Rules to specify what data is stored in each storage tier. Different
+            tiers store data differently, providing different trade-offs between
+            cost and performance. Different parts of a table can be stored
+            separately on different tiers. If a config is specified, tiered
+            storage is enabled for this table. Otherwise, tiered storage is
+            disabled. Only SSD instances can configure tiered storage.
+          $ref: '#/components/schemas/TieredStorageConfig'
+        rowKeySchema:
+          description: >-
+            The row key schema for this table. The schema is used to decode the
+            raw row key bytes into a structured format. The order of field
+            declarations in this schema is important, as it reflects how the raw
+            row key bytes are structured. Currently, this only affects how the
+            key is read via a GoogleSQL query from the ExecuteQuery API. For a
+            SQL query, the _key column is still read as raw bytes. But queries
+            can reference the key fields by name, which will be decoded from
+            _key using provided type and encoding. Queries that reference key
+            fields will fail if they encounter an invalid row key. For example,
+            if _key = "some_id#2024-04-30#\x00\x13\x00\xf3" with the following
+            schema: { fields { field_name: "id" type { string { encoding:
+            utf8_bytes {} } } } fields { field_name: "date" type { string {
+            encoding: utf8_bytes {} } } } fields { field_name: "product_code"
+            type { int64 { encoding: big_endian_bytes {} } } } encoding {
+            delimited_bytes { delimiter: "#" } } } The decoded key parts would
+            be: id = "some_id", date = "2024-04-30", product_code = 1245427 The
+            query "SELECT _key, product_code FROM table" will return two
+            columns: /------------------------------------------------------\ |
+            _key | product_code | |
+            --------------------------------------|--------------| |
+            "some_id#2024-04-30#\x00\x13\x00\xf3" | 1245427 |
+            \------------------------------------------------------/ The schema
+            has the following invariants: (1) The decoded field values are
+            order-preserved. For read, the field values will be decoded in
+            sorted mode from the raw bytes. (2) Every field in the schema must
+            specify a non-empty name. (3) Every field must specify a type with
+            an associated encoding. The type is limited to scalar types only:
+            Array, Map, Aggregate, and Struct are not allowed. (4) The field
+            names must not collide with existing column family names and
+            reserved keywords "_key" and "_timestamp". The following update
+            operations are allowed for row_key_schema: - Update from an empty
+            schema to a new schema. - Remove the existing schema. This operation
+            requires setting the `ignore_warnings` flag to `true`, since it
+            might be a backward incompatible change. Without the flag, the
+            update request will fail with an INVALID_ARGUMENT error. Any other
+            row key schema update operation (e.g. update existing schema columns
+            names or types) is currently unsupported.
+          $ref: '#/components/schemas/GoogleBigtableAdminV2TypeStruct'
     ClusterState:
       id: ClusterState
       description: The state of a table's data in a particular cluster.
@@ -1462,6 +1601,12 @@ components:
         mapType:
           description: Map
           $ref: '#/components/schemas/GoogleBigtableAdminV2TypeMap'
+        protoType:
+          description: Proto
+          $ref: '#/components/schemas/GoogleBigtableAdminV2TypeProto'
+        enumType:
+          description: Enum
+          $ref: '#/components/schemas/GoogleBigtableAdminV2TypeEnum'
     GoogleBigtableAdminV2TypeBytes:
       id: GoogleBigtableAdminV2TypeBytes
       description: Bytes Values of type `Bytes` are stored in `Value.bytes_value`.
@@ -1484,7 +1629,13 @@ components:
         Leaves the value as-is. Sorted mode: all values are supported. Distinct
         mode: all values are supported.
       type: object
-      properties: {}
+      properties:
+        escapeNulls:
+          description: >-
+            If set, allows NULL values to be encoded as the empty string "". The
+            actual empty string, or any value which only contains the null byte
+            0x00, has one more null byte appended.
+          type: boolean
     GoogleBigtableAdminV2TypeString:
       id: GoogleBigtableAdminV2TypeString
       description: String Values of type `String` are stored in `Value.string_value`.
@@ -1520,7 +1671,16 @@ components:
         with: - BigQuery `TEXT` encoding - HBase `Bytes.toBytes` - Java
         `String#getBytes(StandardCharsets.UTF_8)`
       type: object
-      properties: {}
+      properties:
+        nullEscapeChar:
+          description: >-
+            Single-character escape sequence used to support NULL values. If
+            set, allows NULL values to be encoded as the empty string "". The
+            actual empty string, or any value where every character equals
+            `null_escape_char`, has one more `null_escape_char` appended. If
+            `null_escape_char` is set and does not equal the ASCII null
+            character 0x00, then the encoding will not support sorted mode. .
+          type: string
     GoogleBigtableAdminV2TypeInt64:
       id: GoogleBigtableAdminV2TypeInt64
       description: Int64 Values of type `Int64` are stored in `Value.int_value`.
@@ -1538,6 +1698,10 @@ components:
           description: Use `BigEndianBytes` encoding.
           $ref: >-
             #/components/schemas/GoogleBigtableAdminV2TypeInt64EncodingBigEndianBytes
+        orderedCodeBytes:
+          description: Use `OrderedCodeBytes` encoding.
+          $ref: >-
+            #/components/schemas/GoogleBigtableAdminV2TypeInt64EncodingOrderedCodeBytes
     GoogleBigtableAdminV2TypeInt64EncodingBigEndianBytes:
       id: GoogleBigtableAdminV2TypeInt64EncodingBigEndianBytes
       description: >-
@@ -1552,6 +1716,14 @@ components:
           description: 'Deprecated: ignored if set.'
           deprecated: true
           $ref: '#/components/schemas/GoogleBigtableAdminV2TypeBytes'
+    GoogleBigtableAdminV2TypeInt64EncodingOrderedCodeBytes:
+      id: GoogleBigtableAdminV2TypeInt64EncodingOrderedCodeBytes
+      description: >-
+        Encodes the value in a variable length binary format of up to 10 bytes.
+        Values that are closer to zero use fewer bytes. Sorted mode: all values
+        are supported. Distinct mode: all values are supported.
+      type: object
+      properties: {}
     GoogleBigtableAdminV2TypeFloat32:
       id: GoogleBigtableAdminV2TypeFloat32
       description: Float32 Values of type `Float32` are stored in `Value.float_value`.
@@ -1573,7 +1745,22 @@ components:
         Timestamp Values of type `Timestamp` are stored in
         `Value.timestamp_value`.
       type: object
-      properties: {}
+      properties:
+        encoding:
+          description: The encoding to use when converting to or from lower level types.
+          $ref: '#/components/schemas/GoogleBigtableAdminV2TypeTimestampEncoding'
+    GoogleBigtableAdminV2TypeTimestampEncoding:
+      id: GoogleBigtableAdminV2TypeTimestampEncoding
+      description: Rules used to convert to or from lower level types.
+      type: object
+      properties:
+        unixMicrosInt64:
+          description: >-
+            Encodes the number of microseconds since the Unix epoch using the
+            given `Int64` encoding. Values must be microsecond-aligned.
+            Compatible with: - Java `Instant.truncatedTo()` with
+            `ChronoUnit.MICROS`
+          $ref: '#/components/schemas/GoogleBigtableAdminV2TypeInt64Encoding'
     GoogleBigtableAdminV2TypeDate:
       id: GoogleBigtableAdminV2TypeDate
       description: Date Values of type `Date` are stored in `Value.date_value`.
@@ -1658,6 +1845,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/GoogleBigtableAdminV2TypeStructField'
+        encoding:
+          description: The encoding to use when converting to or from lower level types.
+          $ref: '#/components/schemas/GoogleBigtableAdminV2TypeStructEncoding'
     GoogleBigtableAdminV2TypeStructField:
       id: GoogleBigtableAdminV2TypeStructField
       description: A struct field and its type.
@@ -1671,6 +1861,74 @@ components:
         type:
           description: The type of values in this field.
           $ref: '#/components/schemas/Type'
+    GoogleBigtableAdminV2TypeStructEncoding:
+      id: GoogleBigtableAdminV2TypeStructEncoding
+      description: Rules used to convert to or from lower level types.
+      type: object
+      properties:
+        singleton:
+          description: Use `Singleton` encoding.
+          $ref: >-
+            #/components/schemas/GoogleBigtableAdminV2TypeStructEncodingSingleton
+        delimitedBytes:
+          description: Use `DelimitedBytes` encoding.
+          $ref: >-
+            #/components/schemas/GoogleBigtableAdminV2TypeStructEncodingDelimitedBytes
+        orderedCodeBytes:
+          description: User `OrderedCodeBytes` encoding.
+          $ref: >-
+            #/components/schemas/GoogleBigtableAdminV2TypeStructEncodingOrderedCodeBytes
+    GoogleBigtableAdminV2TypeStructEncodingSingleton:
+      id: GoogleBigtableAdminV2TypeStructEncodingSingleton
+      description: >-
+        Uses the encoding of `fields[0].type` as-is. Only valid if `fields.size
+        == 1`.
+      type: object
+      properties: {}
+    GoogleBigtableAdminV2TypeStructEncodingDelimitedBytes:
+      id: GoogleBigtableAdminV2TypeStructEncodingDelimitedBytes
+      description: >-
+        Fields are encoded independently and concatenated with a configurable
+        `delimiter` in between. A struct with no fields defined is encoded as a
+        single `delimiter`. Sorted mode: - Fields are encoded in sorted mode. -
+        Encoded field values must not contain any bytes <= `delimiter[0]` -
+        Element-wise order is preserved: `A < B` if `A[0] < B[0]`, or if `A[0]
+        == B[0] && A[1] < B[1]`, etc. Strict prefixes sort first. Distinct mode:
+        - Fields are encoded in distinct mode. - Encoded field values must not
+        contain `delimiter[0]`.
+      type: object
+      properties:
+        delimiter:
+          description: >-
+            Byte sequence used to delimit concatenated fields. The delimiter
+            must contain at least 1 character and at most 50 characters.
+          type: string
+          format: byte
+    GoogleBigtableAdminV2TypeStructEncodingOrderedCodeBytes:
+      id: GoogleBigtableAdminV2TypeStructEncodingOrderedCodeBytes
+      description: >-
+        Fields are encoded independently and concatenated with the fixed byte
+        pair {0x00, 0x01} in between. Any null (0x00) byte in an encoded field
+        is replaced by the fixed byte pair {0x00, 0xFF}. Fields that encode to
+        the empty string "" have special handling: - If *every* field encodes to
+        "", or if the STRUCT has no fields defined, then the STRUCT is encoded
+        as the fixed byte pair {0x00, 0x00}. - Otherwise, the STRUCT only
+        encodes until the last non-empty field, omitting any trailing empty
+        fields. Any empty fields that aren't omitted are replaced with the fixed
+        byte pair {0x00, 0x00}. Examples: - STRUCT() -> "\00\00" - STRUCT("") ->
+        "\00\00" - STRUCT("", "") -> "\00\00" - STRUCT("", "B") -> "\00\00" +
+        "\00\01" + "B" - STRUCT("A", "") -> "A" - STRUCT("", "B", "") ->
+        "\00\00" + "\00\01" + "B" - STRUCT("A", "", "C") -> "A" + "\00\01" +
+        "\00\00" + "\00\01" + "C" Since null bytes are always escaped, this
+        encoding can cause size blowup for encodings like `Int64.BigEndianBytes`
+        that are likely to produce many such bytes. Sorted mode: - Fields are
+        encoded in sorted mode. - All values supported by the field encodings
+        are allowed - Element-wise order is preserved: `A < B` if `A[0] < B[0]`,
+        or if `A[0] == B[0] && A[1] < B[1]`, etc. Strict prefixes sort first.
+        Distinct mode: - Fields are encoded in distinct mode. - All values
+        supported by the field encodings are allowed.
+      type: object
+      properties: {}
     GoogleBigtableAdminV2TypeArray:
       id: GoogleBigtableAdminV2TypeArray
       description: >-
@@ -1700,6 +1958,36 @@ components:
         valueType:
           description: The type of the values in a map.
           $ref: '#/components/schemas/Type'
+    GoogleBigtableAdminV2TypeProto:
+      id: GoogleBigtableAdminV2TypeProto
+      description: >-
+        A protobuf message type. Values of type `Proto` are stored in
+        `Value.bytes_value`.
+      type: object
+      properties:
+        schemaBundleId:
+          description: The ID of the schema bundle that this proto is defined in.
+          type: string
+        messageName:
+          description: >-
+            The fully qualified name of the protobuf message, including package.
+            In the format of "foo.bar.Message".
+          type: string
+    GoogleBigtableAdminV2TypeEnum:
+      id: GoogleBigtableAdminV2TypeEnum
+      description: >-
+        A protobuf enum type. Values of type `Enum` are stored in
+        `Value.int_value`.
+      type: object
+      properties:
+        schemaBundleId:
+          description: The ID of the schema bundle that this enum is defined in.
+          type: string
+        enumName:
+          description: >-
+            The fully qualified name of the protobuf enum message, including
+            package. In the format of "foo.bar.EnumMessage".
+          type: string
     RestoreInfo:
       id: RestoreInfo
       description: Information about a table restore.
@@ -1816,8 +2104,8 @@ components:
       properties:
         retentionPeriod:
           description: >-
-            Required. How long the automated backups should be retained. The
-            only supported value at this time is 3 days.
+            Required. How long the automated backups should be retained. Values
+            must be at least 3 days and at most 90 days.
           type: string
           format: google-duration
         frequency:
@@ -1825,6 +2113,32 @@ components:
             How frequently automated backups should occur. The only supported
             value at this time is 24 hours. An undefined frequency is treated as
             24 hours.
+          type: string
+          format: google-duration
+    TieredStorageConfig:
+      id: TieredStorageConfig
+      description: >-
+        Config for tiered storage. A valid config must have a valid
+        TieredStorageRule. Otherwise the whole TieredStorageConfig must be
+        unset. By default all data is stored in the SSD tier (only SSD instances
+        can configure tiered storage).
+      type: object
+      properties:
+        infrequentAccess:
+          description: >-
+            Rule to specify what data is stored in the infrequent access(IA)
+            tier. The IA tier allows storing more data per node with reduced
+            performance.
+          $ref: '#/components/schemas/TieredStorageRule'
+    TieredStorageRule:
+      id: TieredStorageRule
+      description: Rule to specify what data is stored in a storage tier.
+      type: object
+      properties:
+        includeIfOlderThan:
+          description: >-
+            Include cells older than the given age. For the infrequent access
+            tier, this value must be at least 30 days.
           type: string
           format: google-duration
     Split:
@@ -2256,6 +2570,61 @@ components:
             resources used by the backup.
           type: string
           format: google-datetime
+    SchemaBundle:
+      id: SchemaBundle
+      description: A named collection of related schemas.
+      type: object
+      properties:
+        name:
+          description: >-
+            Identifier. The unique name identifying this schema bundle. Values
+            are of the form
+            `projects/{project}/instances/{instance}/tables/{table}/schemaBundles/{schema_bundle}`
+          type: string
+        protoSchema:
+          description: Schema for Protobufs.
+          $ref: '#/components/schemas/ProtoSchema'
+        etag:
+          description: >-
+            Optional. The etag for this schema bundle. This may be sent on
+            update and delete requests to ensure the client has an up-to-date
+            value before proceeding. The server returns an ABORTED error on a
+            mismatched etag.
+          type: string
+    ProtoSchema:
+      id: ProtoSchema
+      description: Represents a protobuf schema.
+      type: object
+      properties:
+        protoDescriptors:
+          description: >-
+            Required. Contains a protobuf-serialized
+            [google.protobuf.FileDescriptorSet](https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/descriptor.proto),
+            which could include multiple proto files. To generate it,
+            [install](https://grpc.io/docs/protoc-installation/) and run
+            `protoc` with `--include_imports` and `--descriptor_set_out`. For
+            example, to generate for moon/shot/app.proto, run ``` $protoc
+            --proto_path=/app_path --proto_path=/lib_path \ --include_imports \
+            --descriptor_set_out=descriptors.pb \ moon/shot/app.proto ``` For
+            more details, see protobuffer [self
+            description](https://developers.google.com/protocol-buffers/docs/techniques#self-description).
+          type: string
+          format: byte
+    ListSchemaBundlesResponse:
+      id: ListSchemaBundlesResponse
+      description: The response for ListSchemaBundles.
+      type: object
+      properties:
+        schemaBundles:
+          description: The schema bundles from the specified table.
+          type: array
+          items:
+            $ref: '#/components/schemas/SchemaBundle'
+        nextPageToken:
+          description: >-
+            A token, which can be sent as `page_token` to retrieve the next
+            page. If this field is omitted, there are no subsequent pages.
+          type: string
     ListLocationsResponse:
       id: ListLocationsResponse
       description: The response message for Locations.ListLocations.
@@ -2629,12 +2998,12 @@ components:
             If exists, the name of the long-running operation that will be used
             to track the post-restore optimization process to optimize the
             performance of the restored table. The metadata type of the
-            long-running operation is OptimizeRestoreTableMetadata. The response
-            type is Empty. This long-running operation may be automatically
-            created by the system if applicable after the RestoreTable
-            long-running operation completes successfully. This operation may
-            not be created if the table is already optimized or the restore was
-            not successful.
+            long-running operation is OptimizeRestoredTableMetadata. The
+            response type is Empty. This long-running operation may be
+            automatically created by the system if applicable after the
+            RestoreTable long-running operation completes successfully. This
+            operation may not be created if the table is already optimized or
+            the restore was not successful.
           type: string
         progress:
           description: The progress of the RestoreTable operation.
@@ -2738,6 +3107,149 @@ components:
             Optional. If true, ignore the safety checks when updating the
             AuthorizedView.
           type: boolean
+    CreateSchemaBundleMetadata:
+      id: CreateSchemaBundleMetadata
+      description: The metadata for the Operation returned by CreateSchemaBundle.
+      type: object
+      properties:
+        name:
+          description: >-
+            The unique name identifying this schema bundle. Values are of the
+            form
+            `projects/{project}/instances/{instance}/tables/{table}/schemaBundles/{schema_bundle}`
+          type: string
+        startTime:
+          description: The time at which this operation started.
+          type: string
+          format: google-datetime
+        endTime:
+          description: If set, the time at which this operation finished or was canceled.
+          type: string
+          format: google-datetime
+    UpdateSchemaBundleMetadata:
+      id: UpdateSchemaBundleMetadata
+      description: The metadata for the Operation returned by UpdateSchemaBundle.
+      type: object
+      properties:
+        name:
+          description: >-
+            The unique name identifying this schema bundle. Values are of the
+            form
+            `projects/{project}/instances/{instance}/tables/{table}/schemaBundles/{schema_bundle}`
+          type: string
+        startTime:
+          description: The time at which this operation started.
+          type: string
+          format: google-datetime
+        endTime:
+          description: If set, the time at which this operation finished or was canceled.
+          type: string
+          format: google-datetime
+    CreateLogicalViewMetadata:
+      id: CreateLogicalViewMetadata
+      description: The metadata for the Operation returned by CreateLogicalView.
+      type: object
+      properties:
+        originalRequest:
+          description: >-
+            The request that prompted the initiation of this CreateLogicalView
+            operation.
+          $ref: '#/components/schemas/CreateLogicalViewRequest'
+        startTime:
+          description: The time at which this operation started.
+          type: string
+          format: google-datetime
+        endTime:
+          description: If set, the time at which this operation finished or was canceled.
+          type: string
+          format: google-datetime
+    CreateLogicalViewRequest:
+      id: CreateLogicalViewRequest
+      description: Request message for BigtableInstanceAdmin.CreateLogicalView.
+      type: object
+      properties:
+        parent:
+          description: >-
+            Required. The parent instance where this logical view will be
+            created. Format: `projects/{project}/instances/{instance}`.
+          type: string
+        logicalViewId:
+          description: >-
+            Required. The ID to use for the logical view, which will become the
+            final component of the logical view's resource name.
+          type: string
+        logicalView:
+          description: Required. The logical view to create.
+          $ref: '#/components/schemas/LogicalView'
+    UpdateLogicalViewMetadata:
+      id: UpdateLogicalViewMetadata
+      description: The metadata for the Operation returned by UpdateLogicalView.
+      type: object
+      properties:
+        originalRequest:
+          description: >-
+            The request that prompted the initiation of this UpdateLogicalView
+            operation.
+          $ref: '#/components/schemas/UpdateLogicalViewRequest'
+        startTime:
+          description: The time at which this operation was started.
+          type: string
+          format: google-datetime
+        endTime:
+          description: If set, the time at which this operation finished or was canceled.
+          type: string
+          format: google-datetime
+    UpdateLogicalViewRequest:
+      id: UpdateLogicalViewRequest
+      description: Request message for BigtableInstanceAdmin.UpdateLogicalView.
+      type: object
+      properties:
+        logicalView:
+          description: >-
+            Required. The logical view to update. The logical view's `name`
+            field is used to identify the view to update. Format:
+            `projects/{project}/instances/{instance}/logicalViews/{logical_view}`.
+          $ref: '#/components/schemas/LogicalView'
+        updateMask:
+          description: Optional. The list of fields to update.
+          type: string
+          format: google-fieldmask
+    CreateMaterializedViewMetadata:
+      id: CreateMaterializedViewMetadata
+      description: The metadata for the Operation returned by CreateMaterializedView.
+      type: object
+      properties:
+        originalRequest:
+          description: >-
+            The request that prompted the initiation of this
+            CreateMaterializedView operation.
+          $ref: '#/components/schemas/CreateMaterializedViewRequest'
+        startTime:
+          description: The time at which this operation started.
+          type: string
+          format: google-datetime
+        endTime:
+          description: If set, the time at which this operation finished or was canceled.
+          type: string
+          format: google-datetime
+    CreateMaterializedViewRequest:
+      id: CreateMaterializedViewRequest
+      description: Request message for BigtableInstanceAdmin.CreateMaterializedView.
+      type: object
+      properties:
+        parent:
+          description: >-
+            Required. The parent instance where this materialized view will be
+            created. Format: `projects/{project}/instances/{instance}`.
+          type: string
+        materializedViewId:
+          description: >-
+            Required. The ID to use for the materialized view, which will become
+            the final component of the materialized view's resource name.
+          type: string
+        materializedView:
+          description: Required. The materialized view to create.
+          $ref: '#/components/schemas/MaterializedView'
   parameters:
     access_token:
       description: OAuth access token.
@@ -3164,6 +3676,184 @@ components:
         replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/app_profiles/methods/delete'
+    materialized_views_iam_policies:
+      id: google.bigtableadmin.materialized_views_iam_policies
+      name: materialized_views_iam_policies
+      title: Materialized_views_iam_policies
+      methods:
+        get_iam_policy:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1materializedViews~1{materializedViewsId}:getIamPolicy/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.bindings
+        set_iam_policy:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1materializedViews~1{materializedViewsId}:setIamPolicy/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        test_iam_permissions:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1materializedViews~1{materializedViewsId}:testIamPermissions/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: >-
+              #/components/x-stackQL-resources/materialized_views_iam_policies/methods/get_iam_policy
+        insert: []
+        update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/materialized_views_iam_policies/methods/set_iam_policy
+        delete: []
+    materialized_views:
+      id: google.bigtableadmin.materialized_views
+      name: materialized_views
+      title: Materialized_views
+      methods:
+        create:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1materializedViews/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        list:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1materializedViews/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.materializedViews
+        get:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1materializedViews~1{materializedViewsId}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        patch:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1materializedViews~1{materializedViewsId}/patch
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1materializedViews~1{materializedViewsId}/delete
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/materialized_views/methods/get'
+          - $ref: '#/components/x-stackQL-resources/materialized_views/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/materialized_views/methods/create'
+        update:
+          - $ref: '#/components/x-stackQL-resources/materialized_views/methods/patch'
+        replace: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/materialized_views/methods/delete'
+    logical_views_iam_policies:
+      id: google.bigtableadmin.logical_views_iam_policies
+      name: logical_views_iam_policies
+      title: Logical_views_iam_policies
+      methods:
+        get_iam_policy:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1logicalViews~1{logicalViewsId}:getIamPolicy/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.bindings
+        set_iam_policy:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1logicalViews~1{logicalViewsId}:setIamPolicy/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        test_iam_permissions:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1logicalViews~1{logicalViewsId}:testIamPermissions/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: >-
+              #/components/x-stackQL-resources/logical_views_iam_policies/methods/get_iam_policy
+        insert: []
+        update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/logical_views_iam_policies/methods/set_iam_policy
+        delete: []
+    logical_views:
+      id: google.bigtableadmin.logical_views
+      name: logical_views
+      title: Logical_views
+      methods:
+        create:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1logicalViews/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        list:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1logicalViews/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.logicalViews
+        get:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1logicalViews~1{logicalViewsId}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        patch:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1logicalViews~1{logicalViewsId}/patch
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1logicalViews~1{logicalViewsId}/delete
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/logical_views/methods/get'
+          - $ref: '#/components/x-stackQL-resources/logical_views/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/logical_views/methods/create'
+        update:
+          - $ref: '#/components/x-stackQL-resources/logical_views/methods/patch'
+        replace: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/logical_views/methods/delete'
     tables:
       id: google.bigtableadmin.tables
       name: tables
@@ -3384,6 +4074,95 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/authorized_views_iam_policies/methods/set_iam_policy
         delete: []
+    schema_bundles_iam_policies:
+      id: google.bigtableadmin.schema_bundles_iam_policies
+      name: schema_bundles_iam_policies
+      title: Schema_bundles_iam_policies
+      methods:
+        get_iam_policy:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1tables~1{tablesId}~1schemaBundles~1{schemaBundlesId}:getIamPolicy/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.bindings
+        set_iam_policy:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1tables~1{tablesId}~1schemaBundles~1{schemaBundlesId}:setIamPolicy/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        test_iam_permissions:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1tables~1{tablesId}~1schemaBundles~1{schemaBundlesId}:testIamPermissions/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: >-
+              #/components/x-stackQL-resources/schema_bundles_iam_policies/methods/get_iam_policy
+        insert: []
+        update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/schema_bundles_iam_policies/methods/set_iam_policy
+        delete: []
+    schema_bundles:
+      id: google.bigtableadmin.schema_bundles
+      name: schema_bundles
+      title: Schema_bundles
+      methods:
+        create:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1tables~1{tablesId}~1schemaBundles/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        list:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1tables~1{tablesId}~1schemaBundles/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.schemaBundles
+        patch:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1tables~1{tablesId}~1schemaBundles~1{schemaBundlesId}/patch
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        get:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1tables~1{tablesId}~1schemaBundles~1{schemaBundlesId}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1instances~1{instancesId}~1tables~1{tablesId}~1schemaBundles~1{schemaBundlesId}/delete
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/schema_bundles/methods/get'
+          - $ref: '#/components/x-stackQL-resources/schema_bundles/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/schema_bundles/methods/create'
+        update:
+          - $ref: '#/components/x-stackQL-resources/schema_bundles/methods/patch'
+        replace: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/schema_bundles/methods/delete'
     locations:
       id: google.bigtableadmin.locations
       name: locations
@@ -5263,6 +6042,928 @@ paths:
           name: ignoreWarnings
           schema:
             type: boolean
+  /v2/projects/{projectsId}/instances/{instancesId}/materializedViews/{materializedViewsId}:getIamPolicy:
+    parameters: *ref_1
+    post:
+      description: >-
+        Gets the access control policy for an instance resource. Returns an
+        empty policy if an instance exists but does not have a policy set.
+      operationId: bigtableadmin.projects.instances.materializedViews.getIamPolicy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetIamPolicyRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: materializedViewsId
+          required: true
+          schema:
+            type: string
+  /v2/projects/{projectsId}/instances/{instancesId}/materializedViews/{materializedViewsId}:setIamPolicy:
+    parameters: *ref_1
+    post:
+      description: >-
+        Sets the access control policy on an instance resource. Replaces any
+        existing policy.
+      operationId: bigtableadmin.projects.instances.materializedViews.setIamPolicy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetIamPolicyRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: materializedViewsId
+          required: true
+          schema:
+            type: string
+  /v2/projects/{projectsId}/instances/{instancesId}/materializedViews/{materializedViewsId}:testIamPermissions:
+    parameters: *ref_1
+    post:
+      description: >-
+        Returns permissions that the caller has on the specified instance
+        resource.
+      operationId: bigtableadmin.projects.instances.materializedViews.testIamPermissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestIamPermissionsRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestIamPermissionsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: materializedViewsId
+          required: true
+          schema:
+            type: string
+  /v2/projects/{projectsId}/instances/{instancesId}/materializedViews:
+    parameters: *ref_1
+    post:
+      description: Creates a materialized view within an instance.
+      operationId: bigtableadmin.projects.instances.materializedViews.create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaterializedView'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: materializedViewId
+          schema:
+            type: string
+    get:
+      description: Lists information about materialized views in an instance.
+      operationId: bigtableadmin.projects.instances.materializedViews.list
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMaterializedViewsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+  /v2/projects/{projectsId}/instances/{instancesId}/materializedViews/{materializedViewsId}:
+    parameters: *ref_1
+    get:
+      description: Gets information about a materialized view.
+      operationId: bigtableadmin.projects.instances.materializedViews.get
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaterializedView'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: materializedViewsId
+          required: true
+          schema:
+            type: string
+    patch:
+      description: Updates a materialized view within an instance.
+      operationId: bigtableadmin.projects.instances.materializedViews.patch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaterializedView'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: materializedViewsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: updateMask
+          schema:
+            type: string
+            format: google-fieldmask
+    delete:
+      description: Deletes a materialized view from an instance.
+      operationId: bigtableadmin.projects.instances.materializedViews.delete
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Empty'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: materializedViewsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: etag
+          schema:
+            type: string
+  /v2/projects/{projectsId}/instances/{instancesId}/logicalViews/{logicalViewsId}:getIamPolicy:
+    parameters: *ref_1
+    post:
+      description: >-
+        Gets the access control policy for an instance resource. Returns an
+        empty policy if an instance exists but does not have a policy set.
+      operationId: bigtableadmin.projects.instances.logicalViews.getIamPolicy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetIamPolicyRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: logicalViewsId
+          required: true
+          schema:
+            type: string
+  /v2/projects/{projectsId}/instances/{instancesId}/logicalViews/{logicalViewsId}:setIamPolicy:
+    parameters: *ref_1
+    post:
+      description: >-
+        Sets the access control policy on an instance resource. Replaces any
+        existing policy.
+      operationId: bigtableadmin.projects.instances.logicalViews.setIamPolicy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetIamPolicyRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: logicalViewsId
+          required: true
+          schema:
+            type: string
+  /v2/projects/{projectsId}/instances/{instancesId}/logicalViews/{logicalViewsId}:testIamPermissions:
+    parameters: *ref_1
+    post:
+      description: >-
+        Returns permissions that the caller has on the specified instance
+        resource.
+      operationId: bigtableadmin.projects.instances.logicalViews.testIamPermissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestIamPermissionsRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestIamPermissionsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: logicalViewsId
+          required: true
+          schema:
+            type: string
+  /v2/projects/{projectsId}/instances/{instancesId}/logicalViews:
+    parameters: *ref_1
+    post:
+      description: Creates a logical view within an instance.
+      operationId: bigtableadmin.projects.instances.logicalViews.create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogicalView'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: logicalViewId
+          schema:
+            type: string
+    get:
+      description: Lists information about logical views in an instance.
+      operationId: bigtableadmin.projects.instances.logicalViews.list
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListLogicalViewsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+  /v2/projects/{projectsId}/instances/{instancesId}/logicalViews/{logicalViewsId}:
+    parameters: *ref_1
+    get:
+      description: Gets information about a logical view.
+      operationId: bigtableadmin.projects.instances.logicalViews.get
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogicalView'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: logicalViewsId
+          required: true
+          schema:
+            type: string
+    patch:
+      description: Updates a logical view within an instance.
+      operationId: bigtableadmin.projects.instances.logicalViews.patch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogicalView'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: logicalViewsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: updateMask
+          schema:
+            type: string
+            format: google-fieldmask
+    delete:
+      description: Deletes a logical view from an instance.
+      operationId: bigtableadmin.projects.instances.logicalViews.delete
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.instance
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.cluster
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Empty'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: logicalViewsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: etag
+          schema:
+            type: string
   /v2/projects/{projectsId}/instances/{instancesId}/tables:
     parameters: *ref_1
     post:
@@ -5487,6 +7188,10 @@ paths:
           schema:
             type: string
             format: google-fieldmask
+        - in: query
+          name: ignoreWarnings
+          schema:
+            type: boolean
     delete:
       description: Permanently deletes a specified table and all of its data.
       operationId: bigtableadmin.projects.instances.tables.delete
@@ -6524,6 +8229,483 @@ paths:
           required: true
           schema:
             type: string
+  /v2/projects/{projectsId}/instances/{instancesId}/tables/{tablesId}/schemaBundles/{schemaBundlesId}:getIamPolicy:
+    parameters: *ref_1
+    post:
+      description: >-
+        Gets the access control policy for a Bigtable resource. Returns an empty
+        policy if the resource exists but does not have a policy set.
+      operationId: bigtableadmin.projects.instances.tables.schemaBundles.getIamPolicy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetIamPolicyRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.table
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.table
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.table
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.table
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: tablesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: schemaBundlesId
+          required: true
+          schema:
+            type: string
+  /v2/projects/{projectsId}/instances/{instancesId}/tables/{tablesId}/schemaBundles/{schemaBundlesId}:setIamPolicy:
+    parameters: *ref_1
+    post:
+      description: >-
+        Sets the access control policy on a Bigtable resource. Replaces any
+        existing policy.
+      operationId: bigtableadmin.projects.instances.tables.schemaBundles.setIamPolicy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetIamPolicyRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.table
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.table
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.table
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.table
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: tablesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: schemaBundlesId
+          required: true
+          schema:
+            type: string
+  /v2/projects/{projectsId}/instances/{instancesId}/tables/{tablesId}/schemaBundles/{schemaBundlesId}:testIamPermissions:
+    parameters: *ref_1
+    post:
+      description: >-
+        Returns permissions that the caller has on the specified Bigtable
+        resource.
+      operationId: bigtableadmin.projects.instances.tables.schemaBundles.testIamPermissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestIamPermissionsRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.table
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.table
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.table
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.table
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestIamPermissionsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: tablesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: schemaBundlesId
+          required: true
+          schema:
+            type: string
+  /v2/projects/{projectsId}/instances/{instancesId}/tables/{tablesId}/schemaBundles:
+    parameters: *ref_1
+    post:
+      description: Creates a new schema bundle in the specified table.
+      operationId: bigtableadmin.projects.instances.tables.schemaBundles.create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchemaBundle'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.table
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.table
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.table
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.table
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: tablesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: schemaBundleId
+          schema:
+            type: string
+    get:
+      description: Lists all schema bundles associated with the specified table.
+      operationId: bigtableadmin.projects.instances.tables.schemaBundles.list
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.table
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.table
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.table
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.table
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSchemaBundlesResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: tablesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: view
+          schema:
+            type: string
+  /v2/projects/{projectsId}/instances/{instancesId}/tables/{tablesId}/schemaBundles/{schemaBundlesId}:
+    parameters: *ref_1
+    patch:
+      description: Updates a schema bundle in the specified table.
+      operationId: bigtableadmin.projects.instances.tables.schemaBundles.patch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchemaBundle'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.table
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.table
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.table
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.table
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: tablesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: schemaBundlesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: updateMask
+          schema:
+            type: string
+            format: google-fieldmask
+        - in: query
+          name: ignoreWarnings
+          schema:
+            type: boolean
+    get:
+      description: Gets metadata information about the specified schema bundle.
+      operationId: bigtableadmin.projects.instances.tables.schemaBundles.get
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.table
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.table
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.table
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.table
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaBundle'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: tablesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: schemaBundlesId
+          required: true
+          schema:
+            type: string
+    delete:
+      description: Deletes a schema bundle in the specified table.
+      operationId: bigtableadmin.projects.instances.tables.schemaBundles.delete
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigtable.admin.table
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigtable.admin.table
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.table
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-bigtable.admin.table
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Empty'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: instancesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: tablesId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: schemaBundlesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: etag
+          schema:
+            type: string
   /v2/projects/{projectsId}/locations:
     parameters: *ref_1
     get:
@@ -6582,5 +8764,9 @@ paths:
             format: int32
         - in: query
           name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: extraLocationTypes
           schema:
             type: string

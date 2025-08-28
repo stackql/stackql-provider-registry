@@ -7,8 +7,8 @@ info:
   title: Database Migration API
   description: Manage Cloud Database Migration Service resources on Google Cloud Platform.
   version: v1
-  x-discovery-doc-revision: '20241026'
-  x-generated-date: '2024-11-06'
+  x-discovery-doc-revision: '20250815'
+  x-generated-date: '2025-08-28'
 externalDocs:
   url: https://cloud.google.com/database-migration/
 servers:
@@ -379,6 +379,22 @@ components:
             Configuration for heterogeneous **Oracle to Cloud SQL for
             PostgreSQL** and **Oracle to AlloyDB for PostgreSQL** migrations.
           $ref: '#/components/schemas/OracleToPostgresConfig'
+        sqlserverToPostgresConfig:
+          description: >-
+            Configuration for heterogeneous **SQL Server to Cloud SQL for
+            PostgreSQL** migrations.
+          $ref: '#/components/schemas/SqlServerToPostgresConfig'
+        objectsConfig:
+          description: Optional. The objects that need to be migrated.
+          $ref: '#/components/schemas/MigrationJobObjectsConfig'
+        satisfiesPzs:
+          description: Output only. Reserved for future use.
+          readOnly: true
+          type: boolean
+        satisfiesPzi:
+          description: Output only. Reserved for future use.
+          readOnly: true
+          type: boolean
     DumpFlags:
       id: DumpFlags
       description: Dump flags definition.
@@ -469,12 +485,14 @@ components:
             - Amazon RDS is the source instance provider.
             - Amazon Aurora is the source instance provider.
             - AlloyDB for PostgreSQL is the source instance provider.
+            - Microsoft Azure Database for MySQL/PostgreSQL.
           enum:
             - DATABASE_PROVIDER_UNSPECIFIED
             - CLOUDSQL
             - RDS
             - AURORA
             - ALLOYDB
+            - AZURE_DATABASE
         engine:
           description: The database engine.
           type: string
@@ -573,13 +591,19 @@ components:
       type: object
       properties:
         certPath:
-          description: Required. Path to certificate.
+          description: >-
+            Required. Path to the Certificate (.cer) in Cloud Storage, in the
+            form `gs://bucketName/fileName`. The instance must have write
+            permissions to the bucket and read access to the file.
           type: string
         pvkPath:
-          description: Required. Path to certificate private key.
+          description: >-
+            Required. Path to the Certificate Private Key (.pvk) in Cloud
+            Storage, in the form `gs://bucketName/fileName`. The instance must
+            have write permissions to the bucket and read access to the file.
           type: string
         pvkPassword:
-          description: Required. Input only. Private key password.
+          description: Required. Input only. Password that encrypts the private key.
           type: string
     OracleToPostgresConfig:
       id: OracleToPostgresConfig
@@ -673,6 +697,116 @@ components:
           description: Optional. Timeout for data migration transactions.
           type: string
           format: google-duration
+    SqlServerToPostgresConfig:
+      id: SqlServerToPostgresConfig
+      description: >-
+        Configuration for heterogeneous **SQL Server to Cloud SQL for
+        PostgreSQL** migrations.
+      type: object
+      properties:
+        sqlserverSourceConfig:
+          description: Optional. Configuration for SQL Server source.
+          $ref: '#/components/schemas/SqlServerSourceConfig'
+        postgresDestinationConfig:
+          description: Optional. Configuration for Postgres destination.
+          $ref: '#/components/schemas/PostgresDestinationConfig'
+    SqlServerSourceConfig:
+      id: SqlServerSourceConfig
+      description: Configuration for SQL Server as a source in a migration.
+      type: object
+      properties:
+        maxConcurrentFullDumpConnections:
+          description: >-
+            Optional. Maximum number of connections Database Migration Service
+            will open to the source for full dump phase.
+          type: integer
+          format: int32
+        maxConcurrentCdcConnections:
+          description: >-
+            Optional. Maximum number of connections Database Migration Service
+            will open to the source for CDC phase.
+          type: integer
+          format: int32
+        skipFullDump:
+          description: Optional. Whether to skip full dump or not.
+          type: boolean
+        cdcStartPosition:
+          description: >-
+            Optional. The log sequence number (LSN) to start CDC data migration
+            from.
+          type: string
+    MigrationJobObjectsConfig:
+      id: MigrationJobObjectsConfig
+      description: Configuration for the objects to be migrated.
+      type: object
+      properties:
+        sourceObjectsConfig:
+          description: The list of the migration job objects.
+          $ref: '#/components/schemas/SourceObjectsConfig'
+    SourceObjectsConfig:
+      id: SourceObjectsConfig
+      description: List of configurations for the source objects to be migrated.
+      type: object
+      properties:
+        objectConfigs:
+          description: Optional. The list of the objects to be migrated.
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceObjectConfig'
+        objectsSelectionType:
+          description: Optional. The objects selection type of the migration job.
+          type: string
+          enumDescriptions:
+            - >-
+              The type of the objects selection is unknown, indicating that the
+              migration job is at instance level.
+            - Migrate all of the objects.
+            - Migrate specific objects.
+          enum:
+            - OBJECTS_SELECTION_TYPE_UNSPECIFIED
+            - ALL_OBJECTS
+            - SPECIFIED_OBJECTS
+    SourceObjectConfig:
+      id: SourceObjectConfig
+      description: Config for a single migration job object.
+      type: object
+      properties:
+        objectIdentifier:
+          description: Optional. The object identifier.
+          $ref: '#/components/schemas/SourceObjectIdentifier'
+    SourceObjectIdentifier:
+      id: SourceObjectIdentifier
+      description: An identifier for the Migration Job Object.
+      type: object
+      properties:
+        database:
+          description: >-
+            Optional. The database name. This will be required only if the
+            object uses a database name as part of its unique identifier.
+          type: string
+        schema:
+          description: >-
+            Optional. The schema name. This will be required only if the object
+            uses a schema name as part of its unique identifier.
+          type: string
+        table:
+          description: >-
+            Optional. The table name. This will be required only if the object
+            is a level below database or schema.
+          type: string
+        type:
+          description: Required. The type of the migration job object.
+          type: string
+          enumDescriptions:
+            - The type of the migration job object is unknown.
+            - The migration job object is a database.
+            - The migration job object is a schema.
+            - The migration job object is a table.
+          enum:
+            - MIGRATION_JOB_OBJECT_TYPE_UNSPECIFIED
+            - DATABASE
+            - SCHEMA
+            - TABLE
     StartMigrationJobRequest:
       id: StartMigrationJobRequest
       description: Request message for 'StartMigrationJob' request.
@@ -702,7 +836,10 @@ components:
       id: PromoteMigrationJobRequest
       description: Request message for 'PromoteMigrationJob' request.
       type: object
-      properties: {}
+      properties:
+        objectsFilter:
+          description: Optional. The object filter to apply to the migration job.
+          $ref: '#/components/schemas/MigrationJobObjectsConfig'
     DemoteDestinationRequest:
       id: DemoteDestinationRequest
       description: Request message for 'DemoteDestination' request.
@@ -733,6 +870,12 @@ components:
           description: >-
             Optional. Restart the migration job without running prior
             configuration verification. Defaults to `false`.
+          type: boolean
+        objectsFilter:
+          description: Optional. The object filter to apply to the migration job.
+          $ref: '#/components/schemas/MigrationJobObjectsConfig'
+        restartFailedObjects:
+          description: Optional. If true, only failed objects will be restarted.
           type: boolean
     GenerateSshScriptRequest:
       id: GenerateSshScriptRequest
@@ -938,12 +1081,22 @@ components:
             - Amazon RDS is the source instance provider.
             - Amazon Aurora is the source instance provider.
             - AlloyDB for PostgreSQL is the source instance provider.
+            - Microsoft Azure Database for MySQL/PostgreSQL.
           enum:
             - DATABASE_PROVIDER_UNSPECIFIED
             - CLOUDSQL
             - RDS
             - AURORA
             - ALLOYDB
+            - AZURE_DATABASE
+        satisfiesPzs:
+          description: Output only. Reserved for future use.
+          readOnly: true
+          type: boolean
+        satisfiesPzi:
+          description: Output only. Reserved for future use.
+          readOnly: true
+          type: boolean
     MySqlConnectionProfile:
       id: MySqlConnectionProfile
       description: >-
@@ -1032,6 +1185,15 @@ components:
             will use this certificate to verify it's connecting to the right
             host.
           type: string
+        sslFlags:
+          description: >-
+            Optional. SSL flags used for establishing SSL connection to the
+            source database. Only source specific flags are supported. An object
+            containing a list of "key": "value" pairs. Example: {
+            "server_certificate_hostname": "server.com"}.
+          type: object
+          additionalProperties:
+            type: string
     PostgreSqlConnectionProfile:
       id: PostgreSqlConnectionProfile
       description: >-
@@ -1058,6 +1220,9 @@ components:
             Migration Service will be using to connect to the database. This
             field is not returned on request, and the value is encrypted when
             stored in Database Migration Service.
+          type: string
+        database:
+          description: Optional. The name of the specific database within the host.
           type: string
         passwordSet:
           description: >-
@@ -1161,6 +1326,9 @@ components:
             The backup details in Cloud Storage for homogeneous migration to
             Cloud SQL for SQL Server.
           $ref: '#/components/schemas/SqlServerBackups'
+        database:
+          description: Required. The name of the specific database within the host.
+          type: string
         staticIpConnectivity:
           description: Static IP connectivity data (default, no additional details needed).
           $ref: '#/components/schemas/StaticIpConnectivity'
@@ -1492,16 +1660,20 @@ components:
           additionalProperties:
             type: string
         dataDiskType:
-          description: 'The type of storage: `PD_SSD` (default) or `PD_HDD`.'
+          description: >-
+            The type of storage: `PD_SSD` (default) or `PD_HDD` or
+            `HYPERDISK_BALANCED`.
           type: string
           enumDescriptions:
             - Unspecified.
             - SSD disk.
             - HDD disk.
+            - A Hyperdisk Balanced data disk.
           enum:
             - SQL_DATA_DISK_TYPE_UNSPECIFIED
             - PD_SSD
             - PD_HDD
+            - HYPERDISK_BALANCED
         dataDiskSizeGb:
           description: >-
             The storage capacity available to the database, in GB. The minimum
@@ -1575,6 +1747,20 @@ components:
             overview](https://cloud.google.com/sql/help/mysql-data-cache) in
             Cloud SQL documentation.
           $ref: '#/components/schemas/DataCacheConfig'
+        dataDiskProvisionedIops:
+          description: >-
+            Optional. Provisioned number of I/O operations per second for the
+            data disk. This field is only used for hyperdisk-balanced disk
+            types.
+          type: string
+          format: int64
+        dataDiskProvisionedThroughput:
+          description: >-
+            Optional. Provisioned throughput measured in MiB per second for the
+            data disk. This field is only used for hyperdisk-balanced disk
+            types.
+          type: string
+          format: int64
     SqlIpConfig:
       id: SqlIpConfig
       description: IP Management configuration.
@@ -1689,6 +1875,7 @@ components:
           additionalProperties:
             type: string
         primaryInstanceSettings:
+          description: Settings for the cluster's primary instance
           $ref: '#/components/schemas/PrimaryInstanceSettings'
         encryptionConfig:
           description: >-
@@ -1709,11 +1896,13 @@ components:
             - The database version is Postgres 14.
             - The database version is Postgres 15.
             - The database version is Postgres 16.
+            - The database version is Postgres 17.
           enum:
             - DATABASE_VERSION_UNSPECIFIED
             - POSTGRES_14
             - POSTGRES_15
             - POSTGRES_16
+            - POSTGRES_17
     UserPassword:
       id: UserPassword
       description: >-
@@ -1789,6 +1978,12 @@ components:
           description: The number of CPU's in the VM instance.
           type: integer
           format: int32
+        machineType:
+          description: >-
+            Optional. Machine type of the VM instance. E.g. "n2-highmem-4",
+            "n2-highmem-8", "c4a-highmem-4-lssd". cpu_count must match the
+            number of vCPUs in the machine type.
+          type: string
     InstanceNetworkConfig:
       id: InstanceNetworkConfig
       description: Metadata related to instance level network configuration.
@@ -1886,9 +2081,20 @@ components:
           description: Output only. The error details in case of state FAILED.
           readOnly: true
           $ref: '#/components/schemas/Status'
+        satisfiesPzs:
+          description: Output only. Reserved for future use.
+          readOnly: true
+          type: boolean
+        satisfiesPzi:
+          description: Output only. Reserved for future use.
+          readOnly: true
+          type: boolean
         vpcPeeringConfig:
           description: VPC peering configuration.
           $ref: '#/components/schemas/VpcPeeringConfig'
+        pscInterfaceConfig:
+          description: PSC Interface configuration.
+          $ref: '#/components/schemas/PscInterfaceConfig'
     VpcPeeringConfig:
       id: VpcPeeringConfig
       description: >-
@@ -1903,6 +2109,19 @@ components:
           type: string
         subnet:
           description: Required. A free subnet for peering. (CIDR of /29)
+          type: string
+    PscInterfaceConfig:
+      id: PscInterfaceConfig
+      description: >-
+        The PSC Interface configuration is used to create PSC Interface between
+        DMS's internal VPC and the consumer's PSC.
+      type: object
+      properties:
+        networkAttachment:
+          description: >-
+            Required. Fully qualified name of the Network Attachment that DMS
+            will connect to. Format:
+            `projects/{{project}}/regions/{{region}}/networkAttachments/{{name}}`
           type: string
     ListPrivateConnectionsResponse:
       id: ListPrivateConnectionsResponse
@@ -1980,6 +2199,44 @@ components:
         displayName:
           description: Optional. The display name for the workspace.
           type: string
+        destinationProvider:
+          description: Optional. The provider for the destination database.
+          type: string
+          enumDescriptions:
+            - >-
+              Use this value for on-premise source database instances and
+              ORACLE.
+            - Cloud SQL is the source instance provider.
+            - Amazon RDS is the source instance provider.
+            - Amazon Aurora is the source instance provider.
+            - AlloyDB for PostgreSQL is the source instance provider.
+            - Microsoft Azure Database for MySQL/PostgreSQL.
+          enum:
+            - DATABASE_PROVIDER_UNSPECIFIED
+            - CLOUDSQL
+            - RDS
+            - AURORA
+            - ALLOYDB
+            - AZURE_DATABASE
+        sourceProvider:
+          description: Optional. The provider for the source database.
+          type: string
+          enumDescriptions:
+            - >-
+              Use this value for on-premise source database instances and
+              ORACLE.
+            - Cloud SQL is the source instance provider.
+            - Amazon RDS is the source instance provider.
+            - Amazon Aurora is the source instance provider.
+            - AlloyDB for PostgreSQL is the source instance provider.
+            - Microsoft Azure Database for MySQL/PostgreSQL.
+          enum:
+            - DATABASE_PROVIDER_UNSPECIFIED
+            - CLOUDSQL
+            - RDS
+            - AURORA
+            - ALLOYDB
+            - AZURE_DATABASE
     DatabaseEngineInfo:
       id: DatabaseEngineInfo
       description: The type and version of a source or destination database.
@@ -3162,6 +3419,41 @@ components:
             - DATABASE_ENTITY_TYPE_UDT
             - DATABASE_ENTITY_TYPE_MATERIALIZED_VIEW
             - DATABASE_ENTITY_TYPE_DATABASE
+        ddlKind:
+          description: >-
+            The DDL Kind selected for apply, or UNSPECIFIED if the entity wasn't
+            converted yet.
+          type: string
+          enumDescriptions:
+            - The kind of the DDL is unknown.
+            - DDL of the source entity
+            - Deterministic converted DDL
+            - Gemini AI converted DDL
+            - User edited DDL
+          enum:
+            - DDL_KIND_UNSPECIFIED
+            - SOURCE
+            - DETERMINISTIC
+            - AI
+            - USER_EDIT
+        editedDdlKind:
+          description: >-
+            If ddl_kind is USER_EDIT, this holds the DDL kind of the original
+            content - DETERMINISTIC or AI. Otherwise, this is
+            DDL_KIND_UNSPECIFIED.
+          type: string
+          enumDescriptions:
+            - The kind of the DDL is unknown.
+            - DDL of the source entity
+            - Deterministic converted DDL
+            - Gemini AI converted DDL
+            - User edited DDL
+          enum:
+            - DDL_KIND_UNSPECIFIED
+            - SOURCE
+            - DETERMINISTIC
+            - AI
+            - USER_EDIT
         issueId:
           description: EntityIssues found for this ddl.
           type: array
@@ -3408,6 +3700,9 @@ components:
         defaultValue:
           description: Default value of the column.
           type: string
+        computed:
+          description: Is the column a computed column.
+          type: boolean
     ConstraintEntity:
       id: ConstraintEntity
       description: >-
@@ -3715,6 +4010,11 @@ components:
         sqlCode:
           description: The SQL code which creates the view.
           type: string
+        indices:
+          description: View indices.
+          type: array
+          items:
+            $ref: '#/components/schemas/IndexEntity'
         customFeatures:
           description: Custom engine specific features.
           type: object
@@ -3895,6 +4195,116 @@ components:
           description: >-
             A token that can be sent as `page_token` to retrieve the next page.
             If this field is omitted, there are no subsequent pages.
+          type: string
+    MigrationJobObject:
+      id: MigrationJobObject
+      description: A specific Migration Job Object (e.g. a specifc DB Table)
+      type: object
+      properties:
+        name:
+          description: The object's name.
+          type: string
+        sourceObject:
+          description: The object identifier in the data source.
+          $ref: '#/components/schemas/SourceObjectIdentifier'
+        error:
+          description: Output only. The error details in case of failure.
+          readOnly: true
+          $ref: '#/components/schemas/Status'
+        state:
+          description: The state of the migration job object.
+          type: string
+          enumDescriptions:
+            - The state of the migration job object is unknown.
+            - The migration job object is not started.
+            - The migration job object is running.
+            - The migration job object is being stopped.
+            - The migration job object is currently stopped.
+            - The migration job object is restarting.
+            - The migration job object failed.
+            - The migration job object is deleting.
+            - The migration job object is not selected for migration.
+            - The migration job object is completed.
+          enum:
+            - STATE_UNSPECIFIED
+            - NOT_STARTED
+            - RUNNING
+            - STOPPING
+            - STOPPED
+            - RESTARTING
+            - FAILED
+            - REMOVING
+            - NOT_SELECTED
+            - COMPLETED
+        phase:
+          description: Output only. The phase of the migration job object.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - The phase of the migration job is unknown.
+            - The migration job object is in the full dump phase.
+            - The migration job object is in CDC phase.
+            - The migration job object is ready to be promoted.
+            - The migration job object is in running the promote phase.
+            - The migration job is promoted.
+            - The migration job object is in the differential backup phase.
+          enum:
+            - PHASE_UNSPECIFIED
+            - FULL_DUMP
+            - CDC
+            - READY_FOR_PROMOTE
+            - PROMOTE_IN_PROGRESS
+            - PROMOTED
+            - DIFF_BACKUP
+        createTime:
+          description: Output only. The creation time of the migration job object.
+          readOnly: true
+          type: string
+          format: google-datetime
+        updateTime:
+          description: Output only. The last update time of the migration job object.
+          readOnly: true
+          type: string
+          format: google-datetime
+        heterogeneousMetadata:
+          description: Output only. Metadata for heterogeneous migration jobs objects.
+          readOnly: true
+          $ref: '#/components/schemas/HeterogeneousMetadata'
+    HeterogeneousMetadata:
+      id: HeterogeneousMetadata
+      description: Metadata for heterogeneous migration jobs objects.
+      type: object
+      properties:
+        unsupportedEventsCount:
+          description: The number of unsupported events.
+          type: string
+          format: int64
+    LookupMigrationJobObjectRequest:
+      id: LookupMigrationJobObjectRequest
+      description: >-
+        Request for looking up a specific migration job object by its source
+        object identifier.
+      type: object
+      properties:
+        sourceObjectIdentifier:
+          description: >-
+            Required. The source object identifier which maps to the migration
+            job object.
+          $ref: '#/components/schemas/SourceObjectIdentifier'
+    ListMigrationJobObjectsResponse:
+      id: ListMigrationJobObjectsResponse
+      description: Response containing the objects for a migration job.
+      type: object
+      properties:
+        migrationJobObjects:
+          description: List of migration job objects.
+          type: array
+          items:
+            $ref: '#/components/schemas/MigrationJobObject'
+        nextPageToken:
+          description: >-
+            A token, which can be sent as `page_token` to retrieve the next
+            page.
           type: string
     ListLocationsResponse:
       id: ListLocationsResponse
@@ -4310,14 +4720,22 @@ components:
           description: >-
             Output only. Identifies whether the user has requested cancellation
             of the operation. Operations that have successfully been cancelled
-            have Operation.error value with a google.rpc.Status.code of 1,
-            corresponding to `Code.CANCELLED`.
+            have google.longrunning.Operation.error value with a
+            google.rpc.Status.code of 1, corresponding to `Code.CANCELLED`.
           readOnly: true
           type: boolean
         apiVersion:
           description: Output only. API version used to start the operation.
           readOnly: true
           type: string
+        metadata:
+          description: >-
+            Output only. Additional metadata that is returned by the backend for
+            the operation.
+          readOnly: true
+          type: object
+          additionalProperties:
+            type: string
     MigrationJobVerificationError:
       id: MigrationJobVerificationError
       description: Error message of a verification Migration job.
@@ -4702,6 +5120,13 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        fetch_source_objects:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1migrationJobs~1{migrationJobsId}:fetchSourceObjects/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
       sqlVerbs:
         select:
           - $ref: '#/components/x-stackQL-resources/migration_jobs/methods/get'
@@ -4749,6 +5174,41 @@ components:
         replace:
           - $ref: >-
               #/components/x-stackQL-resources/migration_jobs_iam_policies/methods/set_iam_policy
+        delete: []
+    objects:
+      id: google.datamigration.objects
+      name: objects
+      title: Objects
+      methods:
+        get:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1migrationJobs~1{migrationJobsId}~1objects~1{objectsId}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        lookup:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1migrationJobs~1{migrationJobsId}~1objects:lookup/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        list:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1migrationJobs~1{migrationJobsId}~1objects/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.migrationJobObjects
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/objects/methods/get'
+          - $ref: '#/components/x-stackQL-resources/objects/methods/list'
+        insert: []
+        update: []
+        replace: []
         delete: []
     objects_iam_policies:
       id: google.datamigration.objects_iam_policies
@@ -5248,6 +5708,10 @@ paths:
           name: pageToken
           schema:
             type: string
+        - in: query
+          name: extraLocationTypes
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}:
     parameters: *ref_1
     get:
@@ -5402,7 +5866,7 @@ paths:
         the operation completed despite cancellation. On successful
         cancellation, the operation is not deleted; instead, it becomes an
         operation with an Operation.error value with a google.rpc.Status.code of
-        1, corresponding to `Code.CANCELLED`.
+        `1`, corresponding to `Code.CANCELLED`.
       operationId: datamigration.projects.locations.operations.cancel
       requestBody:
         content:
@@ -5997,6 +6461,43 @@ paths:
           required: true
           schema:
             type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/migrationJobs/{migrationJobsId}:fetchSourceObjects:
+    parameters: *ref_1
+    get:
+      description: >-
+        Retrieves objects from the source database that can be selected for data
+        migration. This is applicable for the following migrations: 1.
+        PostgreSQL to Cloud SQL for PostgreSQL 2. PostgreSQL to AlloyDB for
+        PostgreSQL.
+      operationId: datamigration.projects.locations.migrationJobs.fetchSourceObjects
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: migrationJobsId
+          required: true
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}/migrationJobs/{migrationJobsId}:setIamPolicy:
     parameters: *ref_1
     post:
@@ -6119,6 +6620,126 @@ paths:
         - in: path
           name: migrationJobsId
           required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/migrationJobs/{migrationJobsId}/objects/{objectsId}:
+    parameters: *ref_1
+    get:
+      description: Use this method to get details about a migration job object.
+      operationId: datamigration.projects.locations.migrationJobs.objects.get
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrationJobObject'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: migrationJobsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: objectsId
+          required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/migrationJobs/{migrationJobsId}/objects:lookup:
+    parameters: *ref_1
+    post:
+      description: >-
+        Use this method to look up a migration job object by its source object
+        identifier.
+      operationId: datamigration.projects.locations.migrationJobs.objects.lookup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LookupMigrationJobObjectRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrationJobObject'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: migrationJobsId
+          required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/migrationJobs/{migrationJobsId}/objects:
+    parameters: *ref_1
+    get:
+      description: Use this method to list the objects of a specific migration job.
+      operationId: datamigration.projects.locations.migrationJobs.objects.list
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMigrationJobObjectsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: migrationJobsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: pageToken
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/migrationJobs/{migrationJobsId}/objects/{objectsId}:setIamPolicy:
@@ -6650,6 +7271,10 @@ paths:
             type: string
         - in: query
           name: skipValidation
+          schema:
+            type: boolean
+        - in: query
+          name: validateOnly
           schema:
             type: boolean
     get:

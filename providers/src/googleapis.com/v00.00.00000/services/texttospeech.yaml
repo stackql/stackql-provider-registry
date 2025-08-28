@@ -9,8 +9,8 @@ info:
     Synthesizes natural-sounding speech by applying powerful neural network
     models.
   version: v1
-  x-discovery-doc-revision: '20241026'
-  x-generated-date: '2024-11-06'
+  x-discovery-doc-revision: '20250814'
+  x-generated-date: '2025-08-28'
 externalDocs:
   url: https://cloud.google.com/text-to-speech/
 servers:
@@ -117,6 +117,11 @@ components:
         text:
           description: The raw text to be synthesized.
           type: string
+        markup:
+          description: >-
+            Markup for HD voices specifically. This field may not be used with
+            any other voices.
+          type: string
         ssml:
           description: >-
             The SSML document to be synthesized. The SSML document must be valid
@@ -131,15 +136,13 @@ components:
           $ref: '#/components/schemas/MultiSpeakerMarkup'
         customPronunciations:
           description: >-
-            Optional. The pronunciation customizations to be applied to the
-            input. If this is set, the input will be synthesized using the given
-            pronunciation customizations. The initial support will be for EFIGS
-            (English, French, Italian, German, Spanish) languages, as provided
-            in VoiceSelectionParams. Journey and Instant Clone voices are not
-            supported yet. In order to customize the pronunciation of a phrase,
-            there must be an exact match of the phrase in the input types. If
-            using SSML, the phrase must not be inside a phoneme tag (entirely or
-            partially).
+            Optional. The pronunciation customizations are applied to the input.
+            If this is set, the input is synthesized using the given
+            pronunciation customizations. The initial support is for en-us, with
+            plans to expand to other locales in the future. Instant Clone voices
+            aren't supported. In order to customize the pronunciation of a
+            phrase, there must be an exact match of the phrase in the input
+            types. If using SSML, the phrase must not be inside a phoneme tag.
           $ref: '#/components/schemas/CustomPronunciations'
     MultiSpeakerMarkup:
       id: MultiSpeakerMarkup
@@ -153,7 +156,7 @@ components:
             $ref: '#/components/schemas/Turn'
     Turn:
       id: Turn
-      description: A Multi-speaker turn.
+      description: A multi-speaker turn.
       type: object
       properties:
         speaker:
@@ -170,7 +173,7 @@ components:
       type: object
       properties:
         pronunciations:
-          description: The pronunciation customizations to be applied.
+          description: The pronunciation customizations are applied.
           type: array
           items:
             $ref: '#/components/schemas/CustomPronunciationParams'
@@ -181,9 +184,9 @@ components:
       properties:
         phrase:
           description: >-
-            The phrase to which the customization will be applied. The phrase
-            can be multiple words (in the case of proper nouns etc), but should
-            not span to a whole sentence.
+            The phrase to which the customization is applied. The phrase can be
+            multiple words, such as proper nouns, but shouldn't span the length
+            of the sentence.
           type: string
         phoneticEncoding:
           description: The phonetic encoding of the phrase.
@@ -191,15 +194,32 @@ components:
           enumDescriptions:
             - Not specified.
             - >-
-              IPA. (e.g. apple -> ˈæpəl )
+              IPA, such as apple -> ˈæpəl.
               https://en.wikipedia.org/wiki/International_Phonetic_Alphabet
             - >-
-              X-SAMPA (e.g. apple -> "{p@l" )
+              X-SAMPA, such as apple -> "{p@l".
               https://en.wikipedia.org/wiki/X-SAMPA
+            - >-
+              For reading-to-pron conversion to work well, the `pronunciation`
+              field should only contain Kanji, Hiragana, and Katakana. The
+              pronunciation can also contain pitch accents. The start of a pitch
+              phrase is specified with `^` and the down-pitch position is
+              specified with `!`, for example: phrase:端 pronunciation:^はし
+              phrase:箸 pronunciation:^は!し phrase:橋 pronunciation:^はし! We
+              currently only support the Tokyo dialect, which allows at most one
+              down-pitch per phrase (i.e. at most one `!` between `^`).
+            - >-
+              Used to specify pronunciations for Mandarin words. See
+              https://en.wikipedia.org/wiki/Pinyin. For example: 朝阳, the
+              pronunciation is "chao2 yang2". The number represents the tone,
+              and there is a space between syllables. Neutral tones are
+              represented by 5, for example 孩子 "hai2 zi5".
           enum:
             - PHONETIC_ENCODING_UNSPECIFIED
             - PHONETIC_ENCODING_IPA
             - PHONETIC_ENCODING_X_SAMPA
+            - PHONETIC_ENCODING_JAPANESE_YOMIGANA
+            - PHONETIC_ENCODING_PINYIN
         pronunciation:
           description: >-
             The pronunciation of the phrase. This must be in the phonetic
@@ -264,9 +284,14 @@ components:
         voiceClone:
           description: >-
             Optional. The configuration for a voice clone. If
-            [VoiceCloneParams.voice_clone_key] is set, the service will choose
-            the voice clone matching the specified configuration.
+            [VoiceCloneParams.voice_clone_key] is set, the service chooses the
+            voice clone matching the specified configuration.
           $ref: '#/components/schemas/VoiceCloneParams'
+        modelName:
+          description: >-
+            Optional. The name of the model. If set, the service will choose the
+            model matching the specified configuration.
+          type: string
     CustomVoiceParams:
       id: CustomVoiceParams
       description: Description of the custom voice to be synthesized.
@@ -315,16 +340,16 @@ components:
           type: string
           enumDescriptions:
             - >-
-              Not specified. Will return result
-              google.rpc.Code.INVALID_ARGUMENT.
+              Not specified. Only used by GenerateVoiceCloningKey. Otherwise,
+              will return result google.rpc.Code.INVALID_ARGUMENT.
             - >-
               Uncompressed 16-bit signed little-endian samples (Linear PCM).
               Audio content returned as LINEAR16 also contains a WAV header.
             - MP3 audio at 32kbps.
             - >-
-              Opus encoded audio wrapped in an ogg container. The result will be
-              a file which can be played natively on Android, and in browsers
-              (at least Chrome and Firefox). The quality of the encoding is
+              Opus encoded audio wrapped in an ogg container. The result is a
+              file which can be played natively on Android, and in browsers (at
+              least Chrome and Firefox). The quality of the encoding is
               considerably higher than MP3 while using approximately the same
               bitrate.
             - >-
@@ -335,6 +360,11 @@ components:
               8-bit samples that compand 14-bit audio samples using G.711
               PCMU/A-law. Audio content returned as ALAW also contains a WAV
               header.
+            - >-
+              Uncompressed 16-bit signed little-endian samples (Linear PCM).
+              Note that as opposed to LINEAR16, audio won't be wrapped in a WAV
+              (or any other) header.
+            - M4A audio.
           enum:
             - AUDIO_ENCODING_UNSPECIFIED
             - LINEAR16
@@ -342,12 +372,14 @@ components:
             - OGG_OPUS
             - MULAW
             - ALAW
+            - PCM
+            - M4A
         speakingRate:
           description: >-
-            Optional. Input only. Speaking rate/speed, in the range [0.25, 4.0].
+            Optional. Input only. Speaking rate/speed, in the range [0.25, 2.0].
             1.0 is the normal native speed supported by the specific voice. 2.0
             is twice as fast, and 0.5 is half as fast. If unset(0.0), defaults
-            to the native 1.0 speed. Any other values < 0.25 or > 4.0 will
+            to the native 1.0 speed. Any other values < 0.25 or > 2.0 will
             return an error.
           type: number
           format: double
@@ -400,8 +432,8 @@ components:
       properties:
         lowLatencyJourneySynthesis:
           description: >-
-            Only for Journey voices. If false, the synthesis will be context
-            aware and have higher latency.
+            Only for Journey voices. If false, the synthesis is context aware
+            and has a higher latency.
           type: boolean
     SynthesizeSpeechResponse:
       id: SynthesizeSpeechResponse
@@ -977,7 +1009,7 @@ paths:
         the operation completed despite cancellation. On successful
         cancellation, the operation is not deleted; instead, it becomes an
         operation with an Operation.error value with a google.rpc.Status.code of
-        1, corresponding to `Code.CANCELLED`.
+        `1`, corresponding to `Code.CANCELLED`.
       operationId: texttospeech.operations.cancel
       requestBody:
         content:

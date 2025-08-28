@@ -7,8 +7,8 @@ info:
   title: Cloud Functions API
   description: Manages lightweight user-provided functions executed in response to events.
   version: v2
-  x-discovery-doc-revision: '20241024'
-  x-generated-date: '2024-11-06'
+  x-discovery-doc-revision: '20250814'
+  x-generated-date: '2025-08-28'
 externalDocs:
   url: https://cloud.google.com/functions
 servers:
@@ -508,6 +508,8 @@ components:
               Function deployment failed and the function serving state is
               undefined. The function should be updated or deleted to move it
               out of this state.
+            - Function is being detached.
+            - Function detach failed and the function is still serving.
           enum:
             - STATE_UNSPECIFIED
             - ACTIVE
@@ -515,6 +517,8 @@ components:
             - DEPLOYING
             - DELETING
             - UNKNOWN
+            - DETACHING
+            - DETACH_FAILED
         updateTime:
           description: Output only. The last update timestamp of a Cloud Function.
           readOnly: true
@@ -567,6 +571,10 @@ components:
           readOnly: true
           type: string
           format: google-datetime
+        satisfiesPzi:
+          description: Output only. Reserved for future use.
+          readOnly: true
+          type: boolean
     BuildConfig:
       id: BuildConfig
       description: >-
@@ -629,10 +637,15 @@ components:
           description: >-
             Docker Registry to use for this deployment. This configuration is
             only applicable to 1st Gen functions, 2nd Gen functions can only use
-            Artifact Registry. If unspecified, it defaults to
-            `ARTIFACT_REGISTRY`. If `docker_repository` field is specified, this
-            field should either be left unspecified or set to
-            `ARTIFACT_REGISTRY`.
+            Artifact Registry. Deprecated: as of March 2025,
+            `CONTAINER_REGISTRY` option is no longer available in response to
+            Container Registry's deprecation:
+            https://cloud.google.com/artifact-registry/docs/transition/transition-from-gcr
+            Please use Artifact Registry instead, which is the default choice.
+            If unspecified, it defaults to `ARTIFACT_REGISTRY`. If
+            `docker_repository` field is specified, this field should either be
+            left unspecified or set to `ARTIFACT_REGISTRY`.
+          deprecated: true
           type: string
           enumDescriptions:
             - Unspecified.
@@ -658,8 +671,7 @@ components:
             named 'gcf-artifacts' for every deployed region. It must match the
             pattern
             `projects/{project}/locations/{location}/repositories/{repository}`.
-            Cross-project repositories are not supported. Cross-location
-            repositories are not supported. Repository format must be 'DOCKER'.
+            Repository format must be 'DOCKER'.
           type: string
         serviceAccount:
           description: >-
@@ -1172,8 +1184,8 @@ components:
       id: UpgradeInfo
       description: >-
         Information related to: * A function's eligibility for 1st Gen to 2nd
-        Gen migration and 2nd Gen to CRf detach. * Current state of migration
-        for function undergoing migration/detach.
+        Gen migration. * Current state of migration for function undergoing
+        migration.
       type: object
       properties:
         upgradeState:
@@ -1196,7 +1208,6 @@ components:
             - RedirectFunctionUpgradeTraffic API was un-successful.
             - RollbackFunctionUpgradeTraffic API was un-successful.
             - CommitFunctionUpgrade API was un-successful.
-            - Function is requested to be detached from 2nd Gen to CRf.
           enum:
             - UPGRADE_STATE_UNSPECIFIED
             - ELIGIBLE_FOR_2ND_GEN_UPGRADE
@@ -1208,7 +1219,6 @@ components:
             - REDIRECT_FUNCTION_UPGRADE_TRAFFIC_ERROR
             - ROLLBACK_FUNCTION_UPGRADE_TRAFFIC_ERROR
             - COMMIT_FUNCTION_UPGRADE_ERROR
-            - DETACH_IN_PROGRESS
         serviceConfig:
           description: >-
             Describes the Cloud Run service which has been setup to prepare for
@@ -1250,7 +1260,15 @@ components:
       id: SetupFunctionUpgradeConfigRequest
       description: Request for the `SetupFunctionUpgradeConfig` method.
       type: object
-      properties: {}
+      properties:
+        triggerServiceAccount:
+          description: >-
+            Optional. The trigger's service account. The service account must
+            have permission to invoke Cloud Run services, the permission is
+            `run.routes.invoke`. If empty, defaults to the Compute Engine
+            default service account:
+            `{project_number}-compute@developer.gserviceaccount.com`.
+          type: string
     AbortFunctionUpgradeRequest:
       id: AbortFunctionUpgradeRequest
       description: Request for the `AbortFunctionUpgrade` method.
@@ -1439,6 +1457,11 @@ components:
             the day isn't significant.
           type: integer
           format: int32
+    DetachFunctionRequest:
+      id: DetachFunctionRequest
+      description: Request for the `DetachFunction` method.
+      type: object
+      properties: {}
     ListLocationsResponse:
       id: ListLocationsResponse
       description: The response message for Locations.ListLocations.
@@ -1607,6 +1630,7 @@ components:
             - SetupFunctionUpgradeConfig
             - AbortFunctionUpgrade
             - CommitFunctionUpgrade
+            - DetachFunction
           enum:
             - OPERATIONTYPE_UNSPECIFIED
             - CREATE_FUNCTION
@@ -1617,6 +1641,13 @@ components:
             - SETUP_FUNCTION_UPGRADE_CONFIG
             - ABORT_FUNCTION_UPGRADE
             - COMMIT_FUNCTION_UPGRADE
+            - DETACH_FUNCTION
+        customIamRoleDetected:
+          description: >-
+            Output only. Whether a custom IAM role binding was detected during
+            the upgrade.
+          readOnly: true
+          type: boolean
     GoogleCloudFunctionsV2Stage:
       id: GoogleCloudFunctionsV2Stage
       description: Each Stage of the deployment process
@@ -1627,7 +1658,7 @@ components:
           type: string
           enumDescriptions:
             - Not specified. Invalid name.
-            - Artifact Regsitry Stage
+            - Artifact Registry Stage
             - Build Stage
             - Service Stage
             - Trigger Stage
@@ -1941,6 +1972,13 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        detach_function:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1locations~1{locationsId}~1functions~1{functionsId}:detachFunction/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
       sqlVerbs:
         select:
           - $ref: '#/components/x-stackQL-resources/functions/methods/get'
@@ -2017,6 +2055,10 @@ paths:
             format: int32
         - in: query
           name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: extraLocationTypes
           schema:
             type: string
   /v2/projects/{projectsId}/locations/{locationsId}/operations:
@@ -2702,6 +2744,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenerateDownloadUrlResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: functionsId
+          required: true
+          schema:
+            type: string
+  /v2/projects/{projectsId}/locations/{locationsId}/functions/{functionsId}:detachFunction:
+    parameters: *ref_1
+    post:
+      description: Detaches 2nd Gen function to Cloud Run function.
+      operationId: cloudfunctions.projects.locations.functions.detachFunction
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DetachFunctionRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
       parameters:
         - in: path
           name: projectsId
