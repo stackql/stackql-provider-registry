@@ -7,8 +7,8 @@ info:
   title: Batch API
   description: An API to manage the running of Batch resources on Google Cloud Platform.
   version: v1
-  x-discovery-doc-revision: '20241021'
-  x-generated-date: '2024-11-06'
+  x-discovery-doc-revision: '20250813'
+  x-generated-date: '2025-08-28'
 externalDocs:
   url: https://cloud.google.com/batch/
 servers:
@@ -858,8 +858,9 @@ components:
           description: >-
             Name of an instance template used to create VMs. Named the field as
             'instance_template' instead of 'template' to avoid C++ keyword
-            conflict. Batch only supports global instance templates. You can
-            specify the global instance template as a full or partial URL.
+            conflict. Batch only supports global instance templates from the
+            same project as the job. You can specify the global instance
+            template as a full or partial URL.
           type: string
         installGpuDrivers:
           description: >-
@@ -921,11 +922,21 @@ components:
               by this field) is the older model, and has been migrated to use
               the SPOT model as the underlying technology. This old model will
               still be supported.
+            - >-
+              Bound to the lifecycle of the reservation in which it is
+              provisioned.
+          enumDeprecated:
+            - false
+            - false
+            - false
+            - true
+            - false
           enum:
             - PROVISIONING_MODEL_UNSPECIFIED
             - STANDARD
             - SPOT
             - PREEMPTIBLE
+            - RESERVATION_BOUND
         accelerators:
           description: The accelerators attached to each VM instance.
           type: array
@@ -1166,6 +1177,12 @@ components:
               The Job will be deleted, but has not been deleted yet. Typically
               this is because resources used by the Job are still being cleaned
               up.
+            - >-
+              The Job cancellation is in progress, this is because the resources
+              used by the Job are still being cleaned up.
+            - >-
+              The Job has been cancelled, the task executions were stopped and
+              the resources were cleaned up.
           enum:
             - STATE_UNSPECIFIED
             - QUEUED
@@ -1174,6 +1191,8 @@ components:
             - SUCCEEDED
             - FAILED
             - DELETION_IN_PROGRESS
+            - CANCELLATION_IN_PROGRESS
+            - CANCELLED
         statusEvents:
           description: Job status events
           type: array
@@ -1288,11 +1307,21 @@ components:
               by this field) is the older model, and has been migrated to use
               the SPOT model as the underlying technology. This old model will
               still be supported.
+            - >-
+              Bound to the lifecycle of the reservation in which it is
+              provisioned.
+          enumDeprecated:
+            - false
+            - false
+            - false
+            - true
+            - false
           enum:
             - PROVISIONING_MODEL_UNSPECIFIED
             - STANDARD
             - SPOT
             - PREEMPTIBLE
+            - RESERVATION_BOUND
         taskPack:
           description: The max number of tasks can be assigned to this instance type.
           type: string
@@ -1303,32 +1332,41 @@ components:
     LogsPolicy:
       id: LogsPolicy
       description: >-
-        LogsPolicy describes how outputs from a Job's Tasks (stdout/stderr) will
-        be preserved.
+        LogsPolicy describes if and how a job's logs are preserved. Logs include
+        information that is automatically written by the Batch service agent and
+        any information that you configured the job's runnables to write to the
+        `stdout` or `stderr` streams.
       type: object
       properties:
         destination:
-          description: Where logs should be saved.
+          description: If and where logs should be saved.
           type: string
           enumDescriptions:
-            - Logs are not preserved.
-            - Logs are streamed to Cloud Logging.
-            - Logs are saved to a file path.
+            - (Default) Logs are not preserved.
+            - >-
+              Logs are streamed to Cloud Logging. Optionally, you can configure
+              additional settings in the `cloudLoggingOption` field.
+            - Logs are saved to the file path specified in the `logsPath` field.
           enum:
             - DESTINATION_UNSPECIFIED
             - CLOUD_LOGGING
             - PATH
         logsPath:
           description: >-
-            The path to which logs are saved when the destination = PATH. This
-            can be a local file path on the VM, or under the mount point of a
-            Persistent Disk or Filestore, or a Cloud Storage path.
+            When `destination` is set to `PATH`, you must set this field to the
+            path where you want logs to be saved. This path can point to a local
+            directory on the VM or (if congifured) a directory under the mount
+            path of any Cloud Storage bucket, network file system (NFS), or
+            writable persistent disk that is mounted to the job. For example, if
+            the job has a bucket with `mountPath` set to `/mnt/disks/my-bucket`,
+            you can write logs to the root directory of the `remotePath` of that
+            bucket by setting this field to `/mnt/disks/my-bucket/`.
           type: string
         cloudLoggingOption:
           description: >-
-            Optional. Additional settings for Cloud Logging. It will only take
-            effect when the destination of `LogsPolicy` is set to
-            `CLOUD_LOGGING`.
+            Optional. When `destination` is set to `CLOUD_LOGGING`, you can
+            optionally set this field to configure additional settings for Cloud
+            Logging.
           $ref: '#/components/schemas/CloudLoggingOption'
     CloudLoggingOption:
       id: CloudLoggingOption
@@ -1339,7 +1377,7 @@ components:
       properties:
         useGenericTaskMonitoredResource:
           description: >-
-            Optional. Set this flag to true to change the [monitored resource
+            Optional. Set this field to `true` to change the [monitored resource
             type](https://cloud.google.com/monitoring/api/resources) for Cloud
             Logging logs generated by this Batch job from the
             [`batch.googleapis.com/Job`](https://cloud.google.com/monitoring/api/resources#tag_batch.googleapis.com/Job)
@@ -1412,6 +1450,12 @@ components:
               The Job will be deleted, but has not been deleted yet. Typically
               this is because resources used by the Job are still being cleaned
               up.
+            - >-
+              The Job cancellation is in progress, this is because the resources
+              used by the Job are still being cleaned up.
+            - >-
+              The Job has been cancelled, the task executions were stopped and
+              the resources were cleaned up.
           enum:
             - STATE_UNSPECIFIED
             - QUEUED
@@ -1420,6 +1464,8 @@ components:
             - SUCCEEDED
             - FAILED
             - DELETION_IN_PROGRESS
+            - CANCELLATION_IN_PROGRESS
+            - CANCELLED
         newTaskState:
           description: The new task state.
           type: string
@@ -1439,6 +1485,26 @@ components:
             - FAILED
             - SUCCEEDED
             - UNEXECUTED
+    CancelJobRequest:
+      id: CancelJobRequest
+      description: CancelJob Request.
+      type: object
+      properties:
+        requestId:
+          description: >-
+            Optional. An optional request ID to identify requests. Specify a
+            unique request ID so that if you must retry your request, the server
+            will know to ignore the request if it has already been completed.
+            The server will guarantee that for at least 60 minutes after the
+            first request. For example, consider a situation where you make an
+            initial request and the request times out. If you make the request
+            again with the same request ID, the server can check if original
+            operation with the same request ID was received, and if so, will
+            ignore the second request. This prevents clients from accidentally
+            creating duplicate commitments. The request ID must be a valid UUID
+            with the exception that zero UUID is not supported
+            (00000000-0000-0000-0000-000000000000).
+          type: string
     ListJobsResponse:
       id: ListJobsResponse
       description: ListJob Response.
@@ -2024,8 +2090,8 @@ components:
           description: >-
             Output only. Identifies whether the user has requested cancellation
             of the operation. Operations that have successfully been cancelled
-            have Operation.error value with a google.rpc.Status.code of 1,
-            corresponding to `Code.CANCELLED`.
+            have google.longrunning.Operation.error value with a
+            google.rpc.Status.code of 1, corresponding to `Code.CANCELLED`.
           readOnly: true
           type: boolean
         apiVersion:
@@ -2216,6 +2282,13 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        cancel:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1jobs~1{jobsId}:cancel/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
       sqlVerbs:
         select:
           - $ref: '#/components/x-stackQL-resources/jobs/methods/get'
@@ -2254,10 +2327,10 @@ components:
         update: []
         replace: []
         delete: []
-    state:
-      id: google.batch.state
-      name: state
-      title: State
+    agent_state_report:
+      id: google.batch.agent_state_report
+      name: agent_state_report
+      title: Agent_state_report
       methods:
         report:
           operation:
@@ -2318,6 +2391,10 @@ paths:
             format: int32
         - in: query
           name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: extraLocationTypes
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}:
@@ -2474,7 +2551,7 @@ paths:
         the operation completed despite cancellation. On successful
         cancellation, the operation is not deleted; instead, it becomes an
         operation with an Operation.error value with a google.rpc.Status.code of
-        1, corresponding to `Code.CANCELLED`.
+        `1`, corresponding to `Code.CANCELLED`.
       operationId: batch.projects.locations.operations.cancel
       requestBody:
         content:
@@ -2663,6 +2740,44 @@ paths:
             type: string
         - in: query
           name: requestId
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/jobs/{jobsId}:cancel:
+    parameters: *ref_1
+    post:
+      description: Cancel a Job.
+      operationId: batch.projects.locations.jobs.cancel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelJobRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: jobsId
+          required: true
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/jobs/{jobsId}/taskGroups/{taskGroupsId}/tasks/{tasksId}:

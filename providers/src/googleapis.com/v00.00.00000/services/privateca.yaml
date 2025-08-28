@@ -11,8 +11,8 @@ info:
     certificate authorities (CAs) while staying in control of your private
     keys. 
   version: v1
-  x-discovery-doc-revision: '20241023'
-  x-generated-date: '2024-11-06'
+  x-discovery-doc-revision: '20250625'
+  x-generated-date: '2025-08-28'
 externalDocs:
   url: https://cloud.google.com/
 servers:
@@ -207,9 +207,8 @@ components:
       properties:
         name:
           description: >-
-            Output only. The resource name for this Certificate in the format
+            Identifier. The resource name for this Certificate in the format
             `projects/*/locations/*/caPools/*/certificates/*`.
-          readOnly: true
           type: string
         pemCsr:
           description: Immutable. A pem-encoded X.509 certificate signing request (CSR).
@@ -258,6 +257,14 @@ components:
               certificate request. This mode requires the caller to have the
               `privateca.certificates.create` permission.
             - >-
+              A mode used to get an accurate representation of the Subject
+              field's distinguished name. Indicates that the certificate's
+              Subject and/or SubjectAltNames are specified in the certificate
+              request. When parsing a PEM CSR this mode will maintain the
+              sequence of RDNs found in the CSR's subject field in the issued
+              Certificate. This mode requires the caller to have the
+              `privateca.certificates.create` permission.
+            - >-
               A mode reserved for special cases. Indicates that the certificate
               should have one SPIFFE SubjectAltNames set by the service based on
               the caller's identity. This mode will ignore any explicitly
@@ -267,6 +274,7 @@ components:
           enum:
             - SUBJECT_REQUEST_MODE_UNSPECIFIED
             - DEFAULT
+            - RDN_SEQUENCE
             - REFLECTED_SPIFFE
         revocationDetails:
           description: >-
@@ -385,6 +393,74 @@ components:
         postalCode:
           description: The postal code of the subject.
           type: string
+        rdnSequence:
+          description: This field can be used in place of the named subject fields.
+          type: array
+          items:
+            $ref: '#/components/schemas/RelativeDistinguishedName'
+    RelativeDistinguishedName:
+      id: RelativeDistinguishedName
+      description: >-
+        RelativeDistinguishedName specifies a relative distinguished name which
+        will be used to build a distinguished name.
+      type: object
+      properties:
+        attributes:
+          description: Attributes describes the attribute value assertions in the RDN.
+          type: array
+          items:
+            $ref: '#/components/schemas/AttributeTypeAndValue'
+    AttributeTypeAndValue:
+      id: AttributeTypeAndValue
+      description: >-
+        AttributeTypeAndValue specifies an attribute type and value. It can use
+        either a OID or enum value to specify the attribute type.
+      type: object
+      properties:
+        type:
+          description: The attribute type of the attribute and value pair.
+          type: string
+          enumDescriptions:
+            - Attribute type is unspecified.
+            - The "common name" of the subject.
+            - The country code of the subject.
+            - The organization of the subject.
+            - The organizational unit of the subject.
+            - The locality or city of the subject.
+            - The province, territory, or regional state of the subject.
+            - The street address of the subject.
+            - The postal code of the subject.
+          enum:
+            - ATTRIBUTE_TYPE_UNSPECIFIED
+            - COMMON_NAME
+            - COUNTRY_CODE
+            - ORGANIZATION
+            - ORGANIZATIONAL_UNIT
+            - LOCALITY
+            - PROVINCE
+            - STREET_ADDRESS
+            - POSTAL_CODE
+        objectId:
+          description: Object ID for an attribute type of an attribute and value pair.
+          $ref: '#/components/schemas/ObjectId'
+        value:
+          description: The value for the attribute type.
+          type: string
+    ObjectId:
+      id: ObjectId
+      description: >-
+        An ObjectId specifies an object identifier (OID). These provide context
+        and describe types in ASN.1 messages.
+      type: object
+      properties:
+        objectIdPath:
+          description: >-
+            Required. The parts of an OID path. The most significant parts of
+            the path come first.
+          type: array
+          items:
+            type: integer
+            format: int32
     SubjectAltNames:
       id: SubjectAltNames
       description: >-
@@ -443,21 +519,6 @@ components:
           description: Required. The value of this X.509 extension.
           type: string
           format: byte
-    ObjectId:
-      id: ObjectId
-      description: >-
-        An ObjectId specifies an object identifier (OID). These provide context
-        and describe types in ASN.1 messages.
-      type: object
-      properties:
-        objectIdPath:
-          description: >-
-            Required. The parts of an OID path. The most significant parts of
-            the path come first.
-          type: array
-          items:
-            type: integer
-            format: int32
     X509Parameters:
       id: X509Parameters
       description: >-
@@ -912,7 +973,7 @@ components:
         nextPageToken:
           description: >-
             A token to retrieve next page of results. Pass this value in
-            ListCertificatesRequest.next_page_token to retrieve the next page of
+            ListCertificatesRequest.page_token to retrieve the next page of
             results.
           type: string
         unreachable:
@@ -1051,10 +1112,8 @@ components:
       properties:
         name:
           description: >-
-            Output only. Identifier. The resource name for this
-            CertificateAuthority in the format
-            `projects/*/locations/*/caPools/*/certificateAuthorities/*`.
-          readOnly: true
+            Identifier. The resource name for this CertificateAuthority in the
+            format `projects/*/locations/*/caPools/*/certificateAuthorities/*`.
           type: string
         type:
           description: Required. Immutable. The Type of this CertificateAuthority.
@@ -1212,6 +1271,12 @@ components:
           type: object
           additionalProperties:
             type: string
+        userDefinedAccessUrls:
+          description: >-
+            Optional. User-defined URLs for CA certificate and CRLs. The service
+            does not publish content to these URLs. It is up to the user to
+            mirror content to these URLs.
+          $ref: '#/components/schemas/UserDefinedAccessUrls'
         satisfiesPzs:
           description: Output only. Reserved for future use.
           readOnly: true
@@ -1273,6 +1338,31 @@ components:
           description: >-
             The URLs where this CertificateAuthority's CRLs are published. This
             will only be set for CAs that have been activated.
+          type: array
+          items:
+            type: string
+    UserDefinedAccessUrls:
+      id: UserDefinedAccessUrls
+      description: >-
+        User-defined URLs for accessing content published by this
+        CertificateAuthority.
+      type: object
+      properties:
+        aiaIssuingCertificateUrls:
+          description: >-
+            Optional. A list of URLs where the issuer CA certificate may be
+            downloaded, which appears in the "Authority Information Access"
+            extension in the certificate. If specified, the default Cloud
+            Storage URLs will be omitted.
+          type: array
+          items:
+            type: string
+        crlAccessUrls:
+          description: >-
+            Optional. A list of URLs where to obtain CRL information, i.e. the
+            DistributionPoint.fullName described by
+            https://tools.ietf.org/html/rfc5280#section-4.2.1.13. If specified,
+            the default Cloud Storage URLs will be omitted.
           type: array
           items:
             type: string
@@ -1355,8 +1445,8 @@ components:
         nextPageToken:
           description: >-
             A token to retrieve next page of results. Pass this value in
-            ListCertificateAuthoritiesRequest.next_page_token to retrieve the
-            next page of results.
+            ListCertificateAuthoritiesRequest.page_token to retrieve the next
+            page of results.
           type: string
         unreachable:
           description: A list of locations (e.g. "us-west1") that could not be reached.
@@ -1396,9 +1486,8 @@ components:
       properties:
         name:
           description: >-
-            Output only. Identifier. The resource name for this CaPool in the
-            format `projects/*/locations/*/caPools/*`.
-          readOnly: true
+            Identifier. The resource name for this CaPool in the format
+            `projects/*/locations/*/caPools/*`.
           type: string
         tier:
           description: Required. Immutable. The Tier of this CaPool.
@@ -1439,6 +1528,17 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AllowedKeyType'
+        backdateDuration:
+          description: >-
+            Optional. The duration to backdate all certificates issued from this
+            CaPool. If not set, the certificates will be issued with a
+            not_before_time of the issuance time (i.e. the current time). If
+            set, the certificates will be issued with a not_before_time of the
+            issuance time minus the backdate_duration. The not_after_time will
+            be adjusted to preserve the requested lifetime. The
+            backdate_duration must be less than or equal to 48 hours.
+          type: string
+          format: google-duration
         maximumLifetime:
           description: >-
             Optional. The maximum lifetime allowed for issued Certificates. Note
@@ -1747,8 +1847,8 @@ components:
         nextPageToken:
           description: >-
             A token to retrieve next page of results. Pass this value in
-            ListCertificateAuthoritiesRequest.next_page_token to retrieve the
-            next page of results.
+            ListCertificateAuthoritiesRequest.page_token to retrieve the next
+            page of results.
           type: string
         unreachable:
           description: A list of locations (e.g. "us-west1") that could not be reached.
@@ -1806,11 +1906,10 @@ components:
       properties:
         name:
           description: >-
-            Output only. The resource name for this CertificateRevocationList in
+            Identifier. The resource name for this CertificateRevocationList in
             the format
             `projects/*/locations/*/caPools/*certificateAuthorities/*/
             certificateRevocationLists/*`.
-          readOnly: true
           type: string
         sequenceNumber:
           description: Output only. The CRL sequence number that appears in pem_crl.
@@ -1933,8 +2032,8 @@ components:
         nextPageToken:
           description: >-
             A token to retrieve next page of results. Pass this value in
-            ListCertificateRevocationListsRequest.next_page_token to retrieve
-            the next page of results.
+            ListCertificateRevocationListsRequest.page_token to retrieve the
+            next page of results.
           type: string
         unreachable:
           description: A list of locations (e.g. "us-west1") that could not be reached.
@@ -1950,9 +2049,8 @@ components:
       properties:
         name:
           description: >-
-            Output only. The resource name for this CertificateTemplate in the
+            Identifier. The resource name for this CertificateTemplate in the
             format `projects/*/locations/*/certificateTemplates/*`.
-          readOnly: true
           type: string
         maximumLifetime:
           description: >-
@@ -2028,8 +2126,8 @@ components:
         nextPageToken:
           description: >-
             A token to retrieve next page of results. Pass this value in
-            ListCertificateTemplatesRequest.next_page_token to retrieve the next
-            page of results.
+            ListCertificateTemplatesRequest.page_token to retrieve the next page
+            of results.
           type: string
         unreachable:
           description: A list of locations (e.g. "us-west1") that could not be reached.
@@ -2359,8 +2457,8 @@ components:
           description: >-
             Output only. Identifies whether the user has requested cancellation
             of the operation. Operations that have successfully been cancelled
-            have Operation.error value with a google.rpc.Status.code of 1,
-            corresponding to `Code.CANCELLED`.
+            have google.longrunning.Operation.error value with a
+            google.rpc.Status.code of 1, corresponding to `Code.CANCELLED`.
           readOnly: true
           type: boolean
         apiVersion:
@@ -3021,6 +3119,10 @@ paths:
           name: pageToken
           schema:
             type: string
+        - in: query
+          name: extraLocationTypes
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}:
     parameters: *ref_1
     get:
@@ -3175,7 +3277,7 @@ paths:
         the operation completed despite cancellation. On successful
         cancellation, the operation is not deleted; instead, it becomes an
         operation with an Operation.error value with a google.rpc.Status.code of
-        1, corresponding to `Code.CANCELLED`.
+        `1`, corresponding to `Code.CANCELLED`.
       operationId: privateca.projects.locations.operations.cancel
       requestBody:
         content:

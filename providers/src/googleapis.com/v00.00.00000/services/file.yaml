@@ -9,8 +9,8 @@ info:
     The Cloud Filestore API is used for creating and managing cloud file
     servers.
   version: v1
-  x-discovery-doc-revision: '20241015'
-  x-generated-date: '2024-11-06'
+  x-discovery-doc-revision: '20250810'
+  x-generated-date: '2025-08-28'
 externalDocs:
   url: https://cloud.google.com/filestore/
 servers:
@@ -169,7 +169,7 @@ components:
             returned if there are no more results in the list.
           type: string
         unreachable:
-          description: Locations that could not be reached.
+          description: Unordered list. Locations that could not be reached.
           type: array
           items:
             type: string
@@ -330,9 +330,14 @@ components:
           $ref: '#/components/schemas/Replication'
         tags:
           description: >-
-            Optional. Input only. Immutable. Tag key-value pairs are bound to
-            this resource. For example: "123/environment": "production",
-            "123/costCenter": "marketing"
+            Optional. Input only. Immutable. Tag key-value pairs bound to this
+            resource. Each key must be a namespaced name and each value a short
+            name. Example: "123456789012/environment" : "production",
+            "123456789013/costCenter" : "marketing" See the documentation for
+            more information: - Namespaced name:
+            https://cloud.google.com/resource-manager/docs/tags/tags-creating-and-managing#retrieving_tag_key
+            - Short name:
+            https://cloud.google.com/resource-manager/docs/tags/tags-creating-and-managing#retrieving_tag_value
           type: object
           additionalProperties:
             type: string
@@ -352,11 +357,11 @@ components:
             - FILE_PROTOCOL_UNSPECIFIED
             - NFS_V3
             - NFS_V4_1
-        configurablePerformanceEnabled:
+        customPerformanceSupported:
           description: >-
-            Output only. Indicates whether this instance's performance is
-            configurable. If enabled, adjust it using the 'performance_config'
-            field.
+            Output only. Indicates whether this instance supports configuring
+            its performance. If true, the user can configure the instance's
+            performance by using the 'performance_config' field.
           readOnly: true
           type: boolean
         performanceConfig:
@@ -374,6 +379,21 @@ components:
         deletionProtectionReason:
           description: Optional. The reason for enabling deletion protection.
           type: string
+        minCapacityGb:
+          description: Output only. The min capacity of the instance in GB.
+          readOnly: true
+          type: string
+          format: int64
+        maxCapacityGb:
+          description: Output only. The max capacity of the instance in GB.
+          readOnly: true
+          type: string
+          format: int64
+        capacityStepSizeGb:
+          description: Output only. The increase/decrease capacity step size in GB.
+          readOnly: true
+          type: string
+          format: int64
     FileShareConfig:
       id: FileShareConfig
       description: File share configuration for the instance.
@@ -580,12 +600,25 @@ components:
               The replica is experiencing an issue and might be unusable. You
               can get further details from the `stateReasons` field of the
               `ReplicaConfig` object.
+            - The replica is being promoted.
+            - The replica is being paused.
+            - The replica is paused.
+            - The replica is being resumed.
           enum:
             - STATE_UNSPECIFIED
             - CREATING
             - READY
             - REMOVING
             - FAILED
+            - PROMOTING
+            - PAUSING
+            - PAUSED
+            - RESUMING
+        stateUpdateTime:
+          description: Output only. The time when the replica state was updated.
+          readOnly: true
+          type: string
+          format: google-datetime
         stateReasons:
           description: >-
             Output only. Additional information about the replication state, if
@@ -597,9 +630,15 @@ components:
             enumDescriptions:
               - Reason not specified.
               - The peer instance is unreachable.
+              - The remove replica peer instance operation failed.
+              - The pause replica operation failed.
+              - The resume replica operation failed.
             enum:
               - STATE_REASON_UNSPECIFIED
               - PEER_INSTANCE_UNREACHABLE
+              - REMOVE_FAILED
+              - PAUSE_FAILED
+              - RESUME_FAILED
         peerInstance:
           description: Optional. The peer instance.
           type: string
@@ -625,15 +664,15 @@ components:
         iopsPerTb:
           description: >-
             Provision IOPS dynamically based on the capacity of the instance.
-            Provisioned read IOPS will be calculated by multiplying the capacity
-            of the instance in TiB by the `iops_per_tb` value. For example, for
-            a 2 TiB instance with an `iops_per_tb` value of 17000 the
-            provisioned read IOPS will be 34000. If the calculated value is
-            outside the supported range for the instance's capacity during
-            instance creation, instance creation will fail with an
-            `InvalidArgument` error. Similarly, if an instance capacity update
-            would result in a value outside the supported range, the update will
-            fail with an `InvalidArgument` error.
+            Provisioned IOPS will be calculated by multiplying the capacity of
+            the instance in TiB by the `iops_per_tb` value. For example, for a 2
+            TiB instance with an `iops_per_tb` value of 17000 the provisioned
+            IOPS will be 34000. If the calculated value is outside the supported
+            range for the instance's capacity during instance creation, instance
+            creation will fail with an `InvalidArgument` error. Similarly, if an
+            instance capacity update would result in a value outside the
+            supported range, the update will fail with an `InvalidArgument`
+            error.
           $ref: '#/components/schemas/IOPSPerTB'
         fixedIops:
           description: >-
@@ -651,13 +690,6 @@ components:
       description: IOPS per TB. Filestore defines TB as 1024^4 bytes (TiB).
       type: object
       properties:
-        maxReadIopsPerTb:
-          description: >-
-            Optional. Deprecated: `max_iops_per_tb` should be used instead of
-            this parameter. Maximum read IOPS per TiB.
-          deprecated: true
-          type: string
-          format: int64
         maxIopsPerTb:
           description: Required. Maximum IOPS per TiB.
           type: string
@@ -667,13 +699,6 @@ components:
       description: Fixed IOPS (input/output operations per second) parameters.
       type: object
       properties:
-        maxReadIops:
-          description: >-
-            Optional. Deprecated: `max_iops` should be used instead of this
-            parameter. Maximum raw read IOPS.
-          deprecated: true
-          type: string
-          format: int64
         maxIops:
           description: Required. Maximum IOPS.
           type: string
@@ -685,6 +710,11 @@ components:
         performance configuration.
       type: object
       properties:
+        maxIops:
+          description: Output only. The max IOPS.
+          readOnly: true
+          type: string
+          format: int64
         maxReadIops:
           description: Output only. The max read IOPS.
           readOnly: true
@@ -751,6 +781,11 @@ components:
             The token you can use to retrieve the next page of results. Not
             returned if there are no more results in the list.
           type: string
+        unreachable:
+          description: Unordered list. Locations that could not be reached.
+          type: array
+          items:
+            type: string
     Snapshot:
       id: Snapshot
       description: A Filestore snapshot.
@@ -800,9 +835,14 @@ components:
           format: int64
         tags:
           description: >-
-            Optional. Input only. Immutable. Tag key-value pairs are bound to
-            this resource. For example: "123/environment": "production",
-            "123/costCenter": "marketing"
+            Optional. Input only. Immutable. Tag key-value pairs bound to this
+            resource. Each key must be a namespaced name and each value a short
+            name. Example: "123456789012/environment" : "production",
+            "123456789013/costCenter" : "marketing" See the documentation for
+            more information: - Namespaced name:
+            https://cloud.google.com/resource-manager/docs/tags/tags-creating-and-managing#retrieving_tag_key
+            - Short name:
+            https://cloud.google.com/resource-manager/docs/tags/tags-creating-and-managing#retrieving_tag_value
           type: object
           additionalProperties:
             type: string
@@ -828,7 +868,7 @@ components:
             returned if there are no more results in the list.
           type: string
         unreachable:
-          description: Locations that could not be reached.
+          description: Unordered list. Locations that could not be reached.
           type: array
           items:
             type: string
@@ -968,9 +1008,14 @@ components:
           type: string
         tags:
           description: >-
-            Optional. Input only. Immutable. Tag key-value pairs are bound to
-            this resource. For example: "123/environment": "production",
-            "123/costCenter": "marketing"
+            Optional. Input only. Immutable. Tag key-value pairs bound to this
+            resource. Each key must be a namespaced name and each value a short
+            name. Example: "123456789012/environment" : "production",
+            "123456789013/costCenter" : "marketing" See the documentation for
+            more information: - Namespaced name:
+            https://cloud.google.com/resource-manager/docs/tags/tags-creating-and-managing#retrieving_tag_key
+            - Short name:
+            https://cloud.google.com/resource-manager/docs/tags/tags-creating-and-managing#retrieving_tag_value
           type: object
           additionalProperties:
             type: string
@@ -994,7 +1039,15 @@ components:
       id: PromoteReplicaRequest
       description: PromoteReplicaRequest promotes a Filestore standby instance (replica).
       type: object
-      properties: {}
+      properties:
+        peerInstance:
+          description: >-
+            Optional. The resource name of the peer instance to promote, in the
+            format
+            `projects/{project_id}/locations/{location_id}/instances/{instance_id}`.
+            The peer instance is required if the operation is called on an
+            active instance.
+          type: string
     ListLocationsResponse:
       id: ListLocationsResponse
       description: The response message for Locations.ListLocations.
@@ -1077,8 +1130,8 @@ components:
           description: >-
             Output only. Identifies whether the user has requested cancellation
             of the operation. Operations that have been cancelled successfully
-            have Operation.error value with a google.rpc.Status.code of 1,
-            corresponding to `Code.CANCELLED`.
+            have google.longrunning.Operation.error value with a
+            google.rpc.Status.code of `1`, corresponding to `Code.CANCELLED`.
           readOnly: true
           type: boolean
         apiVersion:
@@ -1257,6 +1310,18 @@ components:
           additionalProperties:
             $ref: >-
               #/components/schemas/GoogleCloudSaasacceleratorManagementProvidersV1NotificationParameter
+        consumerProjectNumber:
+          description: >-
+            Optional. The consumer_project_number associated with this Apigee
+            instance. This field is added specifically to support Apigee
+            integration with SLM Rollout and UMM. It represents the numerical
+            project ID of the GCP project that consumes this Apigee instance. It
+            is used for SLM rollout notifications and UMM integration, enabling
+            proper mapping to customer projects and log delivery for Apigee
+            instances. This field complements consumer_project_id and may be
+            used for specific Apigee scenarios where the numerical ID is
+            required.
+          type: string
     GoogleCloudSaasacceleratorManagementProvidersV1ProvisionedResource:
       id: GoogleCloudSaasacceleratorManagementProvidersV1ProvisionedResource
       description: Describes provisioned dataplane resources.
@@ -2078,16 +2143,16 @@ paths:
           schema:
             type: string
         - in: query
-          name: includeUnrevealedLocations
-          schema:
-            type: boolean
-        - in: query
           name: pageSize
           schema:
             type: integer
             format: int32
         - in: query
           name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: extraLocationTypes
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}:
@@ -2244,7 +2309,7 @@ paths:
         the operation completed despite cancellation. On successful
         cancellation, the operation is not deleted; instead, it becomes an
         operation with an Operation.error value with a google.rpc.Status.code of
-        1, corresponding to `Code.CANCELLED`.
+        `1`, corresponding to `Code.CANCELLED`.
       operationId: file.projects.locations.operations.cancel
       requestBody:
         content:
@@ -2644,6 +2709,10 @@ paths:
           name: filter
           schema:
             type: string
+        - in: query
+          name: returnPartialSuccess
+          schema:
+            type: boolean
     post:
       description: Creates a snapshot.
       operationId: file.projects.locations.instances.snapshots.create
