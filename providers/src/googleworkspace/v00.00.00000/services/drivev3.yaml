@@ -7,10 +7,10 @@ info:
   title: Google Drive API
   description: The Google Drive API allows clients to access resources from Google Drive.
   version: v3
-  x-discovery-doc-revision: '20241202'
-  x-generated-date: '2024-12-07'
+  x-discovery-doc-revision: '20250821'
+  x-generated-date: '2025-08-28'
 externalDocs:
-  url: https://developers.google.com/drive/
+  url: https://developers.google.com/workspace/drive/
 servers:
   - url: https://www.googleapis.com/drive/v3
 components:
@@ -47,21 +47,6 @@ components:
           tokenUrl: https://accounts.google.com/o/oauth2/token
           scopes: *ref_0
   schemas:
-    ListOperationsResponse:
-      id: ListOperationsResponse
-      description: The response message for Operations.ListOperations.
-      type: object
-      properties:
-        operations:
-          description: >-
-            A list of operations that matches the specified filter in the
-            request.
-          type: array
-          items:
-            $ref: '#/components/schemas/Operation'
-        nextPageToken:
-          description: The standard List next-page token.
-          type: string
     Operation:
       id: Operation
       description: >-
@@ -274,27 +259,33 @@ components:
       properties:
         displayName:
           description: Output only. A plain text displayable name for this user.
+          readOnly: true
           type: string
         kind:
           description: >-
             Output only. Identifies what kind of resource this is. Value: the
-            fixed string `"drive#user"`.
+            fixed string `drive#user`.
           default: drive#user
+          readOnly: true
           type: string
         me:
           description: Output only. Whether this user is the requesting user.
+          readOnly: true
           type: boolean
         permissionId:
           description: Output only. The user's ID as visible in Permission resources.
+          readOnly: true
           type: string
         emailAddress:
           description: >-
             Output only. The email address of the user. This may not be present
             in certain contexts if the user has not made their email address
             visible to the requester.
+          readOnly: true
           type: string
         photoLink:
           description: Output only. A link to the user's profile photo, if available.
+          readOnly: true
           type: string
     App:
       id: App
@@ -1090,6 +1081,17 @@ components:
                 Output only. Whether there is a content restriction on the file
                 that can be removed by the current user.
               type: boolean
+            canDisableInheritedPermissions:
+              description: Whether a user can disable inherited permissions.
+              type: boolean
+            canEnableInheritedPermissions:
+              description: Whether a user can re-enable inherited permissions.
+              type: boolean
+            canChangeItemDownloadRestriction:
+              description: >-
+                Output only. Whether the current user can change the owner or
+                organizer-applied download restrictions of the file.
+              type: boolean
         hasAugmentedPermissions:
           description: >-
             Output only. Whether there are permissions directly on this file.
@@ -1313,14 +1315,25 @@ components:
             stored in Google Drive; it is not populated for Docs Editors or
             shortcut files.
           type: string
+        inheritedPermissionsDisabled:
+          description: >-
+            Whether this file has inherited permissions disabled. Inherited
+            permissions are enabled by default.
+          type: boolean
+        downloadRestrictions:
+          description: Download restrictions applied on the file.
+          $ref: '#/components/schemas/DownloadRestrictionsMetadata'
     Permission:
       id: Permission
       description: >-
         A permission for a file. A permission grants a user, group, domain, or
-        the world access to a file or a folder hierarchy. Some resource methods
-        (such as `permissions.update`) require a `permissionId`. Use the
-        `permissions.list` method to retrieve the ID for a file, folder, or
-        shared drive.
+        the world access to a file or a folder hierarchy. By default,
+        permissions requests only return a subset of fields. Permission kind,
+        ID, type, and role are always returned. To retrieve specific fields, see
+        https://developers.google.com/workspace/drive/api/guides/fields-parameter.
+        Some resource methods (such as `permissions.update`) require a
+        `permissionId`. Use the `permissions.list` method to retrieve the ID for
+        a file, folder, or shared drive.
       type: object
       properties:
         id:
@@ -1357,9 +1370,8 @@ components:
           type: string
         permissionDetails:
           description: >-
-            Output only. Details of whether the permissions on this shared drive
-            item are inherited or directly on this item. This is an output-only
-            field which is present only for shared drive items.
+            Output only. Details of whether the permissions on this item are
+            inherited or directly on this item.
           readOnly: true
           type: array
           items:
@@ -1374,14 +1386,14 @@ components:
               inheritedFrom:
                 description: >-
                   Output only. The ID of the item from which this permission is
-                  inherited. This is an output-only field.
+                  inherited. This is only populated for items in shared drives.
                 type: string
               role:
                 description: >-
                   Output only. The primary role for this user. While new values
                   may be added in the future, the following are currently
-                  possible: * `organizer` * `fileOrganizer` * `writer` *
-                  `commenter` * `reader`
+                  possible: * `owner` * `organizer` * `fileOrganizer` * `writer`
+                  * `commenter` * `reader`
                 type: string
               inherited:
                 description: >-
@@ -1464,14 +1476,23 @@ components:
         view:
           description: >-
             Indicates the view for this permission. Only populated for
-            permissions that belong to a view. 'published' is the only supported
-            value.
+            permissions that belong to a view. published and metadata are the
+            only supported values. - published: The permission's role is
+            published_reader. - metadata: The item is only visible to the
+            metadata view because the item has limited access and the scope has
+            at least read access to the parent. Note: The metadata view is
+            currently only supported on folders. 
           type: string
         pendingOwner:
           description: >-
             Whether the account associated with this permission is a pending
             owner. Only populated for `user` type permissions for files that are
             not in a shared drive.
+          type: boolean
+        inheritedPermissionsDisabled:
+          description: >-
+            When true, only organizers, owners, and users with permissions added
+            directly on the item can access it.
           type: boolean
     ContentRestriction:
       id: ContentRestriction
@@ -1584,6 +1605,35 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/User'
+    DownloadRestrictionsMetadata:
+      id: DownloadRestrictionsMetadata
+      description: Download restrictions applied to the file.
+      type: object
+      properties:
+        itemDownloadRestriction:
+          description: >-
+            The download restriction of the file applied directly by the owner
+            or organizer. This does not take into account shared drive settings
+            or DLP rules.
+          $ref: '#/components/schemas/DownloadRestriction'
+        effectiveDownloadRestrictionWithContext:
+          description: >-
+            Output only. The effective download restriction applied to this
+            file. This considers all restriction settings and DLP rules.
+          $ref: '#/components/schemas/DownloadRestriction'
+    DownloadRestriction:
+      id: DownloadRestriction
+      description: A restriction for copy and download of the file.
+      type: object
+      properties:
+        restrictedForReaders:
+          description: Whether download and copy is restricted for readers.
+          type: boolean
+        restrictedForWriters:
+          description: >-
+            Whether download and copy is restricted for writers. If true,
+            download is also restricted for readers.
+          type: boolean
     TeamDrive:
       id: TeamDrive
       description: 'Deprecated: use the drive collection instead.'
@@ -1716,6 +1766,11 @@ components:
                 Whether the current user can reset the Team Drive restrictions
                 to defaults.
               type: boolean
+            canChangeDownloadRestriction:
+              description: >-
+                Whether the current user can change organizer-applied download
+                restrictions of this shared drive.
+              type: boolean
         themeId:
           description: >-
             The ID of the theme from which the background image and color will
@@ -1809,6 +1864,9 @@ components:
                 If false, users with either the organizer role or the file
                 organizer role can share folders.
               type: boolean
+            downloadRestriction:
+              description: Download restrictions applied by shared drive managers.
+              $ref: '#/components/schemas/DownloadRestriction'
         orgUnitId:
           description: >-
             The organizational unit of this shared drive. This field is only
@@ -1953,6 +2011,11 @@ components:
                 Output only. Whether the current user can trash children from
                 folders in this shared drive.
               type: boolean
+            canChangeDownloadRestriction:
+              description: >-
+                Output only. Whether the current user can change
+                organizer-applied download restrictions of this shared drive.
+              type: boolean
         themeId:
           description: >-
             The ID of the theme from which the background image and color will
@@ -2051,6 +2114,9 @@ components:
                 If false, users with either the organizer role or the file
                 organizer role can share folders.
               type: boolean
+            downloadRestriction:
+              description: Download restrictions applied by shared drive managers.
+              $ref: '#/components/schemas/DownloadRestriction'
         orgUnitId:
           description: >-
             Output only. The organizational unit of this shared drive. This
@@ -2144,7 +2210,7 @@ components:
           description: >-
             A region of the document represented as a JSON string. For details
             on defining anchor properties, refer to [Manage comments and
-            replies](https://developers.google.com/drive/api/v3/manage-comments).
+            replies](https://developers.google.com/workspace/drive/api/v3/manage-comments).
           type: string
         replies:
           description: >-
@@ -2594,7 +2660,7 @@ components:
         publishedLink:
           description: >-
             Output only. A link to the published revision. This is only
-            populated for Google Sites files.
+            populated for Docs Editors files.
           type: string
         size:
           description: >-
@@ -2858,13 +2924,6 @@ components:
       name: operations
       title: Operations
       methods:
-        list:
-          operation:
-            $ref: '#/paths/~1operations/get'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-            objectKey: $.operations
         get:
           operation:
             $ref: '#/paths/~1operations~1{name}/get'
@@ -2874,35 +2933,10 @@ components:
       sqlVerbs:
         select:
           - $ref: '#/components/x-stackQL-resources/operations/methods/get'
-          - $ref: '#/components/x-stackQL-resources/operations/methods/list'
         insert: []
         update: []
         replace: []
         delete: []
-    operation:
-      id: googleworkspace.drivev3.operation
-      name: operation
-      title: Operation
-      methods:
-        delete:
-          operation:
-            $ref: '#/paths/~1operation~1{name}/delete'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        cancel:
-          operation:
-            $ref: '#/paths/~1operation~1{name}:cancel/post'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
-        select: []
-        insert: []
-        update: []
-        replace: []
-        delete:
-          - $ref: '#/components/x-stackQL-resources/operation/methods/delete'
     about:
       id: googleworkspace.drivev3.about
       name: about
@@ -3439,7 +3473,7 @@ components:
         replace: []
         delete: []
 paths:
-  /operations:
+  /operations/{name}:
     parameters: &ref_1
       - $ref: '#/components/parameters/access_token'
       - $ref: '#/components/parameters/alt'
@@ -3452,39 +3486,6 @@ paths:
       - $ref: '#/components/parameters/upload_protocol'
       - $ref: '#/components/parameters/uploadType'
       - $ref: '#/components/parameters/_.xgafv'
-    get:
-      description: >-
-        Lists operations that match the specified filter in the request. If the
-        server doesn't support this method, it returns `UNIMPLEMENTED`.
-      operationId: drive.operations.list
-      security: []
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListOperationsResponse'
-      parameters:
-        - in: query
-          name: name
-          schema:
-            type: string
-        - in: query
-          name: filter
-          schema:
-            type: string
-        - in: query
-          name: pageSize
-          schema:
-            type: integer
-            format: int32
-        - in: query
-          name: pageToken
-          schema:
-            type: string
-  /operations/{name}:
-    parameters: *ref_1
     get:
       description: >-
         Gets the latest state of a long-running operation. Clients can use this
@@ -3521,55 +3522,16 @@ paths:
           required: true
           schema:
             type: string
-  /operation/{name}:
-    parameters: *ref_1
-    delete:
-      description: >-
-        Deletes a long-running operation. This method indicates that the client
-        is no longer interested in the operation result. It does not cancel the
-        operation. If the server doesn't support this method, it returns
-        `google.rpc.Code.UNIMPLEMENTED`.
-      operationId: drive.operation.delete
-      security: []
-      responses:
-        '204':
-          description: No Content
-      parameters:
-        - in: path
-          name: name
-          required: true
-          schema:
-            type: string
-  /operation/{name}:cancel:
-    parameters: *ref_1
-    post:
-      description: >-
-        Starts asynchronous cancellation on a long-running operation. The server
-        makes a best effort to cancel the operation, but success is not
-        guaranteed. If the server doesn't support this method, it returns
-        `google.rpc.Code.UNIMPLEMENTED`. Clients can use Operations.GetOperation
-        or other methods to check whether the cancellation succeeded or whether
-        the operation completed despite cancellation. On successful
-        cancellation, the operation is not deleted; instead, it becomes an
-        operation with an Operation.error value with a google.rpc.Status.code of
-        `1`, corresponding to `Code.CANCELLED`.
-      operationId: drive.operation.cancel
-      security: []
-      responses:
-        '204':
-          description: No Content
-      parameters:
-        - in: path
-          name: name
-          required: true
-          schema:
-            type: string
   /about:
     parameters: *ref_1
     get:
       description: >-
         Gets information about the user, the user's Drive, and system
-        capabilities.
+        capabilities. For more information, see [Return user
+        info](https://developers.google.com/workspace/drive/api/guides/user-info).
+        Required: The `fields` parameter must be set. To return the exact fields
+        you need, see [Return specific
+        fields](https://developers.google.com/workspace/drive/api/guides/fields-parameter).
       operationId: drive.about.get
       security:
         - Oauth2:
@@ -3611,7 +3573,9 @@ paths:
   /apps/{appId}:
     parameters: *ref_1
     get:
-      description: Gets a specific app.
+      description: >-
+        Gets a specific app. For more information, see [Return user
+        info](https://developers.google.com/workspace/drive/api/guides/user-info).
       operationId: drive.apps.get
       security:
         - Oauth2:
@@ -3658,7 +3622,9 @@ paths:
   /apps:
     parameters: *ref_1
     get:
-      description: Lists a user's installed apps.
+      description: >-
+        Lists a user's installed apps. For more information, see [Return user
+        info](https://developers.google.com/workspace/drive/api/guides/user-info).
       operationId: drive.apps.list
       security:
         - Oauth2:
@@ -3688,7 +3654,10 @@ paths:
   /changes/startPageToken:
     parameters: *ref_1
     get:
-      description: Gets the starting pageToken for listing future changes.
+      description: >-
+        Gets the starting pageToken for listing future changes. For more
+        information, see [Retrieve
+        changes](https://developers.google.com/workspace/drive/api/guides/manage-changes).
       operationId: drive.changes.getStartPageToken
       security:
         - Oauth2:
@@ -3750,7 +3719,10 @@ paths:
   /changes:
     parameters: *ref_1
     get:
-      description: Lists the changes for a user or shared drive.
+      description: >-
+        Lists the changes for a user or shared drive. For more information, see
+        [Retrieve
+        changes](https://developers.google.com/workspace/drive/api/guides/manage-changes).
       operationId: drive.changes.list
       security:
         - Oauth2:
@@ -3854,7 +3826,10 @@ paths:
   /changes/watch:
     parameters: *ref_1
     post:
-      description: Subscribes to changes for a user.
+      description: >-
+        Subscribes to changes for a user. For more information, see
+        [Notifications for resource
+        changes](https://developers.google.com/workspace/drive/api/guides/push).
       operationId: drive.changes.watch
       requestBody:
         content:
@@ -3963,7 +3938,10 @@ paths:
   /channels/stop:
     parameters: *ref_1
     post:
-      description: Stops watching resources through this channel.
+      description: >-
+        Stops watching resources through this channel. For more information, see
+        [Notifications for resource
+        changes](https://developers.google.com/workspace/drive/api/guides/push).
       operationId: drive.channels.stop
       requestBody:
         content:
@@ -4010,7 +3988,13 @@ paths:
   /files/{fileId}/comments:
     parameters: *ref_1
     post:
-      description: Creates a comment on a file.
+      description: >-
+        Creates a comment on a file. For more information, see [Manage comments
+        and
+        replies](https://developers.google.com/workspace/drive/api/guides/manage-comments).
+        Required: The `fields` parameter must be set. To return the exact fields
+        you need, see [Return specific
+        fields](https://developers.google.com/workspace/drive/api/guides/fields-parameter).
       operationId: drive.comments.create
       requestBody:
         content:
@@ -4040,7 +4024,12 @@ paths:
           schema:
             type: string
     get:
-      description: Lists a file's comments.
+      description: >-
+        Lists a file's comments. For more information, see [Manage comments and
+        replies](https://developers.google.com/workspace/drive/api/guides/manage-comments).
+        Required: The `fields` parameter must be set. To return the exact fields
+        you need, see [Return specific
+        fields](https://developers.google.com/workspace/drive/api/guides/fields-parameter).
       operationId: drive.comments.list
       security:
         - Oauth2:
@@ -4092,7 +4081,9 @@ paths:
   /files/{fileId}/comments/{commentId}:
     parameters: *ref_1
     delete:
-      description: Deletes a comment.
+      description: >-
+        Deletes a comment. For more information, see [Manage comments and
+        replies](https://developers.google.com/workspace/drive/api/guides/manage-comments).
       operationId: drive.comments.delete
       security:
         - Oauth2:
@@ -4118,7 +4109,12 @@ paths:
           schema:
             type: string
     get:
-      description: Gets a comment by ID.
+      description: >-
+        Gets a comment by ID. For more information, see [Manage comments and
+        replies](https://developers.google.com/workspace/drive/api/guides/manage-comments).
+        Required: The `fields` parameter must be set. To return the exact fields
+        you need, see [Return specific
+        fields](https://developers.google.com/workspace/drive/api/guides/fields-parameter).
       operationId: drive.comments.get
       security:
         - Oauth2:
@@ -4160,7 +4156,13 @@ paths:
           schema:
             type: boolean
     patch:
-      description: Updates a comment with patch semantics.
+      description: >-
+        Updates a comment with patch semantics. For more information, see
+        [Manage comments and
+        replies](https://developers.google.com/workspace/drive/api/guides/manage-comments).
+        Required: The `fields` parameter must be set. To return the exact fields
+        you need, see [Return specific
+        fields](https://developers.google.com/workspace/drive/api/guides/fields-parameter).
       operationId: drive.comments.update
       requestBody:
         content:
@@ -4197,7 +4199,9 @@ paths:
   /drives:
     parameters: *ref_1
     post:
-      description: Creates a shared drive.
+      description: >-
+        Creates a shared drive. For more information, see [Manage shared
+        drives](https://developers.google.com/workspace/drive/api/guides/manage-shareddrives).
       operationId: drive.drives.create
       requestBody:
         content:
@@ -4223,7 +4227,7 @@ paths:
           schema:
             type: string
     get:
-      description: ' Lists the user''s shared drives. This method accepts the `q` parameter, which is a search query combining one or more search terms. For more information, see the [Search for shared drives](/drive/api/guides/search-shareddrives) guide.'
+      description: ' Lists the user''s shared drives. This method accepts the `q` parameter, which is a search query combining one or more search terms. For more information, see the [Search for shared drives](/workspace/drive/api/guides/search-shareddrives) guide.'
       operationId: drive.drives.list
       security:
         - Oauth2:
@@ -4264,7 +4268,9 @@ paths:
     delete:
       description: >-
         Permanently deletes a shared drive for which the user is an `organizer`.
-        The shared drive cannot contain any untrashed items.
+        The shared drive cannot contain any untrashed items. For more
+        information, see [Manage shared
+        drives](https://developers.google.com/workspace/drive/api/guides/manage-shareddrives).
       operationId: drive.drives.delete
       security:
         - Oauth2:
@@ -4289,7 +4295,10 @@ paths:
           schema:
             type: boolean
     get:
-      description: Gets a shared drive's metadata by ID.
+      description: >-
+        Gets a shared drive's metadata by ID. For more information, see [Manage
+        shared
+        drives](https://developers.google.com/workspace/drive/api/guides/manage-shareddrives).
       operationId: drive.drives.get
       security:
         - Oauth2:
@@ -4318,7 +4327,10 @@ paths:
           schema:
             type: boolean
     patch:
-      description: Updates the metadata for a shared drive.
+      description: >-
+        Updates the metadata for a shared drive. For more information, see
+        [Manage shared
+        drives](https://developers.google.com/workspace/drive/api/guides/manage-shareddrives).
       operationId: drive.drives.update
       requestBody:
         content:
@@ -4350,7 +4362,10 @@ paths:
   /drives/{driveId}/hide:
     parameters: *ref_1
     post:
-      description: Hides a shared drive from the default view.
+      description: >-
+        Hides a shared drive from the default view. For more information, see
+        [Manage shared
+        drives](https://developers.google.com/workspace/drive/api/guides/manage-shareddrives).
       operationId: drive.drives.hide
       security:
         - Oauth2:
@@ -4373,7 +4388,10 @@ paths:
   /drives/{driveId}/unhide:
     parameters: *ref_1
     post:
-      description: Restores a shared drive to the default view.
+      description: >-
+        Restores a shared drive to the default view. For more information, see
+        [Manage shared
+        drives](https://developers.google.com/workspace/drive/api/guides/manage-shareddrives).
       operationId: drive.drives.unhide
       security:
         - Oauth2:
@@ -4470,7 +4488,7 @@ paths:
   /files:
     parameters: *ref_1
     post:
-      description: ' Creates a new file. This method supports an */upload* URI and accepts uploaded media with the following characteristics: - *Maximum file size:* 5,120 GB - *Accepted Media MIME types:*`*/*` Note: Specify a valid MIME type, rather than the literal `*/*` value. The literal `*/*` is only used to indicate that any valid MIME type can be uploaded. For more information on uploading files, see [Upload file data](/drive/api/guides/manage-uploads). Apps creating shortcuts with `files.create` must specify the MIME type `application/vnd.google-apps.shortcut`. Apps should specify a file extension in the `name` property when inserting files with the API. For example, an operation to insert a JPEG file should specify something like `"name": "cat.jpg"` in the metadata. Subsequent `GET` requests include the read-only `fileExtension` property populated with the extension originally specified in the `title` property. When a Google Drive user requests to download a file, or when the file is downloaded through the sync client, Drive builds a full filename (with extension) based on the title. In cases where the extension is missing, Drive attempts to determine the extension based on the file''s MIME type.'
+      description: ' Creates a new file. This method supports an */upload* URI and accepts uploaded media with the following characteristics: - *Maximum file size:* 5,120 GB - *Accepted Media MIME types:*`*/*` Note: Specify a valid MIME type, rather than the literal `*/*` value. The literal `*/*` is only used to indicate that any valid MIME type can be uploaded. For more information on uploading files, see [Upload file data](/workspace/drive/api/guides/manage-uploads). Apps creating shortcuts with `files.create` must specify the MIME type `application/vnd.google-apps.shortcut`. Apps should specify a file extension in the `name` property when inserting files with the API. For example, an operation to insert a JPEG file should specify something like `"name": "cat.jpg"` in the metadata. Subsequent `GET` requests include the read-only `fileExtension` property populated with the extension originally specified in the `title` property. When a Google Drive user requests to download a file, or when the file is downloaded through the sync client, Drive builds a full filename (with extension) based on the title. In cases where the extension is missing, Drive attempts to determine the extension based on the file''s MIME type.'
       operationId: drive.files.create
       requestBody:
         content:
@@ -4535,7 +4553,7 @@ paths:
           schema:
             type: string
     get:
-      description: ' Lists the user''s files. This method accepts the `q` parameter, which is a search query combining one or more search terms. For more information, see the [Search for files & folders](/drive/api/guides/search-files) guide. *Note:* This method returns *all* files by default, including trashed files. If you don''t want trashed files to appear in the list, use the `trashed=false` query parameter to remove trashed files from the results.'
+      description: ' Lists the user''s files. This method accepts the `q` parameter, which is a search query combining one or more search terms. For more information, see the [Search for files & folders](/workspace/drive/api/guides/search-files) guide. *Note:* This method returns *all* files by default, including trashed files. If you don''t want trashed files to appear in the list, use the `trashed=false` query parameter to remove trashed files from the results.'
       operationId: drive.files.list
       security:
         - Oauth2:
@@ -4683,7 +4701,7 @@ paths:
           schema:
             type: boolean
     get:
-      description: ' Gets a file''s metadata or content by ID. If you provide the URL parameter `alt=media`, then the response includes the file contents in the response body. Downloading content with `alt=media` only works if the file is stored in Drive. To download Google Docs, Sheets, and Slides use [`files.export`](/drive/api/reference/rest/v3/files/export) instead. For more information, see [Download & export files](/drive/api/guides/manage-downloads).'
+      description: ' Gets a file''s metadata or content by ID. If you provide the URL parameter `alt=media`, then the response includes the file contents in the response body. Downloading content with `alt=media` only works if the file is stored in Drive. To download Google Docs, Sheets, and Slides use [`files.export`](/workspace/drive/api/reference/rest/v3/files/export) instead. For more information, see [Download & export files](/workspace/drive/api/guides/manage-downloads).'
       operationId: drive.files.get
       security:
         - Oauth2:
@@ -4752,7 +4770,7 @@ paths:
           schema:
             type: string
     patch:
-      description: ' Updates a file''s metadata and/or content. When calling this method, only populate fields in the request that you want to modify. When updating fields, some fields might be changed automatically, such as `modifiedDate`. This method supports patch semantics. This method supports an */upload* URI and accepts uploaded media with the following characteristics: - *Maximum file size:* 5,120 GB - *Accepted Media MIME types:*`*/*` Note: Specify a valid MIME type, rather than the literal `*/*` value. The literal `*/*` is only used to indicate that any valid MIME type can be uploaded. For more information on uploading files, see [Upload file data](/drive/api/guides/manage-uploads).'
+      description: ' Updates a file''s metadata and/or content. When calling this method, only populate fields in the request that you want to modify. When updating fields, some fields might be changed automatically, such as `modifiedDate`. This method supports patch semantics. This method supports an */upload* URI and accepts uploaded media with the following characteristics: - *Maximum file size:* 5,120 GB - *Accepted Media MIME types:*`*/*` Note: Specify a valid MIME type, rather than the literal `*/*` value. The literal `*/*` is only used to indicate that any valid MIME type can be uploaded. For more information on uploading files, see [Upload file data](/workspace/drive/api/guides/manage-uploads).'
       operationId: drive.files.update
       requestBody:
         content:
@@ -5209,6 +5227,10 @@ paths:
           name: useDomainAdminAccess
           schema:
             type: boolean
+        - in: query
+          name: enforceExpansiveAccess
+          schema:
+            type: boolean
     get:
       description: Lists a file's or shared drive's permissions.
       operationId: drive.permissions.list
@@ -5319,6 +5341,10 @@ paths:
             type: boolean
         - in: query
           name: useDomainAdminAccess
+          schema:
+            type: boolean
+        - in: query
+          name: enforceExpansiveAccess
           schema:
             type: boolean
     get:
@@ -5439,6 +5465,10 @@ paths:
             type: boolean
         - in: query
           name: useDomainAdminAccess
+          schema:
+            type: boolean
+        - in: query
+          name: enforceExpansiveAccess
           schema:
             type: boolean
   /files/{fileId}/comments/{commentId}/replies:
@@ -5656,7 +5686,9 @@ paths:
         Permanently deletes a file version. You can only delete revisions for
         files with binary content in Google Drive, like images or videos.
         Revisions for other files, like Google Docs or Sheets, and the last
-        remaining file version can't be deleted.
+        remaining file version can't be deleted. For more information, see
+        [Manage file
+        revisions](https://developers.google.com/drive/api/guides/manage-revisions).
       operationId: drive.revisions.delete
       security:
         - Oauth2:
@@ -5686,7 +5718,10 @@ paths:
           schema:
             type: string
     get:
-      description: Gets a revision's metadata or content by ID.
+      description: >-
+        Gets a revision's metadata or content by ID. For more information, see
+        [Manage file
+        revisions](https://developers.google.com/workspace/drive/api/guides/manage-revisions).
       operationId: drive.revisions.get
       security:
         - Oauth2:
@@ -5744,7 +5779,10 @@ paths:
           schema:
             type: boolean
     patch:
-      description: Updates a revision with patch semantics.
+      description: >-
+        Updates a revision with patch semantics. For more information, see
+        [Manage file
+        revisions](https://developers.google.com/workspace/drive/api/guides/manage-revisions).
       operationId: drive.revisions.update
       requestBody:
         content:
@@ -5785,7 +5823,9 @@ paths:
   /files/{fileId}/revisions:
     parameters: *ref_1
     get:
-      description: Lists a file's revisions.
+      description: >-
+        Lists a file's revisions. For more information, see [Manage file
+        revisions](https://developers.google.com/workspace/drive/api/guides/manage-revisions).
       operationId: drive.revisions.list
       security:
         - Oauth2:
