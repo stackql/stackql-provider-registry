@@ -1,0 +1,479 @@
+openapi: 3.0.3
+info:
+  title: orgs API
+  description: okta orgs API
+  version: 5.1.0
+paths:
+  /api/v1/orgs:
+    post:
+      summary: Create an org
+      description: >-
+        Creates an org (child org) that has the same features as the current
+        requesting org (parent org).
+
+        A child org inherits any new features added to the parent org, but new
+        features added to the child org aren't propagated back to the parent
+        org.
+
+        > **Notes:**
+
+        > * Some features associated with products, such as Atspoke, Workflows,
+        and Okta Identity Governance, aren't propagated to the child org.
+
+        > * Wait at least 30 seconds after a 201-Created response before you
+        make API requests to the new child org.
+
+        > * For rate limits, see [Org creation rate
+        limits](https://developer.okta.com/docs/reference/rl-additional-limits/#org-creation-rate-limits).
+      operationId: createChildOrg
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChildOrg'
+            examples:
+              CreateChildOrg:
+                $ref: '#/components/examples/CreateChildOrgRequestEx'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChildOrg'
+              examples:
+                CreateChildOrg:
+                  $ref: '#/components/examples/CreateChildOrgResponseEx'
+        '400':
+          $ref: '#/components/responses/ErrorApiValidationFailed400'
+        '401':
+          $ref: '#/components/responses/ErrorInvalidToken401'
+        '403':
+          $ref: '#/components/responses/ErrorAccessDenied403'
+        '429':
+          $ref: '#/components/responses/ErrorTooManyRequests429'
+        '500':
+          $ref: '#/components/responses/ErrorInternalServer500'
+      security:
+        - apiToken: []
+        - oauth2:
+            - okta.orgs.manage
+      tags:
+        - OrgCreator
+      x-okta-lifecycle:
+        lifecycle: GA
+        isGenerallyAvailable: true
+components:
+  schemas:
+    ChildOrg:
+      type: object
+      properties:
+        admin:
+          $ref: '#/components/schemas/OrgCreationAdmin'
+        created:
+          description: Timestamp when the org was created
+          type: string
+          format: date-time
+          readOnly: true
+          example: '2022-08-25T00:05:00.000Z'
+        edition:
+          description: Edition for the org. `SKU` is the only supported value.
+          type: string
+          enum:
+            - SKU
+          example: SKU
+        id:
+          type: string
+          description: Org ID
+          readOnly: true
+          example: 00o1n8sbwArJ7OQRw406
+        lastUpdated:
+          description: Timestamp when the org was last updated
+          type: string
+          format: date-time
+          readOnly: true
+          example: '2022-08-25T00:05:00.000Z'
+        name:
+          description: >-
+            Unique name of the org.
+
+            This name appears in the HTML `<title>` tag of the new org sign-in
+            page.
+
+            Only less than 4-width UTF-8 encoded characters are allowed.
+          type: string
+          format: utf-8
+          minimum: 1
+          maximum: 100
+          example: My Child Org 1
+        settings:
+          description: Settings associated with the created org
+          readOnly: true
+          type: object
+          additionalProperties: true
+        status:
+          description: Status of the org. `ACTIVE` is returned after the org is created.
+          type: string
+          readOnly: true
+          enum:
+            - ACTIVE
+        subdomain:
+          description: Subdomain of the org. Must be unique and include no spaces.
+          type: string
+          minimum: 1
+          maximum: 57
+          example: my-child-org-1
+        token:
+          description: >-
+            API token associated with the child org super admin account.
+
+            Use this API token to provision resources (such as policies, apps,
+            and groups) on the newly created child org.
+
+            This token is revoked if the super admin account is deactivated.
+
+            > **Note:** If this API token expires, sign in to the Admin Console
+            as the super admin user and create a new API token. See [Create an
+            API
+            token](https://developer.okta.com/docs/guides/create-an-api-token/).
+          type: string
+          readOnly: true
+        tokenType:
+          description: >-
+            Type of returned `token`. See [Okta API
+            tokens](https://developer.okta.com/docs/guides/create-an-api-token/main/#okta-api-tokens).
+          type: string
+          readOnly: true
+          example: SSWS
+          enum:
+            - SSWS
+        website:
+          description: Default website for the org
+          type: string
+          example: https://www.okta.com
+        _links:
+          description: >-
+            Specifies available link relations (see [Web
+            Linking](https://www.rfc-editor.org/rfc/rfc8288)) using the [JSON
+            Hypertext Application
+            Language](https://datatracker.ietf.org/doc/html/draft-kelly-json-hal-06)
+            specification
+          readOnly: true
+          type: object
+          additionalProperties: true
+      required:
+        - admin
+        - edition
+        - name
+        - subdomain
+    OrgCreationAdmin:
+      description: >-
+        Profile and credential information for the first super admin user of the
+        child org.
+
+        If you plan to configure and manage the org programmatically, create a
+        system user with a dedicated email address and a strong password.
+
+        > **Note:** If you don't provide `credentials`, the super admin user is
+        prompted to set up their credentials when they sign in to the org for
+        the first time.
+      writeOnly: true
+      type: object
+      properties:
+        credentials:
+          type: object
+          description: >-
+            Specifies primary authentication and recovery credentials for a
+            user. Credential types and requirements vary depending on the
+            provider and security policy of the org.
+          properties:
+            password:
+              type: object
+              description: >-
+                Specifies a password for a user
+
+                > **Note:** For information on defaults and configuring your
+                password policies, see [Configure the password
+                authenticator](https://help.okta.com/okta_help.htm?type=oie&id=ext-configure-password)
+                in the help documentation.
+              properties:
+                value:
+                  type: string
+                  writeOnly: true
+                  description: Password value (which is validated by the password policy)
+                  format: password
+                  example: pa$$word
+            recovery_question:
+              $ref: '#/components/schemas/RecoveryQuestionCredential'
+        profile:
+          type: object
+          description: >-
+            Specifies the profile attributes for the first super admin user. The
+            minimal set of required attributes are `email`, `firstName`,
+            `lastName`, and `login`.
+
+            See
+            [profile](https://developer.okta.com/docs/apihttps://developer.okta.com/docs/apihttps://developer.okta.com/docs/apihttps://developer.okta.com/docs/api/openapi/okta-management/management/tag/User/#tag/User/operation/getUser!c=200&path=profile&t=response)
+            for additional profile attributes.
+          properties:
+            firstName:
+              type: string
+              description: Given name of the User (`givenName`)
+              minLength: 1
+              maxLength: 50
+              nullable: true
+            lastName:
+              type: string
+              description: The family name of the User (`familyName`)
+              minLength: 1
+              maxLength: 50
+              nullable: true
+            email:
+              type: string
+              description: >-
+                The primary email address of the User. For validation, see [RFC
+                5322 Section
+                3.2.3](https://datatracker.ietf.org/doc/html/rfc5322#section-3.2.3).
+              format: email
+              minLength: 5
+              maxLength: 100
+            login:
+              type: string
+              description: The unique identifier for the User (`username`)
+              maxLength: 100
+          additionalProperties: true
+          required:
+            - email
+            - login
+            - firstName
+            - lastName
+      required:
+        - profile
+    Error:
+      title: Error
+      type: object
+      properties:
+        errorCauses:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorCause'
+        errorCode:
+          type: string
+          description: An Okta code for this type of error
+        errorId:
+          type: string
+          description: >-
+            A unique identifier for this error. This can be used by Okta Support
+            to help with troubleshooting.
+        errorLink:
+          type: string
+          description: An Okta code for this type of error
+        errorSummary:
+          type: string
+          description: >-
+            A short description of what caused this error. Sometimes this
+            contains dynamically-generated information about your specific
+            error.
+    RecoveryQuestionCredential:
+      description: >-
+        Specifies a secret question and answer that's validated (case
+        insensitive) when a user forgets their
+
+        password or unlocks their account. The answer property is write-only.
+      type: object
+      properties:
+        answer:
+          type: string
+          description: The answer to the recovery question
+          minimum: 1
+          maximum: 100
+          writeOnly: true
+          example: se7en
+        question:
+          type: string
+          description: The recovery question
+          minimum: 1
+          maximum: 100
+          example: what is your favourite movie?
+    ErrorCause:
+      type: object
+      properties:
+        errorSummary:
+          type: string
+  responses:
+    ErrorApiValidationFailed400:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            APIValidationFailed:
+              $ref: '#/components/examples/ErrorApiValidationFailed'
+    ErrorInvalidToken401:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            InvalidTokenProvided:
+              $ref: '#/components/examples/ErrorInvalidTokenProvided'
+    ErrorAccessDenied403:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            AccessDenied:
+              $ref: '#/components/examples/ErrorAccessDenied'
+    ErrorTooManyRequests429:
+      description: Too Many Requests
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            TooManyRequests:
+              $ref: '#/components/examples/ErrorTooManyRequests'
+    ErrorInternalServer500:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            InternalServerError:
+              $ref: '#/components/examples/ErrorInternalServer'
+  examples:
+    CreateChildOrgRequestEx:
+      summary: Create org request
+      value:
+        subdomain: my-child-org-1
+        name: My Child Org 1
+        website: http://www.examplecorp.com
+        edition: SKU
+        admin:
+          profile:
+            firstName: First
+            lastName: Last
+            email: FirstLast@example.com
+            login: FirstLast@example.com
+            mobilePhone: null
+          credentials:
+            password:
+              value: XXXX
+    CreateChildOrgResponseEx:
+      summary: Create org response
+      value:
+        id: 00o1n8sbwArJ7OQRw406
+        subdomain: my-child-org-1
+        name: My Child Org 1
+        website: http://www.examplecorp.com
+        status: ACTIVE
+        edition: SKU
+        expiresAt: null
+        created: '2024-08-27T15:42:52.000Z'
+        lastUpdated: '2024-08-27T15:42:56.000Z'
+        licensing:
+          apps: []
+        settings:
+          app:
+            errorRedirectUrl: null
+            interstitialUrl: null
+            interstitialMinWaitTime: 1200
+          userAccount:
+            attributes:
+              secondaryEmail: true
+              secondaryImage: true
+          portal:
+            errorRedirectUrl: null
+            signOutUrl: null
+          logs:
+            level: INFO
+        token: XXXXXXXXXXXXX
+        tokenType: SSWS
+        _links:
+          administrator:
+            href: >-
+              https://my-child-org-1.oktapreview.com/api/v1/users/00u1n8sheI1WBQlDV406
+          uploadLogo:
+            href: https://my-child-org-1.oktapreview.com/api/v1/org/logo
+          organization:
+            href: https://my-child-org-1.oktapreview.com/api/v1/orgs/my-child-org-1
+          contacts:
+            href: >-
+              https://my-child-org-1.oktapreview.com/api/v1/orgs/my-child-org-1/contacts
+          policy:
+            href: >-
+              https://my-child-org-1.oktapreview.com/api/v1/orgs/my-child-org-1/policy
+    ErrorApiValidationFailed:
+      summary: API Validation Failed
+      value:
+        errorCode: E0000001
+        errorSummary: 'Api validation failed: {0}'
+        errorLink: E0000001
+        errorId: sampleiCF-8D5rLW6myqiPItW
+        errorCauses: []
+    ErrorInvalidTokenProvided:
+      summary: Invalid Token Provided
+      value:
+        errorCode: E0000011
+        errorSummary: Invalid token provided
+        errorLink: E0000011
+        errorId: sampleQPivGUj_ND5v78vbYWW
+        errorCauses: []
+    ErrorAccessDenied:
+      summary: Access Denied
+      value:
+        errorCode: E0000006
+        errorSummary: You do not have permission to perform the requested action
+        errorLink: E0000006
+        errorId: sampleNUSD_8fdkFd8fs8SDBK
+        errorCauses: []
+    ErrorTooManyRequests:
+      summary: Too Many Requests
+      value:
+        errorCode: E0000047
+        errorSummary: API call exceeded rate limit due to too many requests.
+        errorLink: E0000047
+        errorId: sampleQPivGUj_ND5v78vbYWW
+        errorCauses: []
+    ErrorInternalServer:
+      summary: Internal Server Error
+      value:
+        errorCode: E0000009
+        errorSummary: Internal Server Error
+        errorLink: E0000000
+        errorId: sampleAlJ82XS2SDB_vaNIWgcA
+        errorCauses: []
+  x-stackQL-resources:
+    child_orgs:
+      id: okta.orgs.child_orgs
+      name: child_orgs
+      title: Child Orgs
+      methods:
+        create_child_org:
+          operation:
+            $ref: '#/paths/~1api~1v1~1orgs/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '201'
+      sqlVerbs:
+        select: []
+        insert:
+          - $ref: >-
+              #/components/x-stackQL-resources/child_orgs/methods/create_child_org
+        update: []
+        delete: []
+        replace: []
+servers:
+  - url: https://{subdomain}.okta.com/
+    variables:
+      subdomain:
+        default: my-org
+        description: >-
+          The domain of your organization. This can be a provided subdomain of
+          an official okta domain (okta.com, oktapreview.com, etc) or one of
+          your configured custom domains.
