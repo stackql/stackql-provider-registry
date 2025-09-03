@@ -1,0 +1,979 @@
+openapi: 3.0.3
+info:
+  title: logs API
+  description: okta logs API
+  version: 5.1.0
+paths:
+  /api/v1/logs:
+    get:
+      summary: List all System Log events
+      description: >-
+        Lists all System Log events
+
+
+        See [System Log
+        query](https://developer.okta.com/docs/reference/system-log-query/) for
+        further details and examples, and [System Log filters and
+        search](https://help.okta.com/okta_help.htm?type=oie&id=csh-syslog-filters)
+        for common use cases.
+
+
+        By default, 100 System Log events are returned. If there are more
+        events, see the [header
+        link](https://developer.okta.com/docs/api/#link-header) for the `next`
+        link,
+
+        or increase the number of returned objects using the `limit` parameter.
+
+
+        >**Note:** The value of the `clientSecret` property in the System Log is
+        secured by a hashing function, and isn't the value used during
+        authentication.
+      operationId: listLogEvents
+      parameters:
+        - name: since
+          description: >-
+            Filters the lower time bound of the log events `published` property
+            for bounded queries or persistence time for polling queries
+          in: query
+          schema:
+            type: string
+            format: ISO 8601 compliant timestamp
+            default: 7 days prior to until
+        - name: until
+          description: >-
+            Filters the upper time bound of the log events `published` property
+            for bounded queries or persistence time for polling queries.
+          in: query
+          schema:
+            type: string
+            format: ISO 8601 compliant timestamp
+            default: current time
+        - name: after
+          description: >-
+            Retrieves the next page of results. Okta returns a link in the HTTP
+            Header (`rel=next`) that includes the after query parameter
+          in: query
+          schema:
+            type: string
+            format: Opaque token
+        - name: filter
+          description: >-
+            Filter expression that filters the results. All operators except [ ]
+            are supported. See
+            [Filter](https://developer.okta.com/docs/api/#filter) and
+            [Operators](https://developer.okta.com/docs/api/#operators).
+          in: query
+          schema:
+            type: string
+            format: SCIM Filter expression
+        - name: q
+          description: Filters log events results by one or more case insensitive keywords.
+          in: query
+          schema:
+            type: string
+            format: >-
+              URL encoded string. Max length is 40 characters per keyword, with
+              a maximum of 10 keyword filters per query (before encoding)
+        - name: limit
+          description: Sets the number of results that are returned in the response
+          in: query
+          schema:
+            type: integer
+            format: Integer between 0 and 1000
+            default: 100
+        - name: sortOrder
+          description: >-
+            The order of the returned events that are sorted by the `published`
+            property
+          in: query
+          schema:
+            type: string
+            enum:
+              - ASCENDING
+              - DESCENDING
+            default: ASCENDING
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LogEvent'
+              examples:
+                ListLogs:
+                  $ref: '#/components/examples/ListLogs'
+                LogTargetChangeDetails:
+                  $ref: '#/components/examples/LogTargetChangeDetails'
+        '400':
+          $ref: '#/components/responses/ErrorApiValidationFailed400'
+        '403':
+          $ref: '#/components/responses/ErrorAccessDenied403'
+        '429':
+          $ref: '#/components/responses/ErrorTooManyRequests429'
+      security:
+        - apiToken: []
+        - oauth2:
+            - okta.logs.read
+      tags:
+        - SystemLog
+      x-okta-lifecycle:
+        isCorsEnabled: true
+        lifecycle: GA
+        isGenerallyAvailable: true
+components:
+  schemas:
+    LogEvent:
+      type: object
+      properties:
+        actor:
+          $ref: '#/components/schemas/LogActor'
+        authenticationContext:
+          $ref: '#/components/schemas/LogAuthenticationContext'
+        client:
+          $ref: '#/components/schemas/LogClient'
+        debugContext:
+          $ref: '#/components/schemas/LogDebugContext'
+        displayMessage:
+          description: The display message for an event
+          type: string
+          readOnly: true
+        eventType:
+          description: >-
+            The published event type. Event instances are categorized by action
+            in the event type attribute. This attribute is key to
+
+            navigating the System Log through expression filters. See [Event
+            Types
+            catalog](https://developer.okta.com/docs/reference/api/event-types/#catalog)
+            for a complete list of System Log event types.
+          type: string
+          readOnly: true
+        legacyEventType:
+          description: Associated Events API Action `objectType` attribute value
+          type: string
+          readOnly: true
+        outcome:
+          $ref: '#/components/schemas/LogOutcome'
+        published:
+          description: Timestamp when the event is published
+          type: string
+          format: date-time
+          readOnly: true
+        request:
+          $ref: '#/components/schemas/LogRequest'
+        securityContext:
+          $ref: '#/components/schemas/LogSecurityContext'
+        severity:
+          $ref: '#/components/schemas/LogSeverity'
+        target:
+          type: array
+          readOnly: true
+          description: >-
+            The entity that an actor performs an action on. Targets can be
+            anything, such as an app user, a sign-in token, or anything else.
+
+
+            > **Note:** When searching the target array, search for a given
+            `type` rather than the array location. Target types, such as `User`
+            and `AppInstance`, 
+
+            for a given `eventType` are not always in the same array location.
+          items:
+            $ref: '#/components/schemas/LogTarget'
+        transaction:
+          $ref: '#/components/schemas/LogTransaction'
+        uuid:
+          description: Unique identifier for an individual event
+          type: string
+          readOnly: true
+        version:
+          description: Versioning indicator
+          type: string
+          readOnly: true
+    LogActor:
+      description: >-
+        Describes the user, app, client, or other entity (actor) who performs an
+        action on a target. The actor is dependent on the action that is
+        performed. All events have actors.
+      type: object
+      properties:
+        alternateId:
+          description: Alternative ID of the actor
+          type: string
+          readOnly: true
+        detailEntry:
+          description: Further details about the actor
+          type: object
+          additionalProperties: true
+          readOnly: true
+        displayName:
+          description: Display name of the actor
+          type: string
+          readOnly: true
+        id:
+          description: ID of the actor
+          type: string
+          readOnly: true
+        type:
+          description: Type of actor
+          type: string
+          readOnly: true
+    LogAuthenticationContext:
+      description: >-
+        All authentication relies on validating one or more credentials that
+        prove the authenticity of the actor's identity. Credentials are
+        sometimes provided by the actor, as is the case with passwords, and at
+        other times provided by a third party, and validated by the
+        authentication provider.
+
+
+        The authenticationContext contains metadata about how the actor is
+        authenticated. For example, an authenticationContext for an event, where
+        a user authenticates with Integrated Windows Authentication (IWA), looks
+        like the following:
+
+        ```
+
+        {
+            "authenticationProvider": "ACTIVE_DIRECTORY",
+            "authenticationStep": 0,
+            "credentialProvider": null,
+            "credentialType": "IWA",
+            "externalSessionId": "102N1EKyPFERROGvK9wizMAPQ",
+            "interface": null,
+            "issuer": null
+        }
+
+        ```
+
+        In this case, the user enters an IWA credential to authenticate against
+        an Active Directory instance. All of the user's future-generated events
+        in this sign-in session are going to share the same `externalSessionId`.
+
+
+        Among other operations, this response object can be used to scan for
+        suspicious sign-in activity or perform analytics on user authentication
+        habits (for example, how often authentication scheme X is used versus
+        authentication scheme Y).
+      type: object
+      properties:
+        authenticationProvider:
+          $ref: '#/components/schemas/LogAuthenticationProvider'
+        authenticationStep:
+          description: >-
+            The zero-based step number in the authentication pipeline. Currently
+            unused and always set to `0`.
+          type: integer
+          readOnly: true
+        credentialProvider:
+          $ref: '#/components/schemas/LogCredentialProvider'
+        credentialType:
+          $ref: '#/components/schemas/LogCredentialType'
+        externalSessionId:
+          description: >-
+            A proxy for the actor's [session
+            ID](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)
+          type: string
+          readOnly: true
+        interface:
+          description: >-
+            The third-party user interface that the actor authenticates through,
+            if any.
+          type: string
+          readOnly: true
+        issuer:
+          $ref: '#/components/schemas/LogIssuer'
+    LogClient:
+      description: >-
+        When an event is triggered by an HTTP request, the `client` object
+        describes the [client](https://datatracker.ietf.org/doc/html/rfc2616)
+        that issues the HTTP request. For instance, the web browser is the
+        client when a user accesses Okta. When this request is received and
+        processed, a sign-in event is fired. When the event isn't sourced to an
+        HTTP request, such as an automatic update, the `client` object field is
+        blank.
+      type: object
+      properties:
+        device:
+          description: Type of device that the client operates from (for example, computer)
+          type: string
+          readOnly: true
+        geographicalContext:
+          $ref: '#/components/schemas/LogGeographicalContext'
+        id:
+          description: >-
+            For OAuth requests, this is the ID of the OAuth
+            [client](https://datatracker.ietf.org/doc/html/rfc6749#section-1.1)
+            making the request. For SSWS token requests, this is the ID of the
+            agent making the request.
+          type: string
+          readOnly: true
+        ipAddress:
+          description: IP address that the client is making its request from
+          type: string
+          readOnly: true
+        userAgent:
+          $ref: '#/components/schemas/LogUserAgent'
+        zone:
+          description: >-
+            The `name` of the
+            [Zone](https://developer.okta.com/docs/apihttps://developer.okta.com/docs/api/openapi/okta-management/management/tag/NetworkZone/#tag/NetworkZone/operation/getNetworkZone)
+            that the client's location is mapped to
+          type: string
+          readOnly: true
+    LogDebugContext:
+      description: >-
+        For some kinds of events (for example, OLM provisioning, sign-in
+        request, second factor SMS, and so on), the fields that are provided in
+        other response objects aren't sufficient to adequately describe the
+        operations that the event has performed. In such cases, the
+        `debugContext` object provides a way to store additional information.
+
+
+        For example, an event where a second factor SMS token is sent to a user
+        may have a `debugContext` that looks like the following:
+
+        ```
+
+        {
+            "debugData": {
+                "requestUri": "/api/v1/users/00u3gjksoiRGRAZHLSYV/factors/smsf8luacpZJAva10x45/verify",
+                "smsProvider": "TELESIGN",
+                "transactionId": "268632458E3C100F5F5F594C6DC689D4"
+            }
+        }
+
+        ```
+
+        By inspecting the debugData field, you can find the URI that is used to
+        trigger the second factor SMS
+        (`/api/v1/users/00u3gjksoiRGRAZHLSYV/factors/smsf8luacpZJAva10x45/verify`),
+        the SMS provider (`TELESIGN`), and the ID used by Telesign to identify
+        this transaction (`268632458E3C100F5F5F594C6DC689D4`).
+
+
+        If for some reason the information that is needed to implement a feature
+        isn't provided in other response objects, you should scan the
+        `debugContext.debugData` field for potentially useful fields.
+
+        > **Important:** The information contained in `debugContext.debugData`
+        is intended to add context when troubleshooting customer platform
+        issues. Both key names and values may change from release to release and
+        aren't guaranteed to be stable. Therefore, they shouldn't be viewed as a
+        data contract but as a debugging aid instead.
+      type: object
+      properties:
+        debugData:
+          type: object
+          description: >-
+            A dynamic field that contains miscellaneous information that is
+            dependent on the event type.
+          additionalProperties: true
+          readOnly: true
+    LogOutcome:
+      type: object
+      properties:
+        reason:
+          description: Reason for the result, for example, `INVALID_CREDENTIALS`
+          type: string
+          readOnly: true
+          minLength: 1
+          maxLength: 255
+        result:
+          description: Result of the action
+          type: string
+          readOnly: true
+          enum:
+            - SUCCESS
+            - FAILURE
+            - SKIPPED
+            - ALLOW
+            - DENY
+            - CHALLENGE
+            - UNKNOWN
+            - RATE_LIMIT
+            - DEFERRED
+            - SCHEDULED
+            - ABANDONED
+            - UNANSWERED
+    LogRequest:
+      description: >-
+        The `Request` object describes details that are related to the HTTP
+        request that triggers this event, if available. When the event isn't
+        sourced to an HTTP request, such as an automatic update on the Okta
+        servers, the `Request` object still exists, but the `ipChain` field is
+        empty.
+      type: object
+      properties:
+        ipChain:
+          description: >-
+            If the incoming request passes through any proxies, the IP addresses
+            of those proxies are stored here in the format of clientIp, proxy1,
+            proxy2, and so on. This field is useful when working with trusted
+            proxies.
+          type: array
+          readOnly: true
+          items:
+            $ref: '#/components/schemas/LogIpAddress'
+    LogSecurityContext:
+      description: >-
+        The `securityContext` object provides security information that is
+        directly related to the evaluation of the event's IP reputation. IP
+        reputation is a trustworthiness rating that evaluates how likely a
+        sender is to be malicious and is based on the sender's IP address. As
+        the name implies, the `securityContext` object is useful for security
+        applications-flagging and inspecting suspicious events.
+      type: object
+      properties:
+        asNumber:
+          description: >-
+            The [Autonomous
+            system](https://docs.telemetry.mozilla.org/datasets/other/asn_aggregates/reference)
+            number that's associated with the autonomous system the event
+            request was sourced to
+          type: integer
+          readOnly: true
+        asOrg:
+          description: >-
+            The organization that is associated with the autonomous system that
+            the event request is sourced to
+          type: string
+          readOnly: true
+        domain:
+          description: >-
+            The domain name that's associated with the IP address of the inbound
+            event request
+          type: string
+          readOnly: true
+        isp:
+          description: >-
+            The Internet service provider that's used to send the event's
+            request
+          type: string
+          readOnly: true
+        isProxy:
+          description: Specifies whether an event's request is from a known proxy
+          type: boolean
+          readOnly: true
+    LogSeverity:
+      description: Indicates how severe the event is
+      type: string
+      enum:
+        - DEBUG
+        - ERROR
+        - INFO
+        - WARN
+    LogTarget:
+      type: object
+      properties:
+        alternateId:
+          type: string
+          description: The alternate ID of the target
+          readOnly: true
+        changeDetails:
+          type: object
+          example:
+            LogTargetChangeDetails:
+              $ref: '#/components/examples/LogTargetChangeDetails'
+          description: >-
+            Details on the target's changes. Not all event types support the
+            `changeDetails` property, and not all
+
+            `target` objects contain the `changeDetails` property.
+
+
+            > **Note:** You can't run queries on `changeDetails` or the object's
+            `to` or `from` properties.
+          properties:
+            from:
+              type: object
+              description: The original properties of the target
+              additionalProperties: true
+            to:
+              type: object
+              description: The updated properties of the target
+              additionalProperties: true
+        detailEntry:
+          type: object
+          description: Further details on the target
+          additionalProperties: true
+          readOnly: true
+        displayName:
+          type: string
+          description: The display name of the target
+          readOnly: true
+        id:
+          type: string
+          description: The ID of the target
+          readOnly: true
+        type:
+          type: string
+          description: The type of target
+          readOnly: true
+    LogTransaction:
+      description: >-
+        A `transaction` object comprises contextual information associated with
+        its respective event. 
+
+        This information is useful for understanding sequences of correlated
+        events.
+
+        For example, a `transaction` object such as the following:
+
+        ```
+
+        {
+          "id": "Wn4f-0RQ8D8lTSLkAmkKdQAADqo",
+          "type": "WEB",
+          "detail": null
+        }
+
+        ```
+
+        indicates that a `WEB` request with `id` `Wn4f-0RQ8D8lTSLkAmkKdQAADqo`
+        has created this event.
+
+
+        A `transaction` object with a `requestApiTokenId` in the `detail`
+        object, for example :
+
+        ```
+
+        {
+          "id": "YjSlblAAqnKY7CdyCkXNBgAAAIU",
+          "type": "WEB",
+          "detail": {
+            "requestApiTokenId": "00T94e3cn9kSEO3c51s5"
+          }
+        }
+
+        ```
+
+        indicates that this event was the result of an action performed through
+        an API using the token identified by 00T94e3cn9kSEO3c51s5. The token ID
+        is visible in the Admin Console, **Security** > **API**. See [API token
+        management](https://help.okta.com/okta_help.htm?id=Security_API). For
+        more information on API tokens, see [Create an API
+        token](https://developer.okta.com/docs/guides/create-an-api-token/).
+      type: object
+      properties:
+        detail:
+          description: Details for this transaction.
+          type: object
+          additionalProperties: true
+          readOnly: true
+        id:
+          description: Unique identifier for this transaction.
+          type: string
+          readOnly: true
+        type:
+          description: >-
+            Describes the kind of transaction. `WEB` indicates a web request.
+            `JOB` indicates an asynchronous task.
+          type: string
+          readOnly: true
+    Error:
+      title: Error
+      type: object
+      properties:
+        errorCauses:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorCause'
+        errorCode:
+          type: string
+          description: An Okta code for this type of error
+        errorId:
+          type: string
+          description: >-
+            A unique identifier for this error. This can be used by Okta Support
+            to help with troubleshooting.
+        errorLink:
+          type: string
+          description: An Okta code for this type of error
+        errorSummary:
+          type: string
+          description: >-
+            A short description of what caused this error. Sometimes this
+            contains dynamically-generated information about your specific
+            error.
+    LogAuthenticationProvider:
+      description: >-
+        The system that proves the identity of an actor using the credentials
+        provided to it
+      type: string
+      enum:
+        - ACTIVE_DIRECTORY
+        - FACTOR_PROVIDER
+        - FEDERATION
+        - LDAP
+        - OKTA_AUTHENTICATION_PROVIDER
+        - SOCIAL
+    LogCredentialProvider:
+      description: >-
+        A credential provider is a software service that manages identities and
+        their associated credentials. When authentication occurs through
+        credentials provided by a credential provider, the credential provider
+        is recorded here.
+      type: string
+      enum:
+        - DUO
+        - GOOGLE
+        - OKTA_AUTHENTICATION_PROVIDER
+        - OKTA_CREDENTIAL_PROVIDER
+        - RSA
+        - SYMANTEC
+        - YUBIKEY
+    LogCredentialType:
+      description: The underlying technology/scheme used in the credential
+      type: string
+      enum:
+        - ASSERTION
+        - CERTIFICATE
+        - DEVICE_UDID
+        - EMAIL
+        - IWA
+        - JWT
+        - OAuth 2.0
+        - OKTA_CLIENT_SESSION
+        - OTP
+        - PASSWORD
+        - PRE_SHARED_SYMMETRIC_KEY
+        - SMS
+    LogIssuer:
+      description: >-
+        Describes the issuer of the authorization server when the authentication
+        is performed through OAuth. This is the location where well-known
+        resources regarding the details of the authorization servers are
+        published.
+      type: object
+      properties:
+        id:
+          description: >-
+            Varies depending on the type of authentication. If authentication is
+            SAML 2.0, `id` is the issuer in the SAML assertion. For social
+            login, `id` is the issuer of the token.
+          type: string
+          readOnly: true
+        type:
+          description: >-
+            Information on the `issuer` and source of the SAML assertion or
+            token
+          type: string
+          readOnly: true
+    LogGeographicalContext:
+      description: >-
+        Geographical context describes a set of geographic coordinates. In
+        addition to containing latitude and longitude data, the
+        `GeographicalContext` object also contains address data of postal
+        code-level granularity. Within the `Client` object, the geographical
+        context refers to the physical location of the client when it sends the
+        request that triggers this event. All `Transaction` events with `type`
+        equal to `WEB` have a geographical context set. `Transaction` events
+        with `type` equal to `JOB` don't have a geographical context set. The
+        geographical context data can be missing if the geographical data for a
+        request can't be resolved.
+      type: object
+      properties:
+        city:
+          description: >-
+            The city that encompasses the area that contains the geolocation
+            coordinates, if available (for example, Seattle, San Francisco)
+          type: string
+          readOnly: true
+        country:
+          description: >-
+            Full name of the country that encompasses the area that contains the
+            geolocation coordinates (for example, France, Uganda)
+          type: string
+          readOnly: true
+        geolocation:
+          $ref: '#/components/schemas/LogGeolocation'
+        postalCode:
+          description: Postal code of the area that encompasses the geolocation coordinates
+          type: string
+          readOnly: true
+        state:
+          description: >-
+            Full name of the state or province that encompasses the area that
+            contains the geolocation coordinates (for example, Montana, Ontario)
+          type: string
+          readOnly: true
+    LogUserAgent:
+      description: >
+        "A user agent is software (a software agent) that is acting on behalf of
+        a user." ([Definition of User
+        Agent](https://developer.mozilla.org/en-US/docs/Glossary/User_agent))
+
+
+        In the Okta event data object, the `UserAgent` object provides
+        specifications about the client software that makes event-triggering
+        HTTP requests. User agent identification is often useful for identifying
+        interoperability problems between servers and clients, and also for
+        browser and operating system usage analytics.
+      type: object
+      properties:
+        browser:
+          description: >-
+            If the client is a web browser, this field identifies the type of
+            web browser (for example, CHROME, FIREFOX)
+          type: string
+          readOnly: true
+        os:
+          description: >-
+            The operating system that the client runs on (for example, Windows
+            10)
+          type: string
+          readOnly: true
+        rawUserAgent:
+          description: >-
+            A raw string representation of the user agent that is formatted
+            according to [section 5.5.3 of HTTP/1.1 Semantics and
+            Content](https://datatracker.ietf.org/doc/html/rfc7231#section-5.5.3).
+            Both the `browser` and the `OS` fields can be derived from this
+            field.
+          type: string
+          readOnly: true
+    LogIpAddress:
+      type: object
+      properties:
+        geographicalContext:
+          $ref: '#/components/schemas/LogGeographicalContext'
+        ip:
+          description: IP address
+          type: string
+          readOnly: true
+        source:
+          description: Details regarding the source
+          type: string
+          readOnly: true
+        version:
+          description: IP address version
+          type: string
+          readOnly: true
+    ErrorCause:
+      type: object
+      properties:
+        errorSummary:
+          type: string
+    LogGeolocation:
+      description: >-
+        The latitude and longitude of the geolocation where an action was
+        performed. The object is formatted according to the [ISO
+        6709](https://www.iso.org/obp/ui/fr/#iso:std:iso:6709:ed-3:v1:en)
+        standard.
+      type: object
+      properties:
+        lat:
+          description: >-
+            Latitude which uses two digits for the [integer
+            part](https://www.iso.org/obp/ui/fr/#iso:std:iso:6709:ed-3:v1:en#Latitude)
+          type: number
+          format: double
+          readOnly: true
+        lon:
+          description: >-
+            Longitude which uses three digits for the [integer
+            part](https://www.iso.org/obp/ui/fr/#iso:std:iso:6709:ed-3:v1:en#Longitude)
+          type: number
+          format: double
+          readOnly: true
+  responses:
+    ErrorApiValidationFailed400:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            APIValidationFailed:
+              $ref: '#/components/examples/ErrorApiValidationFailed'
+    ErrorAccessDenied403:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            AccessDenied:
+              $ref: '#/components/examples/ErrorAccessDenied'
+    ErrorTooManyRequests429:
+      description: Too Many Requests
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            TooManyRequests:
+              $ref: '#/components/examples/ErrorTooManyRequests'
+  examples:
+    ListLogs:
+      summary: List all System Log events
+      value:
+        - actor:
+            id: 00uttidj01jqL21aM1d6
+            type: User
+            alternateId: john.doe@example.com
+            displayName: John Doe
+            detailEntry: null
+          client:
+            userAgent:
+              rawUserAgent: >-
+                Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)
+                AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0
+                Safari/537.36
+              os: Mac OS X
+              browser: CHROME
+            zone: null
+            device: Computer
+            id: null
+            ipAddress: 10.0.0.1
+            geographicalContext:
+              city: New York
+              state: New York
+              country: United States
+              postalCode: 10013
+              geolocation:
+                lat: 40.3157
+                lon: -74.01
+          device:
+            id: guofdhyjex1feOgbN1d9
+            name: Mac15,6
+            os_platform: OSX
+            os_version: 14.6.0
+            managed: false
+            registered: true
+            device_integrator: null
+            disk_encryption_type: ALL_INTERNAL_VOLUMES
+            screen_lock_type: BIOMETRIC
+            jailbreak: null
+            secure_hardware_present: true
+          authenticationContext:
+            authenticationProvider: null
+            credentialProvider: null
+            credentialType: null
+            issuer: null
+            interface: null
+            authenticationStep: 0
+            rootSessionId: idxBager62CSveUkTxvgRtonA
+            externalSessionId: idxBager62CSveUkTxvgRtonA
+          displayMessage: User login to Okta
+          eventType: user.session.start
+          outcome:
+            result: SUCCESS
+            reason: null
+          published: '2024-08-13T15:58:20.353Z'
+          securityContext:
+            asNumber: 394089
+            asOrg: ASN 0000
+            isp: google
+            domain: null
+            isProxy: false
+          severity: INFO
+          debugContext:
+            debugData:
+              requestId: ab609228fe84ce59cdcbfa690bcce016
+              requestUri: /idp/idx/authenticators/poll
+              url: /idp/idx/authenticators/poll
+          legacyEventType: core.user_auth.login_success
+          transaction:
+            type: WEB
+            id: ab609228fe84ce59cdcbfa690bgce016
+            detail: null
+          uuid: dc9fd3c0-598c-11ef-8478-2b7584bf8d5a
+          version: 0
+          request:
+            ipChain:
+              - ip: 10.0.0.1
+                geographicalContext:
+                  city: New York
+                  state: New York
+                  country: United States
+                  postalCode: 10013
+                  geolocation:
+                    lat: 40.3157
+                    lon: -74.01
+                version: V4
+                source: null
+          target:
+            - id: pfdfdhyjf0HMbkP2e1d7
+              type: AuthenticatorEnrollment
+              alternateId: unknown
+              displayName: Okta Verify
+              detailEntry: null
+            - id: 0oatxlef9sQvvqInq5d6
+              type: AppInstance
+              alternateId: Okta Admin Console
+              displayName: Okta Admin Console
+              detailEntry: null
+    LogTargetChangeDetails:
+      summary: Example of the `changeDetails` property on the target
+      value:
+        from:
+          vpnLocationOptions: DISABLED
+          vpnSettingsZones:
+            include: null
+            exclude: null
+        to:
+          message: You must a use VPN to connect to this application
+          vpnLocationOptions: ZONE
+          vpnSettingsZones:
+            include:
+              - ALL_ZONES
+            exclude: null
+    ErrorApiValidationFailed:
+      summary: API Validation Failed
+      value:
+        errorCode: E0000001
+        errorSummary: 'Api validation failed: {0}'
+        errorLink: E0000001
+        errorId: sampleiCF-8D5rLW6myqiPItW
+        errorCauses: []
+    ErrorAccessDenied:
+      summary: Access Denied
+      value:
+        errorCode: E0000006
+        errorSummary: You do not have permission to perform the requested action
+        errorLink: E0000006
+        errorId: sampleNUSD_8fdkFd8fs8SDBK
+        errorCauses: []
+    ErrorTooManyRequests:
+      summary: Too Many Requests
+      value:
+        errorCode: E0000047
+        errorSummary: API call exceeded rate limit due to too many requests.
+        errorLink: E0000047
+        errorId: sampleQPivGUj_ND5v78vbYWW
+        errorCauses: []
+  x-stackQL-resources:
+    system_log_events:
+      id: okta.logs.system_log_events
+      name: system_log_events
+      title: System Log Events
+      methods:
+        list_log_events:
+          operation:
+            $ref: '#/paths/~1api~1v1~1logs/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: >-
+              #/components/x-stackQL-resources/system_log_events/methods/list_log_events
+        insert: []
+        update: []
+        delete: []
+        replace: []
+servers:
+  - url: https://{subdomain}.okta.com/
+    variables:
+      subdomain:
+        default: my-org
+        description: >-
+          The domain of your organization. This can be a provided subdomain of
+          an official okta domain (okta.com, oktapreview.com, etc) or one of
+          your configured custom domains.
