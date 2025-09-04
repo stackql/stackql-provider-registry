@@ -7,7 +7,7 @@ _version="${1:-"v1"}"
 
 _out_dir="${SCRIPT_DIR}/out"
 
-_fakeTime="${2:-"2023-02-28 08:15:00"}"
+_fakeTime="${2:-"2025-02-28 08:15:00"}"
 
 _durationDays="${3:-"900"}"
 
