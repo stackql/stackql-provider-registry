@@ -1,0 +1,376 @@
+openapi: 3.0.0
+info:
+  title: oneclick API
+  description: digitalocean API
+  version: '2.0'
+paths:
+  /v2/1-clicks:
+    get:
+      operationId: oneClicks_list
+      summary: List 1-Click Applications
+      description: >
+        To list all available 1-Click applications, send a GET request to
+        `/v2/1-clicks`. The `type` may
+
+        be provided as query paramater in order to restrict results to a certain
+        type of 1-Click, for
+
+        example: `/v2/1-clicks?type=droplet`. Current supported types are
+        `kubernetes` and `droplet`.
+
+
+        The response will be a JSON object with a key called `1_clicks`. This
+        will be set to an array of
+
+        1-Click application data, each of which will contain the the slug and
+        type for the 1-Click.
+      tags:
+        - 1-Click Applications
+      parameters:
+        - $ref: '#/components/parameters/oneClicks_type'
+      responses:
+        '200':
+          $ref: '#/components/responses/oneClicks_all'
+        '401':
+          $ref: '#/components/responses/unauthorized'
+        '429':
+          $ref: '#/components/responses/too_many_requests'
+        '500':
+          $ref: '#/components/responses/server_error'
+        default:
+          $ref: '#/components/responses/unexpected_error'
+      x-codeSamples:
+        - lang: cURL
+          source: |-
+            curl -X GET \
+              -H "Content-Type: application/json"  \
+              "https://api.digitalocean.com/v2/1-clicks"
+        - lang: Python
+          source: |-
+            import os
+            from pydo import Client
+
+            client = Client(token="")
+
+            one_click_apps = client.one_clicks.list()
+      security:
+        - bearer_auth: []
+  /v2/1-clicks/kubernetes:
+    post:
+      operationId: oneClicks_install_kubernetes
+      summary: Install Kubernetes 1-Click Applications
+      description: >
+        To install a Kubernetes 1-Click application on a cluster, send a POST
+        request to
+
+        `/v2/1-clicks/kubernetes`. The `addon_slugs` and `cluster_uuid` must be
+        provided as body
+
+        parameter in order to specify which 1-Click application(s) to install.
+        To list all available
+
+        1-Click Kubernetes applications, send a request to
+        `/v2/1-clicks?type=kubernetes`.
+      tags:
+        - 1-Click Applications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/oneClicks_create'
+      responses:
+        '200':
+          $ref: '#/components/responses/oneClicks_create'
+        '401':
+          $ref: '#/components/responses/unauthorized'
+        '429':
+          $ref: '#/components/responses/too_many_requests'
+        '500':
+          $ref: '#/components/responses/server_error'
+        default:
+          $ref: '#/components/responses/unexpected_error'
+      x-codeSamples:
+        - lang: cURL
+          source: |-
+            curl -X POST \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
+              -d '{"addon_slugs": ["kube-state-metrics", "loki"], "cluster_uuid": "50a994b6-c303-438f-9495-7e896cfe6b08"}'' \
+              "https://api.digitalocean.com/v2/1-clicks/kubernetes"
+        - lang: Python
+          source: |-
+            import os
+            from pydo import Client
+
+            client = Client(token=os.environ.get("DIGITALOCEAN_TOKEN"))
+
+            install_req = {
+                "addon_slugs": ["kube-state-metrics", "loki"],
+                "cluster_uuid": "50a994b6-c303-438f-9495-7e896cfe6b08",
+            }
+            install_resp = client.one_clicks.install_kubernetes(install_req)
+      security:
+        - bearer_auth:
+            - kubernetes:update
+components:
+  schemas:
+    oneClicks_create:
+      type: object
+      properties:
+        addon_slugs:
+          title: addon_slugs
+          type: array
+          items:
+            type: string
+          example:
+            - kube-state-metrics
+            - loki
+          default: []
+          description: >-
+            An array of 1-Click Application slugs to be installed to the
+            Kubernetes cluster.
+        cluster_uuid:
+          title: cluster_uuid
+          type: string
+          example: 50a994b6-c303-438f-9495-7e896cfe6b08
+          description: >-
+            A unique ID for the Kubernetes cluster to which the 1-Click
+            Applications will be installed.
+      required:
+        - addon_slugs
+        - cluster_uuid
+    oneClicks:
+      type: object
+      properties:
+        slug:
+          title: slug
+          type: string
+          example: monitoring
+          description: The slug identifier for the 1-Click application.
+        type:
+          title: type
+          type: string
+          example: kubernetes
+          description: The type of the 1-Click application.
+      required:
+        - slug
+        - type
+    error:
+      type: object
+      properties:
+        id:
+          description: >-
+            A short identifier corresponding to the HTTP status code returned.
+            For  example, the ID for a response returning a 404 status code
+            would be "not_found."
+          type: string
+          example: not_found
+        message:
+          description: >-
+            A message providing additional information about the error,
+            including  details to help resolve it when possible.
+          type: string
+          example: The resource you were accessing could not be found.
+        request_id:
+          description: >-
+            Optionally, some endpoints may include a request ID that should be 
+            provided when reporting bugs or opening support tickets to help 
+            identify the issue.
+          type: string
+          example: 4d9d8375-3c56-4925-a3e7-eb137fed17e9
+      required:
+        - id
+        - message
+  responses:
+    oneClicks_all:
+      description: A JSON object with a key of `1_clicks`.
+      headers:
+        ratelimit-limit:
+          $ref: '#/components/headers/ratelimit-limit'
+        ratelimit-remaining:
+          $ref: '#/components/headers/ratelimit-remaining'
+        ratelimit-reset:
+          $ref: '#/components/headers/ratelimit-reset'
+      content:
+        application/json:
+          schema:
+            properties:
+              1_clicks:
+                type: array
+                items:
+                  $ref: '#/components/schemas/oneClicks'
+            type: object
+          examples:
+            All 1-Click Applications:
+              value:
+                1_clicks:
+                  - slug: monitoring
+                    type: kubernetes
+                  - slug: wordpress-18-04
+                    type: droplet
+    unauthorized:
+      description: Authentication failed due to invalid credentials.
+      headers:
+        ratelimit-limit:
+          $ref: '#/components/headers/ratelimit-limit'
+        ratelimit-remaining:
+          $ref: '#/components/headers/ratelimit-remaining'
+        ratelimit-reset:
+          $ref: '#/components/headers/ratelimit-reset'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/error'
+          example:
+            id: unauthorized
+            message: Unable to authenticate you.
+    too_many_requests:
+      description: The API rate limit has been exceeded.
+      headers:
+        ratelimit-limit:
+          $ref: '#/components/headers/ratelimit-limit'
+        ratelimit-remaining:
+          $ref: '#/components/headers/ratelimit-remaining'
+        ratelimit-reset:
+          $ref: '#/components/headers/ratelimit-reset'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/error'
+          example:
+            id: too_many_requests
+            message: API rate limit exceeded.
+    server_error:
+      description: There was a server error.
+      headers:
+        ratelimit-limit:
+          $ref: '#/components/headers/ratelimit-limit'
+        ratelimit-remaining:
+          $ref: '#/components/headers/ratelimit-remaining'
+        ratelimit-reset:
+          $ref: '#/components/headers/ratelimit-reset'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/error'
+          example:
+            id: server_error
+            message: Unexpected server-side error
+    unexpected_error:
+      description: There was an unexpected error.
+      headers:
+        ratelimit-limit:
+          $ref: '#/components/headers/ratelimit-limit'
+        ratelimit-remaining:
+          $ref: '#/components/headers/ratelimit-remaining'
+        ratelimit-reset:
+          $ref: '#/components/headers/ratelimit-reset'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/error'
+          example:
+            id: example_error
+            message: some error message
+    oneClicks_create:
+      description: >
+        The response will verify that a job has been successfully created to
+        install a 1-Click. The
+
+        post-installation lifecycle of a 1-Click application can not be managed
+        via the DigitalOcean
+
+        API. For additional details specific to the 1-Click, find and view its
+
+        [DigitalOcean Marketplace](https://marketplace.digitalocean.com) page.
+      headers:
+        ratelimit-limit:
+          $ref: '#/components/headers/ratelimit-limit'
+        ratelimit-remaining:
+          $ref: '#/components/headers/ratelimit-remaining'
+        ratelimit-reset:
+          $ref: '#/components/headers/ratelimit-reset'
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+                description: A message about the result of the request.
+                example: Successfully kicked off addon job.
+          examples:
+            Install a 1-Click Application:
+              value:
+                message: Successfully kicked off addon job.
+  parameters:
+    oneClicks_type:
+      in: query
+      name: type
+      description: Restrict results to a certain type of 1-Click.
+      required: false
+      schema:
+        type: string
+        enum:
+          - droplet
+          - kubernetes
+      example: kubernetes
+  headers:
+    ratelimit-limit:
+      schema:
+        type: integer
+      example: 5000
+      description: >-
+        The default limit on number of requests that can be made per hour and
+        per minute. Current rate limits are 5000 requests per hour and 250
+        requests per minute.
+    ratelimit-remaining:
+      schema:
+        type: integer
+      example: 4816
+      description: >-
+        The number of requests in your hourly quota that remain before you hit
+        your request limit. See
+        https://developers.digitalocean.com/documentation/v2/#rate-limit for
+        information about how requests expire.
+    ratelimit-reset:
+      schema:
+        type: integer
+      example: 1444931833
+      description: >-
+        The time when the oldest request will expire. The value is given in Unix
+        epoch time. See
+        https://developers.digitalocean.com/documentation/v2/#rate-limit for
+        information about how requests expire.
+  x-stackQL-resources:
+    applications:
+      id: digitalocean.oneclick.applications
+      name: applications
+      title: Applications
+      methods:
+        one_clicks_list:
+          operation:
+            $ref: '#/paths/~1v2~11-clicks/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.1_clicks
+        one_clicks_install_kubernetes:
+          operation:
+            $ref: '#/paths/~1v2~11-clicks~1kubernetes/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: >-
+              #/components/x-stackQL-resources/applications/methods/one_clicks_list
+        insert:
+          - $ref: >-
+              #/components/x-stackQL-resources/applications/methods/one_clicks_install_kubernetes
+        update: []
+        delete: []
+        replace: []
+servers:
+  - url: https://api.digitalocean.com
