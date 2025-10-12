@@ -12,14 +12,16 @@ providerRootFile="${3}"
 
 serviceIdentifier="${4}"
 
+jsonSchemaDir="${5}"
+
 logDir="${REPOSITORY_ROOT}/test/log"
 
 registryDir="${REPOSITORY_ROOT}/providers"
 
 if [ "${serviceIdentifier}" != "" ]; then
-  ${anySdkExe} aot "${registryDir}" "${providerRootFile}" "${serviceIdentifier}" -v > "${logDir}/aot_${providerID}_${serviceIdentifier}.log" 2>&1
+  ${anySdkExe} aot --schema-dir "${jsonSchemaDir}" "${registryDir}" "${providerRootFile}" "${serviceIdentifier}" -v > "${logDir}/aot_${providerID}_${serviceIdentifier}.log" 2>&1
 else
-  ${anySdkExe} aot "${registryDir}" "${providerRootFile}" -v > "${logDir}/aot_${providerID}.log" 2>&1
+  ${anySdkExe} aot --schema-dir "${jsonSchemaDir}" "${registryDir}" "${providerRootFile}" -v > "${logDir}/aot_${providerID}.log" 2>&1
 fi
 
 rc="$?"
