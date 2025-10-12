@@ -6,6 +6,8 @@ REPOSITORY_ROOT="$(realpath "${CUR_DIR}/../../../..")"
 
 anySdkCliPath="${1}"
 
+jsonSchemaDir="${2}"
+
 for sd in ${REPOSITORY_ROOT}/providers/src/*/ ; do
     echo ""
     subdir="$(realpath "${sd}")"
@@ -14,7 +16,7 @@ for sd in ${REPOSITORY_ROOT}/providers/src/*/ ; do
     echo ""
     for line in $(${anySdkCliPath} interrogate services ${REPOSITORY_ROOT}/providers ${subdir}/v00.00.00000/provider.yaml); do
         serviceIdentifier="${line}"
-        ${REPOSITORY_ROOT}/scripts/cicd/shell/aot-analysis/01-aot-analysis-compact.sh ${anySdkCliPath} "${providerID}" "${subdir}/v00.00.00000/provider.yaml" "${serviceIdentifier}" &
+        ${REPOSITORY_ROOT}/scripts/cicd/shell/aot-analysis/01-aot-analysis-compact.sh ${anySdkCliPath} "${providerID}" "${subdir}/v00.00.00000/provider.yaml" "${serviceIdentifier}" "${jsonSchemaDir}" &
         echo ""
     done
 done
