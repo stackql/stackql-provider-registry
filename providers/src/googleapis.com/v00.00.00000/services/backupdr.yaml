@@ -7,8 +7,8 @@ info:
   title: Backup and DR Service API
   description: ''
   version: v1
-  x-discovery-doc-revision: '20250825'
-  x-generated-date: '2025-08-28'
+  x-discovery-doc-revision: '20251130'
+  x-generated-date: '2025-12-10'
 externalDocs:
   url: https://cloud.google.com/backup-disaster-recovery
 servers:
@@ -381,6 +381,15 @@ components:
         nextPageToken:
           description: The standard List next-page token.
           type: string
+        unreachable:
+          description: >-
+            Unordered list. Unreachable resources. Populated when the request
+            sets `ListOperationsRequest.return_partial_success` and reads across
+            collections. For example, when attempting to list all resources
+            across all supported locations.
+          type: array
+          items:
+            type: string
     Operation:
       id: Operation
       description: >-
@@ -520,6 +529,38 @@ components:
           readOnly: true
           type: string
           format: google-datetime
+        endReason:
+          description: Output only. The reason for ending the trial.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - End reason not set.
+            - >-
+              Trial is deliberately ended by the user to transition to paid
+              usage.
+            - Trial is discontinued before expiration.
+          enum:
+            - END_REASON_UNSPECIFIED
+            - MOVE_TO_PAID
+            - DISCONTINUED
+    EndTrialRequest:
+      id: EndTrialRequest
+      description: Request message for ending a trial.
+      type: object
+      properties:
+        endReason:
+          description: Required. The reason for ending the trial.
+          type: string
+          enumDescriptions:
+            - End reason not set.
+            - >-
+              Trial is deliberately ended by the user to transition to paid
+              usage.
+            - Trial is discontinued before expiration.
+          enum:
+            - END_REASON_UNSPECIFIED
+            - MOVE_TO_PAID
+            - DISCONTINUED
     ListManagementServersResponse:
       id: ListManagementServersResponse
       description: Response message for listing management servers.
@@ -798,9 +839,35 @@ components:
           description: >-
             Required. The default and minimum enforced retention for each backup
             within the backup vault. The enforced retention for each backup can
-            be extended.
+            be extended. Note: Longer minimum enforced retention period impacts
+            potential storage costs post introductory trial. We recommend
+            starting with a short duration of 3 days or less.
           type: string
           format: google-duration
+        backupRetentionInheritance:
+          description: >-
+            Optional. Setting for how a backup's enforced retention end time is
+            inherited.
+          type: string
+          enumDescriptions:
+            - >-
+              Inheritance behavior not set. This will default to
+              `INHERIT_VAULT_RETENTION`.
+            - >-
+              The enforced retention end time of a backup will be inherited from
+              the backup vault's `backup_minimum_enforced_retention_duration`
+              field. This is the default behavior.
+            - >-
+              The enforced retention end time of a backup will always match the
+              expire time of the backup. If this is set, the backup's enforced
+              retention end time will be set to match the expire time during
+              creation of the backup. When updating, the ERET and expire time
+              must be updated together and have the same value. Invalid update
+              requests will be rejected by the server.
+          enum:
+            - BACKUP_RETENTION_INHERITANCE_UNSPECIFIED
+            - INHERIT_VAULT_RETENTION
+            - MATCH_BACKUP_EXPIRE_TIME
         deletable:
           description: >-
             Output only. Set to true when there are no backups nested under this
@@ -893,6 +960,24 @@ components:
             - WITHIN_ORGANIZATION
             - UNRESTRICTED
             - WITHIN_ORG_BUT_UNRESTRICTED_FOR_BA
+        encryptionConfig:
+          description: Optional. The encryption config of the backup vault.
+          $ref: '#/components/schemas/EncryptionConfig'
+    EncryptionConfig:
+      id: EncryptionConfig
+      description: >-
+        Message describing the EncryptionConfig of backup vault. This determines
+        how data within the vault is encrypted at rest.
+      type: object
+      properties:
+        kmsKeyName:
+          description: >-
+            Optional. The Cloud KMS key name to encrypt backups in this backup
+            vault. Must be in the same region as the vault. Some workload
+            backups like compute disk backups may use their inherited source key
+            instead. Format:
+            projects/{project}/locations/{location}/keyRings/{ring}/cryptoKeys/{key}
+          type: string
     ListBackupVaultsResponse:
       id: ListBackupVaultsResponse
       description: Response message for listing BackupVaults.
@@ -1199,6 +1284,15 @@ components:
             level.
           readOnly: true
           $ref: '#/components/schemas/CloudSqlInstanceDataSourceProperties'
+        alloyDbClusterDatasourceProperties:
+          description: >-
+            Output only. AlloyDBClusterDataSourceProperties has a subset of
+            AlloyDB cluster properties that are useful at the Datasource level.
+            Currently none of its child properties are auditable. If new
+            auditable properties are added, the AUDIT annotation should be
+            added.
+          readOnly: true
+          $ref: '#/components/schemas/AlloyDBClusterDataSourceProperties'
         diskDatasourceProperties:
           description: >-
             DiskDataSourceProperties has a subset of Disk properties that are
@@ -1256,6 +1350,19 @@ components:
           description: >-
             Output only. The tier (or machine type) for this instance. Example:
             `db-custom-1-3840`
+          readOnly: true
+          type: string
+    AlloyDBClusterDataSourceProperties:
+      id: AlloyDBClusterDataSourceProperties
+      description: >-
+        AlloyDBClusterDataSourceProperties represents the properties of a
+        AlloyDB cluster resource that are stored in the DataSource. .
+      type: object
+      properties:
+        name:
+          description: >-
+            Output only. Name of the AlloyDB cluster backed up by the
+            datasource.
           readOnly: true
           type: string
     DiskDataSourceProperties:
@@ -1583,6 +1690,31 @@ components:
           description: Optional. The backup can not be deleted before this time.
           type: string
           format: google-datetime
+        backupRetentionInheritance:
+          description: >-
+            Output only. Setting for how the enforced retention end time is
+            inherited. This value is copied from this backup's BackupVault.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - >-
+              Inheritance behavior not set. This will default to
+              `INHERIT_VAULT_RETENTION`.
+            - >-
+              The enforced retention end time of a backup will be inherited from
+              the backup vault's `backup_minimum_enforced_retention_duration`
+              field. This is the default behavior.
+            - >-
+              The enforced retention end time of a backup will always match the
+              expire time of the backup. If this is set, the backup's enforced
+              retention end time will be set to match the expire time during
+              creation of the backup. When updating, the ERET and expire time
+              must be updated together and have the same value. Invalid update
+              requests will be rejected by the server.
+          enum:
+            - BACKUP_RETENTION_INHERITANCE_UNSPECIFIED
+            - INHERIT_VAULT_RETENTION
+            - MATCH_BACKUP_EXPIRE_TIME
         expireTime:
           description: Optional. When this backup is automatically expired.
           type: string
@@ -1644,6 +1776,10 @@ components:
           description: Output only. Backup Appliance specific backup properties.
           readOnly: true
           $ref: '#/components/schemas/BackupApplianceBackupProperties'
+        alloyDbBackupProperties:
+          description: Output only. AlloyDB specific backup properties.
+          readOnly: true
+          $ref: '#/components/schemas/AlloyDbClusterBackupProperties'
         diskBackupProperties:
           description: Output only. Disk specific backup properties.
           readOnly: true
@@ -1681,6 +1817,20 @@ components:
           description: Optional. Output only. Reserved for future use.
           readOnly: true
           type: boolean
+        gcpResource:
+          description: >-
+            Output only. Unique identifier of the GCP resource that is being
+            backed up.
+          readOnly: true
+          $ref: '#/components/schemas/BackupGcpResource'
+        kmsKeyVersions:
+          description: >-
+            Optional. Output only. The list of KMS key versions used to encrypt
+            the backup.
+          readOnly: true
+          type: array
+          items:
+            type: string
     BackupLock:
       id: BackupLock
       description: >-
@@ -2484,12 +2634,22 @@ components:
             projects/{project}/instances/{instance}
           readOnly: true
           type: string
+        instanceCreateTime:
+          description: Output only. The instance creation timestamp.
+          readOnly: true
+          type: string
+          format: google-datetime
         instanceTier:
           description: >-
             Output only. The tier (or machine type) for this instance. Example:
             `db-custom-1-3840`
           readOnly: true
           type: string
+        instanceDeleteTime:
+          description: Output only. The instance delete timestamp.
+          readOnly: true
+          type: string
+          format: google-datetime
     BackupApplianceBackupProperties:
       id: BackupApplianceBackupProperties
       description: >-
@@ -2519,6 +2679,34 @@ components:
           description: Optional. The latest timestamp of data available in this Backup.
           type: string
           format: google-datetime
+    AlloyDbClusterBackupProperties:
+      id: AlloyDbClusterBackupProperties
+      description: >-
+        AlloyDbClusterBackupProperties represents AlloyDB cluster backup
+        properties. .
+      type: object
+      properties:
+        description:
+          description: An optional text description for the backup.
+          type: string
+        storedBytes:
+          description: Output only. Storage usage of this particular backup
+          readOnly: true
+          type: string
+          format: int64
+        chainId:
+          description: >-
+            Output only. The chain id of this backup. Backups belonging to the
+            same chain are sharing the same chain id. This property is
+            calculated and maintained by BackupDR.
+          readOnly: true
+          type: string
+        databaseVersion:
+          description: >-
+            Output only. The PostgreSQL major version of the AlloyDB cluster
+            when the backup was taken.
+          readOnly: true
+          type: string
     DiskBackupProperties:
       id: DiskBackupProperties
       description: DiskBackupProperties represents the properties of a Disk backup.
@@ -2635,6 +2823,37 @@ components:
             this backup in case of scheduled backup or used for on demand
             backup.
           type: string
+    BackupGcpResource:
+      id: BackupGcpResource
+      description: Minimum details to identify a Google Cloud resource for a backup.
+      type: object
+      properties:
+        gcpResourcename:
+          description: Name of the Google Cloud resource.
+          type: string
+        location:
+          description: 'Location of the resource: //"global"/"unspecified".'
+          type: string
+        type:
+          description: >-
+            Type of the resource. Use the Unified Resource Type, eg.
+            compute.googleapis.com/Instance.
+          type: string
+    FetchBackupsForResourceTypeResponse:
+      id: FetchBackupsForResourceTypeResponse
+      description: Response for the FetchBackupsForResourceType method.
+      type: object
+      properties:
+        backups:
+          description: The Backups from the specified parent.
+          type: array
+          items:
+            $ref: '#/components/schemas/Backup'
+        nextPageToken:
+          description: >-
+            A token, which can be sent as `page_token` to retrieve the next
+            page. If this field is omitted, there are no subsequent pages.
+          type: string
     RestoreBackupRequest:
       id: RestoreBackupRequest
       description: Request message for restoring from a Backup.
@@ -2670,6 +2889,18 @@ components:
         diskRestoreProperties:
           description: Disk properties to be overridden during restore.
           $ref: '#/components/schemas/DiskRestoreProperties'
+        clearOverridesFieldMask:
+          description: >-
+            Optional. A field mask used to clear server-side default values for
+            fields within the `instance_properties` oneof. When a field in this
+            mask is cleared, the server will not apply its default logic (like
+            inheriting a value from the source) for that field. The most common
+            current use case is clearing default encryption keys. Examples of
+            field mask paths: - Compute Instance Disks:
+            `compute_instance_restore_properties.disks.*.disk_encryption_key` -
+            Single Disk: `disk_restore_properties.disk_encryption_key`
+          type: string
+          format: google-fieldmask
     ComputeInstanceTargetEnvironment:
       id: ComputeInstanceTargetEnvironment
       description: >-
@@ -3146,6 +3377,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BackupRule'
+        maxCustomOnDemandRetentionDays:
+          description: >-
+            Optional. Optional field to configure the maximum number of days for
+            which a backup can be retained. This field is only applicable for
+            on-demand backups taken with custom retention value.
+          type: integer
+          format: int32
         state:
           description: Output only. The `State` for the `BackupPlan`.
           readOnly: true
@@ -3235,7 +3473,9 @@ components:
             equal to minimum enforced retention of the backup vault. Minimum
             value is 1 and maximum value is 36159 for custom retention on-demand
             backup. Minimum and maximum values are workload specific for all
-            other rules.
+            other rules. Note: Longer retention can lead to higher storage costs
+            post introductory trial. We recommend starting with a short duration
+            of 3 days or less.
           type: integer
           format: int32
         standardSchedule:
@@ -3761,6 +4001,19 @@ components:
             with the exception that zero UUID is not supported
             (00000000-0000-0000-0000-000000000000).
           type: string
+        customRetentionDays:
+          description: >-
+            Optional. The duration for which backup data will be kept, while
+            taking an on-demand backup with custom retention. It is defined in
+            "days". It is mutually exclusive with rule_id. This field is
+            required if rule_id is not provided.
+          type: integer
+          format: int32
+        labels:
+          description: Optional. Labels to be applied on the backup.
+          type: object
+          additionalProperties:
+            type: string
     DataSourceReference:
       id: DataSourceReference
       description: DataSourceReference is a reference to a DataSource resource.
@@ -3813,6 +4066,13 @@ components:
             with.
           readOnly: true
           $ref: '#/components/schemas/DataSourceGcpResourceInfo'
+        totalStoredBytes:
+          description: >-
+            Output only. Total size of the storage used by all backup resources
+            for the referenced datasource.
+          readOnly: true
+          type: string
+          format: int64
     DataSourceBackupConfigInfo:
       id: DataSourceBackupConfigInfo
       description: Information of backup configuration on the DataSource.
@@ -3900,6 +4160,26 @@ components:
             `db-custom-1-3840`
           readOnly: true
           type: string
+    ListDataSourceReferencesResponse:
+      id: ListDataSourceReferencesResponse
+      description: Response for the ListDataSourceReferences method.
+      type: object
+      properties:
+        dataSourceReferences:
+          description: The DataSourceReferences from the specified parent.
+          type: array
+          items:
+            $ref: '#/components/schemas/DataSourceReference'
+        nextPageToken:
+          description: >-
+            A token, which can be sent as `page_token` to retrieve the next
+            page. If this field is omitted, there are no subsequent pages.
+          type: string
+        unreachable:
+          description: Locations that could not be reached.
+          type: array
+          items:
+            type: string
     FetchDataSourceReferencesForResourceTypeResponse:
       id: FetchDataSourceReferencesForResourceTypeResponse
       description: Response for the FetchDataSourceReferencesForResourceType method.
@@ -4011,10 +4291,14 @@ components:
             - Resource type not set.
             - Cloud SQL instance.
             - Compute Engine VM.
+            - Compute Engine Disk.
+            - Compute Engine Regional Disk.
           enum:
             - RESOURCE_TYPE_UNSPECIFIED
             - CLOUD_SQL_INSTANCE
             - COMPUTE_ENGINE_VM
+            - COMPUTE_ENGINE_DISK
+            - COMPUTE_ENGINE_REGIONAL_DISK
         targetResourceLabels:
           description: Labels associated with the target resource.
           type: object
@@ -4373,10 +4657,12 @@ components:
               - ''
               - ''
               - ''
+              - ''
             enum:
               - FEATURE_UNSPECIFIED
               - MANAGEMENT_SERVER
               - COMPUTE_INSTANCE
+              - PROTECTION_SUMMARY
   parameters:
     access_token:
       description: OAuth access token.
@@ -4474,6 +4760,13 @@ components:
           operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1trial:subscribe/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        end:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1trial:end/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -4868,6 +5161,26 @@ components:
         replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/backups/methods/delete'
+    backups_for_resource_type:
+      id: google.backupdr.backups_for_resource_type
+      name: backups_for_resource_type
+      title: Backups_for_resource_type
+      methods:
+        fetch_for_resource_type:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1backupVaults~1{backupVaultsId}~1dataSources~1{dataSourcesId}~1backups:fetchForResourceType/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: >-
+              #/components/x-stackQL-resources/backups_for_resource_type/methods/fetch_for_resource_type
+        insert: []
+        update: []
+        replace: []
+        delete: []
     backup_plans:
       id: google.backupdr.backup_plans
       name: backup_plans
@@ -5031,6 +5344,14 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        list:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataSourceReferences/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.dataSourceReferences
         fetch_for_resource_type:
           operation:
             $ref: >-
@@ -5042,6 +5363,8 @@ components:
         select:
           - $ref: >-
               #/components/x-stackQL-resources/data_source_references/methods/get
+          - $ref: >-
+              #/components/x-stackQL-resources/data_source_references/methods/list
           - $ref: >-
               #/components/x-stackQL-resources/data_source_references/methods/fetch_for_resource_type
         insert: []
@@ -5529,6 +5852,10 @@ paths:
           name: pageToken
           schema:
             type: string
+        - in: query
+          name: returnPartialSuccess
+          schema:
+            type: boolean
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:
     parameters: *ref_1
     get:
@@ -5657,6 +5984,39 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SubscribeTrialRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trial'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/trial:end:
+    parameters: *ref_1
+    post:
+      description: Ends the trial for a project
+      operationId: backupdr.projects.locations.trial.end
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndTrialRequest'
       security:
         - Oauth2:
             - https://www.googleapis.com/auth/cloud-platform
@@ -6473,6 +6833,70 @@ paths:
           name: view
           schema:
             type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/backupVaults/{backupVaultsId}/dataSources/{dataSourcesId}/backups:fetchForResourceType:
+    parameters: *ref_1
+    get:
+      description: Fetch Backups for a given resource type.
+      operationId: >-
+        backupdr.projects.locations.backupVaults.dataSources.backups.fetchForResourceType
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FetchBackupsForResourceTypeResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: backupVaultsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: dataSourcesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: resourceType
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: filter
+          schema:
+            type: string
+        - in: query
+          name: orderBy
+          schema:
+            type: string
+        - in: query
+          name: view
+          schema:
+            type: string
   /v1/projects/{projectsId}/locations/{locationsId}/backupVaults/{backupVaultsId}/dataSources/{dataSourcesId}/backups/{backupsId}:
     parameters: *ref_1
     get:
@@ -7257,6 +7681,51 @@ paths:
         - in: path
           name: dataSourceReferencesId
           required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/locations/{locationsId}/dataSourceReferences:
+    parameters: *ref_1
+    get:
+      description: Lists DataSourceReferences for a given project and location.
+      operationId: backupdr.projects.locations.dataSourceReferences.list
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListDataSourceReferencesResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+        - in: query
+          name: filter
+          schema:
+            type: string
+        - in: query
+          name: orderBy
           schema:
             type: string
   /v1/projects/{projectsId}/locations/{locationsId}/dataSourceReferences:fetchForResourceType:

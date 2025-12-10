@@ -6,9 +6,9 @@ info:
     email: info@stackql.io
   title: BigQuery Data Policy API
   description: Allows users to manage BigQuery data policies.
-  version: v1
-  x-discovery-doc-revision: '20250808'
-  x-generated-date: '2025-08-28'
+  version: v2
+  x-discovery-doc-revision: '20251112'
+  x-generated-date: '2025-12-10'
 externalDocs:
   url: https://cloud.google.com/bigquery/docs/column-data-masking
 servers:
@@ -37,51 +37,113 @@ components:
           tokenUrl: https://accounts.google.com/o/oauth2/token
           scopes: *ref_0
   schemas:
+    CreateDataPolicyRequest:
+      id: CreateDataPolicyRequest
+      description: Request message for the CreateDataPolicy method.
+      type: object
+      properties:
+        dataPolicyId:
+          description: >-
+            Required. User-assigned (human readable) ID of the data policy that
+            needs to be unique within a project. Used as {data_policy_id} in
+            part of the resource name.
+          type: string
+        dataPolicy:
+          description: >-
+            Required. The data policy to create. The `name` field does not need
+            to be provided for the data policy creation.
+          $ref: '#/components/schemas/DataPolicy'
     DataPolicy:
       id: DataPolicy
       description: Represents the label-policy binding.
       type: object
       properties:
-        policyTag:
-          description: >-
-            Policy tag resource name, in the format of
-            `projects/{project_number}/locations/{location_id}/taxonomies/{taxonomy_id}/policyTags/{policyTag_id}`.
-          type: string
         dataMaskingPolicy:
-          description: The data masking policy that specifies the data masking rule to use.
+          description: >-
+            Optional. The data masking policy that specifies the data masking
+            rule to use. It must be set if the data policy type is
+            DATA_MASKING_POLICY.
           $ref: '#/components/schemas/DataMaskingPolicy'
         name:
           description: >-
-            Output only. Resource name of this data policy, in the format of
+            Identifier. Resource name of this data policy, in the format of
             `projects/{project_number}/locations/{location_id}/dataPolicies/{data_policy_id}`.
+          type: string
+        dataPolicyId:
+          description: >-
+            Output only. User-assigned (human readable) ID of the data policy
+            that needs to be unique within a project. Used as {data_policy_id}
+            in part of the resource name.
           readOnly: true
           type: string
+        etag:
+          description: >-
+            The etag for this Data Policy. This field is used for
+            UpdateDataPolicy calls. If Data Policy exists, this field is
+            required and must match the server's etag. It will also be populated
+            in the response of GetDataPolicy, CreateDataPolicy, and
+            UpdateDataPolicy calls.
+          type: string
         dataPolicyType:
-          description: Required. Data policy type. Type of data policy.
+          description: Required. Type of data policy.
           type: string
           enumDescriptions:
             - Default value for the data policy type. This should not be used.
+            - Used to create a data policy for data masking.
+            - Used to create a data policy for raw data access.
             - >-
               Used to create a data policy for column-level security, without
-              data masking.
-            - Used to create a data policy for data masking.
+              data masking. This is deprecated in V2 api and only present to
+              support GET and LIST operations for V1 data policies in V2 api.
           enum:
             - DATA_POLICY_TYPE_UNSPECIFIED
-            - COLUMN_LEVEL_SECURITY_POLICY
             - DATA_MASKING_POLICY
-        dataPolicyId:
+            - RAW_DATA_ACCESS_POLICY
+            - COLUMN_LEVEL_SECURITY_POLICY
+        policyTag:
           description: >-
-            User-assigned (human readable) ID of the data policy that needs to
-            be unique within a project. Used as {data_policy_id} in part of the
-            resource name.
+            Output only. Policy tag resource name, in the format of
+            `projects/{project_number}/locations/{location_id}/taxonomies/{taxonomy_id}/policyTags/{policyTag_id}`.
+            policy_tag is supported only for V1 data policies.
+          readOnly: true
           type: string
+        grantees:
+          description: >-
+            Optional. The list of IAM principals that have Fine Grained Access
+            to the underlying data goverened by this data policy. Uses the [IAM
+            V2 principal
+            syntax](https://cloud.google.com/iam/docs/principal-identifiers#v2)
+            Only supports principal types users, groups, serviceaccounts,
+            cloudidentity. This field is supported in V2 Data Policy only. In
+            case of V1 data policies (i.e. verion = 1 and policy_tag is set),
+            this field is not populated.
+          type: array
+          items:
+            type: string
+        version:
+          description: Output only. The version of the Data Policy resource.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - >-
+              Default value for the data policy version. This should not be
+              used.
+            - >-
+              V1 data policy version. V1 Data Policies will be present in V2
+              List api response, but can not be created/updated/deleted from V2
+              api.
+            - V2 data policy version.
+          enum:
+            - VERSION_UNSPECIFIED
+            - V1
+            - V2
     DataMaskingPolicy:
       id: DataMaskingPolicy
-      description: The data masking policy that is used to specify data masking rule.
+      description: The policy used to specify data masking rule.
       type: object
       properties:
         predefinedExpression:
-          description: A predefined masking expression.
+          description: Optional. A predefined masking expression.
           type: string
           enumDescriptions:
             - >-
@@ -112,15 +174,23 @@ components:
               follows: * Syntax-valid email address: Replace username with
               XXXXX. For example, cloudysanfrancisco@gmail.com becomes
               XXXXX@gmail.com. * Syntax-invalid email address: Apply SHA-256
-              hash. For more information, see Email mask.
+              hash. For more information, see [Email
+              mask](https://cloud.google.com/bigquery/docs/column-data-masking-intro#masking_options).
             - >-
               Masking expression to only show the *year* of `Date`, `DateTime`
               and `TimeStamp`. For example, with the year 2076: * DATE :
               2076-01-01 * DATETIME : 2076-01-01T00:00:00 * TIMESTAMP :
               2076-01-01 00:00:00 UTC Truncation occurs according to the UTC
               time zone. To change this, adjust the default time zone using the
-              `time_zone` system variable. For more information, see the System
-              variables reference.
+              `time_zone` system variable. For more information, see [System
+              variables
+              reference](https://cloud.google.com/bigquery/docs/reference/system-variables).
+            - >-
+              Masking expression that uses hashing to mask column data. It
+              differs from SHA256 in that a unique random value is generated for
+              each query and is added to the hash input, resulting in the hash /
+              masked result to be different for each query. Hence the name
+              "random hash".
           enum:
             - PREDEFINED_EXPRESSION_UNSPECIFIED
             - SHA256
@@ -130,20 +200,45 @@ components:
             - FIRST_FOUR_CHARACTERS
             - EMAIL_MASK
             - DATE_YEAR_MASK
+            - RANDOM_HASH
         routine:
           description: >-
-            The name of the BigQuery routine that contains the custom masking
-            routine, in the format of
+            Optional. The name of the BigQuery routine that contains the custom
+            masking routine, in the format of
             `projects/{project_number}/datasets/{dataset_id}/routines/{routine_id}`.
           type: string
-    RenameDataPolicyRequest:
-      id: RenameDataPolicyRequest
-      description: Request message for the RenameDataPolicy method.
+    AddGranteesRequest:
+      id: AddGranteesRequest
+      description: Request message for the AddGrantees method.
       type: object
       properties:
-        newDataPolicyId:
-          description: Required. The new data policy id.
-          type: string
+        grantees:
+          description: >-
+            Required. IAM principal that should be granted Fine Grained Access
+            to the underlying data goverened by the data policy. The target data
+            policy is determined by the `data_policy` field. Uses the [IAM V2
+            principal
+            syntax](https://cloud.google.com/iam/docs/principal-identifiers#v2).
+            Supported principal types: * User * Group * Service account
+          type: array
+          items:
+            type: string
+    RemoveGranteesRequest:
+      id: RemoveGranteesRequest
+      description: Request message for the RemoveGrantees method.
+      type: object
+      properties:
+        grantees:
+          description: >-
+            Required. IAM principal that should be revoked from Fine Grained
+            Access to the underlying data goverened by the data policy. The
+            target data policy is determined by the `data_policy` field. Uses
+            the [IAM V2 principal
+            syntax](https://cloud.google.com/iam/docs/principal-identifiers#v2).
+            Supported principal types: * User * Group * Service account
+          type: array
+          items:
+            type: string
     Empty:
       id: Empty
       description: >-
@@ -619,14 +714,14 @@ components:
         create:
           operation:
             $ref: >-
-              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies/post
+              #/paths/~1v2~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         list:
           operation:
             $ref: >-
-              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies/get
+              #/paths/~1v2~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies/get
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -634,28 +729,21 @@ components:
         patch:
           operation:
             $ref: >-
-              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies~1{dataPoliciesId}/patch
+              #/paths/~1v2~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies~1{dataPoliciesId}/patch
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         delete:
           operation:
             $ref: >-
-              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies~1{dataPoliciesId}/delete
+              #/paths/~1v2~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies~1{dataPoliciesId}/delete
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         get:
           operation:
             $ref: >-
-              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies~1{dataPoliciesId}/get
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        rename:
-          operation:
-            $ref: >-
-              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies~1{dataPoliciesId}:rename/post
+              #/paths/~1v2~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies~1{dataPoliciesId}/get
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -670,6 +758,35 @@ components:
         replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/data_policies/methods/delete'
+    data_policies_grantees:
+      id: google.bigquerydatapolicy.data_policies_grantees
+      name: data_policies_grantees
+      title: Data_policies_grantees
+      methods:
+        add_grantees:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies~1{dataPoliciesId}:addGrantees/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        remove_grantees:
+          operation:
+            $ref: >-
+              #/paths/~1v2~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies~1{dataPoliciesId}:removeGrantees/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select: []
+        insert:
+          - $ref: >-
+              #/components/x-stackQL-resources/data_policies_grantees/methods/add_grantees
+        update: []
+        replace: []
+        delete:
+          - $ref: >-
+              #/components/x-stackQL-resources/data_policies_grantees/methods/remove_grantees
     data_policies_iam_policies:
       id: google.bigquerydatapolicy.data_policies_iam_policies
       name: data_policies_iam_policies
@@ -678,7 +795,7 @@ components:
         get_iam_policy:
           operation:
             $ref: >-
-              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies~1{dataPoliciesId}:getIamPolicy/post
+              #/paths/~1v2~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies~1{dataPoliciesId}:getIamPolicy/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -686,14 +803,14 @@ components:
         set_iam_policy:
           operation:
             $ref: >-
-              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies~1{dataPoliciesId}:setIamPolicy/post
+              #/paths/~1v2~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies~1{dataPoliciesId}:setIamPolicy/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         test_iam_permissions:
           operation:
             $ref: >-
-              #/paths/~1v1~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies~1{dataPoliciesId}:testIamPermissions/post
+              #/paths/~1v2~1projects~1{projectsId}~1locations~1{locationsId}~1dataPolicies~1{dataPoliciesId}:testIamPermissions/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -708,7 +825,7 @@ components:
               #/components/x-stackQL-resources/data_policies_iam_policies/methods/set_iam_policy
         delete: []
 paths:
-  /v1/projects/{projectsId}/locations/{locationsId}/dataPolicies:
+  /v2/projects/{projectsId}/locations/{locationsId}/dataPolicies:
     parameters: &ref_1
       - $ref: '#/components/parameters/access_token'
       - $ref: '#/components/parameters/alt'
@@ -723,14 +840,14 @@ paths:
       - $ref: '#/components/parameters/_.xgafv'
     post:
       description: >-
-        Creates a new data policy under a project with the given `dataPolicyId`
-        (used as the display name), policy tag, and data policy type.
+        Creates a new data policy under a project with the given
+        `data_policy_id` (used as the display name), and data policy type.
       operationId: bigquerydatapolicy.projects.locations.dataPolicies.create
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DataPolicy'
+              $ref: '#/components/schemas/CreateDataPolicyRequest'
       security:
         - Oauth2:
             - https://www.googleapis.com/auth/bigquery
@@ -801,7 +918,98 @@ paths:
           name: filter
           schema:
             type: string
-  /v1/projects/{projectsId}/locations/{locationsId}/dataPolicies/{dataPoliciesId}:
+  /v2/projects/{projectsId}/locations/{locationsId}/dataPolicies/{dataPoliciesId}:addGrantees:
+    parameters: *ref_1
+    post:
+      description: >-
+        Adds new grantees to a data policy. The new grantees will be added to
+        the existing grantees. If the request contains a duplicate grantee, the
+        grantee will be ignored. If the request contains a grantee that already
+        exists, the grantee will be ignored.
+      operationId: bigquerydatapolicy.projects.locations.dataPolicies.addGrantees
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddGranteesRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigquery
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigquery
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataPolicy'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: dataPoliciesId
+          required: true
+          schema:
+            type: string
+  /v2/projects/{projectsId}/locations/{locationsId}/dataPolicies/{dataPoliciesId}:removeGrantees:
+    parameters: *ref_1
+    post:
+      description: >-
+        Removes grantees from a data policy. The grantees will be removed from
+        the existing grantees. If the request contains a grantee that does not
+        exist, the grantee will be ignored.
+      operationId: bigquerydatapolicy.projects.locations.dataPolicies.removeGrantees
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoveGranteesRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/bigquery
+          Oauth2c:
+            - https://www.googleapis.com/auth/bigquery
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataPolicy'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: locationsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: dataPoliciesId
+          required: true
+          schema:
+            type: string
+  /v2/projects/{projectsId}/locations/{locationsId}/dataPolicies/{dataPoliciesId}:
     parameters: *ref_1
     patch:
       description: >-
@@ -889,10 +1097,6 @@ paths:
           required: true
           schema:
             type: string
-        - in: query
-          name: force
-          schema:
-            type: boolean
     get:
       description: Gets the data policy specified by its resource name.
       operationId: bigquerydatapolicy.projects.locations.dataPolicies.get
@@ -928,49 +1132,7 @@ paths:
           required: true
           schema:
             type: string
-  /v1/projects/{projectsId}/locations/{locationsId}/dataPolicies/{dataPoliciesId}:rename:
-    parameters: *ref_1
-    post:
-      description: Renames the id (display name) of the specified data policy.
-      operationId: bigquerydatapolicy.projects.locations.dataPolicies.rename
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RenameDataPolicyRequest'
-      security:
-        - Oauth2:
-            - https://www.googleapis.com/auth/bigquery
-          Oauth2c:
-            - https://www.googleapis.com/auth/bigquery
-        - Oauth2:
-            - https://www.googleapis.com/auth/cloud-platform
-          Oauth2c:
-            - https://www.googleapis.com/auth/cloud-platform
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DataPolicy'
-      parameters:
-        - in: path
-          name: projectsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: locationsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: dataPoliciesId
-          required: true
-          schema:
-            type: string
-  /v1/projects/{projectsId}/locations/{locationsId}/dataPolicies/{dataPoliciesId}:getIamPolicy:
+  /v2/projects/{projectsId}/locations/{locationsId}/dataPolicies/{dataPoliciesId}:getIamPolicy:
     parameters: *ref_1
     post:
       description: Gets the IAM policy for the specified data policy.
@@ -1012,7 +1174,7 @@ paths:
           required: true
           schema:
             type: string
-  /v1/projects/{projectsId}/locations/{locationsId}/dataPolicies/{dataPoliciesId}:setIamPolicy:
+  /v2/projects/{projectsId}/locations/{locationsId}/dataPolicies/{dataPoliciesId}:setIamPolicy:
     parameters: *ref_1
     post:
       description: Sets the IAM policy for the specified data policy.
@@ -1054,7 +1216,7 @@ paths:
           required: true
           schema:
             type: string
-  /v1/projects/{projectsId}/locations/{locationsId}/dataPolicies/{dataPoliciesId}:testIamPermissions:
+  /v2/projects/{projectsId}/locations/{locationsId}/dataPolicies/{dataPoliciesId}:testIamPermissions:
     parameters: *ref_1
     post:
       description: Returns the caller's permission on the specified data policy resource.
