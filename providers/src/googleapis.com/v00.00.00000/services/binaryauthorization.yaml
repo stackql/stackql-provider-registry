@@ -11,8 +11,8 @@ info:
     Kubernetes Engine (GKE), Anthos Service Mesh, Anthos Clusters, and Cloud
     Run. 
   version: v1
-  x-discovery-doc-revision: '20250731'
-  x-generated-date: '2025-08-28'
+  x-discovery-doc-revision: '20251205'
+  x-generated-date: '2025-12-10'
 externalDocs:
   url: https://cloud.google.com/binary-authorization/
 servers:
@@ -38,56 +38,255 @@ components:
           tokenUrl: https://accounts.google.com/o/oauth2/token
           scopes: *ref_0
   schemas:
-    EvaluateGkePolicyRequest:
-      id: EvaluateGkePolicyRequest
-      description: Request message for PlatformPolicyEvaluationService.EvaluateGkePolicy.
-      type: object
+    ValidateAttestationOccurrenceRequest:
       properties:
-        resource:
-          description: Required. JSON or YAML blob representing a Kubernetes resource.
-          type: object
-          additionalProperties:
-            type: any
-            description: Properties of the object.
-    EvaluateGkePolicyResponse:
-      id: EvaluateGkePolicyResponse
-      description: Response message for PlatformPolicyEvaluationService.EvaluateGkePolicy.
-      type: object
-      properties:
-        verdict:
-          description: The result of evaluating all Pods in the request.
+        occurrenceResourceUri:
+          description: >-
+            Required. The URI of the artifact (e.g. container image) that is the
+            subject of the containing Occurrence.
           type: string
-          enumDescriptions:
-            - Not specified. This should never be used.
-            - All Pods in the request conform to the policy.
-            - At least one Pod does not conform to the policy.
-            - >-
-              Encountered at least one error evaluating a Pod and all other Pods
-              conform to the policy. Non-conformance has precedence over errors.
-          enum:
-            - VERDICT_UNSPECIFIED
-            - CONFORMANT
-            - NON_CONFORMANT
-            - ERROR
-        results:
-          description: Evaluation result for each Pod contained in the request.
+        attestation:
+          description: >-
+            Required. An AttestationOccurrence to be checked that it can be
+            verified by the `Attestor`. It does not have to be an existing
+            entity in Container Analysis. It must otherwise be a valid
+            `AttestationOccurrence`.
+          $ref: '#/components/schemas/AttestationOccurrence'
+        occurrenceNote:
+          description: >-
+            Required. The resource name of the Note to which the containing
+            Occurrence is associated.
+          type: string
+      type: object
+      description: Request message for ValidationHelperV1.ValidateAttestationOccurrence.
+      id: ValidateAttestationOccurrenceRequest
+    PlatformPolicy:
+      type: object
+      description: >-
+        A Binary Authorization platform policy for deployments on various
+        platforms.
+      properties:
+        updateTime:
+          description: Output only. Time when the policy was last updated.
+          type: string
+          readOnly: true
+          format: google-datetime
+        name:
+          description: >-
+            Output only. The relative resource name of the Binary Authorization
+            platform policy, in the form of `projects/*/platforms/*/policies/*`.
+          type: string
+          readOnly: true
+        description:
+          type: string
+          description: Optional. A description comment about the policy.
+        etag:
+          description: >-
+            Optional. Used to prevent updating the policy when another request
+            has updated it since it was retrieved.
+          type: string
+        gkePolicy:
+          $ref: '#/components/schemas/GkePolicy'
+          description: Optional. GKE platform-specific policy.
+      id: PlatformPolicy
+    CheckResult:
+      type: object
+      id: CheckResult
+      properties:
+        evaluationResult:
+          description: If a check was evaluated, contains the result of the check.
+          $ref: '#/components/schemas/EvaluationResult'
+        explanation:
+          type: string
+          description: Explanation of this check result.
+        allowlistResult:
+          description: >-
+            If the image was exempted by an allow_pattern in the check, contains
+            the pattern that the image name matched.
+          $ref: '#/components/schemas/AllowlistResult'
+        type:
+          description: The type of the check.
+          type: string
+        index:
+          format: int64
+          description: The index of the check.
+          type: string
+        displayName:
+          description: The name of the check.
+          type: string
+      description: Result of evaluating one check.
+    TestIamPermissionsResponse:
+      properties:
+        permissions:
           type: array
           items:
-            $ref: '#/components/schemas/PodResult'
+            type: string
+          description: >-
+            A subset of `TestPermissionsRequest.permissions` that the caller is
+            allowed.
+      type: object
+      id: TestIamPermissionsResponse
+      description: Response message for `TestIamPermissions` method.
+    Policy:
+      description: A policy for container image binary authorization.
+      id: Policy
+      properties:
+        etag:
+          description: >-
+            Optional. A checksum, returned by the server, that can be sent on
+            update requests to ensure the policy has an up-to-date value before
+            attempting to update it. See https://google.aip.dev/154.
+          type: string
+        istioServiceIdentityAdmissionRules:
+          type: object
+          description: >-
+            Optional. Per-istio-service-identity admission rules. Istio service
+            identity spec format: `spiffe:///ns//sa/` or `/ns//sa/` e.g.
+            `spiffe://example.com/ns/test-ns/sa/default`
+          additionalProperties:
+            $ref: '#/components/schemas/AdmissionRule'
+        name:
+          description: >-
+            Output only. The resource name, in the format `projects/*/policy`.
+            There is at most one policy per project.
+          readOnly: true
+          type: string
+        description:
+          description: Optional. A descriptive comment.
+          type: string
+        globalPolicyEvaluationMode:
+          description: >-
+            Optional. Controls the evaluation of a Google-maintained global
+            admission policy for common system-level images. Images not covered
+            by the global policy will be subject to the project admission
+            policy. This setting has no effect when specified inside a global
+            admission policy.
+          enumDescriptions:
+            - 'Not specified: `DISABLE` is assumed.'
+            - Enables system policy evaluation.
+            - Disables system policy evaluation.
+          enum:
+            - GLOBAL_POLICY_EVALUATION_MODE_UNSPECIFIED
+            - ENABLE
+            - DISABLE
+          type: string
+        updateTime:
+          format: google-datetime
+          description: Output only. Time when the policy was last updated.
+          readOnly: true
+          type: string
+        clusterAdmissionRules:
+          additionalProperties:
+            $ref: '#/components/schemas/AdmissionRule'
+          type: object
+          description: >-
+            Optional. A valid policy has only one of the following rule maps
+            non-empty, i.e. only one of `cluster_admission_rules`,
+            `kubernetes_namespace_admission_rules`,
+            `kubernetes_service_account_admission_rules`, or
+            `istio_service_identity_admission_rules` can be non-empty.
+            Per-cluster admission rules. Cluster spec format:
+            `location.clusterId`. There can be at most one admission rule per
+            cluster spec. A `location` is either a compute zone (e.g.
+            us-central1-a) or a region (e.g. us-central1). For `clusterId`
+            syntax restrictions see
+            https://cloud.google.com/container-engine/reference/rest/v1/projects.zones.clusters.
+        kubernetesNamespaceAdmissionRules:
+          description: >-
+            Optional. Per-kubernetes-namespace admission rules. K8s namespace
+            spec format: `[a-z.-]+`, e.g. `some-namespace`
+          additionalProperties:
+            $ref: '#/components/schemas/AdmissionRule'
+          type: object
+        defaultAdmissionRule:
+          $ref: '#/components/schemas/AdmissionRule'
+          description: >-
+            Required. Default admission rule for a cluster without a
+            per-cluster, per- kubernetes-service-account, or
+            per-istio-service-identity admission rule.
+        kubernetesServiceAccountAdmissionRules:
+          type: object
+          description: >-
+            Optional. Per-kubernetes-service-account admission rules. Service
+            account spec format: `namespace:serviceaccount`. e.g.
+            `test-ns:default`
+          additionalProperties:
+            $ref: '#/components/schemas/AdmissionRule'
+        admissionWhitelistPatterns:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdmissionWhitelistPattern'
+          description: >-
+            Optional. Admission policy allowlisting. A matching admission
+            request will always be permitted. This feature is typically used to
+            exclude Google or third-party infrastructure images from Binary
+            Authorization policies.
+      type: object
+    Check:
+      description: >-
+        A single check to perform against a Pod. Checks are grouped into
+        `CheckSet` objects, which are defined by the top-level policy.
+      properties:
+        slsaCheck:
+          $ref: '#/components/schemas/SlsaCheck'
+          description: >-
+            Optional. Require that an image was built by a trusted builder (such
+            as Google Cloud Build), meets requirements for Supply chain Levels
+            for Software Artifacts (SLSA), and was built from a trusted source
+            code repostitory.
+        imageAllowlist:
+          description: >-
+            Optional. Images exempted from this check. If any of the patterns
+            match the image url, the check will not be evaluated.
+          $ref: '#/components/schemas/ImageAllowlist'
+        trustedDirectoryCheck:
+          $ref: '#/components/schemas/TrustedDirectoryCheck'
+          description: Optional. Require that an image lives in a trusted directory.
+        simpleSigningAttestationCheck:
+          description: >-
+            Optional. Require a SimpleSigning-type attestation for every image
+            in the deployment.
+          $ref: '#/components/schemas/SimpleSigningAttestationCheck'
+        alwaysDeny:
+          type: boolean
+          description: >-
+            Optional. A special-case check that always denies. Note that this
+            still only applies when the scope of the `CheckSet` applies and the
+            image isn't exempted by an image allowlist. This check is primarily
+            useful for testing, or to set the default behavior for all unmatched
+            scopes to "deny".
+        displayName:
+          type: string
+          description: >-
+            Optional. A user-provided name for this check. This field has no
+            effect on the policy evaluation behavior except to improve
+            readability of messages in evaluation results.
+        imageFreshnessCheck:
+          $ref: '#/components/schemas/ImageFreshnessCheck'
+          description: >-
+            Optional. Require that an image is no older than a configured
+            expiration time. Image age is determined by its upload time.
+        vulnerabilityCheck:
+          description: >-
+            Optional. Require that an image does not contain vulnerabilities
+            that violate the configured rules, such as based on severity levels.
+          $ref: '#/components/schemas/VulnerabilityCheck'
+        sigstoreSignatureCheck:
+          description: >-
+            Optional. Require that an image was signed by Cosign with a trusted
+            key. This check requires that both the image and signature are
+            stored in Artifact Registry.
+          $ref: '#/components/schemas/SigstoreSignatureCheck'
+      id: Check
+      type: object
     PodResult:
-      id: PodResult
-      description: Result of evaluating the whole GKE policy for one Pod.
       type: object
       properties:
-        podName:
-          description: The name of the Pod.
-          type: string
-        kubernetesNamespace:
-          description: The Kubernetes namespace of the Pod.
-          type: string
-        kubernetesServiceAccount:
-          description: The Kubernetes service account of the Pod.
-          type: string
+        imageResults:
+          type: array
+          description: Per-image details.
+          items:
+            $ref: '#/components/schemas/ImageResult'
         verdict:
           description: The result of evaluating this Pod.
           type: string
@@ -104,431 +303,45 @@ components:
             - CONFORMANT
             - NON_CONFORMANT
             - ERROR
-        imageResults:
-          description: Per-image details.
-          type: array
-          items:
-            $ref: '#/components/schemas/ImageResult'
-    ImageResult:
-      id: ImageResult
-      description: Result of evaluating one image.
-      type: object
-      properties:
-        imageUri:
-          description: Image URI from the request.
-          type: string
-        verdict:
-          description: The result of evaluating this image.
-          type: string
-          enumDescriptions:
-            - Not specified. This should never be used.
-            - Image conforms to the policy.
-            - Image does not conform to the policy.
-            - >-
-              Error evaluating the image. Non-conformance has precedence over
-              errors.
-          enum:
-            - IMAGE_VERDICT_UNSPECIFIED
-            - CONFORMANT
-            - NON_CONFORMANT
-            - ERROR
-        allowlistResult:
-          description: >-
-            If the image was exempted by a top-level allow_pattern, contains the
-            allowlist pattern that the image name matched.
-          $ref: '#/components/schemas/AllowlistResult'
-        checkSetResult:
-          description: >-
-            If a check set was evaluated, contains the result of the check set.
-            Empty if there were no check sets.
-          $ref: '#/components/schemas/CheckSetResult'
-        explanation:
-          description: >-
-            Explanation of this image result. Only populated if no check sets
-            were evaluated.
-          type: string
-    AllowlistResult:
-      id: AllowlistResult
-      description: Result of evaluating an image name allowlist.
-      type: object
-      properties:
-        matchedPattern:
-          description: The allowlist pattern that the image matched.
-          type: string
-    CheckSetResult:
-      id: CheckSetResult
-      description: Result of evaluating one check set.
-      type: object
-      properties:
-        index:
-          description: The index of the check set.
-          type: string
-          format: int64
-        displayName:
-          description: The name of the check set.
-          type: string
-        scope:
-          description: The scope of the check set.
-          $ref: '#/components/schemas/Scope'
-        allowlistResult:
-          description: >-
-            If the image was exempted by an allow_pattern in the check set,
-            contains the pattern that the image name matched.
-          $ref: '#/components/schemas/AllowlistResult'
-        checkResults:
-          description: >-
-            If checks were evaluated, contains the results of evaluating each
-            check.
-          $ref: '#/components/schemas/CheckResults'
-        explanation:
-          description: >-
-            Explanation of this check set result. Only populated if no checks
-            were evaluated.
-          type: string
-    Scope:
-      id: Scope
-      description: A scope specifier for `CheckSet` objects.
-      type: object
-      properties:
         kubernetesServiceAccount:
-          description: >-
-            Optional. Matches a single Kubernetes service account, e.g.
-            `my-namespace:my-service-account`. `kubernetes_service_account`
-            scope is always more specific than `kubernetes_namespace` scope for
-            the same namespace.
           type: string
+          description: The Kubernetes service account of the Pod.
+        podName:
+          type: string
+          description: The name of the Pod.
         kubernetesNamespace:
-          description: >-
-            Optional. Matches all Kubernetes service accounts in the provided
-            namespace, unless a more specific `kubernetes_service_account` scope
-            already matched.
+          description: The Kubernetes namespace of the Pod.
           type: string
-    CheckResults:
-      id: CheckResults
-      description: Result of evaluating one or more checks.
-      type: object
-      properties:
-        results:
-          description: Per-check details.
-          type: array
-          items:
-            $ref: '#/components/schemas/CheckResult'
-    CheckResult:
-      id: CheckResult
-      description: Result of evaluating one check.
-      type: object
-      properties:
-        index:
-          description: The index of the check.
-          type: string
-          format: int64
-        displayName:
-          description: The name of the check.
-          type: string
-        type:
-          description: The type of the check.
-          type: string
-        allowlistResult:
-          description: >-
-            If the image was exempted by an allow_pattern in the check, contains
-            the pattern that the image name matched.
-          $ref: '#/components/schemas/AllowlistResult'
-        evaluationResult:
-          description: If a check was evaluated, contains the result of the check.
-          $ref: '#/components/schemas/EvaluationResult'
-        explanation:
-          description: Explanation of this check result.
-          type: string
-    EvaluationResult:
-      id: EvaluationResult
-      description: Result of evaluating one check.
-      type: object
-      properties:
-        verdict:
-          description: The result of evaluating this check.
-          type: string
-          enumDescriptions:
-            - Not specified. This should never be used.
-            - >-
-              The check was successfully evaluated and the image satisfied the
-              check.
-            - >-
-              The check was successfully evaluated and the image did not satisfy
-              the check.
-            - The check was not successfully evaluated.
-          enum:
-            - CHECK_VERDICT_UNSPECIFIED
-            - CONFORMANT
-            - NON_CONFORMANT
-            - ERROR
-    PlatformPolicy:
-      id: PlatformPolicy
-      description: >-
-        A Binary Authorization platform policy for deployments on various
-        platforms.
-      type: object
-      properties:
-        name:
-          description: >-
-            Output only. The relative resource name of the Binary Authorization
-            platform policy, in the form of `projects/*/platforms/*/policies/*`.
-          readOnly: true
-          type: string
-        description:
-          description: Optional. A description comment about the policy.
-          type: string
-        gkePolicy:
-          description: Optional. GKE platform-specific policy.
-          $ref: '#/components/schemas/GkePolicy'
-        updateTime:
-          description: Output only. Time when the policy was last updated.
-          readOnly: true
-          type: string
-          format: google-datetime
-        etag:
-          description: >-
-            Optional. Used to prevent updating the policy when another request
-            has updated it since it was retrieved.
-          type: string
-    GkePolicy:
-      id: GkePolicy
-      description: >-
-        A Binary Authorization policy for a GKE cluster. This is one type of
-        policy that can occur as a `PlatformPolicy`.
-      type: object
-      properties:
-        imageAllowlist:
-          description: >-
-            Optional. Images exempted from this policy. If any of the patterns
-            match the image being evaluated, the rest of the policy will not be
-            evaluated.
-          $ref: '#/components/schemas/ImageAllowlist'
-        checkSets:
-          description: >-
-            Optional. The `CheckSet` objects to apply, scoped by namespace or
-            namespace and service account. Exactly one `CheckSet` will be
-            evaluated for a given Pod (unless the list is empty, in which case
-            the behavior is "always allow"). If multiple `CheckSet` objects have
-            scopes that match the namespace and service account of the Pod being
-            evaluated, only the `CheckSet` with the MOST SPECIFIC scope will
-            match. `CheckSet` objects must be listed in order of decreasing
-            specificity, i.e. if a scope matches a given service account (which
-            must include the namespace), it must come before a `CheckSet` with a
-            scope matching just that namespace. This property is enforced by
-            server-side validation. The purpose of this restriction is to ensure
-            that if more than one `CheckSet` matches a given Pod, the `CheckSet`
-            that will be evaluated will always be the first in the list to match
-            (because if any other matches, it must be less specific). If
-            `check_sets` is empty, the default behavior is to allow all images.
-            If `check_sets` is non-empty, the last `check_sets` entry must
-            always be a `CheckSet` with no scope set, i.e. a catchall to handle
-            any situation not caught by the preceding `CheckSet` objects.
-          type: array
-          items:
-            $ref: '#/components/schemas/CheckSet'
-    ImageAllowlist:
-      id: ImageAllowlist
-      description: Images that are exempted from normal checks based on name pattern only.
-      type: object
-      properties:
-        allowPattern:
-          description: >-
-            Required. A disjunction of image patterns to allow. If any of these
-            patterns match, then the image is considered exempted by this
-            allowlist.
-          type: array
-          items:
-            type: string
-    CheckSet:
-      id: CheckSet
-      description: >-
-        A conjunction of policy checks, scoped to a particular namespace or
-        Kubernetes service account. In order for evaluation of a `CheckSet` to
-        return "allowed" for a given image in a given Pod, one of the following
-        conditions must be satisfied: * The image is explicitly exempted by an
-        entry in `image_allowlist`, OR * ALL of the `checks` evaluate to
-        "allowed".
-      type: object
-      properties:
-        displayName:
-          description: >-
-            Optional. A user-provided name for this `CheckSet`. This field has
-            no effect on the policy evaluation behavior except to improve
-            readability of messages in evaluation results.
-          type: string
-        scope:
-          description: >-
-            Optional. The scope to which this `CheckSet` applies. If unset or an
-            empty string (the default), applies to all namespaces and service
-            accounts. See the `Scope` message documentation for details on
-            scoping rules.
-          $ref: '#/components/schemas/Scope'
-        imageAllowlist:
-          description: >-
-            Optional. Images exempted from this `CheckSet`. If any of the
-            patterns match the image being evaluated, no checks in the
-            `CheckSet` will be evaluated.
-          $ref: '#/components/schemas/ImageAllowlist'
-        checks:
-          description: >-
-            Optional. The checks to apply. The ultimate result of evaluating the
-            check set will be "allow" if and only if every check in `checks`
-            evaluates to "allow". If `checks` is empty, the default behavior is
-            "always allow".
-          type: array
-          items:
-            $ref: '#/components/schemas/Check'
-    Check:
-      id: Check
-      description: >-
-        A single check to perform against a Pod. Checks are grouped into
-        `CheckSet` objects, which are defined by the top-level policy.
-      type: object
-      properties:
-        displayName:
-          description: >-
-            Optional. A user-provided name for this check. This field has no
-            effect on the policy evaluation behavior except to improve
-            readability of messages in evaluation results.
-          type: string
-        imageAllowlist:
-          description: >-
-            Optional. Images exempted from this check. If any of the patterns
-            match the image url, the check will not be evaluated.
-          $ref: '#/components/schemas/ImageAllowlist'
-        alwaysDeny:
-          description: >-
-            Optional. A special-case check that always denies. Note that this
-            still only applies when the scope of the `CheckSet` applies and the
-            image isn't exempted by an image allowlist. This check is primarily
-            useful for testing, or to set the default behavior for all unmatched
-            scopes to "deny".
-          type: boolean
-        simpleSigningAttestationCheck:
-          description: >-
-            Optional. Require a SimpleSigning-type attestation for every image
-            in the deployment.
-          $ref: '#/components/schemas/SimpleSigningAttestationCheck'
-        trustedDirectoryCheck:
-          description: Optional. Require that an image lives in a trusted directory.
-          $ref: '#/components/schemas/TrustedDirectoryCheck'
-        imageFreshnessCheck:
-          description: >-
-            Optional. Require that an image is no older than a configured
-            expiration time. Image age is determined by its upload time.
-          $ref: '#/components/schemas/ImageFreshnessCheck'
-        vulnerabilityCheck:
-          description: >-
-            Optional. Require that an image does not contain vulnerabilities
-            that violate the configured rules, such as based on severity levels.
-          $ref: '#/components/schemas/VulnerabilityCheck'
-        slsaCheck:
-          description: >-
-            Optional. Require that an image was built by a trusted builder (such
-            as Google Cloud Build), meets requirements for Supply chain Levels
-            for Software Artifacts (SLSA), and was built from a trusted source
-            code repostitory.
-          $ref: '#/components/schemas/SlsaCheck'
-        sigstoreSignatureCheck:
-          description: >-
-            Optional. Require that an image was signed by Cosign with a trusted
-            key. This check requires that both the image and signature are
-            stored in Artifact Registry.
-          $ref: '#/components/schemas/SigstoreSignatureCheck'
-    SimpleSigningAttestationCheck:
-      id: SimpleSigningAttestationCheck
-      description: >-
-        Require a signed [DSSE](https://github.com/secure-systems-lab/dsse)
-        attestation with type SimpleSigning.
-      type: object
-      properties:
-        attestationAuthenticators:
-          description: >-
-            Required. The authenticators required by this check to verify an
-            attestation. Typically this is one or more PKIX public keys for
-            signature verification. Only one authenticator needs to consider an
-            attestation verified in order for an attestation to be considered
-            fully authenticated. In otherwords, this list of authenticators is
-            an "OR" of the authenticator results. At least one authenticator is
-            required.
-          type: array
-          items:
-            $ref: '#/components/schemas/AttestationAuthenticator'
-        containerAnalysisAttestationProjects:
-          description: >-
-            Optional. The projects where attestations are stored as Container
-            Analysis Occurrences, in the format `projects/[PROJECT_ID]`. Only
-            one attestation needs to successfully verify an image for this check
-            to pass, so a single verified attestation found in any of
-            `container_analysis_attestation_projects` is sufficient for the
-            check to pass. A project ID must be used, not a project number. When
-            fetching Occurrences from Container Analysis, only
-            `AttestationOccurrence` kinds are considered. In the future,
-            additional Occurrence kinds may be added to the query. Maximum
-            number of `container_analysis_attestation_projects` allowed in each
-            `SimpleSigningAttestationCheck` is 10.
-          type: array
-          items:
-            type: string
-    AttestationAuthenticator:
-      id: AttestationAuthenticator
-      description: >-
-        An attestation authenticator that will be used to verify attestations.
-        Typically this is just a set of public keys. Conceptually, an
-        authenticator can be treated as always returning either "authenticated"
-        or "not authenticated" when presented with a signed attestation (almost
-        always assumed to be a
-        [DSSE](https://github.com/secure-systems-lab/dsse) attestation). The
-        details of how an authenticator makes this decision are specific to the
-        type of 'authenticator' that this message wraps.
-      type: object
-      properties:
-        displayName:
-          description: >-
-            Optional. A user-provided name for this `AttestationAuthenticator`.
-            This field has no effect on the policy evaluation behavior except to
-            improve readability of messages in evaluation results.
-          type: string
-        pkixPublicKeySet:
-          description: >-
-            Optional. A set of raw PKIX SubjectPublicKeyInfo format public keys.
-            If any public key in the set validates the attestation signature,
-            then the signature is considered authenticated (i.e. any one key is
-            sufficient to authenticate).
-          $ref: '#/components/schemas/PkixPublicKeySet'
-    PkixPublicKeySet:
-      id: PkixPublicKeySet
-      description: >-
-        A bundle of PKIX public keys, used to authenticate attestation
-        signatures. Generally, a signature is considered to be authenticated by
-        a `PkixPublicKeySet` if any of the public keys verify it (i.e. it is an
-        "OR" of the keys).
-      type: object
-      properties:
-        pkixPublicKeys:
-          description: Required. `pkix_public_keys` must have at least one entry.
-          type: array
-          items:
-            $ref: '#/components/schemas/PkixPublicKey'
+      id: PodResult
+      description: Result of evaluating the whole GKE policy for one Pod.
     PkixPublicKey:
-      id: PkixPublicKey
-      description: >-
-        A public key in the PkixPublicKey
-        [format](https://tools.ietf.org/html/rfc5280#section-4.1.2.7). Public
-        keys of this type are typically textually encoded using the PEM format.
-      type: object
       properties:
         publicKeyPem:
+          type: string
           description: >-
             A PEM-encoded public key, as described in
             https://tools.ietf.org/html/rfc7468#section-13
-          type: string
         signatureAlgorithm:
-          description: >-
-            The signature algorithm used to verify a message against a signature
-            using this key. These signature algorithm must match the structure
-            and any object identifiers encoded in `public_key_pem` (i.e. this
-            algorithm must match that of the public key).
+          enum:
+            - SIGNATURE_ALGORITHM_UNSPECIFIED
+            - RSA_PSS_2048_SHA256
+            - RSA_SIGN_PSS_2048_SHA256
+            - RSA_PSS_3072_SHA256
+            - RSA_SIGN_PSS_3072_SHA256
+            - RSA_PSS_4096_SHA256
+            - RSA_SIGN_PSS_4096_SHA256
+            - RSA_PSS_4096_SHA512
+            - RSA_SIGN_PSS_4096_SHA512
+            - RSA_SIGN_PKCS1_2048_SHA256
+            - RSA_SIGN_PKCS1_3072_SHA256
+            - RSA_SIGN_PKCS1_4096_SHA256
+            - RSA_SIGN_PKCS1_4096_SHA512
+            - ECDSA_P256_SHA256
+            - EC_SIGN_P256_SHA256
+            - ECDSA_P384_SHA384
+            - EC_SIGN_P384_SHA384
+            - ECDSA_P521_SHA512
+            - EC_SIGN_P521_SHA512
           type: string
           enumDescriptions:
             - Not specified.
@@ -550,27 +363,13 @@ components:
             - ECDSA on the NIST P-384 curve with a SHA384 digest.
             - ECDSA on the NIST P-521 curve with a SHA512 digest.
             - ECDSA on the NIST P-521 curve with a SHA512 digest.
-          enum:
-            - SIGNATURE_ALGORITHM_UNSPECIFIED
-            - RSA_PSS_2048_SHA256
-            - RSA_SIGN_PSS_2048_SHA256
-            - RSA_PSS_3072_SHA256
-            - RSA_SIGN_PSS_3072_SHA256
-            - RSA_PSS_4096_SHA256
-            - RSA_SIGN_PSS_4096_SHA256
-            - RSA_PSS_4096_SHA512
-            - RSA_SIGN_PSS_4096_SHA512
-            - RSA_SIGN_PKCS1_2048_SHA256
-            - RSA_SIGN_PKCS1_3072_SHA256
-            - RSA_SIGN_PKCS1_4096_SHA256
-            - RSA_SIGN_PKCS1_4096_SHA512
-            - ECDSA_P256_SHA256
-            - EC_SIGN_P256_SHA256
-            - ECDSA_P384_SHA384
-            - EC_SIGN_P384_SHA384
-            - ECDSA_P521_SHA512
-            - EC_SIGN_P521_SHA512
+          description: >-
+            The signature algorithm used to verify a message against a signature
+            using this key. These signature algorithm must match the structure
+            and any object identifiers encoded in `public_key_pem` (i.e. this
+            algorithm must match that of the public key).
         keyId:
+          type: string
           description: >-
             Optional. The ID of this public key. Signatures verified by Binary
             Authorization must include the ID of the public key that can be used
@@ -584,15 +383,214 @@ components:
             `AttestorPublicKey`), then this field can either match that value
             exactly, or be left blank, in which case it behaves exactly as
             though it is equal to that wrapper value.
+      id: PkixPublicKey
+      type: object
+      description: >-
+        A public key in the PkixPublicKey
+        [format](https://tools.ietf.org/html/rfc5280#section-4.1.2.7). Public
+        keys of this type are typically textually encoded using the PEM format.
+    AllowlistResult:
+      properties:
+        matchedPattern:
+          description: The allowlist pattern that the image matched.
           type: string
+      description: Result of evaluating an image name allowlist.
+      type: object
+      id: AllowlistResult
+    ImageAllowlist:
+      description: Images that are exempted from normal checks based on name pattern only.
+      id: ImageAllowlist
+      type: object
+      properties:
+        allowPattern:
+          items:
+            type: string
+          description: >-
+            Required. A disjunction of image patterns to allow. If any of these
+            patterns match, then the image is considered exempted by this
+            allowlist.
+          type: array
+    AttestationAuthenticator:
+      description: >-
+        An attestation authenticator that will be used to verify attestations.
+        Typically this is just a set of public keys. Conceptually, an
+        authenticator can be treated as always returning either "authenticated"
+        or "not authenticated" when presented with a signed attestation (almost
+        always assumed to be a
+        [DSSE](https://github.com/secure-systems-lab/dsse) attestation). The
+        details of how an authenticator makes this decision are specific to the
+        type of 'authenticator' that this message wraps.
+      properties:
+        displayName:
+          description: >-
+            Optional. A user-provided name for this `AttestationAuthenticator`.
+            This field has no effect on the policy evaluation behavior except to
+            improve readability of messages in evaluation results.
+          type: string
+        pkixPublicKeySet:
+          description: >-
+            Optional. A set of raw PKIX SubjectPublicKeyInfo format public keys.
+            If any public key in the set validates the attestation signature,
+            then the signature is considered authenticated (i.e. any one key is
+            sufficient to authenticate).
+          $ref: '#/components/schemas/PkixPublicKeySet'
+      id: AttestationAuthenticator
+      type: object
+    AttestorPublicKey:
+      type: object
+      properties:
+        comment:
+          description: Optional. A descriptive comment. This field may be updated.
+          type: string
+        asciiArmoredPgpPublicKey:
+          type: string
+          description: >-
+            ASCII-armored representation of a PGP public key, as the entire
+            output by the command `gpg --export --armor foo@example.com` (either
+            LF or CRLF line endings). When using this field, `id` should be left
+            blank. The Binary Authorization API handlers will calculate the ID
+            and fill it in automatically. Binary Authorization computes this ID
+            as the OpenPGP RFC4880 V4 fingerprint, represented as upper-case
+            hex. If `id` is provided by the caller, it will be overwritten by
+            the API-calculated ID.
+        pkixPublicKey:
+          description: >-
+            A raw PKIX SubjectPublicKeyInfo format public key. NOTE: `id` may be
+            explicitly provided by the caller when using this type of public
+            key, but it MUST be a valid RFC3986 URI. If `id` is left blank, a
+            default one will be computed based on the digest of the DER encoding
+            of the public key.
+          $ref: '#/components/schemas/PkixPublicKey'
+        id:
+          description: >-
+            The ID of this public key. Signatures verified by Binary
+            Authorization must include the ID of the public key that can be used
+            to verify them, and that ID must match the contents of this field
+            exactly. Additional restrictions on this field can be imposed based
+            on which public key type is encapsulated. See the documentation on
+            `public_key` cases below for details.
+          type: string
+      description: >-
+        An attestor public key that will be used to verify attestations signed
+        by this attestor.
+      id: AttestorPublicKey
+    SlsaCheck:
+      properties:
+        rules:
+          description: >-
+            Specifies a list of verification rules for the SLSA attestations. An
+            image is considered compliant with the SlsaCheck if any of the rules
+            are satisfied.
+          items:
+            $ref: '#/components/schemas/VerificationRule'
+          type: array
+      id: SlsaCheck
+      description: >-
+        A SLSA provenance attestation check, which ensures that images are built
+        by a trusted builder using source code from its trusted repositories
+        only.
+      type: object
+    EvaluationResult:
+      description: Result of evaluating one check.
+      id: EvaluationResult
+      properties:
+        verdict:
+          description: The result of evaluating this check.
+          enum:
+            - CHECK_VERDICT_UNSPECIFIED
+            - CONFORMANT
+            - NON_CONFORMANT
+            - ERROR
+          type: string
+          enumDescriptions:
+            - Not specified. This should never be used.
+            - >-
+              The check was successfully evaluated and the image satisfied the
+              check.
+            - >-
+              The check was successfully evaluated and the image did not satisfy
+              the check.
+            - The check was not successfully evaluated.
+      type: object
+    ListPlatformPoliciesResponse:
+      id: ListPlatformPoliciesResponse
+      properties:
+        platformPolicies:
+          type: array
+          description: The list of platform policies.
+          items:
+            $ref: '#/components/schemas/PlatformPolicy'
+        nextPageToken:
+          description: >-
+            A token to retrieve the next page of results. Pass this value in the
+            ListPlatformPoliciesRequest.page_token field in the subsequent call
+            to the `ListPlatformPolicies` method to retrieve the next page of
+            results.
+          type: string
+      description: >-
+        Response message for
+        PlatformPolicyManagementService.ListPlatformPolicies.
+      type: object
+    AdmissionWhitelistPattern:
+      id: AdmissionWhitelistPattern
+      type: object
+      properties:
+        namePattern:
+          description: >-
+            An image name pattern to allowlist, in the form
+            `registry/path/to/image`. This supports a trailing `*` wildcard, but
+            this is allowed only in text after the `registry/` part. This also
+            supports a trailing `**` wildcard which matches subdirectories of a
+            given entry.
+          type: string
+      description: >-
+        An admission allowlist pattern exempts images from checks by admission
+        rules.
+    CheckSet:
+      properties:
+        displayName:
+          description: >-
+            Optional. A user-provided name for this `CheckSet`. This field has
+            no effect on the policy evaluation behavior except to improve
+            readability of messages in evaluation results.
+          type: string
+        imageAllowlist:
+          description: >-
+            Optional. Images exempted from this `CheckSet`. If any of the
+            patterns match the image being evaluated, no checks in the
+            `CheckSet` will be evaluated.
+          $ref: '#/components/schemas/ImageAllowlist'
+        checks:
+          type: array
+          description: >-
+            Optional. The checks to apply. The ultimate result of evaluating the
+            check set will be "allow" if and only if every check in `checks`
+            evaluates to "allow". If `checks` is empty, the default behavior is
+            "always allow".
+          items:
+            $ref: '#/components/schemas/Check'
+        scope:
+          $ref: '#/components/schemas/Scope'
+          description: >-
+            Optional. The scope to which this `CheckSet` applies. If unset or an
+            empty string (the default), applies to all namespaces and service
+            accounts. See the `Scope` message documentation for details on
+            scoping rules.
+      id: CheckSet
+      type: object
+      description: >-
+        A conjunction of policy checks, scoped to a particular namespace or
+        Kubernetes service account. In order for evaluation of a `CheckSet` to
+        return "allowed" for a given image in a given Pod, one of the following
+        conditions must be satisfied: * The image is explicitly exempted by an
+        entry in `image_allowlist`, OR * ALL of the `checks` evaluate to
+        "allowed".
     TrustedDirectoryCheck:
       id: TrustedDirectoryCheck
-      description: >-
-        A trusted directory check, which rejects images that do not come from
-        the set of user-configured trusted directories.
       type: object
       properties:
         trustedDirPatterns:
+          type: array
           description: >-
             Required. List of trusted directory patterns. A pattern is in the
             form "registry/path/to/directory". The registry domain part is
@@ -612,500 +610,16 @@ components:
             `*pkg.dev/my-project/my-repo` is not valid because leading `*` can
             only match subdomain -- `**-docker.pkg.dev` is not valid because one
             leading `*` is allowed, and that it cannot match `/`
-          type: array
           items:
             type: string
-    ImageFreshnessCheck:
-      id: ImageFreshnessCheck
       description: >-
-        An image freshness check, which rejects images that were uploaded before
-        the set number of days ago to the supported repositories.
-      type: object
-      properties:
-        maxUploadAgeDays:
-          description: >-
-            Required. The max number of days that is allowed since the image was
-            uploaded. Must be greater than zero.
-          type: integer
-          format: int32
-    VulnerabilityCheck:
-      id: VulnerabilityCheck
-      description: >-
-        An image vulnerability check, which rejects images that violate the
-        configured vulnerability rules.
-      type: object
-      properties:
-        allowedCves:
-          description: >-
-            Optional. A list of specific CVEs to ignore even if the
-            vulnerability level violates `maximumUnfixableSeverity` or
-            `maximumFixableSeverity`. CVEs are listed in the format of Container
-            Analysis note id. For example: - CVE-2021-20305 - CVE-2020-10543 The
-            CVEs are applicable regardless of note provider project, e.g., an
-            entry of `CVE-2021-20305` will allow vulnerabilities with a note
-            name of either `projects/goog-vulnz/notes/CVE-2021-20305` or
-            `projects/CUSTOM-PROJECT/notes/CVE-2021-20305`.
-          type: array
-          items:
-            type: string
-        blockedCves:
-          description: >-
-            Optional. A list of specific CVEs to always raise warnings about
-            even if the vulnerability level meets `maximumUnfixableSeverity` or
-            `maximumFixableSeverity`. CVEs are listed in the format of Container
-            Analysis note id. For example: - CVE-2021-20305 - CVE-2020-10543 The
-            CVEs are applicable regardless of note provider project, e.g., an
-            entry of `CVE-2021-20305` will block vulnerabilities with a note
-            name of either `projects/goog-vulnz/notes/CVE-2021-20305` or
-            `projects/CUSTOM-PROJECT/notes/CVE-2021-20305`.
-          type: array
-          items:
-            type: string
-        maximumUnfixableSeverity:
-          description: >-
-            Required. The threshold for severity for which a fix isn't currently
-            available. This field is required and must be set.
-          type: string
-          enumDescriptions:
-            - Not specified.
-            - Block any vulnerability.
-            - Allow only minimal severity.
-            - Allow only low severity and lower.
-            - Allow medium severity and lower.
-            - Allow high severity and lower.
-            - Allow critical severity and lower.
-            - Allow all severity, even vulnerability with unspecified severity.
-          enum:
-            - MAXIMUM_ALLOWED_SEVERITY_UNSPECIFIED
-            - BLOCK_ALL
-            - MINIMAL
-            - LOW
-            - MEDIUM
-            - HIGH
-            - CRITICAL
-            - ALLOW_ALL
-        maximumFixableSeverity:
-          description: >-
-            Required. The threshold for severity for which a fix is currently
-            available. This field is required and must be set.
-          type: string
-          enumDescriptions:
-            - Not specified.
-            - Block any vulnerability.
-            - Allow only minimal severity.
-            - Allow only low severity and lower.
-            - Allow medium severity and lower.
-            - Allow high severity and lower.
-            - Allow critical severity and lower.
-            - Allow all severity, even vulnerability with unspecified severity.
-          enum:
-            - MAXIMUM_ALLOWED_SEVERITY_UNSPECIFIED
-            - BLOCK_ALL
-            - MINIMAL
-            - LOW
-            - MEDIUM
-            - HIGH
-            - CRITICAL
-            - ALLOW_ALL
-        containerAnalysisVulnerabilityProjects:
-          description: >-
-            Optional. The projects where vulnerabilities are stored as Container
-            Analysis Occurrences. Each project is expressed in the resource
-            format of `projects/[PROJECT_ID]`, e.g., `projects/my-gcp-project`.
-            An attempt will be made for each project to fetch vulnerabilities,
-            and all valid vulnerabilities will be used to check against the
-            vulnerability policy. If no valid scan is found in all projects
-            configured here, an error will be returned for the check. Maximum
-            number of `container_analysis_vulnerability_projects` allowed in
-            each `VulnerabilityCheck` is 10.
-          type: array
-          items:
-            type: string
-    SlsaCheck:
-      id: SlsaCheck
-      description: >-
-        A SLSA provenance attestation check, which ensures that images are built
-        by a trusted builder using source code from its trusted repositories
-        only.
-      type: object
-      properties:
-        rules:
-          description: >-
-            Specifies a list of verification rules for the SLSA attestations. An
-            image is considered compliant with the SlsaCheck if any of the rules
-            are satisfied.
-          type: array
-          items:
-            $ref: '#/components/schemas/VerificationRule'
-    VerificationRule:
-      id: VerificationRule
-      description: >-
-        Specifies verification rules for evaluating the SLSA attestations
-        including: which builders to trust, where to fetch the SLSA attestations
-        generated by those builders, and other builder-specific evaluation rules
-        such as which source repositories are trusted. An image is considered
-        verified by the rule if any of the fetched SLSA attestations is
-        verified.
-      type: object
-      properties:
-        trustedBuilder:
-          description: >-
-            Each verification rule is used for evaluation against provenances
-            generated by a specific builder (group). For some of the builders,
-            such as the Google Cloud Build, users don't need to explicitly
-            specify their roots of trust in the policy since the evaluation
-            service can automatically fetch them based on the builder (group).
-          type: string
-          enumDescriptions:
-            - Should never happen.
-            - >-
-              The whole Google Cloud Build (GCB) builder group, including all
-              GCB builder types.
-          enum:
-            - BUILDER_UNSPECIFIED
-            - GOOGLE_CLOUD_BUILD
-        attestationSource:
-          description: >-
-            Specifies where to fetch the provenances attestations generated by
-            the builder (group).
-          $ref: '#/components/schemas/AttestationSource'
-        configBasedBuildRequired:
-          description: >-
-            If true, require the image to be built from a top-level
-            configuration. `trusted_source_repo_patterns` specifies the
-            repositories containing this configuration.
-          type: boolean
-        trustedSourceRepoPatterns:
-          description: >-
-            List of trusted source code repository URL patterns. These patterns
-            match the full repository URL without its scheme (e.g. `https://`).
-            The patterns must not include schemes. For example, the pattern
-            `source.cloud.google.com/my-project/my-repo-name` matches the
-            following URLs: - `source.cloud.google.com/my-project/my-repo-name`
-            - `git+ssh://source.cloud.google.com/my-project/my-repo-name` -
-            `https://source.cloud.google.com/my-project/my-repo-name` A pattern
-            matches a URL either exactly or with `*` wildcards. `*` can be used
-            in only two ways: 1. trailing `*` after hosturi/ to match varying
-            endings; 2. trailing `**` after hosturi/ to match `/` as well. `*`
-            and `**` can only be used as wildcards and can only occur at the end
-            of the pattern after a `/`. (So it's not possible to match a URL
-            that contains literal `*`.) For example: -
-            `github.com/my-project/my-repo` is valid to match a single repo -
-            `github.com/my-project/*` will match all direct repos in
-            `my-project` - `github.com/**` matches all repos in GitHub
-          type: array
-          items:
-            type: string
-        customConstraints:
-          description: >-
-            Optional. A CEL expression for specifying custom constraints on the
-            provenance payload. This can be used when users want to specify
-            expectations on provenance fields that are not covered by the
-            general check. For example, users can use this field to require that
-            certain parameters should never be used during the build process.
-          type: string
-    AttestationSource:
-      id: AttestationSource
-      description: Specifies the locations for fetching the provenance attestations.
-      type: object
-      properties:
-        containerAnalysisAttestationProjects:
-          description: >-
-            The IDs of the Google Cloud projects that store the SLSA
-            attestations as Container Analysis Occurrences, in the format
-            `projects/[PROJECT_ID]`. Maximum number of
-            `container_analysis_attestation_projects` allowed in each
-            `AttestationSource` is 10.
-          type: array
-          items:
-            type: string
-    SigstoreSignatureCheck:
-      id: SigstoreSignatureCheck
-      description: >-
-        A Sigstore signature check, which verifies the Sigstore signature
-        associated with an image.
-      type: object
-      properties:
-        sigstoreAuthorities:
-          description: >-
-            Required. The authorities required by this check to verify the
-            signature. A signature only needs to be verified by one authority to
-            pass the check.
-          type: array
-          items:
-            $ref: '#/components/schemas/SigstoreAuthority'
-    SigstoreAuthority:
-      id: SigstoreAuthority
-      description: >-
-        A Sigstore authority, used to verify signatures that are created by
-        Sigstore. An authority is analogous to an attestation authenticator,
-        verifying that a signature is valid or invalid.
-      type: object
-      properties:
-        displayName:
-          description: >-
-            Optional. A user-provided name for this `SigstoreAuthority`. This
-            field has no effect on the policy evaluation behavior except to
-            improve readability of messages in evaluation results.
-          type: string
-        publicKeySet:
-          description: >-
-            Required. A simple set of public keys. A signature is considered
-            valid if any keys in the set validate the signature.
-          $ref: '#/components/schemas/SigstorePublicKeySet'
-    SigstorePublicKeySet:
-      id: SigstorePublicKeySet
-      description: >-
-        A bundle of Sigstore public keys, used to verify Sigstore signatures. A
-        signature is authenticated by a `SigstorePublicKeySet` if any of the
-        keys verify it.
-      type: object
-      properties:
-        publicKeys:
-          description: Required. `public_keys` must have at least one entry.
-          type: array
-          items:
-            $ref: '#/components/schemas/SigstorePublicKey'
-    SigstorePublicKey:
-      id: SigstorePublicKey
-      description: >-
-        A Sigstore public key. `SigstorePublicKey` is the public key material
-        used to authenticate Sigstore signatures.
-      type: object
-      properties:
-        publicKeyPem:
-          description: The public key material in PEM format.
-          type: string
-    ListPlatformPoliciesResponse:
-      id: ListPlatformPoliciesResponse
-      description: >-
-        Response message for
-        PlatformPolicyManagementService.ListPlatformPolicies.
-      type: object
-      properties:
-        platformPolicies:
-          description: The list of platform policies.
-          type: array
-          items:
-            $ref: '#/components/schemas/PlatformPolicy'
-        nextPageToken:
-          description: >-
-            A token to retrieve the next page of results. Pass this value in the
-            ListPlatformPoliciesRequest.page_token field in the subsequent call
-            to the `ListPlatformPolicies` method to retrieve the next page of
-            results.
-          type: string
-    Empty:
-      id: Empty
-      description: >-
-        A generic empty message that you can re-use to avoid defining duplicated
-        empty messages in your APIs. A typical example is to use it as the
-        request or the response type of an API method. For instance: service Foo
-        { rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty); }
-      type: object
-      properties: {}
-    Policy:
-      id: Policy
-      description: A policy for container image binary authorization.
-      type: object
-      properties:
-        name:
-          description: >-
-            Output only. The resource name, in the format `projects/*/policy`.
-            There is at most one policy per project.
-          readOnly: true
-          type: string
-        description:
-          description: Optional. A descriptive comment.
-          type: string
-        globalPolicyEvaluationMode:
-          description: >-
-            Optional. Controls the evaluation of a Google-maintained global
-            admission policy for common system-level images. Images not covered
-            by the global policy will be subject to the project admission
-            policy. This setting has no effect when specified inside a global
-            admission policy.
-          type: string
-          enumDescriptions:
-            - 'Not specified: `DISABLE` is assumed.'
-            - Enables system policy evaluation.
-            - Disables system policy evaluation.
-          enum:
-            - GLOBAL_POLICY_EVALUATION_MODE_UNSPECIFIED
-            - ENABLE
-            - DISABLE
-        admissionWhitelistPatterns:
-          description: >-
-            Optional. Admission policy allowlisting. A matching admission
-            request will always be permitted. This feature is typically used to
-            exclude Google or third-party infrastructure images from Binary
-            Authorization policies.
-          type: array
-          items:
-            $ref: '#/components/schemas/AdmissionWhitelistPattern'
-        clusterAdmissionRules:
-          description: >-
-            Optional. A valid policy has only one of the following rule maps
-            non-empty, i.e. only one of `cluster_admission_rules`,
-            `kubernetes_namespace_admission_rules`,
-            `kubernetes_service_account_admission_rules`, or
-            `istio_service_identity_admission_rules` can be non-empty.
-            Per-cluster admission rules. Cluster spec format:
-            `location.clusterId`. There can be at most one admission rule per
-            cluster spec. A `location` is either a compute zone (e.g.
-            us-central1-a) or a region (e.g. us-central1). For `clusterId`
-            syntax restrictions see
-            https://cloud.google.com/container-engine/reference/rest/v1/projects.zones.clusters.
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/AdmissionRule'
-        kubernetesNamespaceAdmissionRules:
-          description: >-
-            Optional. Per-kubernetes-namespace admission rules. K8s namespace
-            spec format: `[a-z.-]+`, e.g. `some-namespace`
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/AdmissionRule'
-        kubernetesServiceAccountAdmissionRules:
-          description: >-
-            Optional. Per-kubernetes-service-account admission rules. Service
-            account spec format: `namespace:serviceaccount`. e.g.
-            `test-ns:default`
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/AdmissionRule'
-        istioServiceIdentityAdmissionRules:
-          description: >-
-            Optional. Per-istio-service-identity admission rules. Istio service
-            identity spec format: `spiffe:///ns//sa/` or `/ns//sa/` e.g.
-            `spiffe://example.com/ns/test-ns/sa/default`
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/AdmissionRule'
-        defaultAdmissionRule:
-          description: >-
-            Required. Default admission rule for a cluster without a
-            per-cluster, per- kubernetes-service-account, or
-            per-istio-service-identity admission rule.
-          $ref: '#/components/schemas/AdmissionRule'
-        updateTime:
-          description: Output only. Time when the policy was last updated.
-          readOnly: true
-          type: string
-          format: google-datetime
-        etag:
-          description: >-
-            Optional. A checksum, returned by the server, that can be sent on
-            update requests to ensure the policy has an up-to-date value before
-            attempting to update it. See https://google.aip.dev/154.
-          type: string
-    AdmissionWhitelistPattern:
-      id: AdmissionWhitelistPattern
-      description: >-
-        An admission allowlist pattern exempts images from checks by admission
-        rules.
-      type: object
-      properties:
-        namePattern:
-          description: >-
-            An image name pattern to allowlist, in the form
-            `registry/path/to/image`. This supports a trailing `*` wildcard, but
-            this is allowed only in text after the `registry/` part. This also
-            supports a trailing `**` wildcard which matches subdirectories of a
-            given entry.
-          type: string
-    AdmissionRule:
-      id: AdmissionRule
-      description: >-
-        An admission rule specifies either that all container images used in a
-        pod creation request must be attested to by one or more attestors, that
-        all pod creations will be allowed, or that all pod creations will be
-        denied. Images matching an admission allowlist pattern are exempted from
-        admission rules and will never block a pod creation.
-      type: object
-      properties:
-        evaluationMode:
-          description: Required. How this admission rule will be evaluated.
-          type: string
-          enumDescriptions:
-            - Do not use.
-            - This rule allows all pod creations.
-            - >-
-              This rule allows a pod creation if all the attestors listed in
-              `require_attestations_by` have valid attestations for all of the
-              images in the pod spec.
-            - This rule denies all pod creations.
-          enum:
-            - EVALUATION_MODE_UNSPECIFIED
-            - ALWAYS_ALLOW
-            - REQUIRE_ATTESTATION
-            - ALWAYS_DENY
-        requireAttestationsBy:
-          description: >-
-            Optional. The resource names of the attestors that must attest to a
-            container image, in the format `projects/*/attestors/*`. Each
-            attestor must exist before a policy can reference it. To add an
-            attestor to a policy the principal issuing the policy change request
-            must be able to read the attestor resource. Note: this field must be
-            non-empty when the `evaluation_mode` field specifies
-            `REQUIRE_ATTESTATION`, otherwise it must be empty.
-          type: array
-          items:
-            type: string
-        enforcementMode:
-          description: >-
-            Required. The action when a pod creation is denied by the admission
-            rule.
-          type: string
-          enumDescriptions:
-            - Do not use.
-            - Enforce the admission rule by blocking the pod creation.
-            - >-
-              Dryrun mode: Audit logging only. This will allow the pod creation
-              as if the admission request had specified break-glass.
-          enum:
-            - ENFORCEMENT_MODE_UNSPECIFIED
-            - ENFORCED_BLOCK_AND_AUDIT_LOG
-            - DRYRUN_AUDIT_LOG_ONLY
-    Attestor:
-      id: Attestor
-      description: >-
-        An attestor that attests to container image artifacts. An existing
-        attestor cannot be modified except where indicated.
-      type: object
-      properties:
-        name:
-          description: >-
-            Required. The resource name, in the format:
-            `projects/*/attestors/*`. This field may not be updated.
-          type: string
-        description:
-          description: >-
-            Optional. A descriptive comment. This field may be updated. The
-            field may be displayed in chooser dialogs.
-          type: string
-        userOwnedGrafeasNote:
-          description: >-
-            This specifies how an attestation will be read, and how it will be
-            used during policy enforcement.
-          $ref: '#/components/schemas/UserOwnedGrafeasNote'
-        updateTime:
-          description: Output only. Time when the attestor was last updated.
-          readOnly: true
-          type: string
-          format: google-datetime
-        etag:
-          description: >-
-            Optional. A checksum, returned by the server, that can be sent on
-            update requests to ensure the attestor has an up-to-date value
-            before attempting to update it. See https://google.aip.dev/154.
-          type: string
+        A trusted directory check, which rejects images that do not come from
+        the set of user-configured trusted directories.
     UserOwnedGrafeasNote:
-      id: UserOwnedGrafeasNote
+      type: object
       description: >-
         An user owned Grafeas note references a Grafeas Attestation.Authority
         Note created by the user.
-      type: object
       properties:
         noteReference:
           description: >-
@@ -1117,17 +631,6 @@ components:
             image and that links to this Note. Grafeas is an external
             dependency.
           type: string
-        publicKeys:
-          description: >-
-            Optional. Public keys that verify attestations signed by this
-            attestor. This field may be updated. If this field is non-empty, one
-            of the specified public keys must verify that an attestation was
-            signed by this attestor for the image specified in the admission
-            request. If this field is empty, this attestor always returns that
-            no valid attestations exist.
-          type: array
-          items:
-            $ref: '#/components/schemas/AttestorPublicKey'
         delegationServiceAccountEmail:
           description: >-
             Output only. This field will contain the service account email
@@ -1139,128 +642,47 @@ components:
             is fixed for the lifetime of the attestor, but callers should not
             make any other assumptions about the service account email; future
             versions may use an email based on a different naming pattern.
+          type: string
           readOnly: true
-          type: string
-    AttestorPublicKey:
-      id: AttestorPublicKey
-      description: >-
-        An attestor public key that will be used to verify attestations signed
-        by this attestor.
-      type: object
-      properties:
-        comment:
-          description: Optional. A descriptive comment. This field may be updated.
-          type: string
-        id:
+        publicKeys:
           description: >-
-            The ID of this public key. Signatures verified by Binary
-            Authorization must include the ID of the public key that can be used
-            to verify them, and that ID must match the contents of this field
-            exactly. Additional restrictions on this field can be imposed based
-            on which public key type is encapsulated. See the documentation on
-            `public_key` cases below for details.
-          type: string
-        asciiArmoredPgpPublicKey:
-          description: >-
-            ASCII-armored representation of a PGP public key, as the entire
-            output by the command `gpg --export --armor foo@example.com` (either
-            LF or CRLF line endings). When using this field, `id` should be left
-            blank. The Binary Authorization API handlers will calculate the ID
-            and fill it in automatically. Binary Authorization computes this ID
-            as the OpenPGP RFC4880 V4 fingerprint, represented as upper-case
-            hex. If `id` is provided by the caller, it will be overwritten by
-            the API-calculated ID.
-          type: string
-        pkixPublicKey:
-          description: >-
-            A raw PKIX SubjectPublicKeyInfo format public key. NOTE: `id` may be
-            explicitly provided by the caller when using this type of public
-            key, but it MUST be a valid RFC3986 URI. If `id` is left blank, a
-            default one will be computed based on the digest of the DER encoding
-            of the public key.
-          $ref: '#/components/schemas/PkixPublicKey'
-    ListAttestorsResponse:
-      id: ListAttestorsResponse
-      description: Response message for BinauthzManagementServiceV1.ListAttestors.
-      type: object
-      properties:
-        attestors:
-          description: The list of attestors.
+            Optional. Public keys that verify attestations signed by this
+            attestor. This field may be updated. If this field is non-empty, one
+            of the specified public keys must verify that an attestation was
+            signed by this attestor for the image specified in the admission
+            request. If this field is empty, this attestor always returns that
+            no valid attestations exist.
           type: array
           items:
-            $ref: '#/components/schemas/Attestor'
-        nextPageToken:
-          description: >-
-            A token to retrieve the next page of results. Pass this value in the
-            ListAttestorsRequest.page_token field in the subsequent call to the
-            `ListAttestors` method to retrieve the next page of results.
-          type: string
-    ValidateAttestationOccurrenceRequest:
-      id: ValidateAttestationOccurrenceRequest
-      description: Request message for ValidationHelperV1.ValidateAttestationOccurrence.
+            $ref: '#/components/schemas/AttestorPublicKey'
+      id: UserOwnedGrafeasNote
+    Signature:
       type: object
       properties:
-        attestation:
+        publicKeyId:
           description: >-
-            Required. An AttestationOccurrence to be checked that it can be
-            verified by the `Attestor`. It does not have to be an existing
-            entity in Container Analysis. It must otherwise be a valid
-            `AttestationOccurrence`.
-          $ref: '#/components/schemas/AttestationOccurrence'
-        occurrenceNote:
-          description: >-
-            Required. The resource name of the Note to which the containing
-            Occurrence is associated.
+            The identifier for the public key that verifies this signature. *
+            The `public_key_id` is required. * The `public_key_id` SHOULD be an
+            RFC3986 conformant URI. * When possible, the `public_key_id` SHOULD
+            be an immutable reference, such as a cryptographic digest. Examples
+            of valid `public_key_id`s: OpenPGP V4 public key fingerprint: *
+            "openpgp4fpr:74FAF3B861BDA0870C7B6DEF607E48D2A663AEEA" See
+            https://www.iana.org/assignments/uri-schemes/prov/openpgp4fpr for
+            more details on this scheme. RFC6920 digest-named
+            SubjectPublicKeyInfo (digest of the DER serialization): *
+            "ni:///sha-256;cD9o9Cq6LG3jD0iKXqEi_vdjJGecm_iXkbqVoScViaU" *
+            "nih:///sha-256;703f68f42aba2c6de30f488a5ea122fef76324679c9bf89791ba95a1271589a5"
           type: string
-        occurrenceResourceUri:
-          description: >-
-            Required. The URI of the artifact (e.g. container image) that is the
-            subject of the containing Occurrence.
-          type: string
-    AttestationOccurrence:
-      id: AttestationOccurrence
-      description: >-
-        Occurrence that represents a single "attestation". The authenticity of
-        an attestation can be verified using the attached signature. If the
-        verifier trusts the public key of the signer, then verifying the
-        signature is sufficient to establish trust. In this circumstance, the
-        authority to which this attestation is attached is primarily useful for
-        lookup (how to find this attestation if you already know the authority
-        and artifact to be verified) and intent (for which authority this
-        attestation was intended to sign.
-      type: object
-      properties:
-        serializedPayload:
-          description: >-
-            Required. The serialized payload that is verified by one or more
-            `signatures`.
+        signature:
           type: string
           format: byte
-        signatures:
           description: >-
-            One or more signatures over `serialized_payload`. Verifier
-            implementations should consider this attestation message verified if
-            at least one `signature` verifies `serialized_payload`. See
-            `Signature` in common.proto for more details on signature structure
-            and verification.
-          type: array
-          items:
-            $ref: '#/components/schemas/Signature'
-        jwts:
-          description: >-
-            One or more JWTs encoding a self-contained attestation. Each JWT
-            encodes the payload that it verifies within the JWT itself. Verifier
-            implementation SHOULD ignore the `serialized_payload` field when
-            verifying these JWTs. If only JWTs are present on this
-            AttestationOccurrence, then the `serialized_payload` SHOULD be left
-            empty. Each JWT SHOULD encode a claim specific to the `resource_uri`
-            of this Occurrence, but this is not validated by Grafeas metadata
-            API implementations. The JWT itself is opaque to Grafeas.
-          type: array
-          items:
-            $ref: '#/components/schemas/Jwt'
-    Signature:
-      id: Signature
+            The content of the signature, an opaque bytestring. The payload that
+            this signature verifies MUST be unambiguously provided with the
+            Signature during verification. A wrapper message might provide the
+            payload explicitly. Alternatively, a message might have a canonical
+            serialization that can always be unambiguously computed to derive
+            the payload.
       description: >-
         Verifiers (e.g. Kritis implementations) MUST verify signatures with
         respect to the trust anchors defined in policy (e.g. a Kritis policy).
@@ -1281,63 +703,113 @@ components:
         explicitly provided payload (e.g. a `payload` field on the proto message
         that holds this Signature, or the canonical serialization of the proto
         message that holds this signature).
+      id: Signature
+    CheckSetResult:
+      id: CheckSetResult
+      description: Result of evaluating one check set.
       type: object
       properties:
-        signature:
+        scope:
+          $ref: '#/components/schemas/Scope'
+          description: The scope of the check set.
+        allowlistResult:
+          $ref: '#/components/schemas/AllowlistResult'
           description: >-
-            The content of the signature, an opaque bytestring. The payload that
-            this signature verifies MUST be unambiguously provided with the
-            Signature during verification. A wrapper message might provide the
-            payload explicitly. Alternatively, a message might have a canonical
-            serialization that can always be unambiguously computed to derive
-            the payload.
-          type: string
-          format: byte
-        publicKeyId:
+            If the image was exempted by an allow_pattern in the check set,
+            contains the pattern that the image name matched.
+        checkResults:
           description: >-
-            The identifier for the public key that verifies this signature. *
-            The `public_key_id` is required. * The `public_key_id` SHOULD be an
-            RFC3986 conformant URI. * When possible, the `public_key_id` SHOULD
-            be an immutable reference, such as a cryptographic digest. Examples
-            of valid `public_key_id`s: OpenPGP V4 public key fingerprint: *
-            "openpgp4fpr:74FAF3B861BDA0870C7B6DEF607E48D2A663AEEA" See
-            https://www.iana.org/assignments/uri-schemes/prov/openpgp4fpr for
-            more details on this scheme. RFC6920 digest-named
-            SubjectPublicKeyInfo (digest of the DER serialization): *
-            "ni:///sha-256;cD9o9Cq6LG3jD0iKXqEi_vdjJGecm_iXkbqVoScViaU" *
-            "nih:///sha-256;703f68f42aba2c6de30f488a5ea122fef76324679c9bf89791ba95a1271589a5"
+            If checks were evaluated, contains the results of evaluating each
+            check.
+          $ref: '#/components/schemas/CheckResults'
+        index:
           type: string
-    Jwt:
-      id: Jwt
+          format: int64
+          description: The index of the check set.
+        displayName:
+          description: The name of the check set.
+          type: string
+        explanation:
+          type: string
+          description: >-
+            Explanation of this check set result. Only populated if no checks
+            were evaluated.
+    SigstorePublicKeySet:
+      id: SigstorePublicKeySet
+      properties:
+        publicKeys:
+          type: array
+          items:
+            $ref: '#/components/schemas/SigstorePublicKey'
+          description: Required. `public_keys` must have at least one entry.
+      type: object
+      description: >-
+        A bundle of Sigstore public keys, used to verify Sigstore signatures. A
+        signature is authenticated by a `SigstorePublicKeySet` if any of the
+        keys verify it.
+    SimpleSigningAttestationCheck:
+      description: >-
+        Require a signed [DSSE](https://github.com/secure-systems-lab/dsse)
+        attestation with type SimpleSigning.
+      properties:
+        containerAnalysisAttestationProjects:
+          description: >-
+            Optional. The projects where attestations are stored as Container
+            Analysis Occurrences, in the format `projects/[PROJECT_ID]`. Only
+            one attestation needs to successfully verify an image for this check
+            to pass, so a single verified attestation found in any of
+            `container_analysis_attestation_projects` is sufficient for the
+            check to pass. A project ID must be used, not a project number. When
+            fetching Occurrences from Container Analysis, only
+            `AttestationOccurrence` kinds are considered. In the future,
+            additional Occurrence kinds may be added to the query. Maximum
+            number of `container_analysis_attestation_projects` allowed in each
+            `SimpleSigningAttestationCheck` is 10.
+          items:
+            type: string
+          type: array
+        attestationAuthenticators:
+          type: array
+          description: >-
+            Required. The authenticators required by this check to verify an
+            attestation. Typically this is one or more PKIX public keys for
+            signature verification. Only one authenticator needs to consider an
+            attestation verified in order for an attestation to be considered
+            fully authenticated. In otherwords, this list of authenticators is
+            an "OR" of the authenticator results. At least one authenticator is
+            required.
+          items:
+            $ref: '#/components/schemas/AttestationAuthenticator'
+      type: object
+      id: SimpleSigningAttestationCheck
+    TestIamPermissionsRequest:
+      properties:
+        permissions:
+          items:
+            type: string
+          type: array
+          description: >-
+            The set of permissions to check for the `resource`. Permissions with
+            wildcards (such as `*` or `storage.*`) are not allowed. For more
+            information see [IAM
+            Overview](https://cloud.google.com/iam/docs/overview#permissions).
+      type: object
+      description: Request message for `TestIamPermissions` method.
+      id: TestIamPermissionsRequest
+    ImageFreshnessCheck:
       type: object
       properties:
-        compactJwt:
+        maxUploadAgeDays:
+          format: int32
           description: >-
-            The compact encoding of a JWS, which is always three base64 encoded
-            strings joined by periods. For details, see:
-            https://tools.ietf.org/html/rfc7515.html#section-3.1
-          type: string
-    ValidateAttestationOccurrenceResponse:
-      id: ValidateAttestationOccurrenceResponse
-      description: Response message for ValidationHelperV1.ValidateAttestationOccurrence.
-      type: object
-      properties:
-        result:
-          description: The result of the Attestation validation.
-          type: string
-          enumDescriptions:
-            - Unspecified.
-            - The Attestation was able to verified by the Attestor.
-            - The Attestation was not able to verified by the Attestor.
-          enum:
-            - RESULT_UNSPECIFIED
-            - VERIFIED
-            - ATTESTATION_NOT_VERIFIABLE
-        denialReason:
-          description: The reason for denial if the Attestation couldn't be validated.
-          type: string
+            Required. The max number of days that is allowed since the image was
+            uploaded. Must be greater than zero.
+          type: integer
+      description: >-
+        An image freshness check, which rejects images that were uploaded before
+        the set number of days ago to the supported repositories.
+      id: ImageFreshnessCheck
     SetIamPolicyRequest:
-      id: SetIamPolicyRequest
       description: Request message for `SetIamPolicy` method.
       type: object
       properties:
@@ -1348,8 +820,8 @@ components:
             a valid policy but certain Google Cloud services (such as Projects)
             might reject them.
           $ref: '#/components/schemas/IamPolicy'
+      id: SetIamPolicyRequest
     IamPolicy:
-      id: IamPolicy
       description: >-
         An Identity and Access Management (IAM) policy, which specifies access
         controls for Google Cloud resources. A `Policy` is a collection of
@@ -1384,8 +856,23 @@ components:
         timestamp('2020-10-01T00:00:00.000Z') etag: BwWWja0YfJA= version: 3 ```
         For a description of IAM and its features, see the [IAM
         documentation](https://cloud.google.com/iam/docs/).
-      type: object
       properties:
+        etag:
+          format: byte
+          type: string
+          description: >-
+            `etag` is used for optimistic concurrency control as a way to help
+            prevent simultaneous updates of a policy from overwriting each
+            other. It is strongly suggested that systems make use of the `etag`
+            in the read-modify-write cycle to perform policy updates in order to
+            avoid race conditions: An `etag` is returned in the response to
+            `getIamPolicy`, and systems are expected to put that etag in the
+            request to `setIamPolicy` to ensure that their change will be
+            applied to the same version of the policy. **Important:** If you use
+            IAM Conditions, you must include the `etag` field whenever you call
+            `setIamPolicy`. If you omit this field, then IAM allows you to
+            overwrite a version `3` policy with a version `1` policy, and all of
+            the conditions in the version `3` policy are lost.
         version:
           description: >-
             Specifies the format of the policy. Valid values are `0`, `1`, and
@@ -1420,25 +907,423 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Binding'
-        etag:
-          description: >-
-            `etag` is used for optimistic concurrency control as a way to help
-            prevent simultaneous updates of a policy from overwriting each
-            other. It is strongly suggested that systems make use of the `etag`
-            in the read-modify-write cycle to perform policy updates in order to
-            avoid race conditions: An `etag` is returned in the response to
-            `getIamPolicy`, and systems are expected to put that etag in the
-            request to `setIamPolicy` to ensure that their change will be
-            applied to the same version of the policy. **Important:** If you use
-            IAM Conditions, you must include the `etag` field whenever you call
-            `setIamPolicy`. If you omit this field, then IAM allows you to
-            overwrite a version `3` policy with a version `1` policy, and all of
-            the conditions in the version `3` policy are lost.
+      id: IamPolicy
+      type: object
+    ValidateAttestationOccurrenceResponse:
+      id: ValidateAttestationOccurrenceResponse
+      properties:
+        denialReason:
           type: string
-          format: byte
+          description: The reason for denial if the Attestation couldn't be validated.
+        result:
+          enumDescriptions:
+            - Unspecified.
+            - The Attestation was able to verified by the Attestor.
+            - The Attestation was not able to verified by the Attestor.
+          description: The result of the Attestation validation.
+          enum:
+            - RESULT_UNSPECIFIED
+            - VERIFIED
+            - ATTESTATION_NOT_VERIFIABLE
+          type: string
+      description: Response message for ValidationHelperV1.ValidateAttestationOccurrence.
+      type: object
+    GkePolicy:
+      id: GkePolicy
+      properties:
+        imageAllowlist:
+          $ref: '#/components/schemas/ImageAllowlist'
+          description: >-
+            Optional. Images exempted from this policy. If any of the patterns
+            match the image being evaluated, the rest of the policy will not be
+            evaluated.
+        checkSets:
+          description: >-
+            Optional. The `CheckSet` objects to apply, scoped by namespace or
+            namespace and service account. Exactly one `CheckSet` will be
+            evaluated for a given Pod (unless the list is empty, in which case
+            the behavior is "always allow"). If multiple `CheckSet` objects have
+            scopes that match the namespace and service account of the Pod being
+            evaluated, only the `CheckSet` with the MOST SPECIFIC scope will
+            match. `CheckSet` objects must be listed in order of decreasing
+            specificity, i.e. if a scope matches a given service account (which
+            must include the namespace), it must come before a `CheckSet` with a
+            scope matching just that namespace. This property is enforced by
+            server-side validation. The purpose of this restriction is to ensure
+            that if more than one `CheckSet` matches a given Pod, the `CheckSet`
+            that will be evaluated will always be the first in the list to match
+            (because if any other matches, it must be less specific). If
+            `check_sets` is empty, the default behavior is to allow all images.
+            If `check_sets` is non-empty, the last `check_sets` entry must
+            always be a `CheckSet` with no scope set, i.e. a catchall to handle
+            any situation not caught by the preceding `CheckSet` objects.
+          type: array
+          items:
+            $ref: '#/components/schemas/CheckSet'
+      type: object
+      description: >-
+        A Binary Authorization policy for a GKE cluster. This is one type of
+        policy that can occur as a `PlatformPolicy`.
+    PkixPublicKeySet:
+      properties:
+        pkixPublicKeys:
+          type: array
+          description: Required. `pkix_public_keys` must have at least one entry.
+          items:
+            $ref: '#/components/schemas/PkixPublicKey'
+      type: object
+      description: >-
+        A bundle of PKIX public keys, used to authenticate attestation
+        signatures. Generally, a signature is considered to be authenticated by
+        a `PkixPublicKeySet` if any of the public keys verify it (i.e. it is an
+        "OR" of the keys).
+      id: PkixPublicKeySet
+    Scope:
+      id: Scope
+      description: A scope specifier for `CheckSet` objects.
+      type: object
+      properties:
+        kubernetesServiceAccount:
+          description: >-
+            Optional. Matches a single Kubernetes service account, e.g.
+            `my-namespace:my-service-account`. `kubernetes_service_account`
+            scope is always more specific than `kubernetes_namespace` scope for
+            the same namespace.
+          type: string
+        kubernetesNamespace:
+          type: string
+          description: >-
+            Optional. Matches all Kubernetes service accounts in the provided
+            namespace, unless a more specific `kubernetes_service_account` scope
+            already matched.
+    ListAttestorsResponse:
+      properties:
+        nextPageToken:
+          description: >-
+            A token to retrieve the next page of results. Pass this value in the
+            ListAttestorsRequest.page_token field in the subsequent call to the
+            `ListAttestors` method to retrieve the next page of results.
+          type: string
+        attestors:
+          items:
+            $ref: '#/components/schemas/Attestor'
+          type: array
+          description: The list of attestors.
+      id: ListAttestorsResponse
+      type: object
+      description: Response message for BinauthzManagementServiceV1.ListAttestors.
+    AdmissionRule:
+      id: AdmissionRule
+      description: >-
+        An admission rule specifies either that all container images used in a
+        pod creation request must be attested to by one or more attestors, that
+        all pod creations will be allowed, or that all pod creations will be
+        denied. Images matching an admission allowlist pattern are exempted from
+        admission rules and will never block a pod creation.
+      properties:
+        enforcementMode:
+          description: >-
+            Required. The action when a pod creation is denied by the admission
+            rule.
+          type: string
+          enum:
+            - ENFORCEMENT_MODE_UNSPECIFIED
+            - ENFORCED_BLOCK_AND_AUDIT_LOG
+            - DRYRUN_AUDIT_LOG_ONLY
+          enumDescriptions:
+            - Do not use.
+            - Enforce the admission rule by blocking the pod creation.
+            - >-
+              Dryrun mode: Audit logging only. This will allow the pod creation
+              as if the admission request had specified break-glass.
+        evaluationMode:
+          type: string
+          description: Required. How this admission rule will be evaluated.
+          enum:
+            - EVALUATION_MODE_UNSPECIFIED
+            - ALWAYS_ALLOW
+            - REQUIRE_ATTESTATION
+            - ALWAYS_DENY
+          enumDescriptions:
+            - Do not use.
+            - This rule allows all pod creations.
+            - >-
+              This rule allows a pod creation if all the attestors listed in
+              `require_attestations_by` have valid attestations for all of the
+              images in the pod spec.
+            - This rule denies all pod creations.
+        requireAttestationsBy:
+          type: array
+          description: >-
+            Optional. The resource names of the attestors that must attest to a
+            container image, in the format `projects/*/attestors/*`. Each
+            attestor must exist before a policy can reference it. To add an
+            attestor to a policy the principal issuing the policy change request
+            must be able to read the attestor resource. Note: this field must be
+            non-empty when the `evaluation_mode` field specifies
+            `REQUIRE_ATTESTATION`, otherwise it must be empty.
+          items:
+            type: string
+      type: object
+    Jwt:
+      type: object
+      properties:
+        compactJwt:
+          description: >-
+            The compact encoding of a JWS, which is always three base64 encoded
+            strings joined by periods. For details, see:
+            https://tools.ietf.org/html/rfc7515.html#section-3.1
+          type: string
+      id: Jwt
+    Expr:
+      type: object
+      id: Expr
+      properties:
+        location:
+          type: string
+          description: >-
+            Optional. String indicating the location of the expression for error
+            reporting, e.g. a file name and a position in the file.
+        expression:
+          description: >-
+            Textual representation of an expression in Common Expression
+            Language syntax.
+          type: string
+        title:
+          description: >-
+            Optional. Title for the expression, i.e. a short string describing
+            its purpose. This can be used e.g. in UIs which allow to enter the
+            expression.
+          type: string
+        description:
+          description: >-
+            Optional. Description of the expression. This is a longer text which
+            describes the expression, e.g. when hovered over it in a UI.
+          type: string
+      description: >-
+        Represents a textual expression in the Common Expression Language (CEL)
+        syntax. CEL is a C-like expression language. The syntax and semantics of
+        CEL are documented at https://github.com/google/cel-spec. Example
+        (Comparison): title: "Summary size limit" description: "Determines if a
+        summary is less than 100 chars" expression: "document.summary.size() <
+        100" Example (Equality): title: "Requestor is owner" description:
+        "Determines if requestor is the document owner" expression:
+        "document.owner == request.auth.claims.email" Example (Logic): title:
+        "Public documents" description: "Determine whether the document should
+        be publicly visible" expression: "document.type != 'private' &&
+        document.type != 'internal'" Example (Data Manipulation): title:
+        "Notification string" description: "Create a notification string with a
+        timestamp." expression: "'New message received at ' +
+        string(document.create_time)" The exact variables and functions that may
+        be referenced within an expression are determined by the service that
+        evaluates it. See the service documentation for additional information.
+    SigstoreAuthority:
+      type: object
+      properties:
+        publicKeySet:
+          description: >-
+            Required. A simple set of public keys. A signature is considered
+            valid if any keys in the set validate the signature.
+          $ref: '#/components/schemas/SigstorePublicKeySet'
+        displayName:
+          type: string
+          description: >-
+            Optional. A user-provided name for this `SigstoreAuthority`. This
+            field has no effect on the policy evaluation behavior except to
+            improve readability of messages in evaluation results.
+      description: >-
+        A Sigstore authority, used to verify signatures that are created by
+        Sigstore. An authority is analogous to an attestation authenticator,
+        verifying that a signature is valid or invalid.
+      id: SigstoreAuthority
+    VerificationRule:
+      properties:
+        attestationSource:
+          $ref: '#/components/schemas/AttestationSource'
+          description: >-
+            Specifies where to fetch the provenances attestations generated by
+            the builder (group).
+        customConstraints:
+          description: >-
+            Optional. A CEL expression for specifying custom constraints on the
+            provenance payload. This can be used when users want to specify
+            expectations on provenance fields that are not covered by the
+            general check. For example, users can use this field to require that
+            certain parameters should never be used during the build process.
+          type: string
+        configBasedBuildRequired:
+          type: boolean
+          description: >-
+            If true, require the image to be built from a top-level
+            configuration. `trusted_source_repo_patterns` specifies the
+            repositories containing this configuration.
+        trustedBuilder:
+          type: string
+          enum:
+            - BUILDER_UNSPECIFIED
+            - GOOGLE_CLOUD_BUILD
+          enumDescriptions:
+            - Should never happen.
+            - >-
+              The whole Google Cloud Build (GCB) builder group, including all
+              GCB builder types.
+          description: >-
+            Each verification rule is used for evaluation against provenances
+            generated by a specific builder (group). For some of the builders,
+            such as the Google Cloud Build, users don't need to explicitly
+            specify their roots of trust in the policy since the evaluation
+            service can automatically fetch them based on the builder (group).
+        trustedSourceRepoPatterns:
+          type: array
+          description: >-
+            List of trusted source code repository URL patterns. These patterns
+            match the full repository URL without its scheme (e.g. `https://`).
+            The patterns must not include schemes. For example, the pattern
+            `source.cloud.google.com/my-project/my-repo-name` matches the
+            following URLs: - `source.cloud.google.com/my-project/my-repo-name`
+            - `git+ssh://source.cloud.google.com/my-project/my-repo-name` -
+            `https://source.cloud.google.com/my-project/my-repo-name` A pattern
+            matches a URL either exactly or with `*` wildcards. `*` can be used
+            in only two ways: 1. trailing `*` after hosturi/ to match varying
+            endings; 2. trailing `**` after hosturi/ to match `/` as well. `*`
+            and `**` can only be used as wildcards and can only occur at the end
+            of the pattern after a `/`. (So it's not possible to match a URL
+            that contains literal `*`.) For example: -
+            `github.com/my-project/my-repo` is valid to match a single repo -
+            `github.com/my-project/*` will match all direct repos in
+            `my-project` - `github.com/**` matches all repos in GitHub
+          items:
+            type: string
+      type: object
+      id: VerificationRule
+      description: >-
+        Specifies verification rules for evaluating the SLSA attestations
+        including: which builders to trust, where to fetch the SLSA attestations
+        generated by those builders, and other builder-specific evaluation rules
+        such as which source repositories are trusted. An image is considered
+        verified by the rule if any of the fetched SLSA attestations is
+        verified.
+    EvaluateGkePolicyRequest:
+      description: Request message for PlatformPolicyEvaluationService.EvaluateGkePolicy.
+      id: EvaluateGkePolicyRequest
+      type: object
+      properties:
+        resource:
+          type: object
+          description: Required. JSON or YAML blob representing a Kubernetes resource.
+          additionalProperties:
+            description: Properties of the object.
+            type: any
+    AttestationSource:
+      description: Specifies the locations for fetching the provenance attestations.
+      id: AttestationSource
+      type: object
+      properties:
+        containerAnalysisAttestationProjects:
+          type: array
+          items:
+            type: string
+          description: >-
+            The IDs of the Google Cloud projects that store the SLSA
+            attestations as Container Analysis Occurrences, in the format
+            `projects/[PROJECT_ID]`. Maximum number of
+            `container_analysis_attestation_projects` allowed in each
+            `AttestationSource` is 10.
+    VulnerabilityCheck:
+      description: >-
+        An image vulnerability check, which rejects images that violate the
+        configured vulnerability rules.
+      type: object
+      properties:
+        containerAnalysisVulnerabilityProjects:
+          items:
+            type: string
+          type: array
+          description: >-
+            Optional. The projects where vulnerabilities are stored as Container
+            Analysis Occurrences. Each project is expressed in the resource
+            format of `projects/[PROJECT_ID]`, e.g., `projects/my-gcp-project`.
+            An attempt will be made for each project to fetch vulnerabilities,
+            and all valid vulnerabilities will be used to check against the
+            vulnerability policy. If no valid scan is found in all projects
+            configured here, an error will be returned for the check. Maximum
+            number of `container_analysis_vulnerability_projects` allowed in
+            each `VulnerabilityCheck` is 10.
+        maximumFixableSeverity:
+          enum:
+            - MAXIMUM_ALLOWED_SEVERITY_UNSPECIFIED
+            - BLOCK_ALL
+            - MINIMAL
+            - LOW
+            - MEDIUM
+            - HIGH
+            - CRITICAL
+            - ALLOW_ALL
+          enumDescriptions:
+            - Not specified.
+            - Block any vulnerability.
+            - Allow only minimal severity.
+            - Allow only low severity and lower.
+            - Allow medium severity and lower.
+            - Allow high severity and lower.
+            - Allow critical severity and lower.
+            - Allow all severity, even vulnerability with unspecified severity.
+          description: >-
+            Required. The threshold for severity for which a fix is currently
+            available. This field is required and must be set.
+          type: string
+        blockedCves:
+          type: array
+          description: >-
+            Optional. A list of specific CVEs to always raise warnings about
+            even if the vulnerability level meets `maximumUnfixableSeverity` or
+            `maximumFixableSeverity`. CVEs are listed in the format of Container
+            Analysis note id. For example: - CVE-2021-20305 - CVE-2020-10543 The
+            CVEs are applicable regardless of note provider project, e.g., an
+            entry of `CVE-2021-20305` will block vulnerabilities with a note
+            name of either `projects/goog-vulnz/notes/CVE-2021-20305` or
+            `projects/CUSTOM-PROJECT/notes/CVE-2021-20305`.
+          items:
+            type: string
+        allowedCves:
+          type: array
+          description: >-
+            Optional. A list of specific CVEs to ignore even if the
+            vulnerability level violates `maximumUnfixableSeverity` or
+            `maximumFixableSeverity`. CVEs are listed in the format of Container
+            Analysis note id. For example: - CVE-2021-20305 - CVE-2020-10543 The
+            CVEs are applicable regardless of note provider project, e.g., an
+            entry of `CVE-2021-20305` will allow vulnerabilities with a note
+            name of either `projects/goog-vulnz/notes/CVE-2021-20305` or
+            `projects/CUSTOM-PROJECT/notes/CVE-2021-20305`.
+          items:
+            type: string
+        maximumUnfixableSeverity:
+          type: string
+          enum:
+            - MAXIMUM_ALLOWED_SEVERITY_UNSPECIFIED
+            - BLOCK_ALL
+            - MINIMAL
+            - LOW
+            - MEDIUM
+            - HIGH
+            - CRITICAL
+            - ALLOW_ALL
+          enumDescriptions:
+            - Not specified.
+            - Block any vulnerability.
+            - Allow only minimal severity.
+            - Allow only low severity and lower.
+            - Allow medium severity and lower.
+            - Allow high severity and lower.
+            - Allow critical severity and lower.
+            - Allow all severity, even vulnerability with unspecified severity.
+          description: >-
+            Required. The threshold for severity for which a fix isn't currently
+            available. This field is required and must be set.
+      id: VulnerabilityCheck
     Binding:
       id: Binding
-      description: Associates `members`, or principals, with a `role`.
       type: object
       properties:
         role:
@@ -1510,10 +1395,11 @@ components:
             `deleted:principal://iam.googleapis.com/locations/global/workforcePools/{pool_id}/subject/{subject_attribute_value}`:
             Deleted single identity in a workforce identity pool. For example,
             `deleted:principal://iam.googleapis.com/locations/global/workforcePools/my-pool-id/subject/my-subject-attribute-value`.
-          type: array
           items:
             type: string
+          type: array
         condition:
+          $ref: '#/components/schemas/Expr'
           description: >-
             The condition that is associated with this binding. If the condition
             evaluates to `true`, then this binding applies to the current
@@ -1523,80 +1409,251 @@ components:
             in this binding. To learn which resources support conditions in
             their IAM policies, see the [IAM
             documentation](https://cloud.google.com/iam/help/conditions/resource-policies).
-          $ref: '#/components/schemas/Expr'
-    Expr:
-      id: Expr
+      description: Associates `members`, or principals, with a `role`.
+    Empty:
+      type: object
+      properties: {}
+      id: Empty
       description: >-
-        Represents a textual expression in the Common Expression Language (CEL)
-        syntax. CEL is a C-like expression language. The syntax and semantics of
-        CEL are documented at https://github.com/google/cel-spec. Example
-        (Comparison): title: "Summary size limit" description: "Determines if a
-        summary is less than 100 chars" expression: "document.summary.size() <
-        100" Example (Equality): title: "Requestor is owner" description:
-        "Determines if requestor is the document owner" expression:
-        "document.owner == request.auth.claims.email" Example (Logic): title:
-        "Public documents" description: "Determine whether the document should
-        be publicly visible" expression: "document.type != 'private' &&
-        document.type != 'internal'" Example (Data Manipulation): title:
-        "Notification string" description: "Create a notification string with a
-        timestamp." expression: "'New message received at ' +
-        string(document.create_time)" The exact variables and functions that may
-        be referenced within an expression are determined by the service that
-        evaluates it. See the service documentation for additional information.
+        A generic empty message that you can re-use to avoid defining duplicated
+        empty messages in your APIs. A typical example is to use it as the
+        request or the response type of an API method. For instance: service Foo
+        { rpc Bar(google.protobuf.Empty) returns (google.protobuf.Empty); }
+    EvaluateGkePolicyResponse:
       type: object
       properties:
-        expression:
-          description: >-
-            Textual representation of an expression in Common Expression
-            Language syntax.
+        verdict:
+          enum:
+            - VERDICT_UNSPECIFIED
+            - CONFORMANT
+            - NON_CONFORMANT
+            - ERROR
+          enumDescriptions:
+            - Not specified. This should never be used.
+            - All Pods in the request conform to the policy.
+            - At least one Pod does not conform to the policy.
+            - >-
+              Encountered at least one error evaluating a Pod and all other Pods
+              conform to the policy. Non-conformance has precedence over errors.
           type: string
-        title:
-          description: >-
-            Optional. Title for the expression, i.e. a short string describing
-            its purpose. This can be used e.g. in UIs which allow to enter the
-            expression.
+          description: The result of evaluating all Pods in the request.
+        results:
+          description: Evaluation result for each Pod contained in the request.
+          type: array
+          items:
+            $ref: '#/components/schemas/PodResult'
+      id: EvaluateGkePolicyResponse
+      description: Response message for PlatformPolicyEvaluationService.EvaluateGkePolicy.
+    Attestor:
+      description: >-
+        An attestor that attests to container image artifacts. An existing
+        attestor cannot be modified except where indicated.
+      type: object
+      properties:
+        etag:
           type: string
+          description: >-
+            Optional. A checksum, returned by the server, that can be sent on
+            update requests to ensure the attestor has an up-to-date value
+            before attempting to update it. See https://google.aip.dev/154.
+        updateTime:
+          type: string
+          description: Output only. Time when the attestor was last updated.
+          format: google-datetime
+          readOnly: true
+        name:
+          type: string
+          description: >-
+            Required. The resource name, in the format:
+            `projects/*/attestors/*`. This field may not be updated.
+        userOwnedGrafeasNote:
+          description: >-
+            This specifies how an attestation will be read, and how it will be
+            used during policy enforcement.
+          $ref: '#/components/schemas/UserOwnedGrafeasNote'
         description:
           description: >-
-            Optional. Description of the expression. This is a longer text which
-            describes the expression, e.g. when hovered over it in a UI.
+            Optional. A descriptive comment. This field may be updated. The
+            field may be displayed in chooser dialogs.
           type: string
-        location:
-          description: >-
-            Optional. String indicating the location of the expression for error
-            reporting, e.g. a file name and a position in the file.
-          type: string
-    TestIamPermissionsRequest:
-      id: TestIamPermissionsRequest
-      description: Request message for `TestIamPermissions` method.
+      id: Attestor
+    CheckResults:
+      id: CheckResults
       type: object
+      description: Result of evaluating one or more checks.
       properties:
-        permissions:
-          description: >-
-            The set of permissions to check for the `resource`. Permissions with
-            wildcards (such as `*` or `storage.*`) are not allowed. For more
-            information see [IAM
-            Overview](https://cloud.google.com/iam/docs/overview#permissions).
+        results:
+          description: Per-check details.
           type: array
           items:
-            type: string
-    TestIamPermissionsResponse:
-      id: TestIamPermissionsResponse
-      description: Response message for `TestIamPermissions` method.
-      type: object
+            $ref: '#/components/schemas/CheckResult'
+    AttestationOccurrence:
       properties:
-        permissions:
+        jwts:
           description: >-
-            A subset of `TestPermissionsRequest.permissions` that the caller is
-            allowed.
-          type: array
+            One or more JWTs encoding a self-contained attestation. Each JWT
+            encodes the payload that it verifies within the JWT itself. Verifier
+            implementation SHOULD ignore the `serialized_payload` field when
+            verifying these JWTs. If only JWTs are present on this
+            AttestationOccurrence, then the `serialized_payload` SHOULD be left
+            empty. Each JWT SHOULD encode a claim specific to the `resource_uri`
+            of this Occurrence, but this is not validated by Grafeas metadata
+            API implementations. The JWT itself is opaque to Grafeas.
           items:
-            type: string
+            $ref: '#/components/schemas/Jwt'
+          type: array
+        signatures:
+          description: >-
+            One or more signatures over `serialized_payload`. Verifier
+            implementations should consider this attestation message verified if
+            at least one `signature` verifies `serialized_payload`. See
+            `Signature` in common.proto for more details on signature structure
+            and verification.
+          items:
+            $ref: '#/components/schemas/Signature'
+          type: array
+        serializedPayload:
+          description: >-
+            Required. The serialized payload that is verified by one or more
+            `signatures`.
+          type: string
+          format: byte
+      type: object
+      description: >-
+        Occurrence that represents a single "attestation". The authenticity of
+        an attestation can be verified using the attached signature. If the
+        verifier trusts the public key of the signer, then verifying the
+        signature is sufficient to establish trust. In this circumstance, the
+        authority to which this attestation is attached is primarily useful for
+        lookup (how to find this attestation if you already know the authority
+        and artifact to be verified) and intent (for which authority this
+        attestation was intended to sign.
+      id: AttestationOccurrence
+    ImageResult:
+      id: ImageResult
+      description: Result of evaluating one image.
+      properties:
+        explanation:
+          type: string
+          description: >-
+            Explanation of this image result. Only populated if no check sets
+            were evaluated.
+        allowlistResult:
+          description: >-
+            If the image was exempted by a top-level allow_pattern, contains the
+            allowlist pattern that the image name matched.
+          $ref: '#/components/schemas/AllowlistResult'
+        checkSetResult:
+          $ref: '#/components/schemas/CheckSetResult'
+          description: >-
+            If a check set was evaluated, contains the result of the check set.
+            Empty if there were no check sets.
+        verdict:
+          description: The result of evaluating this image.
+          enum:
+            - IMAGE_VERDICT_UNSPECIFIED
+            - CONFORMANT
+            - NON_CONFORMANT
+            - ERROR
+          enumDescriptions:
+            - Not specified. This should never be used.
+            - Image conforms to the policy.
+            - Image does not conform to the policy.
+            - >-
+              Error evaluating the image. Non-conformance has precedence over
+              errors.
+          type: string
+        imageUri:
+          description: Image URI from the request.
+          type: string
+      type: object
+    SigstoreSignatureCheck:
+      description: >-
+        A Sigstore signature check, which verifies the Sigstore signature
+        associated with an image.
+      id: SigstoreSignatureCheck
+      properties:
+        sigstoreAuthorities:
+          items:
+            $ref: '#/components/schemas/SigstoreAuthority'
+          description: >-
+            Required. The authorities required by this check to verify the
+            signature. A signature only needs to be verified by one authority to
+            pass the check.
+          type: array
+      type: object
+    SigstorePublicKey:
+      description: >-
+        A Sigstore public key. `SigstorePublicKey` is the public key material
+        used to authenticate Sigstore signatures.
+      id: SigstorePublicKey
+      properties:
+        publicKeyPem:
+          description: The public key material in PEM format.
+          type: string
+      type: object
   parameters:
-    access_token:
-      description: OAuth access token.
+    key:
+      description: >-
+        API key. Your API key identifies your project and provides you with API
+        access, quota, and reports. Required unless you provide an OAuth 2.0
+        token.
       in: query
-      name: access_token
+      name: key
+      schema:
+        type: string
+    callback:
+      description: JSONP
+      in: query
+      name: callback
+      schema:
+        type: string
+    _.xgafv:
+      description: V1 error format.
+      in: query
+      name: $.xgafv
+      schema:
+        type: string
+        enum:
+          - '1'
+          - '2'
+    prettyPrint:
+      description: Returns response with indentations and line breaks.
+      in: query
+      name: prettyPrint
+      schema:
+        type: boolean
+    fields:
+      description: Selector specifying which fields to include in a partial response.
+      in: query
+      name: fields
+      schema:
+        type: string
+    uploadType:
+      description: Legacy upload protocol for media (e.g. "media", "multipart").
+      in: query
+      name: uploadType
+      schema:
+        type: string
+    oauth_token:
+      description: OAuth 2.0 token for the current user.
+      in: query
+      name: oauth_token
+      schema:
+        type: string
+    upload_protocol:
+      description: Upload protocol for media (e.g. "raw", "multipart").
+      in: query
+      name: upload_protocol
+      schema:
+        type: string
+    quotaUser:
+      description: >-
+        Available to use for quota purposes for server-side applications. Can be
+        any arbitrary string assigned to a user, but should not exceed 40
+        characters.
+      in: query
+      name: quotaUser
       schema:
         type: string
     alt:
@@ -1609,69 +1666,12 @@ components:
           - json
           - media
           - proto
-    callback:
-      description: JSONP
+    access_token:
+      description: OAuth access token.
       in: query
-      name: callback
+      name: access_token
       schema:
         type: string
-    fields:
-      description: Selector specifying which fields to include in a partial response.
-      in: query
-      name: fields
-      schema:
-        type: string
-    key:
-      description: >-
-        API key. Your API key identifies your project and provides you with API
-        access, quota, and reports. Required unless you provide an OAuth 2.0
-        token.
-      in: query
-      name: key
-      schema:
-        type: string
-    oauth_token:
-      description: OAuth 2.0 token for the current user.
-      in: query
-      name: oauth_token
-      schema:
-        type: string
-    prettyPrint:
-      description: Returns response with indentations and line breaks.
-      in: query
-      name: prettyPrint
-      schema:
-        type: boolean
-    quotaUser:
-      description: >-
-        Available to use for quota purposes for server-side applications. Can be
-        any arbitrary string assigned to a user, but should not exceed 40
-        characters.
-      in: query
-      name: quotaUser
-      schema:
-        type: string
-    upload_protocol:
-      description: Upload protocol for media (e.g. "raw", "multipart").
-      in: query
-      name: upload_protocol
-      schema:
-        type: string
-    uploadType:
-      description: Legacy upload protocol for media (e.g. "media", "multipart").
-      in: query
-      name: uploadType
-      schema:
-        type: string
-    _.xgafv:
-      description: V1 error format.
-      in: query
-      name: $.xgafv
-      schema:
-        type: string
-        enum:
-          - '1'
-          - '2'
   x-stackQL-resources:
     policies:
       id: google.binaryauthorization.policies
@@ -1697,21 +1697,13 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        create:
+        delete:
           operation:
             $ref: >-
-              #/paths/~1v1~1projects~1{projectsId}~1platforms~1{platformsId}~1policies/post
+              #/paths/~1v1~1projects~1{projectsId}~1platforms~1{platformsId}~1policies~1{policiesId}/delete
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        list:
-          operation:
-            $ref: >-
-              #/paths/~1v1~1projects~1{projectsId}~1platforms~1{platformsId}~1policies/get
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-            objectKey: $.platformPolicies
         get:
           operation:
             $ref: >-
@@ -1726,10 +1718,18 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        delete:
+        list:
           operation:
             $ref: >-
-              #/paths/~1v1~1projects~1{projectsId}~1platforms~1{platformsId}~1policies~1{policiesId}/delete
+              #/paths/~1v1~1projects~1{projectsId}~1platforms~1{platformsId}~1policies/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.platformPolicies
+        create:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1platforms~1{platformsId}~1policies/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1747,30 +1747,46 @@ components:
           - $ref: '#/components/x-stackQL-resources/policies/methods/update_policy'
         delete:
           - $ref: '#/components/x-stackQL-resources/policies/methods/delete'
+    policy_iam_policies:
+      id: google.binaryauthorization.policy_iam_policies
+      name: policy_iam_policies
+      title: Policy_iam_policies
+      methods:
+        test_iam_permissions:
+          operation:
+            $ref: >-
+              #/paths/~1v1~1projects~1{projectsId}~1policy:testIamPermissions/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        set_iam_policy:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1policy:setIamPolicy/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        get_iam_policy:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1policy:getIamPolicy/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.bindings
+      sqlVerbs:
+        select:
+          - $ref: >-
+              #/components/x-stackQL-resources/policy_iam_policies/methods/get_iam_policy
+        insert: []
+        update: []
+        replace:
+          - $ref: >-
+              #/components/x-stackQL-resources/policy_iam_policies/methods/set_iam_policy
+        delete: []
     attestors:
       id: google.binaryauthorization.attestors
       name: attestors
       title: Attestors
       methods:
-        create:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1attestors/post'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        list:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1attestors/get'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-            objectKey: $.attestors
-        get:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1attestors~1{attestorsId}/get'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
         update:
           operation:
             $ref: '#/paths/~1v1~1projects~1{projectsId}~1attestors~1{attestorsId}/put'
@@ -1781,6 +1797,25 @@ components:
           operation:
             $ref: >-
               #/paths/~1v1~1projects~1{projectsId}~1attestors~1{attestorsId}/delete
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        get:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1attestors~1{attestorsId}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        list:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1attestors/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.attestors
+        create:
+          operation:
+            $ref: '#/paths/~1v1~1projects~1{projectsId}~1attestors/post'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1807,10 +1842,10 @@ components:
       name: attestors_iam_policies
       title: Attestors_iam_policies
       methods:
-        set_iam_policy:
+        test_iam_permissions:
           operation:
             $ref: >-
-              #/paths/~1v1~1projects~1{projectsId}~1attestors~1{attestorsId}:setIamPolicy/post
+              #/paths/~1v1~1projects~1{projectsId}~1attestors~1{attestorsId}:testIamPermissions/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1822,10 +1857,10 @@ components:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.bindings
-        test_iam_permissions:
+        set_iam_policy:
           operation:
             $ref: >-
-              #/paths/~1v1~1projects~1{projectsId}~1attestors~1{attestorsId}:testIamPermissions/post
+              #/paths/~1v1~1projects~1{projectsId}~1attestors~1{attestorsId}:setIamPolicy/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1838,41 +1873,6 @@ components:
         replace:
           - $ref: >-
               #/components/x-stackQL-resources/attestors_iam_policies/methods/set_iam_policy
-        delete: []
-    policy_iam_policies:
-      id: google.binaryauthorization.policy_iam_policies
-      name: policy_iam_policies
-      title: Policy_iam_policies
-      methods:
-        set_iam_policy:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1policy:setIamPolicy/post'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        get_iam_policy:
-          operation:
-            $ref: '#/paths/~1v1~1projects~1{projectsId}~1policy:getIamPolicy/get'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-            objectKey: $.bindings
-        test_iam_permissions:
-          operation:
-            $ref: >-
-              #/paths/~1v1~1projects~1{projectsId}~1policy:testIamPermissions/post
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
-        select:
-          - $ref: >-
-              #/components/x-stackQL-resources/policy_iam_policies/methods/get_iam_policy
-        insert: []
-        update: []
-        replace:
-          - $ref: >-
-              #/components/x-stackQL-resources/policy_iam_policies/methods/set_iam_policy
         delete: []
     systempolicy_policy:
       id: google.binaryauthorization.systempolicy_policy
@@ -1896,17 +1896,17 @@ components:
 paths:
   /v1/projects/{projectsId}/policy:
     parameters: &ref_1
-      - $ref: '#/components/parameters/access_token'
-      - $ref: '#/components/parameters/alt'
-      - $ref: '#/components/parameters/callback'
-      - $ref: '#/components/parameters/fields'
       - $ref: '#/components/parameters/key'
-      - $ref: '#/components/parameters/oauth_token'
-      - $ref: '#/components/parameters/prettyPrint'
-      - $ref: '#/components/parameters/quotaUser'
-      - $ref: '#/components/parameters/upload_protocol'
-      - $ref: '#/components/parameters/uploadType'
+      - $ref: '#/components/parameters/callback'
       - $ref: '#/components/parameters/_.xgafv'
+      - $ref: '#/components/parameters/prettyPrint'
+      - $ref: '#/components/parameters/fields'
+      - $ref: '#/components/parameters/uploadType'
+      - $ref: '#/components/parameters/oauth_token'
+      - $ref: '#/components/parameters/upload_protocol'
+      - $ref: '#/components/parameters/quotaUser'
+      - $ref: '#/components/parameters/alt'
+      - $ref: '#/components/parameters/access_token'
     get:
       description: >-
         A policy specifies the attestors that must attest to a container image,
@@ -1964,6 +1964,100 @@ paths:
           required: true
           schema:
             type: string
+  /v1/projects/{projectsId}/policy:testIamPermissions:
+    parameters: *ref_1
+    post:
+      description: >-
+        Returns permissions that a caller has on the specified resource. If the
+        resource does not exist, this will return an empty set of permissions,
+        not a `NOT_FOUND` error. Note: This operation is designed to be used for
+        building permission-aware UIs and command-line tools, not for
+        authorization checking. This operation may "fail open" without warning.
+      operationId: binaryauthorization.projects.policy.testIamPermissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestIamPermissionsRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestIamPermissionsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/policy:setIamPolicy:
+    parameters: *ref_1
+    post:
+      description: >-
+        Sets the access control policy on the specified resource. Replaces any
+        existing policy. Can return `NOT_FOUND`, `INVALID_ARGUMENT`, and
+        `PERMISSION_DENIED` errors.
+      operationId: binaryauthorization.projects.policy.setIamPolicy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetIamPolicyRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IamPolicy'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/policy:getIamPolicy:
+    parameters: *ref_1
+    get:
+      description: >-
+        Gets the access control policy for a resource. Returns an empty policy
+        if the resource exists and does not have a policy set.
+      operationId: binaryauthorization.projects.policy.getIamPolicy
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IamPolicy'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: options.requestedPolicyVersion
+          schema:
+            type: integer
+            format: int32
   /v1/projects/{projectsId}/platforms/gke/policies/{policiesId}:evaluate:
     parameters: *ref_1
     post:
@@ -2001,87 +2095,45 @@ paths:
           required: true
           schema:
             type: string
-  /v1/projects/{projectsId}/platforms/{platformsId}/policies:
-    parameters: *ref_1
-    post:
-      description: >-
-        Creates a platform policy, and returns a copy of it. Returns `NOT_FOUND`
-        if the project or platform doesn't exist, `INVALID_ARGUMENT` if the
-        request is malformed, `ALREADY_EXISTS` if the policy already exists, and
-        `INVALID_ARGUMENT` if the policy contains a platform-specific policy
-        that does not match the platform value specified in the URL.
-      operationId: binaryauthorization.projects.platforms.policies.create
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PlatformPolicy'
-      security:
-        - Oauth2:
-            - https://www.googleapis.com/auth/cloud-platform
-          Oauth2c:
-            - https://www.googleapis.com/auth/cloud-platform
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PlatformPolicy'
-      parameters:
-        - in: path
-          name: projectsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: platformsId
-          required: true
-          schema:
-            type: string
-        - in: query
-          name: policyId
-          schema:
-            type: string
-    get:
-      description: >-
-        Lists platform policies owned by a project in the specified platform.
-        Returns `INVALID_ARGUMENT` if the project or the platform doesn't exist.
-      operationId: binaryauthorization.projects.platforms.policies.list
-      security:
-        - Oauth2:
-            - https://www.googleapis.com/auth/cloud-platform
-          Oauth2c:
-            - https://www.googleapis.com/auth/cloud-platform
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListPlatformPoliciesResponse'
-      parameters:
-        - in: path
-          name: projectsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: platformsId
-          required: true
-          schema:
-            type: string
-        - in: query
-          name: pageSize
-          schema:
-            type: integer
-            format: int32
-        - in: query
-          name: pageToken
-          schema:
-            type: string
   /v1/projects/{projectsId}/platforms/{platformsId}/policies/{policiesId}:
     parameters: *ref_1
+    delete:
+      description: >-
+        Deletes a platform policy. Returns `NOT_FOUND` if the policy doesn't
+        exist.
+      operationId: binaryauthorization.projects.platforms.policies.delete
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Empty'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: platformsId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: policiesId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: etag
+          schema:
+            type: string
     get:
       description: Gets a platform policy. Returns `NOT_FOUND` if the policy doesn't exist.
       operationId: binaryauthorization.projects.platforms.policies.get
@@ -2151,11 +2203,13 @@ paths:
           required: true
           schema:
             type: string
-    delete:
+  /v1/projects/{projectsId}/platforms/{platformsId}/policies:
+    parameters: *ref_1
+    get:
       description: >-
-        Deletes a platform policy. Returns `NOT_FOUND` if the policy doesn't
-        exist.
-      operationId: binaryauthorization.projects.platforms.policies.delete
+        Lists platform policies owned by a project in the specified platform.
+        Returns `INVALID_ARGUMENT` if the project or the platform doesn't exist.
+      operationId: binaryauthorization.projects.platforms.policies.list
       security:
         - Oauth2:
             - https://www.googleapis.com/auth/cloud-platform
@@ -2167,7 +2221,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Empty'
+                $ref: '#/components/schemas/ListPlatformPoliciesResponse'
       parameters:
         - in: path
           name: projectsId
@@ -2179,71 +2233,8 @@ paths:
           required: true
           schema:
             type: string
-        - in: path
-          name: policiesId
-          required: true
-          schema:
-            type: string
         - in: query
-          name: etag
-          schema:
-            type: string
-  /v1/projects/{projectsId}/attestors:
-    parameters: *ref_1
-    post:
-      description: >-
-        Creates an attestor, and returns a copy of the new attestor. Returns
-        `NOT_FOUND` if the project does not exist, `INVALID_ARGUMENT` if the
-        request is malformed, `ALREADY_EXISTS` if the attestor already exists.
-      operationId: binaryauthorization.projects.attestors.create
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Attestor'
-      security:
-        - Oauth2:
-            - https://www.googleapis.com/auth/cloud-platform
-          Oauth2c:
-            - https://www.googleapis.com/auth/cloud-platform
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Attestor'
-      parameters:
-        - in: path
-          name: projectsId
-          required: true
-          schema:
-            type: string
-        - in: query
-          name: attestorId
-          schema:
-            type: string
-    get:
-      description: >-
-        Lists attestors. Returns `INVALID_ARGUMENT` if the project does not
-        exist.
-      operationId: binaryauthorization.projects.attestors.list
-      security:
-        - Oauth2:
-            - https://www.googleapis.com/auth/cloud-platform
-          Oauth2c:
-            - https://www.googleapis.com/auth/cloud-platform
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListAttestorsResponse'
-      parameters:
-        - in: path
-          name: projectsId
-          required: true
+          name: pageToken
           schema:
             type: string
         - in: query
@@ -2251,15 +2242,19 @@ paths:
           schema:
             type: integer
             format: int32
-        - in: query
-          name: pageToken
-          schema:
-            type: string
-  /v1/projects/{projectsId}/attestors/{attestorsId}:
-    parameters: *ref_1
-    get:
-      description: Gets an attestor. Returns `NOT_FOUND` if the attestor does not exist.
-      operationId: binaryauthorization.projects.attestors.get
+    post:
+      description: >-
+        Creates a platform policy, and returns a copy of it. Returns `NOT_FOUND`
+        if the project or platform doesn't exist, `INVALID_ARGUMENT` if the
+        request is malformed, `ALREADY_EXISTS` if the policy already exists, and
+        `INVALID_ARGUMENT` if the policy contains a platform-specific policy
+        that does not match the platform value specified in the URL.
+      operationId: binaryauthorization.projects.platforms.policies.create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformPolicy'
       security:
         - Oauth2:
             - https://www.googleapis.com/auth/cloud-platform
@@ -2271,7 +2266,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Attestor'
+                $ref: '#/components/schemas/PlatformPolicy'
       parameters:
         - in: path
           name: projectsId
@@ -2279,10 +2274,16 @@ paths:
           schema:
             type: string
         - in: path
-          name: attestorsId
+          name: platformsId
           required: true
           schema:
             type: string
+        - in: query
+          name: policyId
+          schema:
+            type: string
+  /v1/projects/{projectsId}/attestors/{attestorsId}:
+    parameters: *ref_1
     put:
       description: Updates an attestor. Returns `NOT_FOUND` if the attestor does not exist.
       operationId: binaryauthorization.projects.attestors.update
@@ -2340,18 +2341,9 @@ paths:
           required: true
           schema:
             type: string
-  /v1/projects/{projectsId}/attestors/{attestorsId}:validateAttestationOccurrence:
-    parameters: *ref_1
-    post:
-      description: >-
-        Returns whether the given `Attestation` for the given image URI was
-        signed by the given `Attestor`
-      operationId: binaryauthorization.projects.attestors.validateAttestationOccurrence
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ValidateAttestationOccurrenceRequest'
+    get:
+      description: Gets an attestor. Returns `NOT_FOUND` if the attestor does not exist.
+      operationId: binaryauthorization.projects.attestors.get
       security:
         - Oauth2:
             - https://www.googleapis.com/auth/cloud-platform
@@ -2363,7 +2355,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ValidateAttestationOccurrenceResponse'
+                $ref: '#/components/schemas/Attestor'
       parameters:
         - in: path
           name: projectsId
@@ -2375,19 +2367,13 @@ paths:
           required: true
           schema:
             type: string
-  /v1/projects/{projectsId}/attestors/{attestorsId}:setIamPolicy:
+  /v1/projects/{projectsId}/attestors:
     parameters: *ref_1
-    post:
+    get:
       description: >-
-        Sets the access control policy on the specified resource. Replaces any
-        existing policy. Can return `NOT_FOUND`, `INVALID_ARGUMENT`, and
-        `PERMISSION_DENIED` errors.
-      operationId: binaryauthorization.projects.attestors.setIamPolicy
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetIamPolicyRequest'
+        Lists attestors. Returns `INVALID_ARGUMENT` if the project does not
+        exist.
+      operationId: binaryauthorization.projects.attestors.list
       security:
         - Oauth2:
             - https://www.googleapis.com/auth/cloud-platform
@@ -2399,7 +2385,82 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/IamPolicy'
+                $ref: '#/components/schemas/ListAttestorsResponse'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: pageToken
+          schema:
+            type: string
+    post:
+      description: >-
+        Creates an attestor, and returns a copy of the new attestor. Returns
+        `NOT_FOUND` if the project does not exist, `INVALID_ARGUMENT` if the
+        request is malformed, `ALREADY_EXISTS` if the attestor already exists.
+      operationId: binaryauthorization.projects.attestors.create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Attestor'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attestor'
+      parameters:
+        - in: path
+          name: projectsId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: attestorId
+          schema:
+            type: string
+  /v1/projects/{projectsId}/attestors/{attestorsId}:testIamPermissions:
+    parameters: *ref_1
+    post:
+      description: >-
+        Returns permissions that a caller has on the specified resource. If the
+        resource does not exist, this will return an empty set of permissions,
+        not a `NOT_FOUND` error. Note: This operation is designed to be used for
+        building permission-aware UIs and command-line tools, not for
+        authorization checking. This operation may "fail open" without warning.
+      operationId: binaryauthorization.projects.attestors.testIamPermissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestIamPermissionsRequest'
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestIamPermissionsResponse'
       parameters:
         - in: path
           name: projectsId
@@ -2446,52 +2507,14 @@ paths:
           schema:
             type: integer
             format: int32
-  /v1/projects/{projectsId}/attestors/{attestorsId}:testIamPermissions:
-    parameters: *ref_1
-    post:
-      description: >-
-        Returns permissions that a caller has on the specified resource. If the
-        resource does not exist, this will return an empty set of permissions,
-        not a `NOT_FOUND` error. Note: This operation is designed to be used for
-        building permission-aware UIs and command-line tools, not for
-        authorization checking. This operation may "fail open" without warning.
-      operationId: binaryauthorization.projects.attestors.testIamPermissions
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TestIamPermissionsRequest'
-      security:
-        - Oauth2:
-            - https://www.googleapis.com/auth/cloud-platform
-          Oauth2c:
-            - https://www.googleapis.com/auth/cloud-platform
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TestIamPermissionsResponse'
-      parameters:
-        - in: path
-          name: projectsId
-          required: true
-          schema:
-            type: string
-        - in: path
-          name: attestorsId
-          required: true
-          schema:
-            type: string
-  /v1/projects/{projectsId}/policy:setIamPolicy:
+  /v1/projects/{projectsId}/attestors/{attestorsId}:setIamPolicy:
     parameters: *ref_1
     post:
       description: >-
         Sets the access control policy on the specified resource. Replaces any
         existing policy. Can return `NOT_FOUND`, `INVALID_ARGUMENT`, and
         `PERMISSION_DENIED` errors.
-      operationId: binaryauthorization.projects.policy.setIamPolicy
+      operationId: binaryauthorization.projects.attestors.setIamPolicy
       requestBody:
         content:
           application/json:
@@ -2515,13 +2538,23 @@ paths:
           required: true
           schema:
             type: string
-  /v1/projects/{projectsId}/policy:getIamPolicy:
+        - in: path
+          name: attestorsId
+          required: true
+          schema:
+            type: string
+  /v1/projects/{projectsId}/attestors/{attestorsId}:validateAttestationOccurrence:
     parameters: *ref_1
-    get:
+    post:
       description: >-
-        Gets the access control policy for a resource. Returns an empty policy
-        if the resource exists and does not have a policy set.
-      operationId: binaryauthorization.projects.policy.getIamPolicy
+        Returns whether the given `Attestation` for the given image URI was
+        signed by the given `Attestor`
+      operationId: binaryauthorization.projects.attestors.validateAttestationOccurrence
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateAttestationOccurrenceRequest'
       security:
         - Oauth2:
             - https://www.googleapis.com/auth/cloud-platform
@@ -2533,48 +2566,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/IamPolicy'
+                $ref: '#/components/schemas/ValidateAttestationOccurrenceResponse'
       parameters:
         - in: path
           name: projectsId
           required: true
           schema:
             type: string
-        - in: query
-          name: options.requestedPolicyVersion
-          schema:
-            type: integer
-            format: int32
-  /v1/projects/{projectsId}/policy:testIamPermissions:
-    parameters: *ref_1
-    post:
-      description: >-
-        Returns permissions that a caller has on the specified resource. If the
-        resource does not exist, this will return an empty set of permissions,
-        not a `NOT_FOUND` error. Note: This operation is designed to be used for
-        building permission-aware UIs and command-line tools, not for
-        authorization checking. This operation may "fail open" without warning.
-      operationId: binaryauthorization.projects.policy.testIamPermissions
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TestIamPermissionsRequest'
-      security:
-        - Oauth2:
-            - https://www.googleapis.com/auth/cloud-platform
-          Oauth2c:
-            - https://www.googleapis.com/auth/cloud-platform
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TestIamPermissionsResponse'
-      parameters:
         - in: path
-          name: projectsId
+          name: attestorsId
           required: true
           schema:
             type: string
