@@ -7,8 +7,8 @@ info:
   title: Google Cloud Memorystore for Redis API
   description: Creates and manages Redis instances on the Google Cloud Platform.
   version: v1
-  x-discovery-doc-revision: '20250819'
-  x-generated-date: '2025-08-28'
+  x-discovery-doc-revision: '20251104'
+  x-generated-date: '2025-12-10'
 externalDocs:
   url: https://cloud.google.com/memorystore/docs/redis/
 servers:
@@ -49,6 +49,15 @@ components:
         nextPageToken:
           description: The standard List next-page token.
           type: string
+        unreachable:
+          description: >-
+            Unordered list. Unreachable resources. Populated when the request
+            sets `ListOperationsRequest.return_partial_success` and reads across
+            collections e.g. when attempting to list all resources across all
+            supported locations.
+          type: array
+          items:
+            type: string
     Operation:
       id: Operation
       description: >-
@@ -461,14 +470,35 @@ components:
             endpoint can be de-registered before the forwarding rules in the
             cluster endpoint are deleted.
           type: boolean
-        allowFewerZonesDeployment:
+        maintenanceVersion:
           description: >-
-            Optional. Immutable. Allows customers to specify if they are okay
-            with deploying a multi-zone cluster in less than 3 zones. Once set,
-            if there is a zonal outage during the cluster creation, the cluster
-            will only be deployed in 2 zones, and stay within the 2 zones for
-            its lifecycle.
+            Optional. This field can be used to trigger self service update to
+            indicate the desired maintenance version. The input to this field
+            can be determined by the available_maintenance_versions field.
+          type: string
+        effectiveMaintenanceVersion:
+          description: >-
+            Output only. This field represents the actual maintenance version of
+            the cluster.
+          readOnly: true
+          type: string
+        availableMaintenanceVersions:
+          description: >-
+            Output only. This field is used to determine the available
+            maintenance versions for the self service update.
+          readOnly: true
+          type: array
+          items:
+            type: string
+        allowFewerZonesDeployment:
+          description: Optional. Immutable. Deprecated, do not use.
+          deprecated: true
           type: boolean
+        labels:
+          description: Optional. Labels to represent user-provided metadata.
+          type: object
+          additionalProperties:
+            type: string
     GcsBackupSource:
       id: GcsBackupSource
       description: >-
@@ -2237,7 +2267,7 @@ components:
       description: >-
         DatabaseResourceFeed is the top level proto to be used to ingest
         different database resource level events into Condor platform. Next ID:
-        11
+        13
       type: object
       properties:
         resourceId:
@@ -2261,6 +2291,7 @@ components:
             - Database resource recommendation signal data
             - Database config based signal data
             - Database resource metadata from BackupDR
+            - Database resource signal data
           enum:
             - FEEDTYPE_UNSPECIFIED
             - RESOURCE_METADATA
@@ -2269,6 +2300,7 @@ components:
             - RECOMMENDATION_SIGNAL_DATA
             - CONFIG_BASED_SIGNAL_DATA
             - BACKUPDR_METADATA
+            - DATABASE_RESOURCE_SIGNAL_DATA
         resourceMetadata:
           $ref: '#/components/schemas/DatabaseResourceMetadata'
         resourceHealthSignalData:
@@ -2285,6 +2317,11 @@ components:
         backupdrMetadata:
           description: BackupDR metadata is used to ingest metadata from BackupDR.
           $ref: '#/components/schemas/BackupDRMetadata'
+        databaseResourceSignalData:
+          description: >-
+            Database resource signal data is used to ingest signals from
+            database resource signal feeds.
+          $ref: '#/components/schemas/DatabaseResourceSignalData'
         skipIngestion:
           description: >-
             Optional. If true, the feed won't be ingested by DB Center. This
@@ -2352,7 +2389,7 @@ components:
           type: string
     DatabaseResourceMetadata:
       id: DatabaseResourceMetadata
-      description: 'Common model for database resource instance metadata. Next ID: 26'
+      description: 'Common model for database resource instance metadata. Next ID: 30'
       type: object
       properties:
         id:
@@ -2388,6 +2425,11 @@ components:
           type: string
         location:
           description: The resource location. REQUIRED
+          type: string
+        zone:
+          description: >-
+            The resource zone. This is only applicable for zonal resources and
+            will be empty for regional and multi-regional resources.
           type: string
         creationTime:
           description: >-
@@ -2516,10 +2558,12 @@ components:
             - Default, to make it consistent with instance edition enum.
             - Represents the enterprise edition.
             - Represents the enterprise plus edition.
+            - Represents the standard edition.
           enum:
             - EDITION_UNSPECIFIED
             - EDITION_ENTERPRISE
             - EDITION_ENTERPRISE_PLUS
+            - EDITION_STANDARD
         suspensionReason:
           description: Optional. Suspension reason for the resource.
           type: string
@@ -2546,6 +2590,12 @@ components:
         backupdrConfiguration:
           description: Optional. BackupDR Configuration for the resource.
           $ref: '#/components/schemas/BackupDRConfiguration'
+        maintenanceInfo:
+          description: Optional. Maintenance info for the resource.
+          $ref: '#/components/schemas/ResourceMaintenanceInfo'
+        isDeletionProtectionEnabled:
+          description: Optional. Whether deletion protection is enabled for this resource.
+          type: boolean
     Product:
       id: Product
       description: Product specification for Condor resources.
@@ -2570,6 +2620,7 @@ components:
             - Firestore product area in GCP.
             - Compute Engine self managed databases
             - Oracle product area in GCP
+            - BigQuery product area in GCP
             - >-
               Other refers to rest of other product type. This is to be when
               product type is known, but it is not present in this enum.
@@ -2582,6 +2633,7 @@ components:
             - false
             - false
             - true
+            - false
             - false
             - false
             - false
@@ -2602,6 +2654,7 @@ components:
             - PRODUCT_TYPE_FIRESTORE
             - PRODUCT_TYPE_COMPUTE_ENGINE
             - PRODUCT_TYPE_ORACLE_ON_GCP
+            - PRODUCT_TYPE_BIGQUERY
             - PRODUCT_TYPE_OTHER
         engine:
           description: The specific engine that the underlying database is running.
@@ -3004,6 +3057,133 @@ components:
         backupdrManaged:
           description: Indicates if the resource is managed by BackupDR.
           type: boolean
+    ResourceMaintenanceInfo:
+      id: ResourceMaintenanceInfo
+      description: MaintenanceInfo to capture the maintenance details of database resource.
+      type: object
+      properties:
+        maintenanceSchedule:
+          description: Optional. Maintenance window for the database resource.
+          $ref: '#/components/schemas/ResourceMaintenanceSchedule'
+        denyMaintenanceSchedules:
+          description: Optional. List of Deny maintenance period for the database resource.
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceMaintenanceDenySchedule'
+        maintenanceVersion:
+          description: >-
+            Optional. Current Maintenance version of the database resource.
+            Example: "MYSQL_8_0_41.R20250531.01_15"
+          type: string
+    ResourceMaintenanceSchedule:
+      id: ResourceMaintenanceSchedule
+      description: >-
+        Maintenance window for the database resource. It specifies preferred
+        time and day of the week and phase in some cases, when the maintenance
+        can start. This is configured by the customer.
+      type: object
+      properties:
+        time:
+          description: >-
+            Optional. Preferred time to start the maintenance operation on the
+            specified day.
+          $ref: '#/components/schemas/TimeOfDay'
+        day:
+          description: >-
+            Optional. Preferred day of the week for maintenance, e.g. MONDAY,
+            TUESDAY, etc.
+          type: string
+          enumDescriptions:
+            - The day of the week is unspecified.
+            - Monday
+            - Tuesday
+            - Wednesday
+            - Thursday
+            - Friday
+            - Saturday
+            - Sunday
+          enum:
+            - DAY_OF_WEEK_UNSPECIFIED
+            - MONDAY
+            - TUESDAY
+            - WEDNESDAY
+            - THURSDAY
+            - FRIDAY
+            - SATURDAY
+            - SUNDAY
+        phase:
+          description: >-
+            Optional. Phase of the maintenance window. This is to capture order
+            of maintenance. For example, for Cloud SQL resources, this can be
+            used to capture if the maintenance window is in Week1, Week2, Week5,
+            etc. Non production resources are usually part of early phase. For
+            more details, refer to Cloud SQL resources -
+            https://cloud.google.com/sql/docs/mysql/maintenance
+          type: string
+          enumDescriptions:
+            - Phase is unspecified.
+            - Any phase.
+            - Week 1.
+            - Week 2.
+            - Week 5.
+          enum:
+            - PHASE_UNSPECIFIED
+            - ANY
+            - WEEK1
+            - WEEK2
+            - WEEK5
+    ResourceMaintenanceDenySchedule:
+      id: ResourceMaintenanceDenySchedule
+      description: >-
+        Deny maintenance period for the database resource. It specifies the time
+        range during which the maintenance cannot start. This is configured by
+        the customer.
+      type: object
+      properties:
+        startDate:
+          description: Optional. The start date of the deny maintenance period.
+          $ref: '#/components/schemas/Date'
+        endDate:
+          description: Optional. Deny period end date.
+          $ref: '#/components/schemas/Date'
+        time:
+          description: >-
+            Optional. Time in UTC when the deny period starts on start_date and
+            ends on end_date.
+          $ref: '#/components/schemas/TimeOfDay'
+    Date:
+      id: Date
+      description: >-
+        Represents a whole or partial calendar date, such as a birthday. The
+        time of day and time zone are either specified elsewhere or are
+        insignificant. The date is relative to the Gregorian Calendar. This can
+        represent one of the following: * A full date, with non-zero year,
+        month, and day values. * A month and day, with a zero year (for example,
+        an anniversary). * A year on its own, with a zero month and a zero day.
+        * A year and month, with a zero day (for example, a credit card
+        expiration date). Related types: * google.type.TimeOfDay *
+        google.type.DateTime * google.protobuf.Timestamp
+      type: object
+      properties:
+        year:
+          description: >-
+            Year of the date. Must be from 1 to 9999, or 0 to specify a date
+            without a year.
+          type: integer
+          format: int32
+        month:
+          description: >-
+            Month of a year. Must be from 1 to 12, or 0 to specify a year
+            without a month and day.
+          type: integer
+          format: int32
+        day:
+          description: >-
+            Day of a month. Must be from 1 to 31 and valid for the year and
+            month, or 0 to specify a year by itself or a year and month where
+            the day isn't significant.
+          type: integer
+          format: int32
     DatabaseResourceHealthSignalData:
       id: DatabaseResourceHealthSignalData
       description: Common model for database resource health signal data.
@@ -3365,6 +3545,9 @@ components:
             - Replication delay.
             - Outdated version.
             - Outdated client.
+            - Databoost is disabled.
+            - Recommended maintenance policy.
+            - Resource version is in extended support.
           enumDeprecated:
             - false
             - false
@@ -3372,6 +3555,9 @@ components:
             - true
             - true
             - true
+            - false
+            - false
+            - false
             - false
             - false
             - false
@@ -3571,6 +3757,9 @@ components:
             - SIGNAL_TYPE_REPLICATION_LAG
             - SIGNAL_TYPE_OUTDATED_VERSION
             - SIGNAL_TYPE_OUTDATED_CLIENT
+            - SIGNAL_TYPE_DATABOOST_DISABLED
+            - SIGNAL_TYPE_RECOMMENDED_MAINTENANCE_POLICIES
+            - SIGNAL_TYPE_EXTENDED_SUPPORT
         location:
           description: >-
             This is used to identify the location of the resource. Example:
@@ -3809,6 +3998,9 @@ components:
             - Replication delay.
             - Outdated version.
             - Outdated client.
+            - Databoost is disabled.
+            - Recommended maintenance policy.
+            - Resource version is in extended support.
           enumDeprecated:
             - false
             - false
@@ -3816,6 +4008,9 @@ components:
             - true
             - true
             - true
+            - false
+            - false
+            - false
             - false
             - false
             - false
@@ -4015,6 +4210,9 @@ components:
             - SIGNAL_TYPE_REPLICATION_LAG
             - SIGNAL_TYPE_OUTDATED_VERSION
             - SIGNAL_TYPE_OUTDATED_CLIENT
+            - SIGNAL_TYPE_DATABOOST_DISABLED
+            - SIGNAL_TYPE_RECOMMENDED_MAINTENANCE_POLICIES
+            - SIGNAL_TYPE_EXTENDED_SUPPORT
         lastRefreshTime:
           description: Required. last time recommendationw as refreshed
           type: string
@@ -4196,6 +4394,7 @@ components:
             - >-
               Represents if a resources requires all incoming connections to use
               SSL or not.
+            - Represents if a resource version is in extended support.
           enum:
             - SIGNAL_TYPE_UNSPECIFIED
             - SIGNAL_TYPE_OUTDATED_MINOR_VERSION
@@ -4203,6 +4402,7 @@ components:
             - SIGNAL_TYPE_NO_ROOT_PASSWORD
             - SIGNAL_TYPE_EXPOSED_TO_PUBLIC_ACCESS
             - SIGNAL_TYPE_UNENCRYPTED_CONNECTIONS
+            - SIGNAL_TYPE_EXTENDED_SUPPORT
         signalBoolValue:
           description: Signal data for boolean signals.
           type: boolean
@@ -4232,6 +4432,66 @@ components:
         fullResourceName:
           description: Required. Full resource name of this instance.
           type: string
+    DatabaseResourceSignalData:
+      id: DatabaseResourceSignalData
+      description: >-
+        Database resource signal data. This is used to send signals to Condor
+        which are based on the DB/Instance/Fleet level configurations. These
+        will be used to send signals for all inventory types. Next ID: 7
+      type: object
+      properties:
+        resourceId:
+          description: Database resource id.
+          $ref: '#/components/schemas/DatabaseResourceId'
+        fullResourceName:
+          description: Required. Full Resource name of the source resource.
+          type: string
+        lastRefreshTime:
+          description: Required. Last time signal was refreshed
+          type: string
+          format: google-datetime
+        signalType:
+          description: Required. Signal type of the signal
+          type: string
+          enumDescriptions:
+            - Unspecified signal type.
+            - Outdated Minor Version
+            - Represents database auditing is disabled.
+            - >-
+              Represents if a database has a password configured for the root
+              account or not.
+            - Represents if a resource is exposed to public access.
+            - >-
+              Represents if a resources requires all incoming connections to use
+              SSL or not.
+            - Represents if a resource version is in extended support.
+          enum:
+            - SIGNAL_TYPE_UNSPECIFIED
+            - SIGNAL_TYPE_OUTDATED_MINOR_VERSION
+            - SIGNAL_TYPE_DATABASE_AUDITING_DISABLED
+            - SIGNAL_TYPE_NO_ROOT_PASSWORD
+            - SIGNAL_TYPE_EXPOSED_TO_PUBLIC_ACCESS
+            - SIGNAL_TYPE_UNENCRYPTED_CONNECTIONS
+            - SIGNAL_TYPE_EXTENDED_SUPPORT
+        signalState:
+          description: Required. Output only. Signal state of the signal
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - Unspecified signal state.
+            - Signal is active and requires attention.
+            - Signal is inactive and does not require attention.
+            - >-
+              Signal is dismissed by the user and should not be shown to the
+              user again.
+          enum:
+            - SIGNAL_STATE_UNSPECIFIED
+            - ACTIVE
+            - INACTIVE
+            - DISMISSED
+        signalBoolValue:
+          description: Signal data for boolean signals.
+          type: boolean
     OperationMetadata:
       id: OperationMetadata
       description: Pre-defined metadata fields.
@@ -4864,6 +5124,10 @@ paths:
           name: pageToken
           schema:
             type: string
+        - in: query
+          name: returnPartialSuccess
+          schema:
+            type: boolean
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:
     parameters: *ref_1
     get:

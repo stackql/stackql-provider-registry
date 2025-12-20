@@ -7,8 +7,8 @@ info:
   title: Datastream API
   description: ''
   version: v1
-  x-discovery-doc-revision: '20250820'
-  x-generated-date: '2025-08-28'
+  x-discovery-doc-revision: '20251112'
+  x-generated-date: '2025-12-10'
 externalDocs:
   url: https://cloud.google.com/datastream/
 servers:
@@ -49,6 +49,15 @@ components:
         nextPageToken:
           description: The standard List next-page token.
           type: string
+        unreachable:
+          description: >-
+            Unordered list. Unreachable resources. Populated when the request
+            sets `ListOperationsRequest.return_partial_success` and reads across
+            collections e.g. when attempting to list all resources across all
+            supported locations.
+          type: array
+          items:
+            type: string
     Operation:
       id: Operation
       description: >-
@@ -1391,6 +1400,11 @@ components:
           description: Output only. Reserved for future use.
           readOnly: true
           type: boolean
+        ruleSets:
+          description: Optional. Rule sets to apply to the stream.
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleSet'
     SourceConfig:
       id: SourceConfig
       description: The configuration of the stream source.
@@ -1638,6 +1652,17 @@ components:
             set to 0), the system's default value is used
           type: integer
           format: int32
+        jsonMode:
+          description: Optional. MongoDB JSON mode to use for the stream.
+          type: string
+          enumDescriptions:
+            - Unspecified JSON mode.
+            - Strict JSON mode.
+            - Canonical JSON mode.
+          enum:
+            - MONGODB_JSON_MODE_UNSPECIFIED
+            - STRICT
+            - CANONICAL
     DestinationConfig:
       id: DestinationConfig
       description: The configuration of the stream destination.
@@ -1897,206 +1922,136 @@ components:
           type: object
           additionalProperties:
             type: string
-    RunStreamRequest:
-      id: RunStreamRequest
-      description: Request message for running a stream.
+    RuleSet:
+      id: RuleSet
+      description: A set of rules to apply to a set of objects.
       type: object
       properties:
-        cdcStrategy:
+        customizationRules:
+          description: Required. List of customization rules to apply.
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomizationRule'
+        objectFilter:
+          description: Required. Object filter to apply the customization rules to.
+          $ref: '#/components/schemas/ObjectFilter'
+    CustomizationRule:
+      id: CustomizationRule
+      description: A customization rule to apply to a set of objects.
+      type: object
+      properties:
+        bigqueryPartitioning:
+          description: BigQuery partitioning rule.
+          $ref: '#/components/schemas/BigQueryPartitioning'
+        bigqueryClustering:
+          description: BigQuery clustering rule.
+          $ref: '#/components/schemas/BigQueryClustering'
+    BigQueryPartitioning:
+      id: BigQueryPartitioning
+      description: BigQuery partitioning configuration.
+      type: object
+      properties:
+        integerRangePartition:
+          description: Integer range partitioning.
+          $ref: '#/components/schemas/IntegerRangePartition'
+        timeUnitPartition:
+          description: Time unit column partitioning.
+          $ref: '#/components/schemas/TimeUnitPartition'
+        ingestionTimePartition:
+          description: Ingestion time partitioning.
+          $ref: '#/components/schemas/IngestionTimePartition'
+        requirePartitionFilter:
           description: >-
-            Optional. The CDC strategy of the stream. If not set, the system's
-            default value will be used.
-          $ref: '#/components/schemas/CdcStrategy'
-        force:
-          description: Optional. Update the stream without validating it.
+            Optional. If true, queries over the table require a partition
+            filter.
           type: boolean
-    CdcStrategy:
-      id: CdcStrategy
-      description: The strategy that the stream uses for CDC replication.
+    IntegerRangePartition:
+      id: IntegerRangePartition
+      description: >-
+        Integer range partitioning. see
+        https://cloud.google.com/bigquery/docs/partitioned-tables#integer_range
       type: object
       properties:
-        mostRecentStartPosition:
-          description: >-
-            Optional. Start replicating from the most recent position in the
-            source.
-          $ref: '#/components/schemas/MostRecentStartPosition'
-        nextAvailableStartPosition:
-          description: >-
-            Optional. Resume replication from the next available position in the
-            source.
-          $ref: '#/components/schemas/NextAvailableStartPosition'
-        specificStartPosition:
-          description: Optional. Start replicating from a specific position in the source.
-          $ref: '#/components/schemas/SpecificStartPosition'
-    MostRecentStartPosition:
-      id: MostRecentStartPosition
-      description: >-
-        CDC strategy to start replicating from the most recent position in the
-        source.
-      type: object
-      properties: {}
-    NextAvailableStartPosition:
-      id: NextAvailableStartPosition
-      description: >-
-        CDC strategy to resume replication from the next available position in
-        the source.
-      type: object
-      properties: {}
-    SpecificStartPosition:
-      id: SpecificStartPosition
-      description: >-
-        CDC strategy to start replicating from a specific position in the
-        source.
-      type: object
-      properties:
-        mysqlLogPosition:
-          description: MySQL specific log position to start replicating from.
-          $ref: '#/components/schemas/MysqlLogPosition'
-        oracleScnPosition:
-          description: Oracle SCN to start replicating from.
-          $ref: '#/components/schemas/OracleScnPosition'
-        sqlServerLsnPosition:
-          description: SqlServer LSN to start replicating from.
-          $ref: '#/components/schemas/SqlServerLsnPosition'
-        mysqlGtidPosition:
-          description: MySQL GTID set to start replicating from.
-          $ref: '#/components/schemas/MysqlGtidPosition'
-    MysqlLogPosition:
-      id: MysqlLogPosition
-      description: MySQL log position
-      type: object
-      properties:
-        logFile:
-          description: Required. The binary log file name.
+        column:
+          description: Required. The partitioning column.
           type: string
-        logPosition:
-          description: >-
-            Optional. The position within the binary log file. Default is head
-            of file.
-          type: integer
-          format: int32
-    OracleScnPosition:
-      id: OracleScnPosition
-      description: Oracle SCN position
-      type: object
-      properties:
-        scn:
-          description: Required. SCN number from where Logs will be read
+        start:
+          description: Required. The starting value for range partitioning (inclusive).
           type: string
           format: int64
-    SqlServerLsnPosition:
-      id: SqlServerLsnPosition
-      description: SQL Server LSN position
+        end:
+          description: Required. The ending value for range partitioning (exclusive).
+          type: string
+          format: int64
+        interval:
+          description: Required. The interval of each range within the partition.
+          type: string
+          format: int64
+    TimeUnitPartition:
+      id: TimeUnitPartition
+      description: >-
+        Time unit column partitioning. see
+        https://cloud.google.com/bigquery/docs/partitioned-tables#date_timestamp_partitioned_tables
       type: object
       properties:
-        lsn:
-          description: Required. Log sequence number (LSN) from where Logs will be read
+        column:
+          description: Required. The partitioning column.
           type: string
-    MysqlGtidPosition:
-      id: MysqlGtidPosition
-      description: MySQL GTID position
+        partitioningTimeGranularity:
+          description: Optional. Partition granularity.
+          type: string
+          enumDescriptions:
+            - Unspecified partitioing interval.
+            - Hourly partitioning.
+            - Daily partitioning.
+            - Monthly partitioning.
+            - Yearly partitioning.
+          enum:
+            - PARTITIONING_TIME_GRANULARITY_UNSPECIFIED
+            - PARTITIONING_TIME_GRANULARITY_HOUR
+            - PARTITIONING_TIME_GRANULARITY_DAY
+            - PARTITIONING_TIME_GRANULARITY_MONTH
+            - PARTITIONING_TIME_GRANULARITY_YEAR
+    IngestionTimePartition:
+      id: IngestionTimePartition
+      description: >-
+        Ingestion time partitioning. see
+        https://cloud.google.com/bigquery/docs/partitioned-tables#ingestion_time
       type: object
       properties:
-        gtidSet:
-          description: Required. The gtid set to start replication from.
+        partitioningTimeGranularity:
+          description: Optional. Partition granularity
           type: string
-    StreamObject:
-      id: StreamObject
-      description: A specific stream object (e.g a specific DB table).
+          enumDescriptions:
+            - Unspecified partitioing interval.
+            - Hourly partitioning.
+            - Daily partitioning.
+            - Monthly partitioning.
+            - Yearly partitioning.
+          enum:
+            - PARTITIONING_TIME_GRANULARITY_UNSPECIFIED
+            - PARTITIONING_TIME_GRANULARITY_HOUR
+            - PARTITIONING_TIME_GRANULARITY_DAY
+            - PARTITIONING_TIME_GRANULARITY_MONTH
+            - PARTITIONING_TIME_GRANULARITY_YEAR
+    BigQueryClustering:
+      id: BigQueryClustering
+      description: BigQuery clustering configuration.
       type: object
       properties:
-        name:
-          description: Output only. Identifier. The object resource's name.
-          readOnly: true
-          type: string
-        createTime:
-          description: Output only. The creation time of the object.
-          readOnly: true
-          type: string
-          format: google-datetime
-        updateTime:
-          description: Output only. The last update time of the object.
-          readOnly: true
-          type: string
-          format: google-datetime
-        displayName:
-          description: Required. Display name.
-          type: string
-        errors:
-          description: Output only. Active errors on the object.
-          readOnly: true
+        columns:
+          description: Required. Column names to set as clustering columns.
           type: array
           items:
-            $ref: '#/components/schemas/Error'
-        backfillJob:
-          description: The latest backfill job that was initiated for the stream object.
-          $ref: '#/components/schemas/BackfillJob'
-        sourceObject:
-          description: The object identifier in the data source.
+            type: string
+    ObjectFilter:
+      id: ObjectFilter
+      description: Object filter to apply the rules to.
+      type: object
+      properties:
+        sourceObjectIdentifier:
+          description: Specific source object identifier.
           $ref: '#/components/schemas/SourceObjectIdentifier'
-    BackfillJob:
-      id: BackfillJob
-      description: Represents a backfill job on a specific stream object.
-      type: object
-      properties:
-        state:
-          description: Output only. Backfill job state.
-          readOnly: true
-          type: string
-          enumDescriptions:
-            - Default value.
-            - >-
-              Backfill job was never started for the stream object (stream has
-              backfill strategy defined as manual or object was explicitly
-              excluded from automatic backfill).
-            - Backfill job will start pending available resources.
-            - Backfill job is running.
-            - Backfill job stopped (next job run will start from beginning).
-            - Backfill job failed (due to an error).
-            - Backfill completed successfully.
-            - >-
-              Backfill job failed since the table structure is currently
-              unsupported for backfill.
-          enum:
-            - STATE_UNSPECIFIED
-            - NOT_STARTED
-            - PENDING
-            - ACTIVE
-            - STOPPED
-            - FAILED
-            - COMPLETED
-            - UNSUPPORTED
-        trigger:
-          description: Backfill job's triggering reason.
-          type: string
-          enumDescriptions:
-            - Default value.
-            - >-
-              Object backfill job was triggered automatically according to the
-              stream's backfill strategy.
-            - >-
-              Object backfill job was triggered manually using the dedicated
-              API.
-          enum:
-            - TRIGGER_UNSPECIFIED
-            - AUTOMATIC
-            - MANUAL
-        lastStartTime:
-          description: Output only. Backfill job's start time.
-          readOnly: true
-          type: string
-          format: google-datetime
-        lastEndTime:
-          description: Output only. Backfill job's end time.
-          readOnly: true
-          type: string
-          format: google-datetime
-        errors:
-          description: Output only. Errors which caused the backfill job to fail.
-          readOnly: true
-          type: array
-          items:
-            $ref: '#/components/schemas/Error'
     SourceObjectIdentifier:
       id: SourceObjectIdentifier
       description: Represents an identifier of an object in the data source.
@@ -2183,6 +2138,227 @@ components:
         collection:
           description: Required. The collection name.
           type: string
+    RunStreamRequest:
+      id: RunStreamRequest
+      description: Request message for running a stream.
+      type: object
+      properties:
+        cdcStrategy:
+          description: >-
+            Optional. The CDC strategy of the stream. If not set, the system's
+            default value will be used.
+          $ref: '#/components/schemas/CdcStrategy'
+        force:
+          description: Optional. Update the stream without validating it.
+          type: boolean
+    CdcStrategy:
+      id: CdcStrategy
+      description: The strategy that the stream uses for CDC replication.
+      type: object
+      properties:
+        mostRecentStartPosition:
+          description: >-
+            Optional. Start replicating from the most recent position in the
+            source.
+          $ref: '#/components/schemas/MostRecentStartPosition'
+        nextAvailableStartPosition:
+          description: >-
+            Optional. Resume replication from the next available position in the
+            source.
+          $ref: '#/components/schemas/NextAvailableStartPosition'
+        specificStartPosition:
+          description: Optional. Start replicating from a specific position in the source.
+          $ref: '#/components/schemas/SpecificStartPosition'
+    MostRecentStartPosition:
+      id: MostRecentStartPosition
+      description: >-
+        CDC strategy to start replicating from the most recent position in the
+        source.
+      type: object
+      properties: {}
+    NextAvailableStartPosition:
+      id: NextAvailableStartPosition
+      description: >-
+        CDC strategy to resume replication from the next available position in
+        the source.
+      type: object
+      properties: {}
+    SpecificStartPosition:
+      id: SpecificStartPosition
+      description: >-
+        CDC strategy to start replicating from a specific position in the
+        source.
+      type: object
+      properties:
+        mysqlLogPosition:
+          description: MySQL specific log position to start replicating from.
+          $ref: '#/components/schemas/MysqlLogPosition'
+        oracleScnPosition:
+          description: Oracle SCN to start replicating from.
+          $ref: '#/components/schemas/OracleScnPosition'
+        sqlServerLsnPosition:
+          description: SqlServer LSN to start replicating from.
+          $ref: '#/components/schemas/SqlServerLsnPosition'
+        mysqlGtidPosition:
+          description: MySQL GTID set to start replicating from.
+          $ref: '#/components/schemas/MysqlGtidPosition'
+        mongodbChangeStreamPosition:
+          description: MongoDB change stream position to start replicating from.
+          $ref: '#/components/schemas/MongodbChangeStreamPosition'
+    MysqlLogPosition:
+      id: MysqlLogPosition
+      description: MySQL log position
+      type: object
+      properties:
+        logFile:
+          description: Required. The binary log file name.
+          type: string
+        logPosition:
+          description: >-
+            Optional. The position within the binary log file. Default is head
+            of file.
+          type: integer
+          format: int32
+    OracleScnPosition:
+      id: OracleScnPosition
+      description: Oracle SCN position
+      type: object
+      properties:
+        scn:
+          description: Required. SCN number from where Logs will be read
+          type: string
+          format: int64
+    SqlServerLsnPosition:
+      id: SqlServerLsnPosition
+      description: SQL Server LSN position
+      type: object
+      properties:
+        lsn:
+          description: Required. Log sequence number (LSN) from where Logs will be read
+          type: string
+    MysqlGtidPosition:
+      id: MysqlGtidPosition
+      description: MySQL GTID position
+      type: object
+      properties:
+        gtidSet:
+          description: Required. The gtid set to start replication from.
+          type: string
+    MongodbChangeStreamPosition:
+      id: MongodbChangeStreamPosition
+      description: MongoDB change stream position
+      type: object
+      properties:
+        startTime:
+          description: Required. The timestamp to start change stream from.
+          type: string
+          format: google-datetime
+    StreamObject:
+      id: StreamObject
+      description: A specific stream object (e.g a specific DB table).
+      type: object
+      properties:
+        name:
+          description: Output only. Identifier. The object resource's name.
+          readOnly: true
+          type: string
+        createTime:
+          description: Output only. The creation time of the object.
+          readOnly: true
+          type: string
+          format: google-datetime
+        updateTime:
+          description: Output only. The last update time of the object.
+          readOnly: true
+          type: string
+          format: google-datetime
+        displayName:
+          description: Required. Display name.
+          type: string
+        errors:
+          description: Output only. Active errors on the object.
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/Error'
+        backfillJob:
+          description: The latest backfill job that was initiated for the stream object.
+          $ref: '#/components/schemas/BackfillJob'
+        sourceObject:
+          description: The object identifier in the data source.
+          $ref: '#/components/schemas/SourceObjectIdentifier'
+        customizationRules:
+          description: >-
+            Output only. The customization rules for the object. These rules are
+            derived from the parent Stream's `rule_sets` and represent the
+            intended configuration for the object.
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomizationRule'
+    BackfillJob:
+      id: BackfillJob
+      description: Represents a backfill job on a specific stream object.
+      type: object
+      properties:
+        state:
+          description: Output only. Backfill job state.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - Default value.
+            - >-
+              Backfill job was never started for the stream object (stream has
+              backfill strategy defined as manual or object was explicitly
+              excluded from automatic backfill).
+            - Backfill job will start pending available resources.
+            - Backfill job is running.
+            - Backfill job stopped (next job run will start from beginning).
+            - Backfill job failed (due to an error).
+            - Backfill completed successfully.
+            - >-
+              Backfill job failed since the table structure is currently
+              unsupported for backfill.
+          enum:
+            - STATE_UNSPECIFIED
+            - NOT_STARTED
+            - PENDING
+            - ACTIVE
+            - STOPPED
+            - FAILED
+            - COMPLETED
+            - UNSUPPORTED
+        trigger:
+          description: Backfill job's triggering reason.
+          type: string
+          enumDescriptions:
+            - Default value.
+            - >-
+              Object backfill job was triggered automatically according to the
+              stream's backfill strategy.
+            - >-
+              Object backfill job was triggered manually using the dedicated
+              API.
+          enum:
+            - TRIGGER_UNSPECIFIED
+            - AUTOMATIC
+            - MANUAL
+        lastStartTime:
+          description: Output only. Backfill job's start time.
+          readOnly: true
+          type: string
+          format: google-datetime
+        lastEndTime:
+          description: Output only. Backfill job's end time.
+          readOnly: true
+          type: string
+          format: google-datetime
+        errors:
+          description: Output only. Errors which caused the backfill job to fail.
+          readOnly: true
+          type: array
+          items:
+            $ref: '#/components/schemas/Error'
     LookupStreamObjectRequest:
       id: LookupStreamObjectRequest
       description: >-
@@ -2216,7 +2392,24 @@ components:
         Request for manually initiating a backfill job for a specific stream
         object.
       type: object
-      properties: {}
+      properties:
+        eventFilter:
+          description: >-
+            Optional. Optional event filter. If not set, or empty, the backfill
+            will be performed on the entire object. This is currently used for
+            partial backfill and only supported for SQL Server sources.
+          $ref: '#/components/schemas/EventFilter'
+    EventFilter:
+      id: EventFilter
+      description: Represents a filter for included data on a stream object.
+      type: object
+      properties:
+        sqlWhereClause:
+          description: >-
+            An SQL-query Where clause selecting which data should be included,
+            not including the "WHERE" keyword. E.g., "t.key1 = 'value1' AND
+            t.key2 = 'value2'".
+          type: string
     StartBackfillJobResponse:
       id: StartBackfillJobResponse
       description: >-
@@ -3184,6 +3377,10 @@ paths:
           name: pageToken
           schema:
             type: string
+        - in: query
+          name: returnPartialSuccess
+          schema:
+            type: boolean
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:
     parameters: *ref_1
     get:

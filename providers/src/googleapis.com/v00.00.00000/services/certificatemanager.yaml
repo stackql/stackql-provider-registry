@@ -7,8 +7,8 @@ info:
   title: Certificate Manager API
   description: ''
   version: v1
-  x-discovery-doc-revision: '20250813'
-  x-generated-date: '2025-08-28'
+  x-discovery-doc-revision: '20251204'
+  x-generated-date: '2025-12-10'
 externalDocs:
   url: https://cloud.google.com/certificate-manager
 servers:
@@ -49,6 +49,15 @@ components:
         nextPageToken:
           description: The standard List next-page token.
           type: string
+        unreachable:
+          description: >-
+            Unordered list. Unreachable resources. Populated when the request
+            sets `ListOperationsRequest.return_partial_success` and reads across
+            collections. For example, when attempting to list all resources
+            across all supported locations.
+          type: array
+          items:
+            type: string
     Operation:
       id: Operation
       description: >-
@@ -204,6 +213,11 @@ components:
         managed:
           description: If set, contains configuration and state of a managed certificate.
           $ref: '#/components/schemas/ManagedCertificate'
+        managedIdentity:
+          description: >-
+            If set, contains configuration and state of a managed identity
+            certificate.
+          $ref: '#/components/schemas/ManagedIdentityCertificate'
         sanDnsnames:
           description: >-
             Output only. The list of Subject Alternative Names of dnsName type
@@ -432,6 +446,159 @@ components:
             be stable. For programmatic access use FailureReason enum.
           readOnly: true
           type: string
+        attemptTime:
+          description: Output only. The timestamp, when the authorization attempt was made.
+          readOnly: true
+          type: string
+          format: google-datetime
+        troubleshooting:
+          description: >-
+            Output only. Troubleshooting information for the authorization
+            attempt. This field is only populated if the authorization attempt
+            failed.
+          readOnly: true
+          $ref: '#/components/schemas/Troubleshooting'
+    Troubleshooting:
+      id: Troubleshooting
+      description: Troubleshooting information for the authorization attempt.
+      type: object
+      properties:
+        issues:
+          description: >-
+            Output only. The list of issues discovered during the authorization
+            attempt.
+          readOnly: true
+          type: array
+          items:
+            type: string
+            enumDescriptions:
+              - Issue is unspecified.
+              - The resolved CNAME value doesn't match the expected CNAME.
+              - >-
+                Domain has A/AAAA records that point to IPs, where the
+                certificate is not attached.
+              - >-
+                Domain has A/AAAA records that point to IPs, where the
+                certificate is attached, but port 443 is not open.
+              - Domain doesn't have any A/AAAA records.
+              - >-
+                Certificate is not configured to be served from any IPs (e.g.
+                Certificate is not attached to any load balancer).
+            enum:
+              - ISSUE_UNSPECIFIED
+              - CNAME_MISMATCH
+              - RESOLVED_TO_NOT_SERVING
+              - RESOLVED_TO_SERVING_ON_ALT_PORTS
+              - NO_RESOLVED_IPS
+              - CERTIFICATE_NOT_ATTACHED
+        cname:
+          description: Output only. CNAME troubleshooting information.
+          readOnly: true
+          $ref: '#/components/schemas/CNAME'
+        ips:
+          description: Output only. IPs troubleshooting information.
+          readOnly: true
+          $ref: '#/components/schemas/IPs'
+    CNAME:
+      id: CNAME
+      description: CNAME troubleshooting information.
+      type: object
+      properties:
+        name:
+          description: >-
+            Output only. The name of the CNAME record for the domain, equals to
+            `dns_resource_record.name` in the corresponding `DnsAuthorization`.
+          readOnly: true
+          type: string
+        expectedData:
+          description: >-
+            Output only. The expected value of the CNAME record for the domain,
+            equals to `dns_resource_record.data` in the corresponding
+            `DnsAuthorization`.
+          readOnly: true
+          type: string
+        resolvedData:
+          description: >-
+            Output only. The resolved CNAME chain. Empty list if the CNAME
+            record for `CNAME.name` is not found. Otherwise the first item is
+            the value of the CNAME record for `CNAME.name`. If the CNAME chain
+            is longer, the second item is the value of the CNAME record for the
+            first item, and so on.
+          readOnly: true
+          type: array
+          items:
+            type: string
+    IPs:
+      id: IPs
+      description: IPs troubleshooting information.
+      type: object
+      properties:
+        serving:
+          description: >-
+            Output only. The list of IP addresses, where the certificate is
+            attached and port 443 is open.
+          readOnly: true
+          type: array
+          items:
+            type: string
+        servingOnAltPorts:
+          description: >-
+            Output only. The list of IP addresses, where the certificate is
+            attached, but port 443 is not open.
+          readOnly: true
+          type: array
+          items:
+            type: string
+        resolved:
+          description: >-
+            Output only. The list of IP addresses resolved from the domain's
+            A/AAAA records. Can contain both ipv4 and ipv6 addresses.
+          readOnly: true
+          type: array
+          items:
+            type: string
+    ManagedIdentityCertificate:
+      id: ManagedIdentityCertificate
+      description: >-
+        Configuration and state of a Managed Identity Certificate. Certificate
+        Manager provisions and renews Managed Identity Certificates
+        automatically, for as long as it's authorized to do so.
+      type: object
+      properties:
+        identity:
+          description: >-
+            Required. Immutable. SPIFFE ID of the Managed Identity used for this
+            certificate.
+          type: string
+        state:
+          description: Output only. State of the managed certificate resource.
+          readOnly: true
+          type: string
+          enumDescriptions:
+            - State is unspecified.
+            - >-
+              Certificate Manager attempts to provision or renew the
+              certificate. If the process takes longer than expected, consult
+              the `provisioning_issue` field.
+            - >-
+              Multiple certificate provisioning attempts failed and Certificate
+              Manager gave up. To try again, delete and create a new managed
+              Certificate resource. For details see the `provisioning_issue`
+              field.
+            - >-
+              The certificate management is working, and a certificate has been
+              provisioned.
+          enum:
+            - STATE_UNSPECIFIED
+            - PROVISIONING
+            - FAILED
+            - ACTIVE
+        provisioningIssue:
+          description: >-
+            Output only. Information about issues with provisioning a managed
+            certificate.
+          readOnly: true
+          $ref: '#/components/schemas/ProvisioningIssue'
     UsedBy:
       id: UsedBy
       description: Defines a resource that uses the certificate.
@@ -918,6 +1085,13 @@ components:
             fields, and may be sent on update and delete requests to ensure the
             client has an up-to-date value before proceeding.
           type: string
+        spiffeTrustStores:
+          description: >-
+            Optional. Defines a mapping from a trust domain to a TrustStore.
+            This is used for SPIFFE certificate validation.
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/TrustStore'
         trustStores:
           description: >-
             Optional. Set of trust stores to perform validation against. This
@@ -1664,6 +1838,10 @@ paths:
           name: pageToken
           schema:
             type: string
+        - in: query
+          name: returnPartialSuccess
+          schema:
+            type: boolean
   /v1/projects/{projectsId}/locations/{locationsId}/operations/{operationsId}:
     parameters: *ref_1
     get:
