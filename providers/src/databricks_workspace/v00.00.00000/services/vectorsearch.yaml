@@ -6,7 +6,7 @@ info:
     (workspace-level APIs), generated from the Databricks Python SDK.
   version: 0.1.0
   x-stackql-sdk-version: 0.86.0
-  x-stackql-date-generated: '2026-02-24'
+  x-stackql-date-generated: '2026-03-20'
   x-stackql-sdk-namespace: databricks.sdk.service.vectorsearch
 servers:
   - url: https://{deployment_name}.cloud.databricks.com
@@ -31,6 +31,9 @@ paths:
           Type of endpoint
         :param budget_policy_id: str (optional)
           The budget policy id to be applied
+        :param min_qps: int (optional)
+          Min QPS for the endpoint. Mutually exclusive with num_replicas. The actual replica count is
+          calculated at index creation/sync time based on this value.
 
         :returns:
           Long-running operation waiter for :class:`EndpointInfo`.
@@ -52,6 +55,12 @@ paths:
                 budget_policy_id:
                   type: string
                   description: The budget policy id to be applied
+                min_qps:
+                  type: integer
+                  description: >-
+                    Min QPS for the endpoint. Mutually exclusive with
+                    num_replicas. The actual replica count is calculated at
+                    index creation/sync time based on this value.
               required:
                 - name
                 - endpoint_type
@@ -167,6 +176,58 @@ paths:
           schema:
             type: string
           description: Name of the endpoint
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndpointInfo'
+        default:
+          description: Error response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+      x-stackql-sdk-source: VectorSearchEndpointsAPI
+    patch:
+      operationId: vector_search_endpoints_patch_endpoint
+      summary: Update an endpoint
+      tags:
+        - vectorsearch
+        - vector_search_endpoints
+      description: |-
+        Update an endpoint
+
+        :param endpoint_name: str
+          Name of the vector search endpoint
+        :param min_qps: int (optional)
+          Min QPS for the endpoint. Positive integer sets QPS target; -1 resets to default scaling behavior.
+
+        :returns: :class:`EndpointInfo`
+      parameters:
+        - name: endpoint_name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Name of the vector search endpoint
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                min_qps:
+                  type: integer
+                  description: >-
+                    Min QPS for the endpoint. Positive integer sets QPS target;
+                    -1 resets to default scaling behavior.
       responses:
         '200':
           description: Success
@@ -446,10 +507,19 @@ paths:
                     - DELTA_SYNC
                     - DIRECT_ACCESS
                   description: >-
-                    :param delta_sync_index_spec:
-                    :class:`DeltaSyncVectorIndexSpecRequest` (optional)
-                    Specification for Delta Sync Index. Required if `index_type`
-                    is `DELTA_SYNC`.
+                    There are 2 types of Vector Search indexes: - `DELTA_SYNC`:
+                    An index that automatically syncs
+
+                    with a source Delta Table, automatically and incrementally
+                    updating the index as the underlying
+
+                    data in the Delta Table changes. - `DIRECT_ACCESS`: An index
+                    that supports direct read and write
+
+                    of vectors and metadata through our REST and SDK APIs. With
+                    this model, the user manages index
+
+                    updates.
                 delta_sync_index_spec:
                   type: object
                   properties:
@@ -506,6 +576,9 @@ paths:
                     source_table:
                       type: string
                       description: The name of the source table.
+                  description: >-
+                    Specification for Delta Sync Index. Required if `index_type`
+                    is `DELTA_SYNC`.
                 direct_access_index_spec:
                   type: object
                   properties:
@@ -1306,6 +1379,17 @@ components:
         num_indexes:
           type: integer
           description: Number of indexes on the endpoint
+        scaling_info:
+          $ref: '#/components/schemas/EndpointScalingInfo'
+          description: Scaling information for the endpoint
+    EndpointScalingInfo:
+      type: object
+      properties:
+        requested_min_qps:
+          type: integer
+        state:
+          $ref: '#/components/schemas/ScalingChangeState'
+          description: The current state of the scaling change request.
     EndpointStatus:
       type: object
       properties:
@@ -1611,20 +1695,20 @@ components:
 
         Access them by:
 
-        - attribute access::
+        - attribute access:
 
-        >>> Color.RED
-        <Color.RED: 1>
+          >>> Color.RED
+          <Color.RED: 1>
 
         - value lookup:
 
-        >>> Color(1)
-        <Color.RED: 1>
+          >>> Color(1)
+          <Color.RED: 1>
 
         - name lookup:
 
-        >>> Color['RED']
-        <Color.RED: 1>
+          >>> Color['RED']
+          <Color.RED: 1>
 
         Enumerations can be iterated over, and know how many members they have:
 
@@ -1670,6 +1754,49 @@ components:
         processes new data as it
 
         arrives in the source table to keep vector index fresh.
+    ScalingChangeState:
+      type: string
+      x-enum:
+        - SCALING_CHANGE_APPLIED
+        - SCALING_CHANGE_IN_PROGRESS
+        - SCALING_CHANGE_UNSPECIFIED
+      description: |-
+        Create a collection of name/value pairs.
+
+        Example enumeration:
+
+        >>> class Color(Enum):
+        ...     RED = 1
+        ...     BLUE = 2
+        ...     GREEN = 3
+
+        Access them by:
+
+        - attribute access:
+
+          >>> Color.RED
+          <Color.RED: 1>
+
+        - value lookup:
+
+          >>> Color(1)
+          <Color.RED: 1>
+
+        - name lookup:
+
+          >>> Color['RED']
+          <Color.RED: 1>
+
+        Enumerations can be iterated over, and know how many members they have:
+
+        >>> len(Color)
+        3
+
+        >>> list(Color)
+        [<Color.RED: 1>, <Color.BLUE: 2>, <Color.GREEN: 3>]
+
+        Methods can be added to enumerations, and members can have their own
+        attributes -- see the documentation for details.
     UpsertDataStatus:
       type: string
       x-enum:
@@ -1688,20 +1815,20 @@ components:
 
         Access them by:
 
-        - attribute access::
+        - attribute access:
 
-        >>> Color.RED
-        <Color.RED: 1>
+          >>> Color.RED
+          <Color.RED: 1>
 
         - value lookup:
 
-        >>> Color(1)
-        <Color.RED: 1>
+          >>> Color(1)
+          <Color.RED: 1>
 
         - name lookup:
 
-        >>> Color['RED']
-        <Color.RED: 1>
+          >>> Color['RED']
+          <Color.RED: 1>
 
         Enumerations can be iterated over, and know how many members they have:
 
@@ -1805,6 +1932,29 @@ components:
         update: []
         delete:
           - $ref: '#/components/x-stackQL-resources/endpoints/methods/delete'
+        replace: []
+    vector_search_endpoints:
+      id: databricks_workspace.vectorsearch.vector_search_endpoints
+      name: vector_search_endpoints
+      title: Vector Search Endpoints
+      methods:
+        vector_search_endpoints_patch_endpoint:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: >-
+              #/paths/~1api~12.0~1vector-search~1endpoints~1{endpoint_name}/patch
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select: []
+        insert: []
+        update:
+          - $ref: >-
+              #/components/x-stackQL-resources/vector_search_endpoints/methods/vector_search_endpoints_patch_endpoint
+        delete: []
         replace: []
     indexes:
       id: databricks_workspace.vectorsearch.indexes
