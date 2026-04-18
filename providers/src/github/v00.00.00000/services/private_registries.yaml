@@ -1,0 +1,1091 @@
+openapi: 3.0.3
+info:
+  title: private_registries API
+  description: github API
+  version: 1.1.4
+paths:
+  /orgs/{org}/private-registries:
+    get:
+      summary: List private registries for an organization
+      description: >-
+
+        Lists all private registry configurations available at the
+        organization-level without revealing their encrypted
+
+        values.
+
+
+        OAuth app tokens and personal access tokens (classic) need the
+        `admin:org` scope to use this endpoint.
+      tags:
+        - private-registries
+      operationId: private-registries/list-org-private-registries
+      externalDocs:
+        description: API method documentation
+        url: >-
+          https://docs.github.com/rest/private-registries/organization-configurations#list-private-registries-for-an-organization
+      parameters:
+        - $ref: '#/components/parameters/org'
+        - $ref: '#/components/parameters/per-page'
+        - $ref: '#/components/parameters/page'
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - total_count
+                  - configurations
+                properties:
+                  total_count:
+                    type: integer
+                  configurations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/org-private-registry-configuration'
+              examples:
+                default:
+                  $ref: >-
+                    #/components/examples/org-private-registry-configurations-paginated
+          headers:
+            Link:
+              $ref: '#/components/headers/link'
+        '400':
+          $ref: '#/components/responses/bad_request'
+        '404':
+          $ref: '#/components/responses/not_found'
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: private-registries
+        subcategory: organization-configurations
+      x-stackQL-resource: organization_configurations
+    post:
+      summary: Create a private registry for an organization
+      description: >-
+
+        Creates a private registry configuration with an encrypted value for an
+        organization. Encrypt your secret using
+        [LibSodium](https://libsodium.gitbook.io/doc/bindings_for_other_languages).
+        For more information, see "[Encrypting secrets for the REST
+        API](https://docs.github.com/rest/guides/encrypting-secrets-for-the-rest-api)."
+
+        For OIDC-based registries (`oidc_azure`, `oidc_aws`, or `oidc_jfrog`),
+        the `encrypted_value` and `key_id` fields should be omitted.
+
+
+        OAuth app tokens and personal access tokens (classic) need the
+        `admin:org` scope to use this endpoint.
+      tags:
+        - private-registries
+      operationId: private-registries/create-org-private-registry
+      externalDocs:
+        description: API method documentation
+        url: >-
+          https://docs.github.com/rest/private-registries/organization-configurations#create-a-private-registry-for-an-organization
+      parameters:
+        - $ref: '#/components/parameters/org'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                registry_type:
+                  description: The registry type.
+                  type: string
+                  enum:
+                    - maven_repository
+                    - nuget_feed
+                    - goproxy_server
+                    - npm_registry
+                    - rubygems_server
+                    - cargo_registry
+                    - composer_repository
+                    - docker_registry
+                    - git_source
+                    - helm_registry
+                    - hex_organization
+                    - hex_repository
+                    - pub_repository
+                    - python_index
+                    - terraform_registry
+                url:
+                  description: The URL of the private registry.
+                  type: string
+                  format: uri
+                username:
+                  description: >-
+                    The username to use when authenticating with the private
+                    registry. This field should be omitted if the private
+                    registry does not require a username for authentication.
+                  type: string
+                  nullable: true
+                replaces_base:
+                  description: >-
+                    Whether this private registry should replace the base
+                    registry (e.g., npmjs.org for npm, rubygems.org for
+                    rubygems). When set to `true`, Dependabot will only use this
+                    registry and will not fall back to the public registry. When
+                    set to `false` (default), Dependabot will use this registry
+                    for scoped packages but may fall back to the public registry
+                    for other packages.
+                  type: boolean
+                  default: false
+                encrypted_value:
+                  description: >-
+                    The value for your secret, encrypted with
+                    [LibSodium](https://libsodium.gitbook.io/doc/bindings_for_other_languages)
+                    using the public key retrieved from the [Get private
+                    registries public key for an
+                    organization](https://docs.github.com/rest/private-registries/organization-configurations#get-private-registries-public-key-for-an-organization)
+                    endpoint. Required when `auth_type` is `token` or
+                    `username_password`. Should be omitted for OIDC auth types.
+                  type: string
+                  pattern: >-
+                    ^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})$
+                key_id:
+                  description: >-
+                    The ID of the key you used to encrypt the secret. Required
+                    when `auth_type` is `token` or `username_password`. Should
+                    be omitted for OIDC auth types.
+                  type: string
+                visibility:
+                  description: >-
+                    Which type of organization repositories have access to the
+                    private registry. `selected` means only the repositories
+                    specified by `selected_repository_ids` can access the
+                    private registry.
+                  type: string
+                  enum:
+                    - all
+                    - private
+                    - selected
+                selected_repository_ids:
+                  description: >-
+                    An array of repository IDs that can access the organization
+                    private registry. You can only provide a list of repository
+                    IDs when `visibility` is set to `selected`. You can manage
+                    the list of selected repositories using the [Update a
+                    private registry for an
+                    organization](https://docs.github.com/rest/private-registries/organization-configurations#update-a-private-registry-for-an-organization)
+                    endpoint. This field should be omitted if `visibility` is
+                    set to `all` or `private`.
+                  type: array
+                  items:
+                    type: integer
+                auth_type:
+                  description: >-
+                    The authentication type for the private registry. Defaults
+                    to `token` if not specified. Use `oidc_azure`, `oidc_aws`,
+                    or `oidc_jfrog` for OIDC authentication.
+                  type: string
+                  enum:
+                    - token
+                    - username_password
+                    - oidc_azure
+                    - oidc_aws
+                    - oidc_jfrog
+                tenant_id:
+                  description: >-
+                    The tenant ID of the Azure AD application. Required when
+                    `auth_type` is `oidc_azure`.
+                  type: string
+                client_id:
+                  description: >-
+                    The client ID of the Azure AD application. Required when
+                    `auth_type` is `oidc_azure`.
+                  type: string
+                aws_region:
+                  description: The AWS region. Required when `auth_type` is `oidc_aws`.
+                  type: string
+                account_id:
+                  description: The AWS account ID. Required when `auth_type` is `oidc_aws`.
+                  type: string
+                role_name:
+                  description: >-
+                    The AWS IAM role name. Required when `auth_type` is
+                    `oidc_aws`.
+                  type: string
+                domain:
+                  description: >-
+                    The CodeArtifact domain. Required when `auth_type` is
+                    `oidc_aws`.
+                  type: string
+                domain_owner:
+                  description: >-
+                    The CodeArtifact domain owner (AWS account ID). Required
+                    when `auth_type` is `oidc_aws`.
+                  type: string
+                jfrog_oidc_provider_name:
+                  description: >-
+                    The JFrog OIDC provider name. Required when `auth_type` is
+                    `oidc_jfrog`.
+                  type: string
+                audience:
+                  description: >-
+                    The OIDC audience. Optional for `oidc_aws` and `oidc_jfrog`
+                    auth types.
+                  type: string
+                identity_mapping_name:
+                  description: >-
+                    The JFrog identity mapping name. Optional for `oidc_jfrog`
+                    auth type.
+                  type: string
+              required:
+                - registry_type
+                - url
+                - visibility
+            examples:
+              org-private-registry-with-private-visibility:
+                summary: >-
+                  Example of a private registry configuration with private
+                  visibility
+                value:
+                  registry_type: maven_repository
+                  url: https://maven.pkg.github.com/organization/
+                  username: monalisa
+                  replaces_base: true
+                  encrypted_value: c2VjcmV0
+                  key_id: '012345678912345678'
+                  visibility: private
+              org-private-registry-with-selected-visibility:
+                summary: >-
+                  Example of a private registry configuration with selected
+                  visibility
+                value:
+                  registry_type: maven_repository
+                  url: https://maven.pkg.github.com/organization/
+                  username: monalisa
+                  encrypted_value: c2VjcmV0
+                  key_id: '012345678912345678'
+                  visibility: selected
+                  selected_repository_ids:
+                    - 1296269
+                    - 1296280
+              org-private-registry-with-oidc-azure:
+                summary: Example of an OIDC private registry configuration using Azure
+                value:
+                  registry_type: docker_registry
+                  url: https://myregistry.azurecr.io
+                  auth_type: oidc_azure
+                  visibility: all
+                  tenant_id: 12345678-1234-1234-1234-123456789012
+                  client_id: abcdef01-2345-6789-abcd-ef0123456789
+      responses:
+        '201':
+          description: The organization private registry configuration
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/org-private-registry-configuration-with-selected-repositories
+              examples:
+                org-private-registry-with-selected-visibility:
+                  $ref: '#/components/examples/org-private-registry-configuration'
+                org-private-registry-with-private-visibility:
+                  $ref: >-
+                    #/components/examples/org-private-registry-configuration-with-selected-repositories
+        '404':
+          $ref: '#/components/responses/not_found'
+        '422':
+          $ref: '#/components/responses/validation_failed'
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: private-registries
+        subcategory: organization-configurations
+      x-stackQL-resource: organization_configurations
+  /orgs/{org}/private-registries/public-key:
+    get:
+      summary: Get private registries public key for an organization
+      description: >-
+
+        Gets the org public key, which is needed to encrypt private registry
+        secrets. You need to encrypt a secret before you can create or update
+        secrets.
+
+
+        OAuth tokens and personal access tokens (classic) need the `admin:org`
+        scope to use this endpoint.
+      tags:
+        - private-registries
+      operationId: private-registries/get-org-public-key
+      externalDocs:
+        description: API method documentation
+        url: >-
+          https://docs.github.com/rest/private-registries/organization-configurations#get-private-registries-public-key-for-an-organization
+      parameters:
+        - $ref: '#/components/parameters/org'
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - key_id
+                  - key
+                properties:
+                  key_id:
+                    description: The identifier for the key.
+                    example: '012345678912345678'
+                    type: string
+                  key:
+                    description: The Base64 encoded public key.
+                    example: 2Sg8iYjAxxmI2LvUXpJjkYrMxURPc8r+dB7TJyvv1234
+                    type: string
+              examples:
+                default:
+                  $ref: '#/components/examples/private-registries-public-key'
+          headers:
+            Link:
+              $ref: '#/components/headers/link'
+        '404':
+          $ref: '#/components/responses/not_found'
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: private-registries
+        subcategory: organization-configurations
+      x-stackQL-resource: organization_configurations
+  /orgs/{org}/private-registries/{secret_name}:
+    get:
+      summary: Get a private registry for an organization
+      description: >-
+
+        Get the configuration of a single private registry defined for an
+        organization, omitting its encrypted value.
+
+
+        OAuth app tokens and personal access tokens (classic) need the
+        `admin:org` scope to use this endpoint.
+      tags:
+        - private-registries
+      operationId: private-registries/get-org-private-registry
+      externalDocs:
+        description: API method documentation
+        url: >-
+          https://docs.github.com/rest/private-registries/organization-configurations#get-a-private-registry-for-an-organization
+      parameters:
+        - $ref: '#/components/parameters/org'
+        - $ref: '#/components/parameters/secret-name'
+      responses:
+        '200':
+          description: The specified private registry configuration for the organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/org-private-registry-configuration'
+              examples:
+                default:
+                  $ref: '#/components/examples/org-private-registry-configuration'
+        '404':
+          $ref: '#/components/responses/not_found'
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: private-registries
+        subcategory: organization-configurations
+      x-stackQL-resource: organization_configurations
+    patch:
+      summary: Update a private registry for an organization
+      description: >-
+
+        Updates a private registry configuration with an encrypted value for an
+        organization. Encrypt your secret using
+        [LibSodium](https://libsodium.gitbook.io/doc/bindings_for_other_languages).
+        For more information, see "[Encrypting secrets for the REST
+        API](https://docs.github.com/rest/guides/encrypting-secrets-for-the-rest-api)."
+
+        For OIDC-based registries (`oidc_azure`, `oidc_aws`, or `oidc_jfrog`),
+        the `encrypted_value` and `key_id` fields should be omitted.
+
+
+        OAuth app tokens and personal access tokens (classic) need the
+        `admin:org` scope to use this endpoint.
+      tags:
+        - private-registries
+      operationId: private-registries/update-org-private-registry
+      externalDocs:
+        description: API method documentation
+        url: >-
+          https://docs.github.com/rest/private-registries/organization-configurations#update-a-private-registry-for-an-organization
+      parameters:
+        - $ref: '#/components/parameters/org'
+        - $ref: '#/components/parameters/secret-name'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                registry_type:
+                  description: The registry type.
+                  type: string
+                  enum:
+                    - maven_repository
+                    - nuget_feed
+                    - goproxy_server
+                    - npm_registry
+                    - rubygems_server
+                    - cargo_registry
+                    - composer_repository
+                    - docker_registry
+                    - git_source
+                    - helm_registry
+                    - hex_organization
+                    - hex_repository
+                    - pub_repository
+                    - python_index
+                    - terraform_registry
+                url:
+                  description: The URL of the private registry.
+                  type: string
+                  format: uri
+                username:
+                  description: >-
+                    The username to use when authenticating with the private
+                    registry. This field should be omitted if the private
+                    registry does not require a username for authentication.
+                  type: string
+                  nullable: true
+                replaces_base:
+                  description: >-
+                    Whether this private registry should replace the base
+                    registry (e.g., npmjs.org for npm, rubygems.org for
+                    rubygems). When set to `true`, Dependabot will only use this
+                    registry and will not fall back to the public registry. When
+                    set to `false` (default), Dependabot will use this registry
+                    for scoped packages but may fall back to the public registry
+                    for other packages.
+                  type: boolean
+                  default: false
+                encrypted_value:
+                  description: >-
+                    The value for your secret, encrypted with
+                    [LibSodium](https://libsodium.gitbook.io/doc/bindings_for_other_languages)
+                    using the public key retrieved from the [Get private
+                    registries public key for an
+                    organization](https://docs.github.com/rest/private-registries/organization-configurations#get-private-registries-public-key-for-an-organization)
+                    endpoint.
+                  type: string
+                  pattern: >-
+                    ^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})$
+                key_id:
+                  description: The ID of the key you used to encrypt the secret.
+                  type: string
+                visibility:
+                  description: >-
+                    Which type of organization repositories have access to the
+                    private registry. `selected` means only the repositories
+                    specified by `selected_repository_ids` can access the
+                    private registry.
+                  type: string
+                  enum:
+                    - all
+                    - private
+                    - selected
+                selected_repository_ids:
+                  description: >-
+                    An array of repository IDs that can access the organization
+                    private registry. You can only provide a list of repository
+                    IDs when `visibility` is set to `selected`. This field
+                    should be omitted if `visibility` is set to `all` or
+                    `private`.
+                  type: array
+                  items:
+                    type: integer
+                auth_type:
+                  description: >-
+                    The authentication type for the private registry. This field
+                    cannot be changed after creation. If provided, it must match
+                    the existing `auth_type` of the configuration. To change the
+                    authentication type, delete and recreate the configuration.
+                  type: string
+                  enum:
+                    - token
+                    - username_password
+                    - oidc_azure
+                    - oidc_aws
+                    - oidc_jfrog
+                tenant_id:
+                  description: >-
+                    The tenant ID of the Azure AD application. Required when
+                    `auth_type` is `oidc_azure`.
+                  type: string
+                client_id:
+                  description: >-
+                    The client ID of the Azure AD application. Required when
+                    `auth_type` is `oidc_azure`.
+                  type: string
+                aws_region:
+                  description: The AWS region. Required when `auth_type` is `oidc_aws`.
+                  type: string
+                account_id:
+                  description: The AWS account ID. Required when `auth_type` is `oidc_aws`.
+                  type: string
+                role_name:
+                  description: >-
+                    The AWS IAM role name. Required when `auth_type` is
+                    `oidc_aws`.
+                  type: string
+                domain:
+                  description: >-
+                    The CodeArtifact domain. Required when `auth_type` is
+                    `oidc_aws`.
+                  type: string
+                domain_owner:
+                  description: >-
+                    The CodeArtifact domain owner (AWS account ID). Required
+                    when `auth_type` is `oidc_aws`.
+                  type: string
+                jfrog_oidc_provider_name:
+                  description: >-
+                    The JFrog OIDC provider name. Required when `auth_type` is
+                    `oidc_jfrog`.
+                  type: string
+                audience:
+                  description: >-
+                    The OIDC audience. Optional for `oidc_aws` and `oidc_jfrog`
+                    auth types.
+                  type: string
+                identity_mapping_name:
+                  description: >-
+                    The JFrog identity mapping name. Optional for `oidc_jfrog`
+                    auth type.
+                  type: string
+            examples:
+              secret-based-update:
+                summary: Update a secret-based private registry
+                value:
+                  username: monalisa
+                  encrypted_value: c2VjcmV0
+                  key_id: '012345678912345678'
+              oidc-azure-update:
+                summary: Update an OIDC private registry (Azure)
+                value:
+                  tenant_id: 12345678-1234-1234-1234-123456789012
+                  visibility: selected
+                  selected_repository_ids:
+                    - 1296269
+                    - 1296280
+      responses:
+        '204':
+          description: Response
+        '404':
+          $ref: '#/components/responses/not_found'
+        '422':
+          $ref: '#/components/responses/validation_failed'
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: private-registries
+        subcategory: organization-configurations
+      x-stackQL-resource: organization_configurations
+    delete:
+      summary: Delete a private registry for an organization
+      description: >-
+
+        Delete a private registry configuration at the organization-level.
+
+
+        OAuth app tokens and personal access tokens (classic) need the
+        `admin:org` scope to use this endpoint.
+      tags:
+        - private-registries
+      operationId: private-registries/delete-org-private-registry
+      externalDocs:
+        description: API method documentation
+        url: >-
+          https://docs.github.com/rest/private-registries/organization-configurations#delete-a-private-registry-for-an-organization
+      parameters:
+        - $ref: '#/components/parameters/org'
+        - $ref: '#/components/parameters/secret-name'
+      responses:
+        '204':
+          description: Response
+        '400':
+          $ref: '#/components/responses/bad_request'
+        '404':
+          $ref: '#/components/responses/not_found'
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: private-registries
+        subcategory: organization-configurations
+      x-stackQL-resource: organization_configurations
+components:
+  schemas:
+    org-private-registry-configuration:
+      title: Organization private registry
+      description: Private registry configuration for an organization
+      type: object
+      properties:
+        name:
+          description: The name of the private registry configuration.
+          example: MAVEN_REPOSITORY_SECRET
+          type: string
+        registry_type:
+          description: The registry type.
+          enum:
+            - maven_repository
+            - nuget_feed
+            - goproxy_server
+            - npm_registry
+            - rubygems_server
+            - cargo_registry
+            - composer_repository
+            - docker_registry
+            - git_source
+            - helm_registry
+            - hex_organization
+            - hex_repository
+            - pub_repository
+            - python_index
+            - terraform_registry
+          type: string
+        auth_type:
+          description: The authentication type for the private registry.
+          enum:
+            - token
+            - username_password
+            - oidc_azure
+            - oidc_aws
+            - oidc_jfrog
+          type: string
+        url:
+          description: The URL of the private registry.
+          type: string
+          format: uri
+        username:
+          description: The username to use when authenticating with the private registry.
+          example: monalisa
+          type: string
+          nullable: true
+        replaces_base:
+          description: >-
+            Whether this private registry replaces the base registry (e.g.,
+            npmjs.org for npm, rubygems.org for rubygems). When `true`,
+            Dependabot will only use this registry and will not fall back to the
+            public registry. When `false` (default), Dependabot will use this
+            registry for scoped packages but may fall back to the public
+            registry for other packages.
+          type: boolean
+          default: false
+        visibility:
+          description: >-
+            Which type of organization repositories have access to the private
+            registry.
+          enum:
+            - all
+            - private
+            - selected
+          type: string
+        tenant_id:
+          description: The tenant ID of the Azure AD application.
+          type: string
+        client_id:
+          description: The client ID of the Azure AD application.
+          type: string
+        aws_region:
+          description: The AWS region.
+          type: string
+        account_id:
+          description: The AWS account ID.
+          type: string
+        role_name:
+          description: The AWS IAM role name.
+          type: string
+        domain:
+          description: The CodeArtifact domain.
+          type: string
+        domain_owner:
+          description: The CodeArtifact domain owner.
+          type: string
+        jfrog_oidc_provider_name:
+          description: The JFrog OIDC provider name.
+          type: string
+        audience:
+          description: The OIDC audience.
+          type: string
+        identity_mapping_name:
+          description: The JFrog identity mapping name.
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - name
+        - registry_type
+        - visibility
+        - created_at
+        - updated_at
+    org-private-registry-configuration-with-selected-repositories:
+      title: Organization private registry
+      description: Private registry configuration for an organization
+      type: object
+      properties:
+        name:
+          description: The name of the private registry configuration.
+          example: MAVEN_REPOSITORY_SECRET
+          type: string
+        registry_type:
+          description: The registry type.
+          enum:
+            - maven_repository
+            - nuget_feed
+            - goproxy_server
+            - npm_registry
+            - rubygems_server
+            - cargo_registry
+            - composer_repository
+            - docker_registry
+            - git_source
+            - helm_registry
+            - hex_organization
+            - hex_repository
+            - pub_repository
+            - python_index
+            - terraform_registry
+          type: string
+        auth_type:
+          description: The authentication type for the private registry.
+          enum:
+            - token
+            - username_password
+            - oidc_azure
+            - oidc_aws
+            - oidc_jfrog
+          type: string
+        url:
+          description: The URL of the private registry.
+          type: string
+          format: uri
+        username:
+          description: The username to use when authenticating with the private registry.
+          example: monalisa
+          type: string
+        replaces_base:
+          description: >-
+            Whether this private registry replaces the base registry (e.g.,
+            npmjs.org for npm, rubygems.org for rubygems). When `true`,
+            Dependabot will only use this registry and will not fall back to the
+            public registry. When `false` (default), Dependabot will use this
+            registry for scoped packages but may fall back to the public
+            registry for other packages.
+          type: boolean
+          default: false
+        visibility:
+          description: >-
+            Which type of organization repositories have access to the private
+            registry. `selected` means only the repositories specified by
+            `selected_repository_ids` can access the private registry.
+          enum:
+            - all
+            - private
+            - selected
+          type: string
+        selected_repository_ids:
+          type: array
+          description: >-
+            An array of repository IDs that can access the organization private
+            registry when `visibility` is set to `selected`.
+          items:
+            type: integer
+        tenant_id:
+          description: The tenant ID of the Azure AD application.
+          type: string
+        client_id:
+          description: The client ID of the Azure AD application.
+          type: string
+        aws_region:
+          description: The AWS region.
+          type: string
+        account_id:
+          description: The AWS account ID.
+          type: string
+        role_name:
+          description: The AWS IAM role name.
+          type: string
+        domain:
+          description: The CodeArtifact domain.
+          type: string
+        domain_owner:
+          description: The CodeArtifact domain owner.
+          type: string
+        jfrog_oidc_provider_name:
+          description: The JFrog OIDC provider name.
+          type: string
+        audience:
+          description: The OIDC audience.
+          type: string
+        identity_mapping_name:
+          description: The JFrog identity mapping name.
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - name
+        - registry_type
+        - visibility
+        - created_at
+        - updated_at
+    basic-error:
+      title: Basic Error
+      description: Basic Error
+      type: object
+      properties:
+        message:
+          type: string
+        documentation_url:
+          type: string
+        url:
+          type: string
+        status:
+          type: string
+    scim-error:
+      title: Scim Error
+      description: Scim Error
+      type: object
+      properties:
+        message:
+          type: string
+          nullable: true
+        documentation_url:
+          type: string
+          nullable: true
+        detail:
+          type: string
+          nullable: true
+        status:
+          type: integer
+        scimType:
+          type: string
+          nullable: true
+        schemas:
+          type: array
+          items:
+            type: string
+    validation-error:
+      title: Validation Error
+      description: Validation Error
+      type: object
+      required:
+        - message
+        - documentation_url
+      properties:
+        message:
+          type: string
+        documentation_url:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            required:
+              - code
+            properties:
+              resource:
+                type: string
+              field:
+                type: string
+              message:
+                type: string
+              code:
+                type: string
+              index:
+                type: integer
+              value:
+                oneOf:
+                  - type: string
+                    nullable: true
+                  - type: integer
+                    nullable: true
+                  - type: array
+                    nullable: true
+                    items:
+                      type: string
+  responses:
+    bad_request:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/basic-error'
+        application/scim+json:
+          schema:
+            $ref: '#/components/schemas/scim-error'
+    not_found:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/basic-error'
+    validation_failed:
+      description: Validation failed, or the endpoint has been spammed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/validation-error'
+  parameters:
+    org:
+      name: org
+      description: The organization name. The name is not case sensitive.
+      in: path
+      required: true
+      schema:
+        type: string
+    per-page:
+      name: per_page
+      description: >-
+        The number of results per page (max 100). For more information, see
+        "[Using pagination in the REST
+        API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+      in: query
+      schema:
+        type: integer
+        default: 30
+    page:
+      name: page
+      description: >-
+        The page number of the results to fetch. For more information, see
+        "[Using pagination in the REST
+        API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+      in: query
+      schema:
+        type: integer
+        default: 1
+    secret-name:
+      name: secret_name
+      description: The name of the secret.
+      in: path
+      required: true
+      schema:
+        type: string
+  examples:
+    org-private-registry-configurations-paginated:
+      value:
+        total_count: 1
+        configurations:
+          - name: MAVEN_REPOSITORY_SECRET
+            registry_type: maven_repository
+            username: monalisa
+            created_at: '2019-08-10T14:59:22Z'
+            updated_at: '2020-01-10T14:59:22Z'
+            visibility: selected
+    org-private-registry-configuration:
+      value:
+        name: MAVEN_REPOSITORY_SECRET
+        registry_type: maven_repository
+        username: monalisa
+        visibility: private
+        created_at: '2019-08-10T14:59:22Z'
+        updated_at: '2020-01-10T14:59:22Z'
+    org-private-registry-configuration-with-selected-repositories:
+      value:
+        name: MAVEN_REPOSITORY_SECRET
+        registry_type: maven_repository
+        username: monalisa
+        visibility: selected
+        selected_repository_ids:
+          - 1296269
+          - 1296280
+        created_at: '2019-08-10T14:59:22Z'
+        updated_at: '2020-01-10T14:59:22Z'
+    private-registries-public-key:
+      value:
+        key_id: '012345678912345678'
+        key: 2Sg8iYjAxxmI2LvUXpJjkYrMxURPc8r+dB7TJyvv1234
+  headers:
+    link:
+      example: >-
+        <https://api.github.com/resource?page=2>; rel="next",
+        <https://api.github.com/resource?page=5>; rel="last"
+      schema:
+        type: string
+  x-stackQL-resources:
+    private_registries:
+      id: github.private_registries.private_registries
+      name: private_registries
+      title: Private Registries
+      methods:
+        list_org_private_registries:
+          operation:
+            $ref: '#/paths/~1orgs~1{org}~1private-registries/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        create_org_private_registry:
+          operation:
+            $ref: '#/paths/~1orgs~1{org}~1private-registries/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '201'
+        get_org_private_registry:
+          operation:
+            $ref: '#/paths/~1orgs~1{org}~1private-registries~1{secret_name}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_org_private_registry:
+          operation:
+            $ref: '#/paths/~1orgs~1{org}~1private-registries~1{secret_name}/patch'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '204'
+        delete_org_private_registry:
+          operation:
+            $ref: '#/paths/~1orgs~1{org}~1private-registries~1{secret_name}/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '204'
+      sqlVerbs:
+        select:
+          - $ref: >-
+              #/components/x-stackQL-resources/private_registries/methods/get_org_private_registry
+          - $ref: >-
+              #/components/x-stackQL-resources/private_registries/methods/list_org_private_registries
+        insert:
+          - $ref: >-
+              #/components/x-stackQL-resources/private_registries/methods/create_org_private_registry
+        update:
+          - $ref: >-
+              #/components/x-stackQL-resources/private_registries/methods/update_org_private_registry
+        delete:
+          - $ref: >-
+              #/components/x-stackQL-resources/private_registries/methods/delete_org_private_registry
+        replace: []
+    private_registry_public_key:
+      id: github.private_registries.private_registry_public_key
+      name: private_registry_public_key
+      title: Private Registry Public Key
+      methods:
+        get_org_public_key:
+          operation:
+            $ref: '#/paths/~1orgs~1{org}~1private-registries~1public-key/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: >-
+              #/components/x-stackQL-resources/private_registry_public_key/methods/get_org_public_key
+        insert: []
+        update: []
+        delete: []
+        replace: []
+servers:
+  - url: https://api.github.com
