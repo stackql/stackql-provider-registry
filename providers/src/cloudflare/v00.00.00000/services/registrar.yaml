@@ -1,0 +1,2152 @@
+openapi: 3.0.3
+info:
+  title: registrar API
+  description: >-
+    Welcome to Cloudflare's API documentation site. We are experimenting with an
+    updated version of our API documentation - check out
+    [developers.cloudflare.com/api-next/](https://developers.cloudflare.com/api-next/)
+    to test out the new experience. To get started using Cloudflare's products
+    and services via the API, refer to [how to interact with
+    Cloudflare](https://developers.cloudflare.com/fundamentals/basic-tasks/interact-with-cloudflare/),
+    which covers using tools like
+    [Terraform](https://developers.cloudflare.com/terraform/#cloudflare-terraform)
+    and the [official
+    SDKs](https://developers.cloudflare.com/fundamentals/api/reference/sdks/) to
+    maintain your Cloudflare resources. Using the Cloudflare API requires
+    authentication so that Cloudflare knows who is making requests and what
+    permissions you have. Create an API token to grant access to the API to
+    perform actions. You can also authenticate with [API
+    keys](https://developers.cloudflare.com/fundamentals/api/get-started/keys/),
+    but these keys have [several
+    limitations](https://developers.cloudflare.com/fundamentals/api/get-started/keys/#limitations)
+    that make them less secure than API tokens. Whenever possible, use API
+    tokens to interact with the Cloudflare API. To create an API token, from the
+    Cloudflare dashboard, go to My Profile > API Tokens and select Create Token.
+    For more information on how to create and troubleshoot API tokens, refer to
+    our [API fundamentals](https://developers.cloudflare.com/fundamentals/api/).
+    For information regarding rate limits, refer to our [API Rate
+    Limits](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/platform/limits/#api-rate-limits).
+    Totally new to Cloudflare? [Start
+    here](https://developers.cloudflare.com/fundamentals/get-started/).
+  version: 4.0.0
+  contact:
+    name: Cloudflare
+    url: https://www.cloudflare.com
+servers:
+  - url: https://api.cloudflare.com/client/v4
+security:
+  - api_token: []
+paths:
+  /accounts/{account_id}/registrar/domain-check:
+    post:
+      description: >-
+        Performs real-time, authoritative availability checks directly against
+        domain registries. Use this endpoint to verify a domain is available
+        before attempting registration via `POST /registrations`. **Important:**
+        Unlike the Search endpoint, these results are authoritative and reflect
+        current registry status. Always check availability immediately before
+        registration as domain status can change rapidly. **Note:** This
+        endpoint uses POST to accept a list of domains in the request body. It
+        is a read-only operation — it does not create, modify, or reserve any
+        domains. **Extension support:** Only domains on extensions supported for
+        programmatic registration by this API can be registered. If you check a
+        domain on an unsupported extension, the response will include
+        `registrable: false` with a `reason` field explaining why: -
+        `extension_not_supported_via_api` — Cloudflare Registrar supports this
+        extension in the dashboard, but it is not yet available for programmatic
+        registration via this API. Register via
+        `https://dash.cloudflare.com/{account_id}/domains/registrations`
+        instead. - `extension_not_supported` — This extension is not supported
+        by Cloudflare Registrar. - `extension_disallows_registration` — The
+        extension's registry has temporarily or permanently frozen new
+        registrations. No registrar can register domains on this extension at
+        this time. - `domain_premium` — The domain is premium priced. Premium
+        registration is not currently supported by this API. -
+        `domain_unavailable` — The domain is already registered, reserved, or
+        otherwise not available for registration on a supported extension. The
+        `reason` field is only present when `registrable` is `false`.
+        **Behavior:** - Maximum 20 domains per request - Pricing is only
+        returned for domains where `registrable: true` - Results are not cached;
+        each request queries the registry **Workflow:** 1. Call this endpoint
+        with domains the user wants to register. 2. For each domain where
+        `registrable: true`, present pricing to the user. 3. If `tier: premium`,
+        note that premium registration is not currently supported by this API
+        and do not proceed to `POST /registrations`. 4. Proceed to `POST
+        /registrations` only for supported non-premium domains.
+      operationId: registrar-domain-discovery-check
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: The Cloudflare account ID.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/registrarApiDomainCheckRequest'
+        description: >-
+          List of fully qualified domain names (FQDNs) to check. Each domain
+          must include the extension (e.g., "example.com", not "example").
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiDomainCheckResponse'
+          description: >-
+            Successfully returned availability results. Each requested domain
+            appears in the `domains` array with its current availability status
+            and pricing (if available).
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiApiResponseCommonFailure'
+          description: >-
+            Invalid request parameters. Common causes: - Empty `domains` array -
+            Exceeds maximum of 20 domains per request - Malformed request body -
+            None of the provided domains are valid
+      security:
+        - api_token: []
+        - api_email: []
+          api_key: []
+      summary: Check domain availability
+      tags:
+        - Domain Discovery
+      x-stackql-sdk:
+        service: registrar
+        resource_chain: []
+        method: check
+  /accounts/{account_id}/registrar/domain-search:
+    get:
+      description: >-
+        Searches for domain name suggestions based on a keyword, phrase, or
+        partial domain name. Returns a list of potentially available domains
+        with pricing information. **Important:** Results are non-authoritative
+        and based on cached data. Always use the `/domain-check` endpoint to
+        verify real-time availability before attempting registration.
+        Suggestions are scoped to extensions supported for programmatic
+        registration via this API (`POST /registrations`). Domains on
+        unsupported extensions will not appear in results, even if they are
+        available at the registry level. **Use cases:** - Brand name discovery
+        (e.g., "acme corp" → acmecorp.com, acmecorp.dev) - Keyword-based
+        suggestions (e.g., "coffee shop" → coffeeshop.com, mycoffeeshop.net) -
+        Alternative extension discovery (e.g., "example.com" → example.com,
+        example.app, example.xyz) **Workflow:** 1. Call this endpoint with a
+        keyword or domain name. 2. Present suggestions to the user. 3. Call
+        `/domain-check` with the user's chosen domains to confirm real-time
+        availability and pricing. 4. Proceed to `POST /registrations` only for
+        supported non-premium domains where the Check response returns
+        `registrable: true`. **Note:** Searching with just a domain extension
+        (e.g., "com" or ".app") is not supported. Provide a keyword or domain
+        name.
+      operationId: registrar-domain-discovery-search
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: The Cloudflare account ID.
+          schema:
+            type: string
+        - description: >-
+            The search term to find domain suggestions. Accepts keywords,
+            phrases, or full domain names. - Phrases: "coffee shop" returns
+            coffeeshop.com, mycoffeeshop.net, etc. - Domain names: "example.com"
+            returns example.com and variations across extensions
+          in: query
+          name: q
+          schema:
+            maxLength: 100
+            minLength: 1
+            type: string
+        - description: >-
+            Limits results to specific domain extensions from the supported set.
+            If not specified, returns results across all supported extensions.
+            Extensions not in the supported set are silently ignored.
+          explode: false
+          in: query
+          name: extensions
+          schema:
+            items:
+              type: string
+            maxItems: 20
+            type: array
+          style: form
+        - description: >-
+            Maximum number of domain suggestions to return. Defaults to 20 if
+            not specified.
+          in: query
+          name: limit
+          schema:
+            default: 20
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiDomainSearchResponse'
+          description: Successfully returned domain search results.
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiApiResponseCommonFailure'
+          description: >-
+            Invalid request parameters. Common causes: - Missing required `q`
+            parameter - Query exceeds 100 character limit - Invalid extension
+            format
+      security:
+        - api_token: []
+        - api_email: []
+          api_key: []
+      summary: Search for available domains
+      tags:
+        - Domain Discovery
+      x-stackql-sdk:
+        service: registrar
+        resource_chain: []
+        method: search
+  /accounts/{account_id}/registrar/domains:
+    get:
+      deprecated: true
+      description: List domains handled by Registrar.
+      operationId: registrar-domains-list-domains
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: The Cloudflare account ID.
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiDomainResponseCollection'
+          description: List domains response
+        4XX:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    $ref: '#/components/schemas/registrarApiMessages'
+                  messages:
+                    $ref: '#/components/schemas/registrarApiMessages'
+                  result:
+                    items:
+                      $ref: '#/components/schemas/registrarApiDomains'
+                    nullable: true
+                    type: array
+                    enum:
+                      - null
+                  success:
+                    description: Whether the API call was successful
+                    enum:
+                      - true
+                      - false
+                    type: boolean
+                  result_info:
+                    $ref: '#/components/schemas/registrarApiResultInfo'
+                required:
+                  - success
+                  - errors
+                  - messages
+                  - result
+                  - success
+                  - errors
+                  - messages
+                  - result
+          description: List domains response failure
+      security:
+        - api_token: []
+        - api_email: []
+          api_key: []
+      summary: List domains
+      tags:
+        - Registrar Domains
+      x-api-token-group: null
+      x-stainless-deprecation-message: >-
+        This operation is deprecated and will be removed in a future release. A
+        replacement Registrar API will be announced separately.
+      x-stackql-sdk:
+        service: registrar
+        resource_chain:
+          - domains
+        method: list
+  /accounts/{account_id}/registrar/domains/{domain_name}:
+    get:
+      deprecated: true
+      description: Show individual domain.
+      operationId: registrar-domains-get-domain
+      parameters:
+        - in: path
+          name: domain_name
+          schema:
+            $ref: '#/components/schemas/registrarApiDomainName'
+          required: true
+        - name: account_id
+          in: path
+          required: true
+          description: The Cloudflare account ID.
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiDomainResponseSingle'
+          description: Get domain response
+        4XX:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    $ref: '#/components/schemas/registrarApiMessages'
+                  messages:
+                    $ref: '#/components/schemas/registrarApiMessages'
+                  result:
+                    nullable: true
+                    type: object
+                    enum:
+                      - null
+                  success:
+                    description: Whether the API call was successful
+                    enum:
+                      - true
+                      - false
+                    type: boolean
+                required:
+                  - success
+                  - errors
+                  - messages
+                  - result
+                  - success
+                  - errors
+                  - messages
+                  - result
+          description: Get domain response failure
+      security:
+        - api_token: []
+        - api_email: []
+          api_key: []
+      summary: Get domain
+      tags:
+        - Registrar Domains
+      x-api-token-group: null
+      x-stainless-deprecation-message: >-
+        This operation is deprecated and will be removed in a future release. A
+        replacement Registrar API will be announced separately.
+      x-stackql-sdk:
+        service: registrar
+        resource_chain:
+          - domains
+        method: get
+    put:
+      deprecated: true
+      description: Update individual domain.
+      operationId: registrar-domains-update-domain
+      parameters:
+        - in: path
+          name: domain_name
+          schema:
+            $ref: '#/components/schemas/registrarApiDomainName'
+          required: true
+        - name: account_id
+          in: path
+          required: true
+          description: The Cloudflare account ID.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/registrarApiDomainUpdateProperties'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiDomainResponseSingle'
+          description: Update domain response
+        4XX:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    $ref: '#/components/schemas/registrarApiMessages'
+                  messages:
+                    $ref: '#/components/schemas/registrarApiMessages'
+                  result:
+                    nullable: true
+                    type: object
+                    enum:
+                      - null
+                  success:
+                    description: Whether the API call was successful
+                    enum:
+                      - true
+                      - false
+                    type: boolean
+                required:
+                  - success
+                  - errors
+                  - messages
+                  - result
+                  - success
+                  - errors
+                  - messages
+                  - result
+          description: Update domain response failure
+      security:
+        - api_token: []
+        - api_email: []
+          api_key: []
+      summary: Update domain
+      tags:
+        - Registrar Domains
+      x-api-token-group: null
+      x-stainless-deprecation-message: >-
+        This operation is deprecated and will be removed in a future release. A
+        replacement Registrar API will be announced separately.
+      x-stackql-sdk:
+        service: registrar
+        resource_chain:
+          - domains
+        method: update
+  /accounts/{account_id}/registrar/registrations:
+    get:
+      description: >-
+        Returns a paginated list of domain registrations owned by the account.
+        This endpoint uses cursor-based pagination. Results are ordered by
+        registration date by default. To fetch the next page, pass the `cursor`
+        value from the `result_info` object in the response as the `cursor`
+        query parameter in your next request. An empty `cursor` string indicates
+        there are no more pages.
+      operationId: registrar-domain-registration-list
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: The Cloudflare account ID.
+          schema:
+            type: string
+        - description: >-
+            Opaque token from a previous response's `result_info.cursor`. Pass
+            this value to fetch the next page of results. Omit (or pass an empty
+            string) for the first page.
+          in: query
+          name: cursor
+          schema:
+            maxLength: 256
+            type: string
+        - description: Number of items to return per page.
+          in: query
+          name: per_page
+          schema:
+            default: 20
+            maximum: 50
+            minimum: 1
+            type: integer
+        - description: Sort direction for results. Defaults to ascending order.
+          in: query
+          name: direction
+          schema:
+            default: asc
+            enum:
+              - asc
+              - desc
+            type: string
+        - description: >-
+            Column to sort results by. Defaults to registration date
+            (`registry_created_at`) when omitted.
+          in: query
+          name: sort_by
+          schema:
+            default: registry_created_at
+            enum:
+              - registry_created_at
+              - registry_expires_at
+              - name
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/registrarApiRegistrationResponseCollection
+          description: List of registrations for the account.
+        4XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiApiResponseCommonFailure'
+          description: List registrations failure.
+      security:
+        - api_token: []
+        - api_email: []
+          api_key: []
+      summary: List Registrations
+      tags:
+        - Registrar Registration
+      x-stackql-sdk:
+        service: registrar
+        resource_chain:
+          - registrations
+        method: list
+    post:
+      description: >-
+        Starts a domain registration workflow. This is a billable operation —
+        successful registration charges the account's default payment method.
+        All successful domain registrations are non-refundable — once the
+        workflow completes with `state: succeeded`, the charge cannot be
+        reversed. **Prerequisites:** - The account must have a billing profile
+        with a valid default payment method. Set this up at
+        `https://dash.cloudflare.com/{account_id}/billing/payment-info`. - The
+        account must not already be at the maximum supported domain limit. A
+        single account may own up to 100 domains in total across registrations
+        created through either the dashboard or this API. - The domain must be
+        on a supported extension for programmatic registration. - Use `POST
+        /domain-check` immediately before calling this endpoint to confirm
+        real-time availability and pricing. **Supported extensions:** In this
+        API, "extension" means the full registrable suffix after the domain
+        label. For example, in `example.co.uk`, the extension is `co.uk`.
+        Programmatic registration is currently supported for: `com`, `org`,
+        `net`, `app`, `dev`, `cc`, `xyz`, `info`, `cloud`, `studio`, `live`,
+        `link`, `pro`, `tech`, `fyi`, `shop`, `online`, `tools`, `run`, `games`,
+        `build`, `systems`, `world`, `news`, `site`, `network`, `chat`, `space`,
+        `family`, `page`, `life`, `group`, `email`, `solutions`, `day`, `blog`,
+        `ing`, `icu`, `academy`, `today` Cloudflare Registrar supports 400+
+        extensions in the dashboard. Extensions not listed above can still be
+        registered at
+        `https://dash.cloudflare.com/{account_id}/domains/registrations`.
+        **Express mode:** The only required field is `domain_name`. If
+        `contacts` is omitted, the system uses the account's default address
+        book entry as the registrant. If no default exists and no contact is
+        provided, the request fails. Set up a default address book entry and
+        accept the required agreement at
+        `https://dash.cloudflare.com/{account_id}/domains/registrations`.
+        **Defaults:** - `years`: defaults to the extension's minimum
+        registration period (1 year for most extensions, but varies — for
+        example, `.ai` (if supported) requires a minimum of 2 years). -
+        `auto_renew`: defaults to `false`. Setting it to `true` is an explicit
+        opt-in authorizing Cloudflare to charge the account's default payment
+        method up to 30 days before domain expiry to renew the registration.
+        Renewal pricing may change over time based on registry pricing. -
+        `privacy_mode`: defaults to `redaction`. **Premium domains:** Premium
+        domain registration is not currently supported by this API. If `POST
+        /domain-check` returns `tier: premium`, do not call this endpoint for
+        that domain. **Response behavior:** By default, the server holds the
+        connection for a bounded, server-defined amount of time while the
+        registration completes. Most registrations finish within this window and
+        return `201 Created` with a completed workflow status. If the
+        registration is still processing after this synchronous wait window, the
+        server returns `202 Accepted`. Poll the URL in `links.self` to track
+        progress. To skip the wait and receive an immediate `202`, send `Prefer:
+        respond-async`.
+      operationId: registrar-domain-registration-create
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: The Cloudflare account ID.
+          schema:
+            type: string
+        - description: >-
+            Set to `respond-async` to receive an immediate `202 Accepted`
+            without waiting for the operation to complete (RFC 7240). The header
+            may be combined with other preferences using standard
+            comma-separated syntax.
+          in: header
+          name: Prefer
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/registrarApiRegistrationCreateRequest'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiWorkflowStatusResponseSingle'
+          description: >-
+            Registration completed successfully within the synchronous wait
+            window. The workflow status will have `state: succeeded` and
+            `completed: true`.
+          headers:
+            Preference-Applied:
+              description: Echoed when the server honored a `Prefer` header.
+              schema:
+                type: string
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiWorkflowStatusResponseSingle'
+          description: >-
+            Registration is still processing. This occurs when the operation did
+            not complete within the synchronous wait window, or when `Prefer:
+            respond-async` was sent. Poll the URL in `links.self` to track
+            progress.
+          headers:
+            Location:
+              description: URL of the workflow status resource (same as `links.self`).
+              schema:
+                type: string
+            Preference-Applied:
+              description: Set to `respond-async` when the server honored the preference.
+              schema:
+                type: string
+        4XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiApiResponseCommonFailure'
+          description: Create registration failure.
+      security:
+        - api_token: []
+        - api_email: []
+          api_key: []
+      summary: Create Registration
+      tags:
+        - Registrar Registration
+      x-stackql-sdk:
+        service: registrar
+        resource_chain:
+          - registrations
+        method: create
+  /accounts/{account_id}/registrar/registrations/{domain_name}:
+    get:
+      description: >-
+        Returns the current state of a domain registration. This is the
+        canonical read endpoint for a domain you own. It returns the full
+        registration resource including current settings and expiration. When
+        the registration resource is ready, both `created_at` and `expires_at`
+        are present in the response.
+      operationId: registrar-domain-registration-get
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: The Cloudflare account ID.
+          schema:
+            type: string
+        - description: Domain name to retrieve.
+          in: path
+          name: domain_name
+          schema:
+            $ref: '#/components/schemas/registrarApiDomainName'
+          required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiRegistrationResponseSingle'
+          description: Registration details.
+        4XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiApiResponseCommonFailure'
+          description: Get registration failure.
+      security:
+        - api_token: []
+        - api_email: []
+          api_key: []
+      summary: Get Registration
+      tags:
+        - Registrar Registration
+      x-stackql-sdk:
+        service: registrar
+        resource_chain:
+          - registrations
+        method: get
+    patch:
+      description: >-
+        Updates an existing domain registration. By default, the server holds
+        the connection for a bounded, server-defined amount of time while the
+        update completes. Most updates finish within this window and return `200
+        OK` with a completed workflow status. If the update is still processing
+        after this synchronous wait window, the server returns `202 Accepted`.
+        Poll the URL in `links.self` to track progress. To skip the wait and
+        receive an immediate `202`, send `Prefer: respond-async`. This endpoint
+        currently supports updating `auto_renew` only.
+      operationId: registrar-domain-registration-update
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: The Cloudflare account ID.
+          schema:
+            type: string
+        - description: Domain name to update.
+          in: path
+          name: domain_name
+          schema:
+            $ref: '#/components/schemas/registrarApiDomainName'
+          required: true
+        - description: >-
+            Set to `respond-async` to receive an immediate `202 Accepted`
+            without waiting for the operation to complete (RFC 7240).
+          in: header
+          name: Prefer
+          schema:
+            enum:
+              - respond-async
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/registrarApiRegistrationUpdateRequest'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiWorkflowStatusResponseSingle'
+          description: >-
+            Update completed successfully within the synchronous wait window.
+            The workflow status will have `state: succeeded` and `completed:
+            true`.
+          headers:
+            Preference-Applied:
+              description: Echoed when the server honored a `Prefer` header.
+              schema:
+                type: string
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiWorkflowStatusResponseSingle'
+          description: >-
+            Update is still processing. This occurs when the operation did not
+            complete within the synchronous wait window, or when `Prefer:
+            respond-async` was sent. Poll the URL in `links.self` to track
+            progress.
+          headers:
+            Location:
+              description: URL of the workflow status resource (same as `links.self`).
+              schema:
+                type: string
+            Preference-Applied:
+              description: Set to `respond-async` when the server honored the preference.
+              schema:
+                type: string
+        4XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiApiResponseCommonFailure'
+          description: Update registration failure.
+      security:
+        - api_token: []
+        - api_email: []
+          api_key: []
+      summary: Update Registration
+      tags:
+        - Registrar Registration
+      x-stackql-sdk:
+        service: registrar
+        resource_chain:
+          - registrations
+        method: edit
+  /accounts/{account_id}/registrar/registrations/{domain_name}/registration-status:
+    get:
+      description: >-
+        Returns the current status of a domain registration workflow. Use this
+        endpoint to poll for completion when the POST response returned `202
+        Accepted`. The URL is provided in the `links.self` field of the workflow
+        status response. Poll this endpoint until the workflow reaches a
+        terminal state or a state that requires user attention. **Terminal
+        states:** `succeeded` and `failed` are terminal and always have
+        `completed: true`. **Non-terminal states:** - `action_required` has
+        `completed: false` and will not resolve on its own. The workflow is
+        paused pending user intervention. - `blocked` has `completed: false` and
+        indicates the workflow is waiting on a third party such as the extension
+        registry or losing registrar. Continue polling while informing the user
+        of the delay. Use increasing backoff between polls. When `state:
+        blocked`, use a longer polling interval and do not poll indefinitely. A
+        naive polling loop that only checks `completed` can run indefinitely
+        when `state: action_required`. Break explicitly on `action_required`:
+        ```js let status; do { await new Promise(r => setTimeout(r, 2000));
+        status = await cloudflare.request({ method: 'GET', path:
+        reg.result.links.self, }); } while ( !status.result.completed &&
+        status.result.state !== 'action_required' ); if (status.result.state ===
+        'action_required') { // Surface context.action and
+        context.confirmation_sent_to to the user. // Do not re-submit the
+        registration request. } ```
+      operationId: registrar-domain-registration-get-status
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: The Cloudflare account ID.
+          schema:
+            type: string
+        - in: path
+          name: domain_name
+          schema:
+            $ref: '#/components/schemas/registrarApiDomainName'
+          required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiWorkflowStatusResponseSingle'
+          description: Registration workflow status.
+        4XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiApiResponseCommonFailure'
+          description: Get status failure.
+      security:
+        - api_token: []
+        - api_email: []
+          api_key: []
+      summary: Get Registration Status
+      tags:
+        - Registrar Registration
+      x-stackql-sdk:
+        service: registrar
+        resource_chain:
+          - registration_status
+        method: get
+  /accounts/{account_id}/registrar/registrations/{domain_name}/update-status:
+    get:
+      description: >-
+        Returns the current status of a domain update workflow. Use this
+        endpoint to poll for completion when the PATCH response returned `202
+        Accepted`. The URL is provided in the `links.self` field of the workflow
+        status response. Poll this endpoint until the workflow reaches a
+        terminal state or a state that requires user attention. Use increasing
+        backoff between polls. When the workflow remains blocked on a third
+        party, use a longer polling interval and do not poll indefinitely.
+      operationId: registrar-domain-registration-get-update-status
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          description: The Cloudflare account ID.
+          schema:
+            type: string
+        - in: path
+          name: domain_name
+          schema:
+            $ref: '#/components/schemas/registrarApiDomainName'
+          required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiWorkflowStatusResponseSingle'
+          description: Update workflow status.
+        4XX:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/registrarApiApiResponseCommonFailure'
+          description: Get update status failure.
+      security:
+        - api_token: []
+        - api_email: []
+          api_key: []
+      summary: Get Update Status
+      tags:
+        - Registrar Registration
+      x-stackql-sdk:
+        service: registrar
+        resource_chain:
+          - update_status
+        method: get
+components:
+  schemas:
+    registrarApiAddress:
+      description: Address.
+      example: 123 Sesame St.
+      type: string
+    registrarApiAddress2:
+      description: Optional address line for unit, floor, suite, etc.
+      example: Suite 430
+      type: string
+    registrarApiApiResponseCommonFailure:
+      properties:
+        errors:
+          example:
+            - code: 7003
+              message: No route for the URI
+          minItems: 1
+          $ref: '#/components/schemas/registrarApiMessages'
+        messages:
+          example: []
+          $ref: '#/components/schemas/registrarApiMessages'
+        result:
+          enum:
+            - null
+          nullable: true
+          type: object
+        success:
+          description: Whether the API call was successful
+          enum:
+            - false
+          example: false
+          type: boolean
+      required:
+        - success
+        - errors
+        - messages
+        - result
+      type: object
+    registrarApiAutoRenew:
+      description: >-
+        Auto-renew controls whether subscription is automatically renewed upon
+        domain expiration.
+      example: true
+      type: boolean
+      x-auditable: true
+    registrarApiAvailable:
+      description: >-
+        Shows if a domain is available for transferring into Cloudflare
+        Registrar.
+      example: false
+      type: boolean
+    registrarApiCanRegister:
+      description: Indicates if the domain can be registered as a new domain.
+      example: false
+      type: boolean
+    registrarApiCity:
+      description: City.
+      example: Austin
+      type: string
+    registrarApiContactIdentifier:
+      description: Contact Identifier.
+      example: ea95132c15732412d22c1476fa83f27a
+      maxLength: 32
+      readOnly: true
+      type: string
+    registrarApiContactProperties:
+      properties:
+        address:
+          $ref: '#/components/schemas/registrarApiAddress'
+        address2:
+          $ref: '#/components/schemas/registrarApiAddress2'
+        city:
+          $ref: '#/components/schemas/registrarApiCity'
+        country:
+          $ref: '#/components/schemas/registrarApiCountry'
+        email:
+          $ref: '#/components/schemas/registrarApiEmail'
+        fax:
+          $ref: '#/components/schemas/registrarApiFax'
+        first_name:
+          $ref: '#/components/schemas/registrarApiFirstName'
+        id:
+          $ref: '#/components/schemas/registrarApiContactIdentifier'
+        last_name:
+          $ref: '#/components/schemas/registrarApiLastName'
+        organization:
+          $ref: '#/components/schemas/registrarApiOrganization'
+        phone:
+          $ref: '#/components/schemas/registrarApiTelephone'
+        state:
+          $ref: '#/components/schemas/registrarApiState'
+        zip:
+          $ref: '#/components/schemas/registrarApiZipcode'
+      required:
+        - first_name
+        - last_name
+        - address
+        - city
+        - state
+        - zip
+        - country
+        - phone
+        - organization
+      type: object
+    registrarApiContacts:
+      type: object
+      $ref: '#/components/schemas/registrarApiContactProperties'
+    registrarApiCountry:
+      description: The country in which the user lives.
+      example: US
+      maxLength: 30
+      nullable: true
+      type: string
+    registrarApiCreatedAt:
+      description: Shows time of creation.
+      example: '2018-08-28T17:26:26Z'
+      format: date-time
+      type: string
+    registrarApiCurrentRegistrar:
+      description: Shows name of current registrar.
+      example: Cloudflare
+      type: string
+    registrarApiCursorResultInfo:
+      description: >-
+        Cursor-based pagination metadata. Used by list endpoints that support
+        cursor pagination. Pass the `cursor` value as a query parameter in the
+        next request to fetch the next page. An empty string indicates there are
+        no more pages.
+      properties:
+        count:
+          description: Number of items in the current result set.
+          example: 20
+          type: integer
+        cursor:
+          description: >-
+            Opaque cursor for fetching the next page. Pass this value as the
+            `cursor` query parameter in a subsequent request. An empty string
+            indicates there are no more pages.
+          example: eyJ0IjoiMjAyNS0wNi0xNVQxMjowMDowMC4wMDAwMDBaIiwibiI6ImJyYXZvLm5ldCJ9
+          type: string
+        per_page:
+          description: Maximum number of items per page.
+          example: 20
+          type: integer
+      required:
+        - cursor
+        - per_page
+        - count
+      type: object
+    registrarApiDomainCheckRequest:
+      description: Request body for checking domain availability.
+      properties:
+        domains:
+          description: >-
+            List of fully qualified domain names (FQDNs) to check for
+            availability. Each domain must include the extension. - Minimum: 1
+            domain - Maximum: 20 domains per request - Domains on unsupported
+            extensions are returned with `registrable: false` and a `reason`
+            field - Malformed domain names (e.g., missing extension) may be
+            omitted from the response
+          example:
+            - example.com
+            - example.net
+          items:
+            type: string
+          maxItems: 20
+          minItems: 1
+          type: array
+      required:
+        - domains
+      type: object
+    registrarApiDomainCheckResponse:
+      properties:
+        errors:
+          $ref: '#/components/schemas/registrarApiMessages'
+        messages:
+          $ref: '#/components/schemas/registrarApiMessages'
+        result:
+          description: Contains the availability check results.
+          properties:
+            domains:
+              description: >-
+                Array of domain availability results. Domains on unsupported
+                extensions are included with `registrable: false` and a `reason`
+                field. Malformed domain names may be omitted.
+              items:
+                $ref: '#/components/schemas/registrarApiDomainCheckResult'
+              type: array
+          required:
+            - domains
+          type: object
+        success:
+          description: Whether the API call was successful
+          enum:
+            - true
+          example: true
+          type: boolean
+      required:
+        - success
+        - errors
+        - messages
+        - result
+        - result
+      type: object
+    registrarApiDomainCheckResult:
+      description: >-
+        Represents a single authoritative domain availability result returned by
+        the Check endpoint. Check results reflect current registry status and
+        should be used immediately before registration.
+      properties:
+        name:
+          description: >-
+            The fully qualified domain name (FQDN) in punycode format for
+            internationalized domain names (IDNs).
+          example: example.com
+          type: string
+        pricing:
+          $ref: '#/components/schemas/registrarApiPricing'
+        reason:
+          description: >-
+            Present only when `registrable` is `false`. Explains why the domain
+            cannot be registered via this API. -
+            `extension_not_supported_via_api`: Cloudflare Registrar supports
+            this extension in the dashboard but it is not yet available for
+            programmatic registration via this API. The user can register via
+            `https://dash.cloudflare.com/{account_id}/domains/registrations`. -
+            `extension_not_supported`: This extension is not supported by
+            Cloudflare Registrar at all. - `extension_disallows_registration`:
+            The extension's registry has temporarily or permanently frozen new
+            registrations. No registrar can register domains on this extension
+            at this time. - `domain_premium`: The domain is premium priced.
+            Premium registration is not currently supported by this API. -
+            `domain_unavailable`: The domain is already registered, reserved, or
+            otherwise not available on a supported extension.
+          enum:
+            - extension_not_supported_via_api
+            - extension_not_supported
+            - extension_disallows_registration
+            - domain_premium
+            - domain_unavailable
+          example: domain_unavailable
+          type: string
+        registrable:
+          description: >-
+            Indicates whether this domain can be registered programmatically
+            through this API based on a real-time registry check. - `true`:
+            Domain is available for registration. The `pricing` object will be
+            included. - `false`: Domain is not available. See the `reason` field
+            for why. `tier` may still be present on some non-registrable
+            results, such as premium domains.
+          example: true
+          type: boolean
+        tier:
+          description: >-
+            The pricing tier for this domain. Always present when `registrable`
+            is `true`; defaults to `standard` for most domains. May be absent
+            when `registrable` is `false`. - `standard`: Standard registry
+            pricing - `premium`: Premium domain with higher pricing set by the
+            registry
+          enum:
+            - standard
+            - premium
+          example: standard
+          type: string
+      required:
+        - name
+        - registrable
+      type: object
+    registrarApiDomainIdentifier:
+      description: Domain identifier.
+      example: ea95132c15732412d22c1476fa83f27a
+      maxLength: 32
+      readOnly: true
+      type: string
+    registrarApiDomainName:
+      description: >-
+        Fully qualified domain name (FQDN) including the extension (e.g.,
+        `example.com`, `mybrand.app`). The domain name uniquely identifies a
+        registration — the same domain cannot be registered twice, making it a
+        natural idempotency key for registration requests.
+      example: example.com
+      type: string
+      x-auditable: true
+    registrarApiDomainProperties:
+      properties:
+        available:
+          $ref: '#/components/schemas/registrarApiAvailable'
+        can_register:
+          $ref: '#/components/schemas/registrarApiCanRegister'
+        created_at:
+          $ref: '#/components/schemas/registrarApiCreatedAt'
+          readOnly: true
+        current_registrar:
+          $ref: '#/components/schemas/registrarApiCurrentRegistrar'
+        expires_at:
+          $ref: '#/components/schemas/registrarApiExpiresAt'
+        id:
+          $ref: '#/components/schemas/registrarApiDomainIdentifier'
+        locked:
+          $ref: '#/components/schemas/registrarApiLocked'
+        registrant_contact:
+          $ref: '#/components/schemas/registrarApiRegistrantContact'
+        registry_statuses:
+          $ref: '#/components/schemas/registrarApiRegistryStatuses'
+        supported_tld:
+          $ref: '#/components/schemas/registrarApiSupportedTld'
+        transfer_in:
+          $ref: '#/components/schemas/registrarApiTransferIn'
+        updated_at:
+          $ref: '#/components/schemas/registrarApiUpdatedAt'
+          readOnly: true
+      type: object
+    registrarApiDomainResponseCollection:
+      type: object
+      properties:
+        errors:
+          $ref: '#/components/schemas/registrarApiMessages'
+        messages:
+          $ref: '#/components/schemas/registrarApiMessages'
+        result:
+          items:
+            $ref: '#/components/schemas/registrarApiDomains'
+          nullable: true
+          type: array
+        success:
+          description: Whether the API call was successful
+          enum:
+            - true
+          example: true
+          type: boolean
+        result_info:
+          $ref: '#/components/schemas/registrarApiResultInfo'
+      required:
+        - success
+        - errors
+        - messages
+        - result
+    registrarApiDomainResponseSingle:
+      type: object
+      properties:
+        errors:
+          $ref: '#/components/schemas/registrarApiMessages'
+        messages:
+          $ref: '#/components/schemas/registrarApiMessages'
+        result:
+          nullable: true
+          type: object
+        success:
+          description: Whether the API call was successful
+          enum:
+            - true
+          example: true
+          type: boolean
+      required:
+        - success
+        - errors
+        - messages
+        - result
+    registrarApiDomainSearchResponse:
+      properties:
+        errors:
+          $ref: '#/components/schemas/registrarApiMessages'
+        messages:
+          $ref: '#/components/schemas/registrarApiMessages'
+        result:
+          description: Contains the search results.
+          properties:
+            domains:
+              description: >-
+                Array of domain suggestions sorted by relevance. May be empty if
+                no domains match the search criteria.
+              items:
+                $ref: '#/components/schemas/registrarApiDomainSearchResult'
+              type: array
+          required:
+            - domains
+          type: object
+        success:
+          description: Whether the API call was successful
+          enum:
+            - true
+          example: true
+          type: boolean
+      required:
+        - success
+        - errors
+        - messages
+        - result
+        - result
+      type: object
+    registrarApiDomainSearchResult:
+      description: >-
+        Represents a single domain suggestion returned by the Search endpoint.
+        Search results are non-authoritative and may be based on cached data.
+        Use POST /domain-check to confirm real-time availability and pricing
+        before registration.
+      properties:
+        name:
+          description: >-
+            The fully qualified domain name (FQDN) in punycode format for
+            internationalized domain names (IDNs).
+          example: example.com
+          type: string
+        pricing:
+          $ref: '#/components/schemas/registrarApiPricing'
+        reason:
+          description: >-
+            Present only when `registrable` is `false` on search results.
+            Explains why the domain does not appear registrable through this
+            API. These values are advisory; use POST /domain-check for
+            authoritative status. - `extension_not_supported_via_api`:
+            Cloudflare Registrar supports this extension in the dashboard but it
+            is not yet available for programmatic registration via this API. -
+            `extension_not_supported`: This extension is not supported by
+            Cloudflare Registrar at all. - `extension_disallows_registration`:
+            The extension's registry has temporarily or permanently frozen new
+            registrations. - `domain_premium`: The domain is premium priced.
+            Premium registration is not currently supported by this API. -
+            `domain_unavailable`: The domain appears unavailable.
+          enum:
+            - extension_not_supported_via_api
+            - extension_not_supported
+            - extension_disallows_registration
+            - domain_premium
+            - domain_unavailable
+          example: domain_unavailable
+          type: string
+        registrable:
+          description: >-
+            Indicates whether this domain appears available based on search
+            data. Search results are non-authoritative and may be stale. -
+            `true`: The domain appears available. Use POST /domain-check to
+            confirm before registration. - `false`: The domain does not appear
+            available in search results.
+          example: true
+          type: boolean
+        tier:
+          description: >-
+            The pricing tier for this domain. Always present when `registrable`
+            is `true`; defaults to `standard` for most domains. May be absent
+            when `registrable` is `false`. - `standard`: Standard registry
+            pricing - `premium`: Premium domain with higher pricing set by the
+            registry
+          enum:
+            - standard
+            - premium
+          example: standard
+          type: string
+      required:
+        - name
+        - registrable
+      type: object
+    registrarApiDomainUpdateProperties:
+      properties:
+        auto_renew:
+          $ref: '#/components/schemas/registrarApiAutoRenew'
+        locked:
+          $ref: '#/components/schemas/registrarApiLocked'
+        privacy:
+          $ref: '#/components/schemas/registrarApiPrivacy'
+      type: object
+    registrarApiDomains:
+      type: object
+      $ref: '#/components/schemas/registrarApiDomainProperties'
+    registrarApiEmail:
+      description: The contact email address of the user.
+      example: user@example.com
+      maxLength: 90
+      type: string
+    registrarApiExpiresAt:
+      description: Shows when domain name registration expires.
+      example: '2019-08-28T23:59:59Z'
+      format: date-time
+      type: string
+    registrarApiFax:
+      description: Contact fax number.
+      example: 123-867-5309
+      type: string
+    registrarApiFirstName:
+      description: User's first name
+      example: John
+      maxLength: 60
+      nullable: true
+      type: string
+    registrarApiLastName:
+      description: User's last name
+      example: Appleseed
+      maxLength: 60
+      nullable: true
+      type: string
+    registrarApiLocked:
+      description: Shows whether a registrar lock is in place for a domain.
+      example: false
+      type: boolean
+      x-auditable: true
+    registrarApiMessages:
+      example: []
+      items:
+        $ref: '#/components/schemas/responseInfo'
+      type: array
+    registrarApiOrganization:
+      description: Name of organization.
+      example: Cloudflare, Inc.
+      type: string
+    registrarApiPricing:
+      description: >-
+        Annual pricing information for a registrable domain. This object is only
+        present when `registrable` is `true`. All prices are per year and
+        returned as strings to preserve decimal precision. `registration_cost`
+        and `renewal_cost` are frequently the same value, but may differ —
+        especially for premium domains where registries set different rates for
+        initial registration vs. renewal. For a multi-year registration (e.g., 4
+        years), the first year is charged at `registration_cost` and each
+        subsequent year at `renewal_cost`. Registry pricing may change over
+        time; the values returned here reflect the current registry rate.
+        Premium pricing may be surfaced by Search and Check, but premium
+        registration is not currently supported by this API.
+      properties:
+        currency:
+          description: ISO-4217 currency code for the prices (e.g., "USD", "EUR", "GBP").
+          example: USD
+          type: string
+        registration_cost:
+          description: >-
+            The first-year cost to register this domain. For premium domains
+            (`tier: premium`), this price is set by the registry and may be
+            significantly higher than standard pricing. For multi-year
+            registrations, this cost applies to the first year only; subsequent
+            years are charged at `renewal_cost`.
+          example: '8.57'
+          type: string
+        renewal_cost:
+          description: >-
+            Per-year renewal cost for this domain. Applied to each year beyond
+            the first year of a multi-year registration, and to each annual
+            auto-renewal thereafter. May differ from `registration_cost`,
+            especially for premium domains where initial registration often
+            costs more than renewals.
+          example: '8.57'
+          type: string
+      required:
+        - currency
+        - registration_cost
+        - renewal_cost
+      type: object
+    registrarApiPrivacy:
+      description: Privacy option controls redacting WHOIS information.
+      example: true
+      type: boolean
+      x-auditable: true
+    registrarApiRegistrantContact:
+      description: Shows contact information for domain registrant.
+      $ref: '#/components/schemas/registrarApiContacts'
+    registrarApiRegistration:
+      description: >-
+        A domain registration resource representing the current state of a
+        registered domain.
+      properties:
+        auto_renew:
+          description: Whether the domain will be automatically renewed before expiration.
+          example: true
+          type: boolean
+        created_at:
+          description: >-
+            When the domain was registered. Present when the registration
+            resource exists.
+          example: '2025-01-15T10:00:00Z'
+          format: date-time
+          type: string
+          readOnly: true
+        domain_name:
+          $ref: '#/components/schemas/registrarApiDomainName'
+        expires_at:
+          description: >-
+            When the domain registration expires. Present when the registration
+            is ready; may be null only while `status` is `registration_pending`.
+          example: '2026-01-15T10:00:00Z'
+          format: date-time
+          nullable: true
+          type: string
+        locked:
+          description: Whether the domain is locked for transfer.
+          example: true
+          type: boolean
+        privacy_mode:
+          description: Current WHOIS privacy mode for the registration.
+          enum:
+            - false
+            - redaction
+          example: redaction
+          type: string
+        status:
+          description: >-
+            Current registration status. - `active`: Domain is registered and
+            operational - `registration_pending`: Registration is in progress -
+            `expired`: Domain has expired - `suspended`: Domain is suspended by
+            the registry - `redemption_period`: Domain is in the redemption
+            grace period - `pending_delete`: Domain is pending deletion by the
+            registry
+          enum:
+            - active
+            - registration_pending
+            - expired
+            - suspended
+            - redemption_period
+            - pending_delete
+          example: active
+          type: string
+      required:
+        - domain_name
+        - status
+        - created_at
+        - expires_at
+        - auto_renew
+        - privacy_mode
+        - locked
+      type: object
+    registrarApiRegistrationContact:
+      description: >-
+        Registrant contact data for the domain registration. This information is
+        submitted to the domain registry and, depending on extension and privacy
+        settings, may appear in public WHOIS records.
+      properties:
+        email:
+          description: >-
+            Email address for the registrant. Used for domain-related
+            communications from the registry, including ownership verification
+            and renewal notices.
+          example: ada@example.com
+          format: email
+          type: string
+        fax:
+          description: >-
+            Fax number in E.164 format (e.g., `+1.5555555555`). Optional. Most
+            registrations do not require a fax number.
+          example: '+1.5555555555'
+          type: string
+        phone:
+          description: >-
+            Phone number in E.164 format: `+{country_code}.{number}` with no
+            spaces or dashes. Examples: `+1.5555555555` (US), `+44.2071234567`
+            (UK), `+81.312345678` (Japan).
+          example: '+1.5555555555'
+          type: string
+        postal_info:
+          $ref: '#/components/schemas/registrarApiRegistrationContactPostalInfo'
+      required:
+        - phone
+        - email
+        - postal_info
+      type: object
+    registrarApiRegistrationContactAddress:
+      description: Physical mailing address for the registrant contact.
+      properties:
+        city:
+          description: City or locality name.
+          example: Austin
+          type: string
+        country_code:
+          description: >-
+            Two-letter country code per ISO 3166-1 alpha-2 (e.g., `US`, `GB`,
+            `CA`, `DE`).
+          example: US
+          type: string
+        postal_code:
+          description: Postal or ZIP code.
+          example: '78701'
+          type: string
+        state:
+          description: >-
+            State, province, or region. Use the standard abbreviation where
+            applicable (e.g., `TX` for Texas, `ON` for Ontario).
+          example: TX
+          type: string
+        street:
+          description: Street address including building/suite number.
+          example: 123 Main St
+          type: string
+      required:
+        - street
+        - city
+        - state
+        - postal_code
+        - country_code
+      type: object
+    registrarApiRegistrationContactPostalInfo:
+      description: Postal/mailing information for the registrant contact.
+      properties:
+        address:
+          $ref: '#/components/schemas/registrarApiRegistrationContactAddress'
+        name:
+          description: >-
+            Full legal name of the registrant (individual or authorized
+            representative).
+          example: Ada Lovelace
+          type: string
+        organization:
+          description: Organization or company name. Optional for individual registrants.
+          example: Example Inc
+          type: string
+      required:
+        - name
+        - address
+      type: object
+    registrarApiRegistrationContacts:
+      description: >-
+        Contact data for the registration request. If the `contacts` object is
+        omitted entirely from the request, or if `contacts.registrant` is not
+        provided, the system will use the account's default address book entry
+        as the registrant contact. This default must be pre-configured by the
+        account owner at
+        `https://dash.cloudflare.com/{account_id}/domains/registrations`, where
+        they can create or update the address book entry and accept the required
+        agreement. No API exists for managing address book entries at this time.
+        If no default address book entry exists and no registrant contact is
+        provided, the registration request will fail with a validation error.
+      properties:
+        registrant:
+          $ref: '#/components/schemas/registrarApiRegistrationContact'
+      type: object
+    registrarApiRegistrationCreateRequest:
+      properties:
+        auto_renew:
+          default: false
+          description: >-
+            Enable or disable automatic renewal. Defaults to `false` if omitted.
+            Setting this field to `true` is an explicit opt-in authorizing
+            Cloudflare to charge the account's default payment method up to 30
+            days before domain expiry to renew the domain automatically. Renewal
+            pricing may change over time based on registry pricing.
+          example: false
+          type: boolean
+        contacts:
+          $ref: '#/components/schemas/registrarApiRegistrationContacts'
+        domain_name:
+          $ref: '#/components/schemas/registrarApiDomainName'
+        privacy_mode:
+          default: redaction
+          description: >-
+            WHOIS privacy mode for the registration. Defaults to `redaction`. -
+            `off`: Do not request WHOIS privacy. - `redaction`: Request WHOIS
+            redaction where supported by the extension. Some extensions do not
+            support privacy/redaction.
+          enum:
+            - false
+            - redaction
+          example: redaction
+          type: string
+        years:
+          description: >-
+            Number of years to register (1–10). If omitted, defaults to the
+            minimum registration period required by the registry for this
+            extension. For most extensions this is 1 year, but some extensions
+            require longer minimum terms (e.g., `.ai` requires a minimum of 2
+            years). The registry for each extension may also enforce its own
+            maximum registration term. If the requested value exceeds the
+            registry's maximum, the registration will be rejected. When in
+            doubt, use the default by omitting this field.
+          example: 1
+          maximum: 10
+          minimum: 1
+          type: integer
+      required:
+        - domain_name
+      type: object
+    registrarApiRegistrationResponseCollection:
+      properties:
+        errors:
+          $ref: '#/components/schemas/registrarApiMessages'
+        messages:
+          $ref: '#/components/schemas/registrarApiMessages'
+        result:
+          items:
+            $ref: '#/components/schemas/registrarApiRegistration'
+          type: array
+        success:
+          description: Whether the API call was successful
+          enum:
+            - true
+          example: true
+          type: boolean
+        result_info:
+          $ref: '#/components/schemas/registrarApiCursorResultInfo'
+      required:
+        - success
+        - errors
+        - messages
+        - result
+        - result
+        - result_info
+      type: object
+    registrarApiRegistrationResponseSingle:
+      properties:
+        errors:
+          $ref: '#/components/schemas/registrarApiMessages'
+        messages:
+          $ref: '#/components/schemas/registrarApiMessages'
+        result:
+          $ref: '#/components/schemas/registrarApiRegistration'
+        success:
+          description: Whether the API call was successful
+          enum:
+            - true
+          example: true
+          type: boolean
+      required:
+        - success
+        - errors
+        - messages
+        - result
+      type: object
+    registrarApiRegistrationUpdateRequest:
+      description: >-
+        Request to update an existing domain registration. This endpoint
+        currently supports updating `auto_renew` only.
+      minProperties: 1
+      properties:
+        auto_renew:
+          description: >-
+            Enable or disable automatic renewal. Setting this field to `true`
+            authorizes Cloudflare to charge the account's default payment method
+            up to 30 days before domain expiry to renew the domain
+            automatically. Renewal pricing may change over time based on
+            registry pricing.
+          example: true
+          type: boolean
+      type: object
+    registrarApiRegistryStatuses:
+      description: >-
+        A comma-separated list of registry status codes. A full list of status
+        codes can be found at [EPP Status
+        Codes](https://www.icann.org/resources/pages/epp-status-codes-2014-06-16-en).
+      example: ok,serverTransferProhibited
+      type: string
+    registrarApiResultInfo:
+      properties:
+        count:
+          description: Total number of results for the requested service
+          example: 1
+          type: number
+        page:
+          description: Current page within paginated list of results
+          example: 1
+          type: number
+        per_page:
+          description: Number of results per page of results
+          example: 20
+          type: number
+        total_count:
+          description: Total results available without any search parameters
+          example: 2000
+          type: number
+      type: object
+    registrarApiState:
+      description: State.
+      example: TX
+      type: string
+    registrarApiSupportedTld:
+      description: >-
+        Whether a particular TLD is currently supported by Cloudflare Registrar.
+        Refer to [TLD Policies](https://www.cloudflare.com/tld-policies/) for a
+        list of supported TLDs.
+      example: true
+      type: boolean
+    registrarApiTelephone:
+      description: User's telephone number
+      example: +1 123-123-1234
+      maxLength: 20
+      nullable: true
+      type: string
+    registrarApiTransferIn:
+      description: Statuses for domain transfers into Cloudflare Registrar.
+      properties:
+        accept_foa:
+          description: Form of authorization has been accepted by the registrant.
+          enum:
+            - needed
+            - ok
+          example: needed
+          type: string
+        approve_transfer:
+          description: Shows transfer status with the registry.
+          enum:
+            - needed
+            - ok
+            - pending
+            - trying
+            - rejected
+            - unknown
+          example: unknown
+          type: string
+        can_cancel_transfer:
+          description: Indicates if cancellation is still possible.
+          example: true
+          type: boolean
+        disable_privacy:
+          description: Privacy guards are disabled at the foreign registrar.
+          enum:
+            - needed
+            - ok
+            - unknown
+          example: ok
+          type: string
+        enter_auth_code:
+          description: Auth code has been entered and verified.
+          enum:
+            - needed
+            - ok
+            - pending
+            - trying
+            - rejected
+          example: needed
+          type: string
+        unlock_domain:
+          description: Domain is unlocked at the foreign registrar.
+          enum:
+            - needed
+            - ok
+            - pending
+            - trying
+            - unknown
+          example: ok
+          type: string
+      type: object
+    registrarApiUpdatedAt:
+      description: Last updated.
+      example: '2018-08-28T17:26:26Z'
+      format: date-time
+      type: string
+    registrarApiWorkflowError:
+      description: >-
+        Error details when a workflow reaches the `failed` state. The specific
+        error codes and messages depend on the workflow type (registration,
+        update, etc.) and the underlying registry response. These workflow error
+        codes are separate from immediate HTTP error `errors[].code` values
+        returned by non-2xx responses. Surface `error.message` to the user for
+        context.
+      properties:
+        code:
+          description: Machine-readable error code identifying the failure reason.
+          example: registry_rejected
+          type: string
+        message:
+          description: >-
+            Human-readable explanation of the failure. May include
+            registry-specific details.
+          example: Registry rejected the request.
+          type: string
+      required:
+        - code
+        - message
+      type: object
+    registrarApiWorkflowLinks:
+      properties:
+        resource:
+          description: URL to the domain resource.
+          example: /accounts/{account_id}/registrar/registrations/example.com
+          type: string
+        self:
+          description: URL to this status resource.
+          example: >-
+            /accounts/{account_id}/registrar/registrations/example.com/registration-status
+          type: string
+      required:
+        - self
+      type: object
+    registrarApiWorkflowStatus:
+      description: Status of an async registration workflow.
+      properties:
+        completed:
+          description: >-
+            Whether the workflow has reached a terminal state. `true` when
+            `state` is `succeeded` or `failed`. `false` for `pending`,
+            `in_progress`, `action_required`, and `blocked`.
+          example: false
+          type: boolean
+        context:
+          description: >-
+            Workflow-specific data for this workflow. The workflow subject is
+            identified by `context.domain_name` for domain-centric workflows.
+          type: object
+        created_at:
+          format: date-time
+          type: string
+          readOnly: true
+        error:
+          nullable: true
+          $ref: '#/components/schemas/registrarApiWorkflowError'
+        links:
+          $ref: '#/components/schemas/registrarApiWorkflowLinks'
+        state:
+          description: >-
+            Workflow lifecycle state. - `pending`: Workflow has been created but
+            not yet started processing. - `in_progress`: Actively processing.
+            Continue polling `links.self`. The workflow has an internal deadline
+            and will not remain in this state indefinitely. - `action_required`:
+            Paused — requires action by the user (not the system). See
+            `context.action` for what is needed. An automated polling loop must
+            break on this state; it will not resolve on its own without user
+            intervention. - `blocked`: The workflow cannot make progress due to
+            a third party such as the domain extension's registry or a losing
+            registrar. No user action will help. Continue polling — the block
+            may resolve when the third party responds. - `succeeded`: Terminal.
+            The operation completed successfully. `completed` will be `true`.
+            For registrations, `context.registration` contains the resulting
+            registration resource. - `failed`: Terminal. The operation failed.
+            `completed` will be `true`. See `error.code` and `error.message` for
+            the reason. Do not auto-retry without user review.
+          enum:
+            - pending
+            - in_progress
+            - action_required
+            - blocked
+            - succeeded
+            - failed
+          example: in_progress
+          type: string
+        updated_at:
+          format: date-time
+          type: string
+          readOnly: true
+      required:
+        - state
+        - completed
+        - created_at
+        - updated_at
+        - links
+      type: object
+    registrarApiWorkflowStatusResponseSingle:
+      properties:
+        errors:
+          $ref: '#/components/schemas/registrarApiMessages'
+        messages:
+          $ref: '#/components/schemas/registrarApiMessages'
+        result:
+          $ref: '#/components/schemas/registrarApiWorkflowStatus'
+        success:
+          description: Whether the API call was successful
+          enum:
+            - true
+          example: true
+          type: boolean
+      required:
+        - success
+        - errors
+        - messages
+        - result
+      type: object
+    registrarApiZipcode:
+      description: The zipcode or postal code where the user lives.
+      example: '12345'
+      maxLength: 20
+      nullable: true
+      type: string
+    responseInfo:
+      properties:
+        code:
+          minimum: 1000
+          type: integer
+        message:
+          type: string
+        documentation_url:
+          type: string
+        source:
+          type: object
+          properties:
+            pointer:
+              type: string
+      required:
+        - code
+        - message
+      type: object
+      uniqueItems: true
+  securitySchemes:
+    api_email:
+      in: header
+      name: X-Auth-Email
+      type: apiKey
+      description: >-
+        The previous authorization scheme for interacting with the Cloudflare
+        API, used in conjunction with a Global API key.
+    api_key:
+      in: header
+      name: X-Auth-Key
+      type: apiKey
+      description: >-
+        The previous authorization scheme for interacting with the Cloudflare
+        API. When possible, use API tokens instead of Global API keys.
+    api_token:
+      scheme: bearer
+      type: http
+      description: >-
+        The preferred authorization scheme for interacting with the Cloudflare
+        API. [Create a
+        token](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/).
+    user_service_key:
+      in: header
+      name: X-Auth-User-Service-Key
+      type: apiKey
+      description: >-
+        Used when interacting with the Origin CA certificates API. [View/change
+        your
+        key](https://developers.cloudflare.com/fundamentals/api/get-started/ca-keys/#viewchange-your-origin-ca-keys).
+  x-stackQL-resources:
+    registrar:
+      id: cloudflare.registrar.registrar
+      name: registrar
+      title: Registrar
+      methods:
+        create_domain_check:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1accounts~1{account_id}~1registrar~1domain-check/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select: []
+        insert: []
+        update: []
+        delete: []
+        replace: []
+    domain_search:
+      id: cloudflare.registrar.domain_search
+      name: domain_search
+      title: Domain Search
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1accounts~1{account_id}~1registrar~1domain-search/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.result.domains
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/domain_search/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace: []
+    domains:
+      id: cloudflare.registrar.domains
+      name: domains
+      title: Domains
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1accounts~1{account_id}~1registrar~1domains/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.result
+        get:
+          operation:
+            $ref: >-
+              #/paths/~1accounts~1{account_id}~1registrar~1domains~1{domain_name}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: >-
+              #/paths/~1accounts~1{account_id}~1registrar~1domains~1{domain_name}/put
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/domains/methods/get'
+          - $ref: '#/components/x-stackQL-resources/domains/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace:
+          - $ref: '#/components/x-stackQL-resources/domains/methods/update'
+    registrations:
+      id: cloudflare.registrar.registrations
+      name: registrations
+      title: Registrations
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1accounts~1{account_id}~1registrar~1registrations/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.result
+        create:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1accounts~1{account_id}~1registrar~1registrations/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '201'
+        get:
+          operation:
+            $ref: >-
+              #/paths/~1accounts~1{account_id}~1registrar~1registrations~1{domain_name}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.result
+        edit:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: >-
+              #/paths/~1accounts~1{account_id}~1registrar~1registrations~1{domain_name}/patch
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/registrations/methods/get'
+          - $ref: '#/components/x-stackQL-resources/registrations/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/registrations/methods/create'
+        update:
+          - $ref: '#/components/x-stackQL-resources/registrations/methods/edit'
+        delete: []
+        replace: []
+    registration_status:
+      id: cloudflare.registrar.registration_status
+      name: registration_status
+      title: Registration Status
+      methods:
+        list:
+          operation:
+            $ref: >-
+              #/paths/~1accounts~1{account_id}~1registrar~1registrations~1{domain_name}~1registration-status/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.result
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/registration_status/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace: []
+    update_status:
+      id: cloudflare.registrar.update_status
+      name: update_status
+      title: Update Status
+      methods:
+        list:
+          operation:
+            $ref: >-
+              #/paths/~1accounts~1{account_id}~1registrar~1registrations~1{domain_name}~1update-status/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.result
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/update_status/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace: []
