@@ -5396,6 +5396,102 @@ paths:
         free: true
         pro: true
       operationId: get_zones_zone_id_dns_records_usage
+  /graphql/dns_analytics_adaptive_groups:
+    post:
+      operationId: graphql-dns_analytics_adaptive_groups-list
+      summary: DNS query analytics for a zone, grouped by query name, type, response code, cache status, and serving colo
+      description: DNS query analytics for a zone, grouped by query name, type, response code, cache status, and serving colo. Replaces the deprecated REST endpoints /zones/{zone_id}/dns_analytics/* (hard EOL 2026-12-01).
+      x-stackQL-graphQL:
+        url: https://api.cloudflare.com/client/v4/graphql
+        httpVerb: POST
+        responseSelection:
+          jsonPath: $.result[*]
+        cursor:
+          strategy: keyset
+          jsonPath: $.data.viewer.zones[0].dnsAnalyticsAdaptiveGroups[-1:].dimensions.datetime
+          format: ', AND datetime_gt: "{{ .value }}"'
+        query: "query {\n  viewer {\n    zones(filter: { zoneTag: \"{{ .zone_tag }}\" }, limit: 1) {\n      dnsAnalyticsAdaptiveGroups(\n        filter: { datetime_geq: \"{{ .since }}\", datetime_lt: \"{{ .until }}\"{{ .cursor }} }\n        limit: {{ if .limit }}{{ .limit }}{{ else }}100{{ end }}\n        orderBy: [datetimeMinute_ASC]\n      ) {\n        dimensions {\n          datetime: datetimeMinute\n          queryName\n          queryType\n          responseCode\n          responseCached\n          coloName\n          ipVersion\n          protocol\n        }\n        sum {\n          countNotCachedAndNotStale\n          countStale\n        }\n        count\n      }\n    }\n  }\n}\n"
+      x-stackql-protocol: graphql
+      parameters:
+      - name: zone_tag
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Cloudflare zone ID (the 32-char hex tag).
+      - name: since
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+        description: Lower bound (inclusive). RFC3339.
+      - name: until
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+        description: Upper bound (exclusive). RFC3339.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 100
+        description: Maximum dimension-tuple rows per call.
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        datetime:
+                          type: string
+                          format: date-time
+                        query_name:
+                          type: string
+                          description: DNS query name (no trailing dot).
+                        query_type:
+                          type: string
+                          description: DNS query type (A
+                          AAAA: null
+                          MX: null
+                          etc.).: null
+                        response_code:
+                          type: string
+                          description: DNS response code (NOERROR
+                          NXDOMAIN: null
+                          etc.).: null
+                        response_cached:
+                          type: string
+                          description: Whether the response was served from cache.
+                        colo_name:
+                          type: string
+                          description: IATA code of the Cloudflare colo.
+                        ip_version:
+                          type: string
+                          description: IPv4 / IPv6.
+                        protocol:
+                          type: string
+                          description: Transport protocol (UDP / TCP / DoH / DoT).
+                        queries:
+                          type: integer
+                          description: Total DNS queries for this dimension tuple.
+                        queries_not_cached_not_stale:
+                          type: integer
+                          description: Queries served fresh (not cache
+                          not stale).: null
+                        queries_stale:
+                          type: integer
+                          description: Queries served from stale cache.
 components:
   schemas:
     dnsAnalyticsDimensions:
@@ -8844,6 +8940,30 @@ components:
         select:
         - $ref: '#/components/x-stackQL-resources/usage/methods/list_by_account'
         - $ref: '#/components/x-stackQL-resources/usage/methods/list_by_zone'
+        insert: []
+        update: []
+        delete: []
+        replace: []
+    dns_analytics_adaptive_groups:
+      id: cloudflare.dns.dns_analytics_adaptive_groups
+      name: dns_analytics_adaptive_groups
+      title: Dns Analytics Adaptive Groups
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1graphql~1dns_analytics_adaptive_groups/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.result
+            transform:
+              type: golang_template_json_v0.3.0
+              body: "{\n  \"result\": [\n    {{- $data := index . \"data\" }}\n    {{- if $data }}\n    {{- $viewer := index $data \"viewer\" }}\n    {{- $zones := index $viewer \"zones\" }}\n    {{- if and $zones (gt (len $zones) 0) }}\n    {{- $rows := index (index $zones 0) \"dnsAnalyticsAdaptiveGroups\" }}\n    {{- $first := true -}}\n    {{- range $i, $row := $rows }}\n    {{- if not $first }},{{ end }}{{- $first = false }}\n    {\n      \"datetime\":                     {{ toJson (index $row \"dimensions\" \"datetime\") }},\n      \"query_name\":                   {{ toJson (index $row \"dimensions\" \"queryName\") }},\n      \"query_type\":                   {{ toJson (index $row \"dimensions\" \"queryType\") }},\n      \"response_code\":                {{ toJson (index $row \"dimensions\" \"responseCode\") }},\n      \"response_cached\":              {{ toJson (index $row \"dimensions\" \"responseCached\") }},\n      \"colo_name\":                    {{ toJson (index $row \"dimensions\"\
+                \ \"coloName\") }},\n      \"ip_version\":                   {{ toJson (index $row \"dimensions\" \"ipVersion\") }},\n      \"protocol\":                     {{ toJson (index $row \"dimensions\" \"protocol\") }},\n      \"queries\":                      {{ index $row \"count\" }},\n      \"queries_not_cached_not_stale\": {{ index $row \"sum\" \"countNotCachedAndNotStale\" }},\n      \"queries_stale\":                {{ index $row \"sum\" \"countStale\" }}\n    }\n    {{- end }}\n    {{- end }}\n    {{- end }}\n  ]\n}\n"
+          x-stackql-protocol: graphql
+      sqlVerbs:
+        select:
+        - $ref: '#/components/x-stackQL-resources/dns_analytics_adaptive_groups/methods/list'
         insert: []
         update: []
         delete: []
