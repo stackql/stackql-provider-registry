@@ -11177,6 +11177,97 @@ paths:
         resource_chain:
         - routes
         method: update
+  /graphql/workers_invocations:
+    post:
+      operationId: graphql-workers_invocations-list
+      summary: Cloudflare Workers invocation analytics for an account, grouped by script, status, and serving colo
+      description: Cloudflare Workers invocation analytics for an account, grouped by script, status, and serving colo. Per-tuple totals for requests, errors, CPU time, duration (GB-s), subrequests, and response bytes.
+      x-stackQL-graphQL:
+        url: https://api.cloudflare.com/client/v4/graphql
+        httpVerb: POST
+        responseSelection:
+          jsonPath: $.result[*]
+        cursor:
+          jsonPath: $.result[*].__no_cursor
+        query: "query {\n  viewer {\n    accounts(filter: { accountTag: \"{{ .account_tag }}\" }, limit: 1) {\n      workersInvocationsAdaptive(\n        filter: { datetime_geq: \"{{ .since }}\", datetime_lt: \"{{ .until }}\" }\n        limit: {{ if .limit }}{{ .limit }}{{ else }}100{{ end }}\n        orderBy: [datetimeMinute_ASC]\n      ) {\n        dimensions {\n          datetime: datetimeMinute\n          scriptName\n          status\n          coloCode\n          usageModel\n        }\n        sum {\n          requests\n          errors\n          subrequests\n          cpuTimeUs\n          duration\n          wallTime\n          responseBodySize\n        }\n      }\n    }\n  }\n}\n"
+      x-stackql-protocol: graphql
+      parameters:
+      - name: account_tag
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Cloudflare account ID (the 32-char hex tag).
+      - name: since
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+        description: Lower bound (inclusive). RFC3339.
+      - name: until
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+        description: Upper bound (exclusive). RFC3339.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 100
+        description: Maximum dimension-tuple rows per call.
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        datetime:
+                          type: string
+                          format: date-time
+                        script_name:
+                          type: string
+                          description: Worker script name.
+                        status:
+                          type: string
+                          description: Invocation status (success / clientDisconnected / scriptError / etc.).
+                        colo_code:
+                          type: string
+                          description: IATA airport code of the serving colo.
+                        usage_model:
+                          type: string
+                          description: Usage model (bundled / unbound / etc.).
+                        requests:
+                          type: integer
+                          description: Invocation count.
+                        errors:
+                          type: integer
+                          description: Errored invocations.
+                        subrequests:
+                          type: integer
+                          description: Subrequest count.
+                        cpu_time_us:
+                          type: integer
+                          description: Total CPU time in microseconds.
+                        duration_gb_s:
+                          type: integer
+                          description: Billable duration (GB*s units).
+                        wall_time_us:
+                          type: integer
+                          description: Total wall time in microseconds.
+                        response_body_size:
+                          type: integer
+                          description: Total response body bytes.
 components:
   schemas:
     buildsAPIResponse:
@@ -17683,3 +17774,27 @@ components:
         - $ref: '#/components/x-stackQL-resources/routes/methods/delete'
         replace:
         - $ref: '#/components/x-stackQL-resources/routes/methods/update'
+    workers_invocations:
+      id: cloudflare.workers.workers_invocations
+      name: workers_invocations
+      title: Workers Invocations
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1graphql~1workers_invocations/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.result
+            transform:
+              type: golang_template_json_v0.3.0
+              body: "{\n  \"result\": [\n    {{- $data := index . \"data\" }}\n    {{- if $data }}\n    {{- $viewer := index $data \"viewer\" }}\n    {{- $accounts := index $viewer \"accounts\" }}\n    {{- if and $accounts (gt (len $accounts) 0) }}\n    {{- $rows := index (index $accounts 0) \"workersInvocationsAdaptive\" }}\n    {{- $first := true -}}\n    {{- range $i, $row := $rows }}\n    {{- if not $first }},{{ end }}{{- $first = false }}\n    {\n      \"datetime\":      {{ toJson (index $row \"dimensions\" \"datetime\") }},\n      \"script_name\":   {{ toJson (index $row \"dimensions\" \"scriptName\") }},\n      \"status\":        {{ toJson (index $row \"dimensions\" \"status\") }},\n      \"colo_code\":     {{ toJson (index $row \"dimensions\" \"coloCode\") }},\n      \"usage_model\":   {{ toJson (index $row \"dimensions\" \"usageModel\") }},\n      \"requests\":      {{ index $row \"sum\" \"requests\" }},\n      \"errors\":        {{ index $row \"sum\" \"errors\" }},\n      \"subrequests\"\
+                :   {{ index $row \"sum\" \"subrequests\" }},\n      \"cpu_time_us\":   {{ index $row \"sum\" \"cpuTimeUs\" }},\n      \"duration_gb_s\": {{ index $row \"sum\" \"duration\" }},\n      \"wall_time_us\":  {{ index $row \"sum\" \"wallTime\" }}\n    }\n    {{- end }}\n    {{- end }}\n    {{- end }}\n  ]\n}\n"
+          x-stackql-protocol: graphql
+      sqlVerbs:
+        select:
+        - $ref: '#/components/x-stackQL-resources/workers_invocations/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace: []
