@@ -100,8 +100,3 @@ deploy `--env dev`, pushes to `main` deploy `--env production`. Manual deploys:
 npm run deploy:dev    # wrangler deploy --env dev
 npm run deploy:prod   # wrangler deploy --env production
 ```
-
-## Migration
-
-See [MIGRATION.md](MIGRATION.md) for the full blue-green cutover runbook
-(parallel-hostname validation, DNS last mile, and Deno decommission).
