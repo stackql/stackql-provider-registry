@@ -141,6 +141,13 @@ run_stackql_suite() { # label base
   fi
 }
 
+# All execution lives in main(), invoked at the very end. This forces bash to
+# parse the entire script before running anything, so the install step's
+# subprocesses cannot corrupt incremental script reads when this file lives on
+# a Windows drive mount (/mnt/c) under WSL - which otherwise yields a spurious
+# "unexpected EOF" parse error mid-run.
+main() {
+
 # --- preflight: stackql ---------------------------------------------------
 
 printf "${BOLD}Preflight${NC}\n"
@@ -151,7 +158,8 @@ elif command -v stackql >/dev/null 2>&1; then
   STACKQL=$(command -v stackql)
 else
   printf "  stackql not found in cwd; installing via get-stackql.io...\n"
-  curl -fsSL https://get-stackql.io/install | sh || true
+  # the documented Linux install - drops ./stackql into the cwd
+  curl -fsSL https://get-stackql.io/install | sh
   if [ -x ./stackql ]; then STACKQL=./stackql
   elif command -v stackql >/dev/null 2>&1; then STACKQL=$(command -v stackql); fi
 fi
@@ -191,3 +199,6 @@ if [ "$FAIL" -gt 0 ]; then
 fi
 printf "\n${GREEN}All tests passed.${NC}\n"
 exit 0
+}
+
+main "$@"
