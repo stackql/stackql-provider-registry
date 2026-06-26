@@ -107,8 +107,8 @@ run_http_suite() { # label base
   fi
 
   # 404 (unknown doc) and 405 (non-GET)
-  expect_status "GET unknown doc -> 404" 404 "$base/providers/dist/does-not-exist"
-  expect_status "POST /ping -> 405" 405 "$base/ping" -X POST
+  expect_status "GET unknown doc" 404 "$base/providers/dist/does-not-exist"
+  expect_status "POST /ping" 405 "$base/ping" -X POST
 
   # analytics
   expect_status "GET /analytics" 200 "$base/analytics"
