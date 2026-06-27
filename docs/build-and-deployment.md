@@ -12,10 +12,11 @@ The following diagram shows the CI/CD flow for this repository.
         SignAndPackage --> Tests[provider\ne2e tests]
     end
     subgraph Push[triggered by protected branch merge commit]
-        Tests --> PushArtifacts[/register\nand publish\nartifacts/]
-        PushArtifacts --> Deno((Deno\nDeploy))
+        Tests --> PushArtifacts[/register\nand publish\nartifacts to S3/]
+        PushArtifacts --> SyncR2[/sync docs\nto R2/]
+        SyncR2 --> Worker((Cloudflare\nWorker))
     end
-    Deno --> End(end)
+    Worker --> End(end)
     ProvUpd -->|no| End
   end
 ```
@@ -27,7 +28,7 @@ The nodes in the above graph are described in the sections below:
   * [package artifacts](#package-artifacts)
   * [provider tests](#provider-tests)
   * [register and store artifacts](#register-and-store-artifacts)
-  * [Deno Deploy](#deno-deploy)
+  * [serve from Cloudflare](#serve-from-cloudflare)
 <!--te-->
 
 The following steps are performed on all pull requests to protected branches `dev` or `main` (if providers were updated):  
@@ -73,27 +74,23 @@ Steps include:
 
 #### Publish Artifacts to Provider Registry Artifact Repository
 
-Packaged artifacts are published to the artifact repository in AWS S3 bucket (`stackql-registry-artifacts`).  Steps include:  
+Packaged artifacts are published to the master/archive artifact repository in AWS S3 bucket (`stackql-registry-artifacts`). The full registry tree is then reconstructed from S3 so the complete set of provider docs (plus a freshly generated `providers.yaml`) is available for the serving layer. Steps include:  
 
 - `[PUBLISH] configure aws credentials`
 - `[PUBLISH] publish provider docs to artifact repo`
-
-#### Deno Deploy
-
-Provider docs are prepared for distribution via [Deno Deploy](https://deno.com/deploy); this includes pulling the latest versions of the provider docs from the artifact repository and preparing the `index.ts` file for distribution.  Steps include:
-
-- `[DEPLOY] setup SSH`
-- `[DEPLOY] pull deno deploy assets`
 - `[DEPLOY] pull additional docs from artifact repo`
-- `[DEPLOY] install deno`
 
-The public StackQL Provider Registry is distributed via [Deno Deploy](https://deno.com/deploy), using the following endpoints:  
+#### Serve from Cloudflare
+
+S3 remains the master/archive store. The reconstructed docs tree is mirrored to Cloudflare R2, and a [Cloudflare Worker](../origin) (source in [origin/](../origin)) serves provider docs from R2 at the edge, logging download analytics to D1. Steps include:  
+
+- `[DEPLOY-CF] install worker deps`
+- `[DEPLOY-CF] sync docs to R2 (dev)` / `[DEPLOY-CF] sync docs to R2 (prod)`
+- `[DEPLOY-CF] deploy worker (dev)` / `[DEPLOY-CF] deploy worker (prod)`
+
+The public StackQL Provider Registry is served from Cloudflare, using the following endpoints:  
 
 | Endpoint | Description |
 | --- | --- |
 | [registry.stackql.app](https://registry.stackql.app/ping) | Production registry (built from `main`) |
-| [registry-dev.stackql.app](https://registry.stackql.app/ping) | Development registry (built from `dev`) |
-
-Steps include:  
-
-- `[DEPLOY] deploy to deno deploy`
+| [registry-dev.stackql.app](https://registry-dev.stackql.app/ping) | Development registry (built from `dev`) |

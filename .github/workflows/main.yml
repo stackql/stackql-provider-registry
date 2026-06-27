@@ -21,13 +21,10 @@ jobs:
     env:
       AWS_DEFAULT_REGION: us-west-1
       REG_MAX_VERSIONS: 3
-      REG_MAX_AGE_MONTHS: 6   
-      REG_WEBSITE_DIR: _deno_website
+      REG_MAX_AGE_MONTHS: 6
+      REG_WEBSITE_DIR: _website
       REG_PROVIDER_PATH: providers/dist
       REG_ARTIFACT_REPO_BUCKET: stackql-registry-artifacts
-      REG_DENO_DEPLOY_ASSET_REPO: deno-deploy-registry
-      REG_DENO_DEPLOY_API_DEV: stackql-dev-registry
-      REG_DENO_DEPLOY_API_PROD: stackql-registry
 
     steps:
       - uses: actions/checkout@v7
@@ -132,7 +129,7 @@ jobs:
       #
 
       - name: "[PUBLISH] configure aws credentials" 
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         if: env.REG_EVENT == 'push'
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -144,32 +141,18 @@ jobs:
         run: |
             python scripts/publish/publish-provider-docs-to-artifact-repo.py
 
-      - name: "[DEPLOY] setup SSH"
-        uses: MrSquaare/ssh-setup-action@v3.1.0
-        if: env.REG_EVENT == 'push'
-        with:
-          host: github.com
-          private-key: ${{ secrets.SSH_PRIVATE_KEY }}          
-
-      - name: "[DEPLOY] pull deno deploy assets"
-        if: env.REG_EVENT == 'push'
-        run: |
-          git clone git@github.com:stackql/${REG_DENO_DEPLOY_ASSET_REPO}.git
-          cp ${REG_DENO_DEPLOY_ASSET_REPO}/website/index.ts $REG_WEBSITE_DIR
-
       - name: "[DEPLOY] pull additional docs from artifact repo"
         if: env.REG_EVENT == 'push'
         run: |
           python scripts/deploy/pull-additional-docs-from-artifact-repo.py
 
       #
-      # Cloudflare (green) dual-publish. Runs here, BEFORE clean-deploy-dir.py
-      # flattens/destroys the working tree (which removes the origin/ Worker
-      # source). The full docs tree (changed providers + everything pulled from
-      # the artifact repo, plus the freshly generated providers.yaml) lives at
-      # ${REG_WEBSITE_DIR}/${REG_PROVIDER_PATH} at this point, byte-identical to
-      # what the Deno origin is about to deploy. Same push/branch gating as the
-      # Deno steps, so blue and green stay in sync during the transition window.
+      # Cloudflare serving layer. S3 (stackql-registry-artifacts) remains the
+      # master/archive: the steps above publish changed providers to S3 and
+      # reconstruct the full docs tree from it. Here that full tree (changed
+      # providers + everything pulled from the artifact repo, plus the freshly
+      # generated providers.yaml) lives at ${REG_WEBSITE_DIR}/${REG_PROVIDER_PATH}
+      # and is mirrored to R2, which the Worker serves from at the edge.
       #
 
       - name: "[DEPLOY-CF] install worker deps"
@@ -228,32 +211,3 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           cd origin && npx wrangler deploy --env production
-
-      - name: "[DEPLOY] install deno"
-        if: env.REG_EVENT == 'push'
-        uses: denoland/setup-deno@main
-        with:
-          deno-version: 1.18.2
-
-      - name: "[DEPLOY] clean deploy dir"
-        if: env.REG_EVENT == 'push'
-        run: |
-          python scripts/deploy/clean-deploy-dir.py
-          echo "deployment dir contents: "
-          tree .
-          echo "providers.yaml contents: "
-          cat ${REG_PROVIDER_PATH}/providers.yaml
-
-      - name: "[DEPLOY] deploy to deno deploy (dev)"
-        if: env.REG_TARGET_BRANCH == 'dev' && env.REG_EVENT == 'push'
-        uses: denoland/deployctl@1.13.1
-        with:
-          project: ${{ env.REG_DENO_DEPLOY_API_DEV }}
-          entrypoint: index.ts
-
-      - name: "[DEPLOY] deploy to deno deploy (prod)"
-        if: env.REG_TARGET_BRANCH == 'main' && env.REG_EVENT == 'push'
-        uses: denoland/deployctl@1.13.1
-        with:
-          project: ${{ env.REG_DENO_DEPLOY_API_PROD }}
-          entrypoint: index.ts
