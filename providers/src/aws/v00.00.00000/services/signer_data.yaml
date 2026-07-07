@@ -1,0 +1,163 @@
+openapi: 3.0.0
+info:
+  version: "2017-08-25"
+  title: AWS Signer Data Plane
+  description: AWS Signer Data Plane
+  x-serviceName: signer
+  x-serviceAlias: signer_data
+  x-protocol: rest-json
+  x-apiVersion: "2017-08-25"
+  x-endpointPrefix: data-signer
+servers:
+  - url: https://data-signer.{region}.amazonaws.com
+    variables:
+      region:
+        default: us-east-1
+        description: AWS region
+    description: Regional endpoint for signer-data
+paths:
+  /revocations:
+    get:
+      operationId: GetRevocationStatus
+      description: Retrieves the revocation status for a signed artifact by checking if the signing profile, job, or certificate has been revoked.
+      parameters:
+        - name: signatureTimestamp
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Timestamp"
+          description: The timestamp when the artifact was signed, in ISO 8601 format.
+        - name: platformId
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/PlatformId"
+          description: The platform identifier for the signing platform used.
+        - name: profileVersionArn
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Arn"
+          description: The ARN of the signing profile version used to sign the artifact.
+        - name: jobArn
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Arn"
+          description: The ARN of the signing job that produced the signature.
+        - name: certificateHashes
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/CertificateHashes"
+          description: List of certificate hashes to check for revocation.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetRevocationStatusOutputDisplay"
+components:
+  parameters:
+    X-Amz-Content-Sha256:
+      in: header
+      name: X-Amz-Content-Sha256
+      required: false
+      schema:
+        type: string
+    X-Amz-Date:
+      in: header
+      name: X-Amz-Date
+      required: false
+      schema:
+        type: string
+    X-Amz-Algorithm:
+      in: header
+      name: X-Amz-Algorithm
+      required: false
+      schema:
+        type: string
+    X-Amz-Credential:
+      in: header
+      name: X-Amz-Credential
+      required: false
+      schema:
+        type: string
+    X-Amz-Security-Token:
+      in: header
+      name: X-Amz-Security-Token
+      required: false
+      schema:
+        type: string
+    X-Amz-Signature:
+      in: header
+      name: X-Amz-Signature
+      required: false
+      schema:
+        type: string
+    X-Amz-SignedHeaders:
+      in: header
+      name: X-Amz-SignedHeaders
+      required: false
+      schema:
+        type: string
+  schemas:
+    Timestamp:
+      type: string
+      format: date-time
+    PlatformId:
+      type: string
+      pattern: "[a-zA-Z0-9_-]+"
+    Arn:
+      type: string
+      minLength: 20
+      maxLength: 2048
+    CertificateHashes:
+      type: array
+      items:
+        $ref: "#/components/schemas/CertificateHash"
+    CertificateHash:
+      type: string
+      minLength: 1
+      maxLength: 2048
+    GetRevocationStatusRowDisplay:
+      type: object
+      properties:
+        revoked_entity:
+          type: string
+          description: List of entity identifiers that have been revoked. Empty if no revocations found.
+    GetRevocationStatusOutputDisplay:
+      type: object
+      properties:
+        line_items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GetRevocationStatusRowDisplay"
+  x-stackQL-resources:
+    revocation_status:
+      id: aws.signer_data.revocation_status
+      name: revocation_status
+      title: revocation_status
+      methods:
+        get_revocation_status:
+          operation:
+            $ref: "#/paths/~1revocations/get"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+            overrideMediaType: application/json
+            schema_override:
+              $ref: "#/components/schemas/GetRevocationStatusOutputDisplay"
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{{- $lst := index . "revokedEntities" -}}{"line_items": [{{- if eq (kindOf $lst) "slice" -}}{{- range $i, $v := $lst -}}{{- if $i }},{{ end }}{"revoked_entity": {{ toJson $v }}}{{- end -}}{{- end -}}]}'
+            objectKey: $.line_items
+          request:
+            nativeCasing: pascal
+      sqlVerbs:
+        select:
+          - $ref: "#/components/x-stackQL-resources/revocation_status/methods/get_revocation_status"
+        insert: []
+        update: []
+        delete: []
