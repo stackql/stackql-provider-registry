@@ -1,0 +1,229 @@
+openapi: 3.0.0
+info:
+  version: "2023-01-01"
+  title: AWS Sign-In Service
+  description: AWS Sign-In Service
+  x-serviceName: signin
+  x-serviceAlias: signin
+  x-protocol: rest-json
+  x-apiVersion: "2023-01-01"
+  x-endpointPrefix: signin
+servers:
+  - url: https://signin.{region}.amazonaws.com
+    variables:
+      region:
+        default: us-east-1
+        description: AWS region
+    description: Regional endpoint for signin
+paths:
+  /v1/token:
+    post:
+      operationId: CreateOAuth2Token
+      description: "CreateOAuth2Token API Path: /v1/token Request Method: POST Content-Type: application/json or application/x-www-form-urlencoded This API implements OAuth 2.0 flows for AWS Sign-In CLI clients, supporting both: Authorization code redemption (grant_type=authorization_code) - NOT idempotent Token refresh (grant_type=refresh_token) - Idempotent within token validity window The operation behavior is determined by the grant_type parameter in the request body: Authorization Code Flow (NOT Idempotent): JSON or form-encoded body with client_id, grant_type=authorization_code, code, redirect_uri, code_verifier Returns access_token, token_type, expires_in, refresh_token, and id_token Each authorization code can only be used ONCE for security (prevents replay attacks) Token Refresh Flow (Idempotent): JSON or form-encoded body with client_id, grant_type=refresh_token, refresh_token Returns access_token, token_type, expires_in, and refresh_token (no id_token) Multiple calls with same refresh_token return consistent results within validity window Authentication and authorization: Confidential clients: sigv4 signing required with signin:ExchangeToken permissions CLI clients (public): authn/authz skipped based on client_id & grant_type Note: This operation cannot be marked as @idempotent because it handles both idempotent (token refresh) and non-idempotent (auth code redemption) flows in a single endpoint."
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tokenInput:
+                  $ref: "#/components/schemas/CreateOAuth2TokenRequestBody"
+              required:
+                - tokenInput
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateOAuth2TokenResponse"
+components:
+  parameters:
+    X-Amz-Content-Sha256:
+      in: header
+      name: X-Amz-Content-Sha256
+      required: false
+      schema:
+        type: string
+    X-Amz-Date:
+      in: header
+      name: X-Amz-Date
+      required: false
+      schema:
+        type: string
+    X-Amz-Algorithm:
+      in: header
+      name: X-Amz-Algorithm
+      required: false
+      schema:
+        type: string
+    X-Amz-Credential:
+      in: header
+      name: X-Amz-Credential
+      required: false
+      schema:
+        type: string
+    X-Amz-Security-Token:
+      in: header
+      name: X-Amz-Security-Token
+      required: false
+      schema:
+        type: string
+    X-Amz-Signature:
+      in: header
+      name: X-Amz-Signature
+      required: false
+      schema:
+        type: string
+    X-Amz-SignedHeaders:
+      in: header
+      name: X-Amz-SignedHeaders
+      required: false
+      schema:
+        type: string
+  schemas:
+    CreateOAuth2TokenRequestBody:
+      description: "Request body payload for CreateOAuth2Token operation The operation type is determined by the grant_type parameter: grant_type=authorization_code: Requires code, redirect_uri, code_verifier grant_type=refresh_token: Requires refresh_token"
+      type: object
+      properties:
+        clientId:
+          $ref: "#/components/schemas/ClientId"
+          description: The client identifier (ARN) used during Sign-In onboarding Required for both authorization code and refresh token flows
+        grantType:
+          $ref: "#/components/schemas/GrantType"
+          description: OAuth 2.0 grant type - determines which flow is used Must be "authorization_code" or "refresh_token"
+        code:
+          $ref: "#/components/schemas/AuthorizationCode"
+          description: The authorization code received from /v1/authorize Required only when grant_type=authorization_code
+        redirectUri:
+          $ref: "#/components/schemas/RedirectUri"
+          description: The redirect URI that must match the original authorization request Required only when grant_type=authorization_code
+        codeVerifier:
+          $ref: "#/components/schemas/CodeVerifier"
+          description: PKCE code verifier to prove possession of the original code challenge Required only when grant_type=authorization_code
+        refreshToken:
+          $ref: "#/components/schemas/RefreshToken"
+          description: The refresh token returned from auth_code redemption Required only when grant_type=refresh_token
+      required:
+        - clientId
+        - grantType
+    ClientId:
+      description: "Client identifier pattern for AWS Sign-In devtools clients The ARN used by client as part of Sign-In onboarding. Expected values: arn:aws:signin:::devtools/cross-device (for cross-device devtools login) arn:aws:signin:::devtools/same-device (for same-device devtools login) This will be finalized after consulting with UX as this is visible to end customer."
+      type: string
+      pattern: arn:aws:signin:::devtools/(cross-device|same-device)
+    GrantType:
+      description: 'OAuth 2.0 grant type parameter For auth code redemption: Must be "authorization_code" For token refresh: Must be "refresh_token" Based on client_id & grant_type, authn/authz is skipped for CLI endpoints.'
+      type: string
+      pattern: (authorization_code|refresh_token)
+    AuthorizationCode:
+      description: Authorization code received from AWS Sign-In /v1/authorize endpoint The authorization code received from AWS Sign-In from /v1/authorize. Used in auth code redemption flow only.
+      type: string
+      minLength: 1
+      maxLength: 512
+    RedirectUri:
+      description: Redirect URI for OAuth 2.0 flow validation The same redirect URI used in the authorization request. This must match exactly what was sent in the original authorization request for security validation.
+      type: string
+      minLength: 1
+      maxLength: 2048
+    CodeVerifier:
+      description: PKCE code verifier for OAuth 2.0 security PKCE code verifier to prove possession of the original code challenge. Used to prevent authorization code interception attacks in public clients. Must be 43-128 characters using unreserved characters [A-Z] / [a-z] / [0-9] / "-" / "." / "_" / "~"
+      type: string
+      minLength: 43
+      maxLength: 128
+      pattern: "[A-Za-z0-9\\-._~]+"
+    RefreshToken:
+      description: Encrypted refresh token with cnf.jkt This is the encrypted refresh token returned from auth code redemption. The token content includes cnf.jkt (SHA-256 thumbprint of the presented jwk). Used in subsequent token refresh requests.
+      type: string
+      minLength: 1
+      maxLength: 2048
+    CreateOAuth2TokenResponse:
+      description: Output structure for CreateOAuth2Token operation Contains flattened token operation outputs for both authorization code and refresh token flows. The response content depends on the grant_type from the original request.
+      type: object
+      properties:
+        tokenOutput:
+          $ref: "#/components/schemas/CreateOAuth2TokenResponseBody"
+          description: Flattened token operation outputs The specific response fields depend on the grant_type used in the request
+      required:
+        - tokenOutput
+    CreateOAuth2TokenResponseBody:
+      description: "Response body payload for CreateOAuth2Token operation The response content depends on the grant_type from the request: grant_type=authorization_code: Returns all fields including refresh_token and id_token grant_type=refresh_token: Returns access_token, token_type, expires_in, refresh_token (no id_token)"
+      type: object
+      properties:
+        accessToken:
+          $ref: "#/components/schemas/AccessToken"
+          description: Scoped-down AWS credentials (15 minute duration) Present for both authorization code redemption and token refresh
+        tokenType:
+          $ref: "#/components/schemas/TokenType"
+          description: Token type indicating this is AWS SigV4 credentials Value is "aws_sigv4" for both flows
+        expiresIn:
+          $ref: "#/components/schemas/ExpiresIn"
+          description: Time to expiry in seconds (maximum 900) Present for both authorization code redemption and token refresh
+        refreshToken:
+          $ref: "#/components/schemas/RefreshToken"
+          description: Encrypted refresh token with cnf.jkt (SHA-256 thumbprint of presented jwk) Always present in responses (required for both flows)
+        idToken:
+          $ref: "#/components/schemas/IdToken"
+          description: ID token containing user identity information Present only in authorization code redemption response (grant_type=authorization_code) Not included in token refresh responses
+      required:
+        - accessToken
+        - tokenType
+        - expiresIn
+        - refreshToken
+    AccessToken:
+      description: AWS credentials structure containing temporary access credentials The scoped-down, 15 minute duration AWS credentials. Scoping down will be based on CLI policy (CLI team needs to create it). Similar to cloud shell implementation.
+      type: object
+      properties:
+        accessKeyId:
+          $ref: "#/components/schemas/String"
+          description: AWS access key ID for temporary credentials
+        secretAccessKey:
+          $ref: "#/components/schemas/String"
+          description: AWS secret access key for temporary credentials
+        sessionToken:
+          $ref: "#/components/schemas/String"
+          description: AWS session token for temporary credentials
+      required:
+        - accessKeyId
+        - secretAccessKey
+        - sessionToken
+    String:
+      type: string
+    TokenType:
+      description: Token type parameter indicating credential usage A parameter which indicates to the client how the token must be used. Value is "aws_sigv4" (instead of typical "Bearer" for other OAuth systems) to indicate that the client must de-serialize the token and use it to generate a signature.
+      type: string
+      pattern: aws_sigv4
+    ExpiresIn:
+      description: Time to expiry in seconds The time to expiry in seconds, for these purposes will be at most 900 (15 minutes).
+      type: integer
+      minimum: 1
+      maximum: 900
+    IdToken:
+      description: ID token containing user identity information Encoded JWT token containing user identity claims and authentication context. Returned only in authorization code redemption responses (grant_type=authorization_code). Contains user identity information such as ARN and other identity claims.
+      type: string
+      minLength: 1
+      maxLength: 4096
+  x-stackQL-resources:
+    o_auth2_tokens:
+      id: aws.signin.o_auth2_tokens
+      name: o_auth2_tokens
+      title: o_auth2_tokens
+      methods:
+        create_o_auth2_token:
+          operation:
+            $ref: "#/paths/~1v1~1token/post"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+          request:
+            nativeCasing: pascal
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+      sqlVerbs:
+        select: []
+        insert:
+          - $ref: "#/components/x-stackQL-resources/o_auth2_tokens/methods/create_o_auth2_token"
+        update: []
+        delete: []
