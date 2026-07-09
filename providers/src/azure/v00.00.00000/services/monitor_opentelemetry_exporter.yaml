@@ -1,0 +1,680 @@
+openapi: 3.0.0
+servers:
+  - url: https://{host}/{api_version}
+    variables:
+      host:
+        default: ""
+        description: The service endpoint host (no scheme), e.g. myaccount.table.cosmos.azure.com:443 - value of the client `host` parameter.
+      api_version:
+        default: ""
+        description: The service endpoint host (no scheme), e.g. myaccount.table.cosmos.azure.com:443 - value of the client `apiVersion` parameter.
+info:
+  title: Azure Monitor Client
+  description: OpenTelemetry Exporter for Azure Monitor.
+  contact:
+    name: StackQL Studios
+    url: https://stackql.io/
+    email: info@stackql.io
+  version: 2024-04-01-preview-stackql-generated
+  x-serviceAlias: monitor_opentelemetry_exporter
+  x-sdkPackage: azure-monitor-opentelemetry-exporter
+  x-plane: data
+security:
+  - azure_auth:
+      - user_impersonation
+components:
+  securitySchemes:
+    azure_auth:
+      description: Azure Active Directory OAuth2 Flow.
+      type: oauth2
+      flows:
+        implicit:
+          authorizationUrl: https://login.microsoftonline.com/common/oauth2/authorize
+          scopes:
+            user_impersonation: impersonate your user account
+  schemas:
+    MonitorBase:
+      type: object
+      description: Data struct to contain only C section with custom fields.
+      properties:
+        baseType:
+          type: string
+          description: Name of item (B section) if any. If telemetry data is derived straight from this, this should be null.
+        baseData:
+          $ref: "#/components/schemas/MonitorDomain"
+          description: The data payload for the telemetry request.
+    MonitorDomain:
+      type: object
+      description: "The abstract common base of all domains. You probably want to use the sub-classes and not this class directly. Known sub-classes are: AvailabilityData, TelemetryEventData, TelemetryExceptionData, MessageData, MetricsData, PageViewData, PageViewPerfData, RemoteDependencyData, RequestData"
+      properties:
+        ver:
+          type: integer
+          description: Schema version. Required.
+        kind:
+          type: string
+          description: 'Discriminator property to identify the specific telemetry data type. Required. Known values are: "AvailabilityData", "EventData", "ExceptionData", "MessageData", "MetricsData", "PageViewData", "PageViewPerfData", "RemoteDependencyData", and "RequestData".'
+      required:
+        - ver
+    TrackResponse:
+      type: object
+      description: Response containing the status of each telemetry item.
+      properties:
+        itemsReceived:
+          type: integer
+          description: The number of items received.
+        itemsAccepted:
+          type: integer
+          description: The number of items accepted.
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/TelemetryErrorDetails"
+          description: An array of error detail objects.
+    TelemetryErrorDetails:
+      type: object
+      description: The error details.
+      properties:
+        index:
+          type: integer
+          description: The index in the original payload of the item.
+        statusCode:
+          type: integer
+          description: The item specific HTTP Response status code.
+        message:
+          type: string
+          description: The error message.
+    MetricPoint:
+      type: object
+      description: Metric data point.
+      properties:
+        Name:
+          type: string
+          description: Metric name. Required.
+        Value:
+          type: number
+          description: Metric value. Required.
+        Weight:
+          type: integer
+          description: Metric weight. Required.
+      required:
+        - Name
+        - Value
+        - Weight
+    DocumentIngress:
+      type: object
+      description: "Base class of the specific document types. You probably want to use the sub-classes and not this class directly. Known sub-classes are: Event, Exception, RemoteDependency, Request, Trace"
+      properties:
+        DocumentType:
+          type: string
+          description: "Telemetry type. Types not defined in enum will get replaced with a 'Unknown' type. Required. Known values are: \"Request\", \"RemoteDependency\", \"Exception\", \"Event\", \"Trace\", and \"Unknown\"."
+        DocumentStreamIds:
+          type: array
+          items:
+            type: string
+          description: An array of document streaming ids. Each id identifies a flow of documents customized by UX customers.
+        Properties:
+          type: array
+          items:
+            $ref: "#/components/schemas/KeyValuePairStringString"
+          description: Collection of custom properties.
+      required:
+        - DocumentType
+    KeyValuePairStringString:
+      type: object
+      description: Key-value pair of string and string.
+      properties:
+        key:
+          type: string
+          description: Key of the key-value pair. Required.
+        value:
+          type: string
+          description: Value of the key-value pair. Required.
+      required:
+        - key
+        - value
+    ProcessCpuData:
+      type: object
+      description: CPU consumption datapoint.
+      properties:
+        ProcessName:
+          type: string
+          description: Process name. Required.
+        CpuPercentage:
+          type: integer
+          description: CPU consumption percentage. Required.
+      required:
+        - ProcessName
+        - CpuPercentage
+    CollectionConfigurationError:
+      type: object
+      description: Represents an error while SDK parses and applies an instance of CollectionConfigurationInfo.
+      properties:
+        CollectionConfigurationErrorType:
+          $ref: "#/components/schemas/CollectionConfigurationErrorType"
+          description: 'Error type. Required. Known values are: "Unknown", "PerformanceCounterParsing", "PerformanceCounterUnexpected", "PerformanceCounterDuplicateIds", "DocumentStreamDuplicateIds", "DocumentStreamFailureToCreate", "DocumentStreamFailureToCreateFilterUnexpected", "MetricDuplicateIds", "MetricTelemetryTypeUnsupported", "MetricFailureToCreate", "MetricFailureToCreateFilterUnexpected", "FilterFailureToCreateUnexpected", and "CollectionConfigurationFailureToCreateUnexpected".'
+        Message:
+          type: string
+          description: Error message. Required.
+        FullException:
+          type: string
+          description: Exception that led to the creation of the configuration error. Required.
+        Data:
+          type: array
+          items:
+            $ref: "#/components/schemas/KeyValuePairStringString"
+          description: Custom properties to add more information to the error. Required.
+      required:
+        - CollectionConfigurationErrorType
+        - Message
+        - FullException
+        - Data
+    CollectionConfigurationErrorType:
+      type: string
+      enum:
+        - Unknown
+        - PerformanceCounterParsing
+        - PerformanceCounterUnexpected
+        - PerformanceCounterDuplicateIds
+        - DocumentStreamDuplicateIds
+        - DocumentStreamFailureToCreate
+        - DocumentStreamFailureToCreateFilterUnexpected
+        - MetricDuplicateIds
+        - MetricTelemetryTypeUnsupported
+        - MetricFailureToCreate
+        - MetricFailureToCreateFilterUnexpected
+        - FilterFailureToCreateUnexpected
+        - CollectionConfigurationFailureToCreateUnexpected
+    CollectionConfigurationInfo:
+      type: object
+      description: Represents the collection configuration - a customizable description of performance counters, metrics, and full telemetry documents to be collected by the client SDK.
+      properties:
+        ETag:
+          type: string
+          description: An encoded string that indicates whether the collection configuration is changed. Required.
+        Metrics:
+          type: array
+          items:
+            $ref: "#/components/schemas/DerivedMetricInfo"
+          description: An array of metric configuration info. Required.
+        DocumentStreams:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentStreamInfo"
+          description: An array of document stream configuration info. Required.
+        QuotaInfo:
+          $ref: "#/components/schemas/QuotaConfigurationInfo"
+          description: Controls document quotas to be sent to Live Metrics.
+      required:
+        - ETag
+        - Metrics
+        - DocumentStreams
+    DerivedMetricInfo:
+      type: object
+      description: A metric configuration set by UX to scope the metrics it's interested in.
+      properties:
+        Id:
+          type: string
+          description: metric configuration identifier. Required.
+        TelemetryType:
+          type: string
+          description: Telemetry type. Required.
+        FilterGroups:
+          type: array
+          items:
+            $ref: "#/components/schemas/FilterConjunctionGroupInfo"
+          description: A collection of filters to scope metrics that UX needs. Required.
+        Projection:
+          type: string
+          description: "Telemetry's metric dimension whose value is to be aggregated. Example values: Duration, Count(),... Required."
+        Aggregation:
+          $ref: "#/components/schemas/AggregationType"
+          description: 'Aggregation type. This is the aggregation done from everything within a single server. Required. Known values are: "Avg", "Sum", "Min", and "Max".'
+        BackEndAggregation:
+          $ref: "#/components/schemas/AggregationType"
+          description: 'Aggregation type. This Aggregation is done across the values for all the servers taken together. Required. Known values are: "Avg", "Sum", "Min", and "Max".'
+      required:
+        - Id
+        - TelemetryType
+        - FilterGroups
+        - Projection
+        - Aggregation
+        - BackEndAggregation
+    FilterConjunctionGroupInfo:
+      type: object
+      description: An AND-connected group of FilterInfo objects.
+      properties:
+        Filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/FilterInfo"
+          description: An array of filters. Required.
+      required:
+        - Filters
+    FilterInfo:
+      type: object
+      description: A filter set on UX.
+      properties:
+        FieldName:
+          type: string
+          description: dimension name of the filter. Required.
+        Predicate:
+          $ref: "#/components/schemas/PredicateType"
+          description: 'Operator of the filter. Required. Known values are: "Equal", "NotEqual", "LessThan", "GreaterThan", "LessThanOrEqual", "GreaterThanOrEqual", "Contains", and "DoesNotContain".'
+        Comparand:
+          type: string
+          description: Comparand of the filter. Required.
+      required:
+        - FieldName
+        - Predicate
+        - Comparand
+    PredicateType:
+      type: string
+      enum:
+        - Equal
+        - NotEqual
+        - LessThan
+        - GreaterThan
+        - LessThanOrEqual
+        - GreaterThanOrEqual
+        - Contains
+        - DoesNotContain
+    AggregationType:
+      type: string
+      enum:
+        - Avg
+        - Sum
+        - Min
+        - Max
+    DocumentStreamInfo:
+      type: object
+      description: Configurations/filters set by UX to scope the document/telemetry it's interested in.
+      properties:
+        Id:
+          type: string
+          description: Identifier of the document stream initiated by a UX. Required.
+        DocumentFilterGroups:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentFilterConjunctionGroupInfo"
+          description: Gets or sets an OR-connected collection of filter groups. Required.
+      required:
+        - Id
+        - DocumentFilterGroups
+    DocumentFilterConjunctionGroupInfo:
+      type: object
+      description: A collection of filters for a specific telemetry type.
+      properties:
+        TelemetryType:
+          $ref: "#/components/schemas/TelemetryType"
+          description: 'Telemetry type. Required. Known values are: "Request", "Dependency", "Exception", "Event", "Metric", "PerformanceCounter", and "Trace".'
+        Filters:
+          $ref: "#/components/schemas/FilterConjunctionGroupInfo"
+          description: An array of filter groups. Required.
+      required:
+        - TelemetryType
+        - Filters
+    TelemetryType:
+      type: string
+      enum:
+        - Request
+        - Dependency
+        - Exception
+        - Event
+        - Metric
+        - PerformanceCounter
+        - Trace
+    QuotaConfigurationInfo:
+      type: object
+      description: Controls document quotas to be sent to Live Metrics.
+      properties:
+        InitialQuota:
+          type: number
+          description: Initial quota.
+        MaxQuota:
+          type: number
+          description: Max quota. Required.
+        QuotaAccrualRatePerSec:
+          type: number
+          description: Quota accrual rate per second. Required.
+      required:
+        - MaxQuota
+        - QuotaAccrualRatePerSec
+  x-stackQL-resources:
+    tracks:
+      id: azure.monitor_opentelemetry_exporter.tracks
+      name: tracks
+      title: tracks
+      methods:
+        track:
+          operation:
+            $ref: "#/paths/~1track/post"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+          request:
+            nativeCasing: camel
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+      sqlVerbs:
+        select: []
+        insert: []
+        update: []
+        delete: []
+    is_subscribeds:
+      id: azure.monitor_opentelemetry_exporter.is_subscribeds
+      name: is_subscribeds
+      title: is_subscribeds
+      methods:
+        is_subscribed:
+          operation:
+            $ref: "#/paths/~1QuickPulseService.svc~1ping?api-version=2024-04-01-preview/post"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+          request:
+            nativeCasing: camel
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+      sqlVerbs:
+        select: []
+        insert: []
+        update: []
+        delete: []
+    publishes:
+      id: azure.monitor_opentelemetry_exporter.publishes
+      name: publishes
+      title: publishes
+      methods:
+        publish:
+          operation:
+            $ref: "#/paths/~1QuickPulseService.svc~1post?api-version=2024-04-01-preview/post"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+          request:
+            nativeCasing: camel
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+      sqlVerbs:
+        select: []
+        insert: []
+        update: []
+        delete: []
+paths:
+  /track:
+    post:
+      operationId: _AzureMonitorClient_track
+      description: Track telemetry events. This operation sends a sequence of telemetry events that will be monitored by Azure Monitor.
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ver:
+                  type: integer
+                  description: "Envelope version. For internal use only. By assigning this the default, it will not be serialized within the payload unless changed to a value other than #1."
+                name:
+                  type: string
+                  description: Type name of telemetry data item. Required.
+                time:
+                  type: string
+                  format: date-time
+                  description: "Event date time when telemetry item was created. This is the wall clock time on the client when the event was generated. There is no guarantee that the client's time is accurate. This field must be formatted in UTC ISO 8601 format, with a trailing 'Z' character, as described publicly on `https://en.wikipedia.org/wiki/ISO_8601#UTC `_. Note: the number of decimal seconds digits provided are variable (and unspecified). Consumers should handle this, i.e. managed code consumers should not use format 'O' for parsing as it specifies a fixed length. Example: 2009-06-15T13:45:30.0000000Z. Required."
+                sampleRate:
+                  type: number
+                  description: Sampling rate used in application. This telemetry item represents 100 / sampleRate actual telemetry items.
+                seq:
+                  type: string
+                  description: Sequence field used to track absolute order of uploaded events.
+                iKey:
+                  type: string
+                  description: The instrumentation key of the Application Insights resource.
+                tags:
+                  type: object
+                  properties: {}
+                  description: Key/value collection of context properties. See ContextTagKeys for information on available properties.
+                data:
+                  $ref: "#/components/schemas/MonitorBase"
+                  description: Telemetry data item.
+              required:
+                - name
+                - time
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrackResponse"
+  /QuickPulseService.svc/ping?api-version=2024-04-01-preview:
+    post:
+      operationId: _LiveMetricsClient_is_subscribed
+      description: Determine whether there is any subscription to the metrics and documents.
+      parameters:
+        - name: ikey
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The instrumentation key of the target Application Insights component for which the client checks whether there's any subscription to it. Required.
+        - name: x-ms-qps-transmission-time
+          in: header
+          required: false
+          schema:
+            type: integer
+          description: Timestamp when the client transmits the metrics and documents to Live Metrics. A 8-byte long type of ticks. Default value is None.
+        - name: x-ms-qps-machine-name
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Computer name where Application Insights SDK lives. Live Metrics uses machine name with instance name as a backup. Default value is None.
+        - name: x-ms-qps-instance-name
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Service instance name where Application Insights SDK lives. Live Metrics uses machine name with instance name as a backup. Default value is None.
+        - name: x-ms-qps-stream-id
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Identifies an Application Insights SDK as trusted agent to report metrics and documents. Default value is None.
+        - name: x-ms-qps-role-name
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Cloud role name of the service. Default value is None.
+        - name: x-ms-qps-invariant-version
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Version/generation of the data contract (MonitoringDataPoint) between the client and Live Metrics. Default value is None.
+        - name: x-ms-qps-configuration-etag
+          in: header
+          required: false
+          schema:
+            type: string
+          description: An encoded string that indicates whether the collection configuration is changed. Default value is None.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                Version:
+                  type: string
+                  description: Application Insights SDK version. Required.
+                InvariantVersion:
+                  type: integer
+                  description: Version/generation of the data contract (MonitoringDataPoint) between SDK and Live Metrics. Required.
+                Instance:
+                  type: string
+                  description: Service instance name where Application Insights SDK lives. Required.
+                RoleName:
+                  type: string
+                  description: Service role name. Required.
+                MachineName:
+                  type: string
+                  description: Computer name where Application Insights SDK lives. Required.
+                StreamId:
+                  type: string
+                  description: Identifies an Application Insights SDK as a trusted agent to report metrics and documents. Required.
+                Timestamp:
+                  type: string
+                  format: date-time
+                  description: Data point generation timestamp.
+                TransmissionTime:
+                  type: string
+                  format: date-time
+                  description: Timestamp when the client transmits the metrics and documents to Live Metrics.
+                IsWebApp:
+                  type: boolean
+                  description: True if the current application is an Azure Web App. Required.
+                PerformanceCollectionSupported:
+                  type: boolean
+                  description: True if performance counters collection is supported. Required.
+                Metrics:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/MetricPoint"
+                  description: An array of metric data points.
+                Documents:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/DocumentIngress"
+                  description: An array of documents of a specific type {Request}, {RemoteDependency}, {Exception}, {Event}, or {Trace}.
+                TopCpuProcesses:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/ProcessCpuData"
+                  description: An array of top cpu consumption data point.
+                CollectionConfigurationErrors:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/CollectionConfigurationError"
+                  description: An array of error while SDK parses and applies the {CollectionConfigurationInfo} provided by Live Metrics.
+              required:
+                - Version
+                - InvariantVersion
+                - Instance
+                - RoleName
+                - MachineName
+                - StreamId
+                - IsWebApp
+                - PerformanceCollectionSupported
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionConfigurationInfo"
+  /QuickPulseService.svc/post?api-version=2024-04-01-preview:
+    post:
+      operationId: _LiveMetricsClient_publish
+      description: Publish live metrics to the Live Metrics service when there is an active subscription to the metrics.
+      parameters:
+        - name: ikey
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The instrumentation key of the target Application Insights component for which the client checks whether there's any subscription to it. Required.
+        - name: x-ms-qps-configuration-etag
+          in: header
+          required: false
+          schema:
+            type: string
+          description: An encoded string that indicates whether the collection configuration is changed. Default value is None.
+        - name: x-ms-qps-transmission-time
+          in: header
+          required: false
+          schema:
+            type: integer
+          description: Timestamp when the client transmits the metrics and documents to Live Metrics. A 8-byte long type of ticks. Default value is None.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                Version:
+                  type: string
+                  description: Application Insights SDK version. Required.
+                InvariantVersion:
+                  type: integer
+                  description: Version/generation of the data contract (MonitoringDataPoint) between SDK and Live Metrics. Required.
+                Instance:
+                  type: string
+                  description: Service instance name where Application Insights SDK lives. Required.
+                RoleName:
+                  type: string
+                  description: Service role name. Required.
+                MachineName:
+                  type: string
+                  description: Computer name where Application Insights SDK lives. Required.
+                StreamId:
+                  type: string
+                  description: Identifies an Application Insights SDK as a trusted agent to report metrics and documents. Required.
+                Timestamp:
+                  type: string
+                  format: date-time
+                  description: Data point generation timestamp.
+                TransmissionTime:
+                  type: string
+                  format: date-time
+                  description: Timestamp when the client transmits the metrics and documents to Live Metrics.
+                IsWebApp:
+                  type: boolean
+                  description: True if the current application is an Azure Web App. Required.
+                PerformanceCollectionSupported:
+                  type: boolean
+                  description: True if performance counters collection is supported. Required.
+                Metrics:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/MetricPoint"
+                  description: An array of metric data points.
+                Documents:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/DocumentIngress"
+                  description: An array of documents of a specific type {Request}, {RemoteDependency}, {Exception}, {Event}, or {Trace}.
+                TopCpuProcesses:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/ProcessCpuData"
+                  description: An array of top cpu consumption data point.
+                CollectionConfigurationErrors:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/CollectionConfigurationError"
+                  description: An array of error while SDK parses and applies the {CollectionConfigurationInfo} provided by Live Metrics.
+              required:
+                - Version
+                - InvariantVersion
+                - Instance
+                - RoleName
+                - MachineName
+                - StreamId
+                - IsWebApp
+                - PerformanceCollectionSupported
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionConfigurationInfo"
