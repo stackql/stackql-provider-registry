@@ -2,13 +2,16 @@ openapi: 3.0.0
 servers:
   - url: https://management.azure.com/
 info:
-  title: Dynamics 365 Commerce
-  description: Dynamics 365 Commerce Management Client
+  title: Usage Management Client
+  description: UsageManagementClient.
   contact:
     name: StackQL Studios
     url: https://stackql.io/
     email: info@stackql.io
-  version: 2024-10-18-stackql-generated
+  version: 2015-06-01-preview-stackql-generated
+  x-serviceAlias: commerce
+  x-sdkPackage: azure-mgmt-commerce
+  x-plane: mgmt
 security:
   - azure_auth:
       - user_impersonation
@@ -22,31 +25,96 @@ components:
           authorizationUrl: https://login.microsoftonline.com/common/oauth2/authorize
           scopes:
             user_impersonation: impersonate your user account
-  parameters:
-    SubscriptionIdParameter:
-      name: subscriptionId
-      in: path
-      description: It uniquely identifies Microsoft Azure subscription. The subscription ID forms part of the URI for every service call.
-      required: true
-      schema:
-        type: string
-    ApiVersionParameter:
-      name: api-version
-      in: query
-      description: Client Api Version.
-      required: false
-      schema:
-        type: string
   schemas:
-    InfoField:
-      description: Key-value pairs of instance details in the legacy format.
-      properties: {}
+    OfferTermInfo:
       type: object
-    UsageSample:
+      description: "Describes the offer term. You probably want to use the sub-classes and not this class directly. Known sub-classes are: MonetaryCommitment, MonetaryCredit, RecurringCharge All required parameters must be populated in order to send to server."
       properties:
+        Name:
+          type: string
+          description: 'Name of the offer term. Required. Known values are: "Recurring Charge", "Monetary Commitment", and "Monetary Credit".'
+        EffectiveDate:
+          type: string
+          format: date-time
+          description: Indicates the date from which the offer term is effective.
+      required:
+        - Name
+    MeterInfo:
+      type: object
+      description: Detailed information about the meter.
+      properties:
+        MeterId:
+          type: string
+          description: The unique identifier of the resource.
+        MeterName:
+          type: string
+          description: The name of the meter, within the given meter category.
+        MeterCategory:
+          type: string
+          description: The category of the meter, e.g., 'Cloud services', 'Networking', etc..
+        MeterSubCategory:
+          type: string
+          description: The subcategory of the meter, e.g., 'A6 Cloud services', 'ExpressRoute (IXP)', etc..
+        Unit:
+          type: string
+          description: The unit in which the meter consumption is charged, e.g., 'Hours', 'GB', etc.
+        MeterTags:
+          type: array
+          items:
+            type: string
+          description: Provides additional meter data. 'Third Party' indicates a meter with no discount. Blanks indicate First Party.
+        MeterRegion:
+          type: string
+          description: The region in which the Azure service is available.
+        MeterRates:
+          type: object
+          properties: {}
+          description: The list of key/value pairs for the meter rates, in the format 'key':'value' where key = the meter quantity, and value = the corresponding price.
+        EffectiveDate:
+          type: string
+          format: date-time
+          description: Indicates the date from which the meter rate is effective.
+        IncludedQuantity:
+          type: number
+          description: The resource quantity that is included in the offer at no cost. Consumption beyond this quantity will be charged.
+    ResourceRateCardInfo:
+      type: object
+      description: Price and Metadata information for resources.
+      properties:
+        Currency:
+          type: string
+          description: The currency in which the rates are provided.
+        Locale:
+          type: string
+          description: The culture in which the resource information is localized.
+        IsTaxIncluded:
+          type: boolean
+          description: All rates are pretax, so this will always be returned as 'false'.
+        OfferTerms:
+          type: array
+          items:
+            $ref: "#/components/schemas/OfferTermInfo"
+          description: A list of offer terms.
+        Meters:
+          type: array
+          items:
+            $ref: "#/components/schemas/MeterInfo"
+          description: A list of meters.
+    UsageAggregationFlattened:
+      type: object
+      description: Flattened view of UsageAggregation ('properties' hoisted to the top level).
+      properties:
+        id:
+          type: string
+          description: Unique Id for the usage aggregate.
+        name:
+          type: string
+          description: Name of the usage aggregate.
+        type:
+          type: string
+          description: Type of the resource being returned.
         subscriptionId:
           type: string
-          format: uuid
           description: The subscription identifier for the Azure user.
         meterId:
           type: string
@@ -61,7 +129,6 @@ components:
           description: UTC end time for the usage bucket to which this usage aggregate belongs.
         quantity:
           type: number
-          format: float
           description: The amount of the resource consumption that occurred in this time frame.
         unit:
           type: string
@@ -77,257 +144,43 @@ components:
           description: Sub-category of the consumed resource.
         meterRegion:
           type: string
-          description: Region of the meterId used for billing purposes
+          description: Region of the meterId used for billing purposes.
         infoFields:
-          $ref: '#/components/schemas/InfoField'
+          type: object
+          properties: {}
           description: Key-value pairs of instance details (legacy format).
         instanceData:
           type: string
           description: Key-value pairs of instance details represented as a string.
-      description: Describes a sample of the usageAggregation.
+    PagedUsageAggregationFlattened:
       type: object
-    UsageAggregation:
-      description: Describes the usageAggregation.
-      properties:
-        id:
-          type: string
-          description: Unique Id for the usage aggregate.
-        name:
-          type: string
-          description: Name of the usage aggregate.
-        type:
-          type: string
-          description: Type of the resource being returned.
-        properties:
-          $ref: '#/components/schemas/UsageSample'
-          x-ms-client-flatten: true
-          description: Usage data.
-      type: object
-    UsageAggregationListResult:
       properties:
         value:
           type: array
           items:
-            $ref: '#/components/schemas/UsageAggregation'
-          description: Gets or sets details for the requested aggregation.
+            $ref: "#/components/schemas/UsageAggregationFlattened"
         nextLink:
           type: string
-          description: Gets or sets the link to the next set of results.
-      description: The Get UsageAggregates operation response.
-      type: object
-    RateCardQueryParameters:
-      description: Parameters that are used in the odata $filter query parameter for providing RateCard information.
-      required:
-        - OfferDurableId
-        - Currency
-        - Locale
-        - RegionInfo
-      properties:
-        OfferDurableId:
-          description: The Offer ID parameter consists of the 'MS-AZR-' prefix, plus the Offer ID number (e.g., MS-AZR-0026P). See https://azure.microsoft.com/en-us/support/legal/offer-details/ for more information on the list of available Offer IDs, country/region availability, and billing currency.
-          type: string
-          pattern: ^MS-AZR-\d{4}P(-\d{4}P)*$
-        Currency:
-          description: The currency in which the rates need to be provided.
-          type: string
-        Locale:
-          description: The culture in which the resource metadata needs to be localized.
-          type: string
-        RegionInfo:
-          description: 2 letter ISO code where the offer was purchased.
-          type: string
-      type: object
-    ResourceRateCardInfo:
-      description: Price and Metadata information for resources
-      properties:
-        Currency:
-          description: The currency in which the rates are provided.
-          type: string
-        Locale:
-          description: The culture in which the resource information is localized.
-          type: string
-        IsTaxIncluded:
-          description: All rates are pretax, so this will always be returned as 'false'.
-          type: boolean
-        OfferTerms:
-          type: array
-          items:
-            $ref: '#/components/schemas/OfferTermInfo'
-          x-ms-identifiers:
-            - Name
-          description: A list of offer terms.
-        Meters:
-          type: array
-          items:
-            $ref: '#/components/schemas/MeterInfo'
-          x-ms-identifiers:
-            - MeterId
-          description: A list of meters.
-      type: object
-    MeterInfo:
-      description: Detailed information about the meter.
-      properties:
-        MeterId:
-          description: The unique identifier of the resource.
-          type: string
-          format: uuid
-        MeterName:
-          description: The name of the meter, within the given meter category
-          type: string
-        MeterCategory:
-          description: The category of the meter, e.g., 'Cloud services', 'Networking', etc..
-          type: string
-        MeterSubCategory:
-          description: The subcategory of the meter, e.g., 'A6 Cloud services', 'ExpressRoute (IXP)', etc..
-          type: string
-        Unit:
-          description: The unit in which the meter consumption is charged, e.g., 'Hours', 'GB', etc.
-          type: string
-        MeterTags:
-          type: array
-          items:
-            type: string
-          description: Provides additional meter data. 'Third Party' indicates a meter with no discount. Blanks indicate First Party.
-        MeterRegion:
-          description: The region in which the Azure service is available.
-          type: string
-        MeterRates:
-          description: The list of key/value pairs for the meter rates, in the format 'key':'value' where key = the meter quantity, and value = the corresponding price
-          type: object
-          additionalProperties:
-            type: number
-            format: float
-        EffectiveDate:
-          description: Indicates the date from which the meter rate is effective.
-          type: string
-          format: date-time
-        IncludedQuantity:
-          description: The resource quantity that is included in the offer at no cost. Consumption beyond this quantity will be charged.
-          type: number
-          format: float
-      type: object
-    OfferTermInfo:
-      description: Describes the offer term.
-      discriminator:
-        propertyName: Name
-      required:
-        - Name
-      properties:
-        Name:
-          description: Name of the offer term
-          type: string
-          enum:
-            - Recurring Charge
-            - Monetary Commitment
-            - Monetary Credit
-          x-ms-enum:
-            name: OfferTermInfo
-            modelAsString: false
-        EffectiveDate:
-          description: Indicates the date from which the offer term is effective.
-          type: string
-          format: date-time
-      type: object
-    MonetaryCredit:
-      x-ms-discriminator-value: Monetary Credit
-      description: Indicates that this is a monetary credit offer.
-      properties:
-        Name:
-          description: Name of the offer term
-          type: string
-          enum:
-            - Recurring Charge
-            - Monetary Commitment
-            - Monetary Credit
-          x-ms-enum:
-            name: OfferTermInfo
-            modelAsString: false
-        EffectiveDate:
-          description: Indicates the date from which the offer term is effective.
-          type: string
-          format: date-time
-        Credit:
-          description: The amount of credit provided under the terms of the given offer level.
-          type: number
-          format: decimal
-        ExcludedMeterIds:
-          description: An array of meter ids that are excluded from the given offer terms.
-          type: array
-          items:
-            type: string
-            format: uuid
-      type: object
-    MonetaryCommitment:
-      x-ms-discriminator-value: Monetary Commitment
-      description: Indicates that a monetary commitment is required for this offer
-      properties:
-        Name:
-          description: Name of the offer term
-          type: string
-          enum:
-            - Recurring Charge
-            - Monetary Commitment
-            - Monetary Credit
-          x-ms-enum:
-            name: OfferTermInfo
-            modelAsString: false
-        EffectiveDate:
-          description: Indicates the date from which the offer term is effective.
-          type: string
-          format: date-time
-        TieredDiscount:
-          description: The list of key/value pairs for the tiered meter rates, in the format 'key':'value' where key = price, and value = the corresponding discount percentage. This field is used only by offer terms of type 'Monetary Commitment'.
-          type: object
-          additionalProperties:
-            type: number
-            format: decimal
-        ExcludedMeterIds:
-          description: An array of meter ids that are excluded from the given offer terms.
-          type: array
-          items:
-            type: string
-            format: uuid
-      type: object
-    RecurringCharge:
-      x-ms-discriminator-value: Recurring Charge
-      description: Indicates a recurring charge is present for this offer.
-      properties:
-        Name:
-          description: Name of the offer term
-          type: string
-          enum:
-            - Recurring Charge
-            - Monetary Commitment
-            - Monetary Credit
-          x-ms-enum:
-            name: OfferTermInfo
-            modelAsString: false
-        EffectiveDate:
-          description: Indicates the date from which the offer term is effective.
-          type: string
-          format: date-time
-        RecurringCharge:
-          description: The amount of recurring charge as per the offer term.
-          type: integer
-      type: object
-    ErrorResponse:
-      description: Describes the format of Error response.
-      type: object
-      properties:
-        code:
-          description: Error code
-          type: string
-        message:
-          description: Error message indicating why the operation failed.
-          type: string
-    ErrorObjectResponse:
-      description: Describes the format of Error response with a wrapper object
-      type: object
-      properties:
-        error:
-          description: Wrapper object for error information
-          $ref: '#/components/schemas/ErrorResponse'
   x-stackQL-resources:
+    rate_card:
+      id: azure_extras.commerce.rate_card
+      name: rate_card
+      title: rate_card
+      methods:
+        get:
+          operation:
+            $ref: "#/paths/~1subscriptions~1{subscription_id}~1providers~1Microsoft.Commerce~1RateCard?api-version=2015-06-01-preview/get"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+          request:
+            nativeCasing: camel
+      sqlVerbs:
+        select:
+          - $ref: "#/components/x-stackQL-resources/rate_card/methods/get"
+        insert: []
+        update: []
+        delete: []
     usage_aggregates:
       id: azure_extras.commerce.usage_aggregates
       name: usage_aggregates
@@ -335,153 +188,98 @@ components:
       methods:
         list:
           operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Microsoft.Commerce~1UsageAggregates?api-version=2015-06-01-preview/get'
-            operationId: UsageAggregates_List
+            $ref: "#/paths/~1subscriptions~1{subscription_id}~1providers~1Microsoft.Commerce~1UsageAggregates?api-version=2015-06-01-preview/get"
           response:
+            openAPIDocKey: "200"
             mediaType: application/json
-            openAPIDocKey: '200'
-            schemaRef: UsageAggregationListResult
             objectKey: $.value
+            overrideMediaType: application/json
+            transform:
+              type: golang_template_json_v0.3.0
+              body: |-
+                {"value": [
+                {{- range $i, $row := index . "value" }}{{ if $i }},{{ end }}
+                  { {{ $p := index $row "properties" }}{{ if eq (kindOf $p) "map" }}{{ range $k, $v := $p }}{{ printf "%q" $k }}: {{ toJson $v }}, {{ end }}{{ end }}{{ range $k, $v := $row }}{{ printf "%q" $k }}: {{ toJson $v }}, {{ end }}"_flattened": true }
+                {{- end }}
+                ], "nextLink": {{ toJson (index . "nextLink") }}}
+          request:
+            nativeCasing: camel
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/usage_aggregates/methods/list'
+          - $ref: "#/components/x-stackQL-resources/usage_aggregates/methods/list"
         insert: []
         update: []
-        replace: []
-        delete: []
-    rate_cards:
-      id: azure_extras.commerce.rate_cards
-      name: rate_cards
-      title: rate_cards
-      methods:
-        get:
-          operation:
-            $ref: '#/paths/~1subscriptions~1{subscriptionId}~1providers~1Microsoft.Commerce~1RateCard?api-version=2015-06-01-preview/get'
-            operationId: RateCard_Get
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-            schemaRef: ResourceRateCardInfo
-      sqlVerbs:
-        select:
-          - $ref: '#/components/x-stackQL-resources/rate_cards/methods/get'
-        insert: []
-        update: []
-        replace: []
         delete: []
 paths:
-  /subscriptions/{subscriptionId}/providers/Microsoft.Commerce/UsageAggregates?api-version=2015-06-01-preview:
+  /subscriptions/{subscription_id}/providers/Microsoft.Commerce/RateCard?api-version=2015-06-01-preview:
     get:
-      tags:
-        - UsageAggregates
-      operationId: UsageAggregates_List
-      description: Query aggregated Azure subscription consumption data for a date range.
-      externalDocs:
-        url: https://docs.microsoft.com/rest/api/commerce/usageaggregates
+      operationId: RateCard_get
+      description: "Enables you to query for the resource/meter metadata and related prices used in a given subscription by Offer ID, Currency, Locale and Region. The metadata associated with the billing meters, including but not limited to service names, types, resources, units of measure, and regions, is subject to change at any time and without notice. If you intend to use this billing data in an automated fashion, please use the billing meter GUID to uniquely identify each billable item. If the billing meter GUID is scheduled to change due to a new billing model, you will be notified in advance of the change. .. seealso:: - https://docs.microsoft.com/rest/api/commerce/ratecard"
       parameters:
+        - name: subscription_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: $filter
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The filter to apply on the operation. It ONLY supports the 'eq' and 'and' logical operators at this time. All the 4 query parameters 'OfferDurableId', 'Currency', 'Locale', 'Region' are required to be a part of the $filter. Required.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResourceRateCardInfo"
+  /subscriptions/{subscription_id}/providers/Microsoft.Commerce/UsageAggregates?api-version=2015-06-01-preview:
+    get:
+      operationId: UsageAggregates_list
+      description: "Query aggregated Azure subscription consumption data for a date range. .. seealso:: - https://docs.microsoft.com/rest/api/commerce/usageaggregates"
+      parameters:
+        - name: subscription_id
+          in: path
+          required: true
+          schema:
+            type: string
         - name: reportedStartTime
           in: query
-          description: The start of the time range to retrieve data for.
           required: true
           schema:
-            format: date-time
             type: string
+            format: date-time
+          description: The start of the time range to retrieve data for. Required.
         - name: reportedEndTime
           in: query
-          description: The end of the time range to retrieve data for.
           required: true
           schema:
-            format: date-time
             type: string
+            format: date-time
+          description: The end of the time range to retrieve data for. Required.
         - name: showDetails
           in: query
-          description: '`True` returns usage data in instance-level detail, `false` causes server-side aggregation with fewer details. For example, if you have 3 website instances, by default you will get 3 line items for website consumption. If you specify showDetails = false, the data will be aggregated as a single line item for website consumption within the time period (for the given subscriptionId, meterId, usageStartTime and usageEndTime).'
           required: false
           schema:
             type: boolean
+          description: "`True` returns usage data in instance-level detail, `false` causes server-side aggregation with fewer details. For example, if you have 3 website instances, by default you will get 3 line items for website consumption. If you specify showDetails = false, the data will be aggregated as a single line item for website consumption within the time period (for the given subscriptionId, meterId, usageStartTime and usageEndTime). Default value is None."
         - name: aggregationGranularity
           in: query
-          description: '`Daily` (default) returns the data in daily granularity, `Hourly` returns the data in hourly granularity.'
           required: false
           schema:
-            default: Daily
-            enum:
-              - Daily
-              - Hourly
-            x-ms-enum:
-              name: AggregationGranularity
-              modelAsString: false
             type: string
+          description: '`Daily` (default) returns the data in daily granularity, `Hourly` returns the data in hourly granularity. Known values are: "Daily" and "Hourly". Default value is "Daily".'
         - name: continuationToken
           in: query
-          description: 'Used when a continuation token string is provided in the response body of the previous call, enabling paging through a large result set. If not present, the data is retrieved from the beginning of the day/hour (based on the granularity) passed in. '
           required: false
           schema:
             type: string
-        - $ref: '#/components/parameters/SubscriptionIdParameter'
+          description: Used when a continuation token string is provided in the response body of the previous call, enabling paging through a large result set. If not present, the data is retrieved from the beginning of the day/hour (based on the granularity) passed in. Default value is None.
       responses:
-        '200':
-          description: Normal response for a successful query. The response body will contain the data that matches the filters specified in the query parameters.
+        "200":
+          description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UsageAggregationListResult'
-            text/json:
-              schema:
-                $ref: '#/components/schemas/UsageAggregationListResult'
-        '202':
-          description: Response indicating that a request has been accepted for processing. However, the processing has not been completed.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorObjectResponse'
-            text/json:
-              schema:
-                $ref: '#/components/schemas/ErrorObjectResponse'
-        default:
-          description: Error response describing why the operation failed.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorObjectResponse'
-            text/json:
-              schema:
-                $ref: '#/components/schemas/ErrorObjectResponse'
-      x-ms-pageable:
-        nextLinkName: nextLink
-  /subscriptions/{subscriptionId}/providers/Microsoft.Commerce/RateCard?api-version=2015-06-01-preview:
-    get:
-      tags:
-        - RateCard
-      operationId: RateCard_Get
-      description: 'Enables you to query for the resource/meter metadata and related prices used in a given subscription by Offer ID, Currency, Locale and Region. The metadata associated with the billing meters, including but not limited to service names, types, resources, units of measure, and regions, is subject to change at any time and without notice. If you intend to use this billing data in an automated fashion, please use the billing meter GUID to uniquely identify each billable item. If the billing meter GUID is scheduled to change due to a new billing model, you will be notified in advance of the change. '
-      externalDocs:
-        url: https://docs.microsoft.com/rest/api/commerce/ratecard
-      parameters:
-        - name: $filter
-          in: query
-          description: The filter to apply on the operation. It ONLY supports the 'eq' and 'and' logical operators at this time. All the 4 query parameters 'OfferDurableId',  'Currency', 'Locale', 'Region' are required to be a part of the $filter.
-          required: true
-          schema:
-            type: string
-        - $ref: '#/components/parameters/SubscriptionIdParameter'
-      responses:
-        '200':
-          description: Normal response for a successful query. The response body will contain the data that matches the filters specified in the query parameters.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ResourceRateCardInfo'
-            text/json:
-              schema:
-                $ref: '#/components/schemas/ResourceRateCardInfo'
-        default:
-          description: Error response describing why the operation failed.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-            text/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-      x-ms-odata: '#/components/schemas/RateCardQueryParameters'
+                $ref: "#/components/schemas/PagedUsageAggregationFlattened"

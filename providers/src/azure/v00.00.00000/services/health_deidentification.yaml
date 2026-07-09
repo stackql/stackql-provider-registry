@@ -1,0 +1,514 @@
+openapi: 3.0.0
+servers:
+  - url: https://{endpoint}
+    variables:
+      endpoint:
+        default: ""
+        description: The service endpoint host (no scheme), e.g. myaccount.table.cosmos.azure.com:443 - value of the client `endpoint` parameter.
+info:
+  title: Deidentification Client
+  description: DeidentificationClient.
+  contact:
+    name: StackQL Studios
+    url: https://stackql.io/
+    email: info@stackql.io
+  version: 2025-07-15-preview-stackql-generated
+  x-serviceAlias: health_deidentification
+  x-sdkPackage: azure-health-deidentification
+  x-plane: data
+security:
+  - azure_auth:
+      - user_impersonation
+components:
+  securitySchemes:
+    azure_auth:
+      description: Azure Active Directory OAuth2 Flow.
+      type: oauth2
+      flows:
+        implicit:
+          authorizationUrl: https://login.microsoftonline.com/common/oauth2/authorize
+          scopes:
+            user_impersonation: impersonate your user account
+  schemas:
+    DeidentificationOperationType:
+      type: string
+      enum:
+        - Redact
+        - Surrogate
+        - Tag
+        - SurrogateOnly
+    SourceStorageLocation:
+      type: object
+      description: Storage location.
+      properties:
+        location:
+          type: string
+          description: URL to storage location. Required.
+        prefix:
+          type: string
+          description: Prefix to filter path by. Required.
+        extensions:
+          type: array
+          items:
+            type: string
+          description: List of extensions to filter path by.
+      required:
+        - location
+        - prefix
+    TargetStorageLocation:
+      type: object
+      description: Storage location.
+      properties:
+        location:
+          type: string
+          description: URL to storage location. Required.
+        prefix:
+          type: string
+          description: 'Replaces the input prefix of a file path with the output prefix, preserving the rest of the path structure. Example: File full path: documents/user/note.txt Input Prefix: "documents/user/" Output Prefix: "output_docs/" Output file: "output_docs/note.txt". Required.'
+        overwrite:
+          type: boolean
+          description: When set to true during a job, the service will overwrite the output location if it already exists.
+      required:
+        - location
+        - prefix
+    DeidentificationJobCustomizationOptions:
+      type: object
+      description: Customizations options to override default service behaviors for job usage.
+      properties:
+        redactionFormat:
+          type: string
+          description: Format of the redacted output. Only valid when Operation is Redact. Please refer to `https://learn.microsoft.com/azure/healthcare-apis/deidentification/redaction-format `_ for more details.
+        surrogateLocale:
+          type: string
+          description: Locale in which the output surrogates are written.
+        inputLocale:
+          type: string
+          description: Locale of the input text. Used for better PHI detection. Defaults to 'en-US'.
+    OperationStatus:
+      type: string
+      enum:
+        - NotStarted
+        - Running
+        - Succeeded
+        - Failed
+        - Canceled
+    DeidentificationJobSummary:
+      type: object
+      description: Summary metrics of a job.
+      properties:
+        successful:
+          type: integer
+          description: Number of documents that have completed. Required.
+        failed:
+          type: integer
+          description: Number of documents that have failed. Required.
+        canceled:
+          type: integer
+          description: Number of documents that have been canceled. Required.
+        total:
+          type: integer
+          description: Number of documents total. Required.
+        bytesProcessed:
+          type: integer
+          description: Number of bytes processed. Required.
+      required:
+        - successful
+        - failed
+        - canceled
+        - total
+        - bytesProcessed
+    DeidentificationJob:
+      type: object
+      description: A job containing a batch of documents to de-identify.
+      properties:
+        name:
+          type: string
+          description: The name of a job. Required.
+        operation:
+          $ref: "#/components/schemas/DeidentificationOperationType"
+          description: 'Operation to perform on the input documents. Known values are: "Redact", "Surrogate", "Tag", and "SurrogateOnly".'
+        sourceLocation:
+          $ref: "#/components/schemas/SourceStorageLocation"
+          description: Storage location to perform the operation on. Required.
+        targetLocation:
+          $ref: "#/components/schemas/TargetStorageLocation"
+          description: Target location to store output of operation. Required.
+        customizations:
+          $ref: "#/components/schemas/DeidentificationJobCustomizationOptions"
+          description: Customization parameters to override default service behaviors.
+        status:
+          $ref: "#/components/schemas/OperationStatus"
+          description: 'Current status of a job. Required. Known values are: "NotStarted", "Running", "Succeeded", "Failed", and "Canceled".'
+        error:
+          type: object
+          properties: {}
+          description: Error when job fails in it's entirety.
+        lastUpdatedAt:
+          type: string
+          format: date-time
+          description: Date and time when the job was completed. If the job is canceled, this is the time when the job was canceled. If the job failed, this is the time when the job failed. Required.
+        createdAt:
+          type: string
+          format: date-time
+          description: Date and time when the job was created. Required.
+        startedAt:
+          type: string
+          format: date-time
+          description: Date and time when the job was started.
+        summary:
+          $ref: "#/components/schemas/DeidentificationJobSummary"
+          description: Summary of a job. Exists only when the job is completed.
+      required:
+        - sourceLocation
+        - targetLocation
+    TaggedPhiEntities:
+      type: object
+      description: Grouped PHI entities with shared encoding specification.
+      properties:
+        encoding:
+          $ref: "#/components/schemas/TextEncodingType"
+          description: 'The encoding type used for all entities in this group. Required. Known values are: "Utf8", "Utf16", and "CodePoint".'
+        entities:
+          type: array
+          items:
+            $ref: "#/components/schemas/SimplePhiEntity"
+          description: List of PHI entities using the specified encoding. Required.
+      required:
+        - encoding
+        - entities
+    TextEncodingType:
+      type: string
+      enum:
+        - Utf8
+        - Utf16
+        - CodePoint
+    SimplePhiEntity:
+      type: object
+      description: Simple PHI entity with encoding-specific offset and length values.
+      properties:
+        category:
+          $ref: "#/components/schemas/PhiCategory"
+          description: 'PHI Category of the entity. Required. Known values are: "Unknown", "Account", "Age", "BioID", "City", "CountryOrRegion", "Date", "Device", "Doctor", "Email", "Fax", "HealthPlan", "Hospital", "IDNum", "IPAddress", "License", "LocationOther", "MedicalRecord", "Organization", "Patient", "Phone", "Profession", "SocialSecurity", "State", "Street", "Url", "Username", "Vehicle", and "Zip".'
+        offset:
+          type: integer
+          description: Starting index of the location from within the input text using the group's encoding. Required.
+        length:
+          type: integer
+          description: Length of the input text using the group's encoding. Required.
+        text:
+          type: string
+          description: Text of the entity (optional).
+      required:
+        - category
+        - offset
+        - length
+    PhiCategory:
+      type: string
+      enum:
+        - Unknown
+        - Account
+        - Age
+        - BioID
+        - City
+        - CountryOrRegion
+        - Date
+        - Device
+        - Doctor
+        - Email
+        - Fax
+        - HealthPlan
+        - Hospital
+        - IDNum
+        - IPAddress
+        - License
+        - LocationOther
+        - MedicalRecord
+        - Organization
+        - Patient
+        - Phone
+        - Profession
+        - SocialSecurity
+        - State
+        - Street
+        - Url
+        - Username
+        - Vehicle
+        - Zip
+    DeidentificationCustomizationOptions:
+      type: object
+      description: Customizations options to override default service behaviors for synchronous usage.
+      properties:
+        redactionFormat:
+          type: string
+          description: Format of the redacted output. Only valid when Operation is Redact. Please refer to `https://learn.microsoft.com/azure/healthcare-apis/deidentification/redaction-format `_ for more details.
+        surrogateLocale:
+          type: string
+          description: Locale in which the output surrogates are written.
+        inputLocale:
+          type: string
+          description: Locale of the input text. Used for better PHI detection. Defaults to 'en-US'.
+    DeidentificationResult:
+      type: object
+      description: Response body for de-identification operation.
+      properties:
+        outputText:
+          type: string
+          description: Output text after de-identification. Not available for "Tag" operation.
+        taggerResult:
+          $ref: "#/components/schemas/PhiTaggerResult"
+          description: Result of the "Tag" operation. Only available for "Tag" Operation.
+    PhiTaggerResult:
+      type: object
+      description: Result of the "Tag" operation.
+      properties:
+        entities:
+          type: array
+          items:
+            $ref: "#/components/schemas/PhiEntity"
+          description: List of entities detected in the input. Required.
+      required:
+        - entities
+    PhiEntity:
+      type: object
+      description: PHI Entity tag in the input.
+      properties:
+        category:
+          $ref: "#/components/schemas/PhiCategory"
+          description: 'PHI Category of the entity. Required. Known values are: "Unknown", "Account", "Age", "BioID", "City", "CountryOrRegion", "Date", "Device", "Doctor", "Email", "Fax", "HealthPlan", "Hospital", "IDNum", "IPAddress", "License", "LocationOther", "MedicalRecord", "Organization", "Patient", "Phone", "Profession", "SocialSecurity", "State", "Street", "Url", "Username", "Vehicle", and "Zip".'
+        offset:
+          $ref: "#/components/schemas/StringIndex"
+          description: Starting index of the location from within the input text. Required.
+        length:
+          $ref: "#/components/schemas/StringIndex"
+          description: Length of the input text. Required.
+        text:
+          type: string
+          description: Text of the entity.
+        confidenceScore:
+          type: number
+          description: Confidence score of the category match.
+      required:
+        - category
+        - offset
+        - length
+    StringIndex:
+      type: object
+      description: String index encoding model.
+      properties:
+        utf8:
+          type: integer
+          description: The offset or length of the substring in UTF-8 encoding. Required.
+        utf16:
+          type: integer
+          description: The offset or length of the substring in UTF-16 encoding. Primary encoding used by .NET, Java, and JavaScript. Required.
+        codePoint:
+          type: integer
+          description: The offset or length of the substring in CodePoint encoding. Primary encoding used by Python. Required.
+      required:
+        - utf8
+        - utf16
+        - codePoint
+  x-stackQL-resources:
+    jobs:
+      id: azure.health_deidentification.jobs
+      name: jobs
+      title: jobs
+      methods:
+        get_job:
+          operation:
+            $ref: "#/paths/~1jobs~1{name}?api-version=2025-07-15-preview/get"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+        delete_job:
+          operation:
+            $ref: "#/paths/~1jobs~1{name}?api-version=2025-07-15-preview/delete"
+          response:
+            openAPIDocKey: "204"
+      sqlVerbs:
+        select:
+          - $ref: "#/components/x-stackQL-resources/jobs/methods/get_job"
+        insert: []
+        update: []
+        delete:
+          - $ref: "#/components/x-stackQL-resources/jobs/methods/delete_job"
+    deidentify_documents:
+      id: azure.health_deidentification.deidentify_documents
+      name: deidentify_documents
+      title: deidentify_documents
+      methods:
+        deidentify_documents:
+          operation:
+            $ref: "#/paths/~1jobs~1{name}?api-version=2025-07-15-preview/put"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+          request:
+            nativeCasing: camel
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+      sqlVerbs:
+        select: []
+        insert: []
+        update: []
+        delete: []
+    cancel_jobs:
+      id: azure.health_deidentification.cancel_jobs
+      name: cancel_jobs
+      title: cancel_jobs
+      methods:
+        cancel_job:
+          operation:
+            $ref: "#/paths/~1jobs~1{name}:cancel?api-version=2025-07-15-preview/post"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+      sqlVerbs:
+        select: []
+        insert: []
+        update: []
+        delete: []
+    deidentify_texts:
+      id: azure.health_deidentification.deidentify_texts
+      name: deidentify_texts
+      title: deidentify_texts
+      methods:
+        deidentify_text:
+          operation:
+            $ref: "#/paths/~1deid?api-version=2025-07-15-preview/post"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+          request:
+            nativeCasing: camel
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+      sqlVerbs:
+        select: []
+        insert: []
+        update: []
+        delete: []
+paths:
+  /jobs/{name}?api-version=2025-07-15-preview:
+    get:
+      operationId: _DeidentificationClient_get_job
+      description: Get a de-identification job. Resource read operation template.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The name of a job. Required.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeidentificationJob"
+    put:
+      operationId: _DeidentificationClient_begin_deidentify_documents
+      description: Create a de-identification job. Long-running resource create or replace operation template.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The name of a job. Required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                operation:
+                  $ref: "#/components/schemas/DeidentificationOperationType"
+                  description: 'Operation to perform on the input documents. Known values are: "Redact", "Surrogate", "Tag", and "SurrogateOnly".'
+                sourceLocation:
+                  $ref: "#/components/schemas/SourceStorageLocation"
+                  description: Storage location to perform the operation on. Required.
+                targetLocation:
+                  $ref: "#/components/schemas/TargetStorageLocation"
+                  description: Target location to store output of operation. Required.
+                customizations:
+                  $ref: "#/components/schemas/DeidentificationJobCustomizationOptions"
+                  description: Customization parameters to override default service behaviors.
+              required:
+                - sourceLocation
+                - targetLocation
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeidentificationJob"
+    delete:
+      operationId: _DeidentificationClient_delete_job
+      description: Delete a de-identification job. Removes the record of the job from the service. Does not delete any documents.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The name of a job. Required.
+      responses:
+        "204":
+          description: Success (no content / accepted)
+  /jobs/{name}:cancel?api-version=2025-07-15-preview:
+    post:
+      operationId: _DeidentificationClient_cancel_job
+      description: Cancel a de-identification job. Cancels a job that is in progress. The job will be marked as canceled and the service will stop processing the job. The service will not delete any documents that have already been processed. If the job is already complete, this will have no effect.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The name of a job. Required.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeidentificationJob"
+  /deid?api-version=2025-07-15-preview:
+    post:
+      operationId: _DeidentificationClient_deidentify_text
+      description: De-identify text. A remote procedure call (RPC) operation.
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                inputText:
+                  type: string
+                  description: Input text to de-identify. Required.
+                operation:
+                  $ref: "#/components/schemas/DeidentificationOperationType"
+                  description: 'Operation to perform on the input documents. Known values are: "Redact", "Surrogate", "Tag", and "SurrogateOnly".'
+                taggedEntities:
+                  $ref: "#/components/schemas/TaggedPhiEntities"
+                  description: Grouped PHI entities with single encoding specification for SurrogateOnly operation.
+                customizations:
+                  $ref: "#/components/schemas/DeidentificationCustomizationOptions"
+                  description: Customization parameters to override default service behaviors.
+              required:
+                - inputText
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeidentificationResult"
