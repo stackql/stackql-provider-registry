@@ -1,0 +1,175 @@
+openapi: 3.0.3
+info:
+  title: Anthropic Admin API - cost
+  description: Cost reports (USD service-level cost breakdowns) for the Anthropic Admin API. Priority Tier costs use a different billing model and are not included; track them through the usage endpoint.
+  version: "2023-06-01"
+servers:
+  - url: https://api.anthropic.com
+paths:
+  /v1/organizations/cost_report:
+    get:
+      operationId: cost_report
+      summary: Get Cost Report
+      description: Get a cost report bucketed by day, optionally grouped by `workspace_id` and/or `description`. Costs are USD decimal strings in lowest currency units (cents).
+      parameters:
+        - name: anthropic-version
+          in: header
+          required: false
+          description: The version of the Claude API you want to use.
+          schema:
+            type: string
+            default: "2023-06-01"
+        - name: anthropic-beta
+          in: header
+          required: false
+          description: Optional beta version header.
+          schema:
+            type: string
+        - name: starting_at
+          in: query
+          required: true
+          description: Time buckets that start on or after this RFC 3339 timestamp will be returned. Snapped to the start of the day in UTC.
+          schema:
+            type: string
+        - name: ending_at
+          in: query
+          required: false
+          description: Time buckets that end before this RFC 3339 timestamp will be returned.
+          schema:
+            type: string
+        - name: bucket_width
+          in: query
+          required: false
+          description: Time granularity of the response data. Only `1d` is supported.
+          schema:
+            type: string
+            enum:
+              - 1d
+        - name: group_by[]
+          in: query
+          required: false
+          description: Group by any subset of `description` and `workspace_id`. When grouping by `description`, responses include parsed fields like `model` and `cost_type`.
+          schema:
+            type: array
+            items:
+              type: string
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of time buckets to return in the response.
+          schema:
+            type: integer
+        - name: page
+          in: query
+          required: false
+          description: Optionally set to the `next_page` token from the previous response.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CostReport"
+components:
+  schemas:
+    CostBucket:
+      type: object
+      description: One daily time bucket of cost data.
+      properties:
+        starting_at:
+          type: string
+          description: Start of the time bucket (inclusive) in RFC 3339 format.
+        ending_at:
+          type: string
+          description: End of the time bucket (exclusive) in RFC 3339 format.
+        results:
+          type: array
+          description: List of cost items for this time bucket; multiple items when one or more `group_by[]` parameters are specified.
+          items:
+            type: object
+            properties:
+              amount:
+                type: string
+                description: Cost amount in lowest currency units (cents) as a decimal string. For example `123.45` in USD represents $1.23.
+              currency:
+                type: string
+                description: Currency code for the cost amount. Currently always `USD`.
+              description:
+                type: string
+                nullable: true
+                description: Description of the cost item. Null unless grouping by description.
+              cost_type:
+                type: string
+                nullable: true
+                description: Type of cost - `code_execution`, `session_usage`, `tokens` or `web_search`. Null unless grouping by description.
+              token_type:
+                type: string
+                nullable: true
+                description: Type of token - `uncached_input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation.ephemeral_5m_input_tokens` or `cache_creation.ephemeral_1h_input_tokens`. Null unless grouping by description or for non-token costs.
+              context_window:
+                type: string
+                nullable: true
+                description: Input context window used, `0-200k` or `200k-1M`. Null unless grouping by description or for non-token costs.
+              model:
+                type: string
+                nullable: true
+                description: Model name used. Null unless grouping by description or for non-token costs.
+              service_tier:
+                type: string
+                nullable: true
+                description: Service tier used, `batch` or `standard`. Null unless grouping by description or for non-token costs.
+              inference_geo:
+                type: string
+                nullable: true
+                description: Inference geo used. Null unless grouping by description.
+              workspace_id:
+                type: string
+                nullable: true
+                description: ID of the Workspace this cost is associated with. Null unless grouping by workspace, and for the default workspace.
+    CostReport:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/CostBucket"
+        has_more:
+          type: boolean
+          description: Indicates if there are more results.
+        next_page:
+          type: string
+          nullable: true
+          description: Token to provide as `page` in the subsequent request to retrieve the next page of data.
+  x-stackQL-resources:
+    cost_reports:
+      id: anthropic_admin.cost.cost_reports
+      name: cost_reports
+      title: Cost Reports
+      methods:
+        list:
+          operation:
+            $ref: "#/paths/~1v1~1organizations~1cost_report/get"
+          response:
+            mediaType: application/json
+            openAPIDocKey: "200"
+            objectKey: $.data
+          config:
+            pagination:
+              requestToken:
+                key: page
+                location: query
+              responseToken:
+                key: $.next_page
+                location: body
+            queryParamPushdown:
+              top:
+                paramName: limit
+      sqlVerbs:
+        select:
+          - $ref: "#/components/x-stackQL-resources/cost_reports/methods/list"
+        insert: []
+        update: []
+        delete: []
+        replace: []
