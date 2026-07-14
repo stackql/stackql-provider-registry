@@ -2,8 +2,8 @@ openapi: 3.0.0
 servers:
   - url: https://management.azure.com/
 info:
-  title: Automation Client
-  description: Automation Client.
+  title: Azure Automation
+  description: Process automation with runbooks, DSC, schedules, hybrid workers and update deployments.
   contact:
     name: StackQL Studios
     url: https://stackql.io/
@@ -533,22 +533,6 @@ components:
           description: Identity for the resource.
       required:
         - location
-    DeletedRunbook:
-      type: object
-      description: Definition of deleted runbook.
-      properties:
-        properties:
-          $ref: "#/components/schemas/DeletedRunbookProperties"
-          description: Gets or sets the runbook properties.
-        id:
-          type: string
-          description: The resource id.
-        name:
-          type: string
-          description: Gets or sets name of the resource.
-        location:
-          type: string
-          description: Gets or sets the location of the resource.
     DeletedRunbookProperties:
       type: object
       description: Definition of the deleted runbook property.
@@ -573,13 +557,46 @@ components:
           type: string
           format: date-time
           description: Gets or sets the last modified time.
-    PagedDeletedRunbook:
+    DeletedRunbookFlattened:
+      type: object
+      description: Flattened view of DeletedRunbook ('properties' hoisted to the top level).
+      properties:
+        id:
+          type: string
+          description: The resource id.
+        name:
+          type: string
+          description: Gets or sets name of the resource.
+        location:
+          type: string
+          description: Gets or sets the location of the resource.
+        runbookId:
+          type: string
+          description: Gets or sets the Runbook Id.
+        runbookType:
+          type: string
+          description: Type of the runbook.
+        runtime:
+          type: string
+          description: Gets or sets runtime of the runbook.
+        runtimeEnvironment:
+          type: string
+          description: Environment of the runbook.
+        creationTime:
+          type: string
+          format: date-time
+          description: Gets or sets the creation time.
+        deletionTime:
+          type: string
+          format: date-time
+          description: Gets or sets the last modified time.
+    PagedDeletedRunbookFlattened:
       type: object
       properties:
         value:
           type: array
           items:
-            $ref: "#/components/schemas/DeletedRunbook"
+            $ref: "#/components/schemas/DeletedRunbookFlattened"
         nextLink:
           type: string
     AutomationAccountUpdateProperties:
@@ -2255,15 +2272,6 @@ components:
             $ref: "#/components/schemas/JobStreamFlattened"
         nextLink:
           type: string
-    KeyListResult:
-      type: object
-      description: KeyListResult.
-      properties:
-        keys:
-          type: array
-          items:
-            $ref: "#/components/schemas/Key"
-          description: Lists the automation keys.
     Key:
       type: object
       description: Automation key which is used to register a DSC Node.
@@ -2287,6 +2295,15 @@ components:
       enum:
         - Read
         - Full
+    KeyListResult:
+      type: object
+      description: KeyListResult.
+      properties:
+        keys:
+          type: array
+          items:
+            $ref: "#/components/schemas/Key"
+          description: Lists the automation keys.
     LinkedWorkspace:
       type: object
       description: Definition of the linked workspace.
@@ -5594,6 +5611,16 @@ components:
           response:
             openAPIDocKey: "200"
             mediaType: application/json
+            objectKey: $.value
+            overrideMediaType: application/json
+            transform:
+              type: golang_template_json_v0.3.0
+              body: |-
+                {"value": [
+                {{- range $i, $row := index . "value" }}{{ if $i }},{{ end }}
+                  { {{ $p := index $row "properties" }}{{ if eq (kindOf $p) "map" }}{{ range $k, $v := $p }}{{ printf "%q" $k }}: {{ toJson $v }}, {{ end }}{{ end }}{{ range $k, $v := $row }}{{ printf "%q" $k }}: {{ toJson $v }}, {{ end }}"_flattened": true }
+                {{- end }}
+                ], "nextLink": {{ toJson (index . "nextLink") }}}
       sqlVerbs:
         select:
           - $ref: "#/components/x-stackQL-resources/automation_account/methods/get"
@@ -5967,6 +5994,11 @@ components:
             $ref: "#/paths/~1subscriptions~1{subscription_id}~1resourceGroups~1{resource_group_name}~1providers~1Microsoft.Automation~1automationAccounts~1{automation_account_name}~1configurations~1{configuration_name}~1content?api-version=2024-10-23/get"
           response:
             openAPIDocKey: "200"
+            mediaType: application/json
+            overrideMediaType: application/json
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{"value": {{ toJson . }}}'
       sqlVerbs:
         select:
           - $ref: "#/components/x-stackQL-resources/dsc_configuration/methods/get"
@@ -6313,11 +6345,21 @@ components:
             $ref: "#/paths/~1subscriptions~1{subscription_id}~1resourceGroups~1{resource_group_name}~1providers~1Microsoft.Automation~1automationAccounts~1{automation_account_name}~1jobs~1{job_name}~1output?api-version=2024-10-23/get"
           response:
             openAPIDocKey: "200"
+            mediaType: application/json
+            overrideMediaType: application/json
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{"value": {{ toJson . }}}'
         get_runbook_content:
           operation:
             $ref: "#/paths/~1subscriptions~1{subscription_id}~1resourceGroups~1{resource_group_name}~1providers~1Microsoft.Automation~1automationAccounts~1{automation_account_name}~1jobs~1{job_name}~1runbookContent?api-version=2024-10-23/get"
           response:
             openAPIDocKey: "200"
+            mediaType: application/json
+            overrideMediaType: application/json
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{"value": {{ toJson . }}}'
         suspend:
           operation:
             $ref: "#/paths/~1subscriptions~1{subscription_id}~1resourceGroups~1{resource_group_name}~1providers~1Microsoft.Automation~1automationAccounts~1{automation_account_name}~1jobs~1{job_name}~1suspend?api-version=2024-10-23/post"
@@ -6451,7 +6493,8 @@ components:
             openAPIDocKey: "200"
             mediaType: application/json
       sqlVerbs:
-        select: []
+        select:
+          - $ref: "#/components/x-stackQL-resources/keys/methods/list_by_automation_account"
         insert: []
         update: []
         delete: []
@@ -6584,6 +6627,11 @@ components:
             $ref: "#/paths/~1subscriptions~1{subscription_id}~1resourceGroups~1{resource_group_name}~1providers~1Microsoft.Automation~1automationAccounts~1{automation_account_name}~1nodes~1{node_id}~1reports~1{report_id}~1content?api-version=2024-10-23/get"
           response:
             openAPIDocKey: "200"
+            mediaType: application/json
+            overrideMediaType: application/json
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{"value": {{ toJson . }}}'
       sqlVerbs:
         select:
           - $ref: "#/components/x-stackQL-resources/node_reports/methods/get"
@@ -6944,6 +6992,11 @@ components:
             $ref: "#/paths/~1subscriptions~1{subscription_id}~1resourceGroups~1{resource_group_name}~1providers~1Microsoft.Automation~1automationAccounts~1{automation_account_name}~1runbooks~1{runbook_name}~1draft~1content?api-version=2024-10-23/get"
           response:
             openAPIDocKey: "200"
+            mediaType: application/json
+            overrideMediaType: application/json
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{"value": {{ toJson . }}}'
         replace_content:
           operation:
             $ref: "#/paths/~1subscriptions~1{subscription_id}~1resourceGroups~1{resource_group_name}~1providers~1Microsoft.Automation~1automationAccounts~1{automation_account_name}~1runbooks~1{runbook_name}~1draft~1content?api-version=2024-10-23/put"
@@ -6960,8 +7013,6 @@ components:
           - $ref: "#/components/x-stackQL-resources/runbook_draft/methods/get"
         insert: []
         update: []
-        replace:
-          - $ref: "#/components/x-stackQL-resources/runbook_draft/methods/replace_content"
         delete: []
     runbook:
       id: azure.automation.runbook
@@ -7026,6 +7077,11 @@ components:
             $ref: "#/paths/~1subscriptions~1{subscription_id}~1resourceGroups~1{resource_group_name}~1providers~1Microsoft.Automation~1automationAccounts~1{automation_account_name}~1runbooks~1{runbook_name}~1content?api-version=2024-10-23/get"
           response:
             openAPIDocKey: "200"
+            mediaType: application/json
+            overrideMediaType: application/json
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{"value": {{ toJson . }}}'
         publish:
           operation:
             $ref: "#/paths/~1subscriptions~1{subscription_id}~1resourceGroups~1{resource_group_name}~1providers~1Microsoft.Automation~1automationAccounts~1{automation_account_name}~1runbooks~1{runbook_name}~1publish?api-version=2024-10-23/post"
@@ -8225,7 +8281,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PagedDeletedRunbook"
+                $ref: "#/components/schemas/PagedDeletedRunbookFlattened"
   /subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/certificates/{certificate_name}?api-version=2024-10-23:
     get:
       operationId: Certificate_get
@@ -9216,6 +9272,13 @@ paths:
       responses:
         "200":
           description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: string
   /subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/nodeConfigurations/{node_configuration_name}?api-version=2024-10-23:
     get:
       operationId: DscNodeConfiguration_get
@@ -10221,6 +10284,13 @@ paths:
       responses:
         "200":
           description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: string
   /subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/jobs/{job_name}/runbookContent?api-version=2024-10-23:
     get:
       operationId: Job_get_runbook_content
@@ -10258,6 +10328,13 @@ paths:
       responses:
         "200":
           description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: string
   /subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/jobs/{job_name}/suspend?api-version=2024-10-23:
     post:
       operationId: Job_suspend
@@ -11019,6 +11096,13 @@ paths:
       responses:
         "200":
           description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: string
   /subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/objectDataTypes/{type_name}/fields?api-version=2024-10-23:
     get:
       operationId: ObjectDataTypes_list_fields_by_type
@@ -11938,6 +12022,13 @@ paths:
       responses:
         "200":
           description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: string
     put:
       operationId: RunbookDraft_begin_replace_content
       description: Replaces the runbook draft content.
@@ -12238,6 +12329,13 @@ paths:
       responses:
         "200":
           description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: string
   /subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Automation/automationAccounts/{automation_account_name}/runbooks/{runbook_name}/publish?api-version=2024-10-23:
     post:
       operationId: Runbook_begin_publish
