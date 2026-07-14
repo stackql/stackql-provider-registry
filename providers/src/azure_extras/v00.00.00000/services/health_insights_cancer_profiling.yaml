@@ -1,0 +1,422 @@
+openapi: 3.0.0
+servers:
+  - url: https://{endpoint}/healthinsights
+    variables:
+      endpoint:
+        default: ""
+        description: The service endpoint host (no scheme), e.g. myaccount.table.cosmos.azure.com:443 - value of the client `endpoint` parameter.
+info:
+  title: Azure AI Health Insights - Cancer Profiling (Data Plane)
+  description: Infer cancer staging and attributes from clinical documents.
+  contact:
+    name: StackQL Studios
+    url: https://stackql.io/
+    email: info@stackql.io
+  version: 2023-03-01-preview-stackql-generated
+  x-serviceAlias: health_insights_cancer_profiling
+  x-sdkPackage: azure-healthinsights-cancerprofiling
+  x-plane: data
+security:
+  - azure_auth:
+      - user_impersonation
+components:
+  securitySchemes:
+    azure_auth:
+      description: Azure Active Directory OAuth2 Flow.
+      type: oauth2
+      flows:
+        implicit:
+          authorizationUrl: https://login.microsoftonline.com/common/oauth2/authorize
+          scopes:
+            user_impersonation: impersonate your user account
+  schemas:
+    PatientRecord:
+      type: object
+      description: A patient record, including their clinical information and data. All required parameters must be populated in order to send to Azure.
+      properties:
+        id:
+          type: string
+          description: A given identifier for the patient. Has to be unique across all patients in a single request. Required.
+        info:
+          $ref: "#/components/schemas/PatientInfo"
+          description: Patient structured information, including demographics and known structured clinical information.
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/PatientDocument"
+          description: Patient unstructured clinical data, given as documents.
+      required:
+        - id
+    PatientInfo:
+      type: object
+      description: Patient structured information, including demographics and known structured clinical information.
+      properties:
+        sex:
+          $ref: "#/components/schemas/PatientInfoSex"
+          description: "The patient's sex. Known values are: \"female\", \"male\", and \"unspecified\"."
+        birthDate:
+          type: string
+          format: date
+          description: The patient's date of birth.
+        clinicalInfo:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClinicalCodedElement"
+          description: Known clinical information for the patient, structured.
+    PatientInfoSex:
+      type: string
+      enum:
+        - female
+        - male
+        - unspecified
+    ClinicalCodedElement:
+      type: object
+      description: A piece of clinical information, expressed as a code in a clinical coding system. All required parameters must be populated in order to send to Azure.
+      properties:
+        system:
+          type: string
+          description: The clinical coding system, e.g. ICD-10, SNOMED-CT, UMLS. Required.
+        code:
+          type: string
+          description: The code within the given clinical coding system. Required.
+        name:
+          type: string
+          description: The name of this coded concept in the coding system.
+        value:
+          type: string
+          description: A value associated with the code within the given clinical coding system.
+      required:
+        - system
+        - code
+    PatientDocument:
+      type: object
+      description: A clinical document related to a patient. Document here is in the wide sense - not just a text document (note). All required parameters must be populated in order to send to Azure.
+      properties:
+        type:
+          $ref: "#/components/schemas/DocumentType"
+          description: "The type of the patient document, such as 'note' (text document) or 'fhirBundle' (FHIR JSON document). Required. Known values are: \"note\", \"fhirBundle\", \"dicom\", and \"genomicSequencing\"."
+        clinicalType:
+          $ref: "#/components/schemas/ClinicalDocumentType"
+          description: 'The type of the clinical document. Known values are: "consultation", "dischargeSummary", "historyAndPhysical", "procedure", "progress", "imaging", "laboratory", and "pathology".'
+        id:
+          type: string
+          description: A given identifier for the document. Has to be unique across all documents for a single patient. Required.
+        language:
+          type: string
+          description: A 2 letter ISO 639-1 representation of the language of the document.
+        createdDateTime:
+          type: string
+          format: date-time
+          description: The date and time when the document was created.
+        content:
+          $ref: "#/components/schemas/DocumentContent"
+          description: The content of the patient document. Required.
+      required:
+        - type
+        - id
+        - content
+    DocumentType:
+      type: string
+      enum:
+        - note
+        - fhirBundle
+        - dicom
+        - genomicSequencing
+    ClinicalDocumentType:
+      type: string
+      enum:
+        - consultation
+        - dischargeSummary
+        - historyAndPhysical
+        - procedure
+        - progress
+        - imaging
+        - laboratory
+        - pathology
+    DocumentContent:
+      type: object
+      description: The content of the patient document. All required parameters must be populated in order to send to Azure.
+      properties:
+        sourceType:
+          $ref: "#/components/schemas/DocumentContentSourceType"
+          description: "The type of the content's source. In case the source type is 'inline', the content is given as a string (for instance, text). In case the source type is 'reference', the content is given as a URI. Required. Known values are: \"inline\" and \"reference\"."
+        value:
+          type: string
+          description: The content of the document, given either inline (as a string) or as a reference (URI). Required.
+      required:
+        - sourceType
+        - value
+    DocumentContentSourceType:
+      type: string
+      enum:
+        - inline
+        - reference
+    OncoPhenotypeModelConfiguration:
+      type: object
+      description: Configuration affecting the Onco Phenotype model's inference.
+      properties:
+        verbose:
+          type: boolean
+          description: An indication whether the model should produce verbose output.
+        includeEvidence:
+          type: boolean
+          description: An indication whether the model's output should include evidence for the inferences.
+        inferenceTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/OncoPhenotypeInferenceType"
+          description: A list of inference types to be inferred for the current request. This could be used if only part of the Onco Phenotype inferences are required. If this list is omitted or empty, the model will return all the inference types.
+        checkForCancerCase:
+          type: boolean
+          description: An indication whether to perform a preliminary step on the patient's documents to determine whether they relate to a Cancer case.
+      required:
+        - verbose
+        - includeEvidence
+        - checkForCancerCase
+    OncoPhenotypeInferenceType:
+      type: string
+      enum:
+        - tumorSite
+        - histology
+        - clinicalStageT
+        - clinicalStageN
+        - clinicalStageM
+        - pathologicStageT
+        - pathologicStageN
+        - pathologicStageM
+    OncoPhenotypeResult:
+      type: object
+      description: The response for the Onco Phenotype request. Readonly variables are only populated by the server, and will be ignored when sending a request. All required parameters must be populated in order to send to Azure.
+      properties:
+        jobId:
+          type: string
+          description: A processing job identifier. Required.
+        createdDateTime:
+          type: string
+          format: date-time
+          description: The date and time when the processing job was created. Required.
+        expirationDateTime:
+          type: string
+          format: date-time
+          description: The date and time when the processing job is set to expire. Required.
+        lastUpdateDateTime:
+          type: string
+          format: date-time
+          description: The date and time when the processing job was last updated. Required.
+        status:
+          $ref: "#/components/schemas/JobStatus"
+          description: 'The status of the processing job. Required. Known values are: "notStarted", "running", "succeeded", "failed", and "partiallyCompleted".'
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/Error"
+          description: An array of errors, if any errors occurred during the processing job.
+        results:
+          $ref: "#/components/schemas/OncoPhenotypeResults"
+          description: The inference results for the Onco Phenotype request.
+      required:
+        - jobId
+        - createdDateTime
+        - expirationDateTime
+        - lastUpdateDateTime
+        - status
+    JobStatus:
+      type: string
+      enum:
+        - notStarted
+        - running
+        - succeeded
+        - failed
+        - partiallyCompleted
+    Error:
+      type: object
+      description: The error object. All required parameters must be populated in order to send to Azure.
+      properties:
+        code:
+          type: string
+          description: One of a server-defined set of error codes. Required.
+        message:
+          type: string
+          description: A human-readable representation of the error. Required.
+        target:
+          type: string
+          description: The target of the error.
+        details:
+          type: array
+          items:
+            $ref: "#/components/schemas/Error"
+          description: An array of details about specific errors that led to this reported error. Required.
+        innererror:
+          $ref: "#/components/schemas/InnerError"
+          description: An object containing more specific information than the current object about the error.
+      required:
+        - code
+        - message
+        - details
+    InnerError:
+      type: object
+      description: An object containing more specific information about the error. As per Microsoft One API guidelines - https://github.com/Microsoft/api-guidelines/blob/vNext/Guidelines.md#7102-error-condition-responses. All required parameters must be populated in order to send to Azure.
+      properties:
+        code:
+          type: string
+          description: One of a server-defined set of error codes. Required.
+        innererror:
+          $ref: "#/components/schemas/InnerError"
+          description: Inner error.
+      required:
+        - code
+    OncoPhenotypeResults:
+      type: object
+      description: The inference results for the Onco Phenotype request. All required parameters must be populated in order to send to Azure.
+      properties:
+        patients:
+          type: array
+          items:
+            $ref: "#/components/schemas/OncoPhenotypePatientResult"
+          description: Results for the patients given in the request. Required.
+        modelVersion:
+          type: string
+          description: The version of the model used for inference, expressed as the model date. Required.
+      required:
+        - patients
+        - modelVersion
+    OncoPhenotypePatientResult:
+      type: object
+      description: The results of the model's work for a single patient. All required parameters must be populated in order to send to Azure.
+      properties:
+        id:
+          type: string
+          description: The identifier given for the patient in the request. Required.
+        inferences:
+          type: array
+          items:
+            $ref: "#/components/schemas/OncoPhenotypeInference"
+          description: The model's inferences for the given patient. Required.
+      required:
+        - id
+        - inferences
+    OncoPhenotypeInference:
+      type: object
+      description: An inference made by the Onco Phenotype model regarding a patient. All required parameters must be populated in order to send to Azure.
+      properties:
+        type:
+          $ref: "#/components/schemas/OncoPhenotypeInferenceType"
+          description: 'The type of the Onco Phenotype inference. Required. Known values are: "tumorSite", "histology", "clinicalStageT", "clinicalStageN", "clinicalStageM", "pathologicStageT", "pathologicStageN", and "pathologicStageM".'
+        value:
+          type: string
+          description: The value of the inference, as relevant for the given inference type. Required.
+        description:
+          type: string
+          description: The description corresponding to the inference value.
+        confidenceScore:
+          type: number
+          description: Confidence score for this inference.
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/InferenceEvidence"
+          description: The evidence corresponding to the inference value.
+        caseId:
+          type: string
+          description: An identifier for a clinical case, if there are multiple clinical cases regarding the same patient.
+      required:
+        - type
+        - value
+    InferenceEvidence:
+      type: object
+      description: A piece of evidence corresponding to an inference.
+      properties:
+        patientDataEvidence:
+          $ref: "#/components/schemas/ClinicalNoteEvidence"
+          description: A piece of evidence from a clinical note (text document).
+        patientInfoEvidence:
+          $ref: "#/components/schemas/ClinicalCodedElement"
+          description: A piece of clinical information, expressed as a code in a clinical coding system.
+        importance:
+          type: number
+          description: A value indicating how important this piece of evidence is for the inference.
+    ClinicalNoteEvidence:
+      type: object
+      description: A piece of evidence from a clinical note (text document). All required parameters must be populated in order to send to Azure.
+      properties:
+        id:
+          type: string
+          description: The identifier of the document containing the evidence. Required.
+        text:
+          type: string
+          description: The actual text span which is evidence for the inference.
+        offset:
+          type: integer
+          description: The start index of the evidence text span in the document (0 based). Required.
+        length:
+          type: integer
+          description: The length of the evidence text span. Required.
+      required:
+        - id
+        - offset
+        - length
+  x-stackQL-resources:
+    infer_cancer_profiles:
+      id: azure_extras.health_insights_cancer_profiling.infer_cancer_profiles
+      name: infer_cancer_profiles
+      title: infer_cancer_profiles
+      methods:
+        infer_cancer_profile:
+          operation:
+            $ref: "#/paths/~1oncophenotype~1jobs?api-version=2023-03-01-preview/post"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+          request:
+            nativeCasing: camel
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+      sqlVerbs:
+        select: []
+        insert: []
+        update: []
+        delete: []
+paths:
+  /oncophenotype/jobs?api-version=2023-03-01-preview:
+    post:
+      operationId: CancerProfilingClient_begin_infer_cancer_profile
+      description: Create Onco Phenotype job. Creates an Onco Phenotype job with the given request body.
+      parameters:
+        - name: Repeatability-Request-ID
+          in: header
+          required: false
+          schema:
+            type: string
+          description: An opaque, globally-unique, client-generated string identifier for the request. Default value is None.
+        - name: Repeatability-First-Sent
+          in: header
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Specifies the date and time at which the request was first created. Default value is None.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                patients:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/PatientRecord"
+                  description: The list of patients, including their clinical information and data. Required.
+                configuration:
+                  $ref: "#/components/schemas/OncoPhenotypeModelConfiguration"
+                  description: Configuration affecting the Onco Phenotype model's inference.
+              required:
+                - patients
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OncoPhenotypeResult"

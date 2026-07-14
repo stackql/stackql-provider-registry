@@ -1,0 +1,772 @@
+openapi: 3.0.0
+servers:
+  - url: https://{endpoint}/healthinsights
+    variables:
+      endpoint:
+        default: ""
+        description: The service endpoint host (no scheme), e.g. myaccount.table.cosmos.azure.com:443 - value of the client `endpoint` parameter.
+info:
+  title: Azure AI Health Insights - Clinical Matching (Data Plane)
+  description: Match patients to clinical trials from clinical documents and registries.
+  contact:
+    name: StackQL Studios
+    url: https://stackql.io/
+    email: info@stackql.io
+  version: 2023-03-01-preview-stackql-generated
+  x-serviceAlias: health_insights_clinical_matching
+  x-sdkPackage: azure-healthinsights-clinicalmatching
+  x-plane: data
+security:
+  - azure_auth:
+      - user_impersonation
+components:
+  securitySchemes:
+    azure_auth:
+      description: Azure Active Directory OAuth2 Flow.
+      type: oauth2
+      flows:
+        implicit:
+          authorizationUrl: https://login.microsoftonline.com/common/oauth2/authorize
+          scopes:
+            user_impersonation: impersonate your user account
+  schemas:
+    PatientRecord:
+      type: object
+      description: A patient record, including their clinical information and data. All required parameters must be populated in order to send to Azure.
+      properties:
+        id:
+          type: string
+          description: A given identifier for the patient. Has to be unique across all patients in a single request. Required.
+        info:
+          $ref: "#/components/schemas/PatientInfo"
+          description: Patient structured information, including demographics and known structured clinical information.
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/PatientDocument"
+          description: Patient unstructured clinical data, given as documents.
+      required:
+        - id
+    PatientInfo:
+      type: object
+      description: Patient structured information, including demographics and known structured clinical information.
+      properties:
+        sex:
+          $ref: "#/components/schemas/PatientInfoSex"
+          description: "The patient's sex. Known values are: \"female\", \"male\", and \"unspecified\"."
+        birthDate:
+          type: string
+          format: date
+          description: The patient's date of birth.
+        clinicalInfo:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClinicalCodedElement"
+          description: Known clinical information for the patient, structured.
+    PatientInfoSex:
+      type: string
+      enum:
+        - female
+        - male
+        - unspecified
+    ClinicalCodedElement:
+      type: object
+      description: A piece of clinical information, expressed as a code in a clinical coding system. All required parameters must be populated in order to send to Azure.
+      properties:
+        system:
+          type: string
+          description: The clinical coding system, e.g. ICD-10, SNOMED-CT, UMLS. Required.
+        code:
+          type: string
+          description: The code within the given clinical coding system. Required.
+        name:
+          type: string
+          description: The name of this coded concept in the coding system.
+        value:
+          type: string
+          description: A value associated with the code within the given clinical coding system.
+      required:
+        - system
+        - code
+    PatientDocument:
+      type: object
+      description: A clinical document related to a patient. Document here is in the wide sense - not just a text document (note). All required parameters must be populated in order to send to Azure.
+      properties:
+        type:
+          $ref: "#/components/schemas/DocumentType"
+          description: "The type of the patient document, such as 'note' (text document) or 'fhirBundle' (FHIR JSON document). Required. Known values are: \"note\", \"fhirBundle\", \"dicom\", and \"genomicSequencing\"."
+        clinicalType:
+          $ref: "#/components/schemas/ClinicalDocumentType"
+          description: 'The type of the clinical document. Known values are: "consultation", "dischargeSummary", "historyAndPhysical", "procedure", "progress", "imaging", "laboratory", and "pathology".'
+        id:
+          type: string
+          description: A given identifier for the document. Has to be unique across all documents for a single patient. Required.
+        language:
+          type: string
+          description: A 2 letter ISO 639-1 representation of the language of the document.
+        createdDateTime:
+          type: string
+          format: date-time
+          description: The date and time when the document was created.
+        content:
+          $ref: "#/components/schemas/DocumentContent"
+          description: The content of the patient document. Required.
+      required:
+        - type
+        - id
+        - content
+    DocumentType:
+      type: string
+      enum:
+        - note
+        - fhirBundle
+        - dicom
+        - genomicSequencing
+    ClinicalDocumentType:
+      type: string
+      enum:
+        - consultation
+        - dischargeSummary
+        - historyAndPhysical
+        - procedure
+        - progress
+        - imaging
+        - laboratory
+        - pathology
+    DocumentContent:
+      type: object
+      description: The content of the patient document. All required parameters must be populated in order to send to Azure.
+      properties:
+        sourceType:
+          $ref: "#/components/schemas/DocumentContentSourceType"
+          description: "The type of the content's source. In case the source type is 'inline', the content is given as a string (for instance, text). In case the source type is 'reference', the content is given as a URI. Required. Known values are: \"inline\" and \"reference\"."
+        value:
+          type: string
+          description: The content of the document, given either inline (as a string) or as a reference (URI). Required.
+      required:
+        - sourceType
+        - value
+    DocumentContentSourceType:
+      type: string
+      enum:
+        - inline
+        - reference
+    TrialMatcherModelConfiguration:
+      type: object
+      description: Configuration affecting the Trial Matcher model's inference. All required parameters must be populated in order to send to Azure.
+      properties:
+        verbose:
+          type: boolean
+          description: An indication whether the model should produce verbose output.
+        includeEvidence:
+          type: boolean
+          description: An indication whether the model's output should include evidence for the inferences.
+        clinicalTrials:
+          $ref: "#/components/schemas/ClinicalTrials"
+          description: The clinical trials that the patient(s) should be matched to. The trial selection can be given as a list of custom clinical trials and/or a list of filters to known clinical trial registries. In case both are given, the resulting trial set is a union of the two sets. Required.
+      required:
+        - verbose
+        - includeEvidence
+        - clinicalTrials
+    ClinicalTrials:
+      type: object
+      description: The clinical trials that the patient(s) should be matched to. The trial selection can be given as a list of custom clinical trials and/or a list of filters to known clinical trial registries. In case both are given, the resulting trial set is a union of the two sets.
+      properties:
+        customTrials:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClinicalTrialDetails"
+          description: A list of clinical trials.
+        registryFilters:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClinicalTrialRegistryFilter"
+          description: A list of filters, each one creating a selection of trials from a given clinical trial registry.
+    ClinicalTrialDetails:
+      type: object
+      description: A description of a clinical trial. All required parameters must be populated in order to send to Azure.
+      properties:
+        id:
+          type: string
+          description: A given identifier for the clinical trial. Has to be unique within a list of clinical trials. Required.
+        eligibilityCriteriaText:
+          type: string
+          description: The eligibility criteria of the clinical trial (inclusion and exclusion), given as text.
+        demographics:
+          $ref: "#/components/schemas/ClinicalTrialDemographics"
+          description: Demographic criteria for a clinical trial.
+        metadata:
+          $ref: "#/components/schemas/ClinicalTrialMetadata"
+          description: Trial data which is of interest to the potential participant. Required.
+      required:
+        - id
+        - metadata
+    ClinicalTrialDemographics:
+      type: object
+      description: Demographic criteria for a clinical trial.
+      properties:
+        acceptedSex:
+          $ref: "#/components/schemas/ClinicalTrialAcceptedSex"
+          description: 'Indication of the sex of people who may participate in the clinical trial. Known values are: "all", "female", and "male".'
+        acceptedAgeRange:
+          $ref: "#/components/schemas/AcceptedAgeRange"
+          description: A definition of the range of ages accepted by a clinical trial. Contains a minimum age and/or a maximum age.
+    ClinicalTrialAcceptedSex:
+      type: string
+      enum:
+        - all
+        - female
+        - male
+    AcceptedAgeRange:
+      type: object
+      description: A definition of the range of ages accepted by a clinical trial. Contains a minimum age and/or a maximum age.
+      properties:
+        minimumAge:
+          $ref: "#/components/schemas/AcceptedAge"
+          description: A person's age, given as a number (value) and a unit (e.g. years, months).
+        maximumAge:
+          $ref: "#/components/schemas/AcceptedAge"
+          description: A person's age, given as a number (value) and a unit (e.g. years, months).
+    AcceptedAge:
+      type: object
+      description: A person's age, given as a number (value) and a unit (e.g. years, months). All required parameters must be populated in order to send to Azure.
+      properties:
+        unit:
+          $ref: "#/components/schemas/AgeUnit"
+          description: "Possible units for a person's age. Required. Known values are: \"years\", \"months\", and \"days\"."
+        value:
+          type: number
+          description: The number of years/months/days that represents the person's age. Required.
+      required:
+        - unit
+        - value
+    AgeUnit:
+      type: string
+      enum:
+        - years
+        - months
+        - days
+    ClinicalTrialMetadata:
+      type: object
+      description: Trial data which is of interest to the potential participant. All required parameters must be populated in order to send to Azure.
+      properties:
+        phases:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClinicalTrialPhase"
+          description: Phases which are relevant for the clinical trial. Each clinical trial can be in a certain phase or in multiple phases.
+        studyType:
+          $ref: "#/components/schemas/ClinicalTrialStudyType"
+          description: 'Possible study types of a clinical trial. Known values are: "interventional", "observational", "expandedAccess", and "patientRegistries".'
+        recruitmentStatus:
+          $ref: "#/components/schemas/ClinicalTrialRecruitmentStatus"
+          description: 'Possible recruitment status of a clinical trial. Known values are: "unknownStatus", "notYetRecruiting", "recruiting", and "enrollingByInvitation".'
+        conditions:
+          type: array
+          items:
+            type: string
+          description: Medical conditions and their synonyms which are relevant for the clinical trial, given as strings. Required.
+        sponsors:
+          type: array
+          items:
+            type: string
+          description: Sponsors/collaborators involved with the trial.
+        contacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContactDetails"
+          description: Contact details of the trial administrators, for patients that want to participate in the trial.
+        facilities:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClinicalTrialResearchFacility"
+          description: Research facilities where the clinical trial is conducted.
+      required:
+        - conditions
+    ClinicalTrialPhase:
+      type: string
+      enum:
+        - notApplicable
+        - earlyPhase1
+        - phase1
+        - phase2
+        - phase3
+        - phase4
+    ClinicalTrialStudyType:
+      type: string
+      enum:
+        - interventional
+        - observational
+        - expandedAccess
+        - patientRegistries
+    ClinicalTrialRecruitmentStatus:
+      type: string
+      enum:
+        - unknownStatus
+        - notYetRecruiting
+        - recruiting
+        - enrollingByInvitation
+    ContactDetails:
+      type: object
+      description: A person's contact details.
+      properties:
+        name:
+          type: string
+          description: The person's name.
+        email:
+          type: string
+          description: The person's email.
+        phone:
+          type: string
+          description: A person's phone number.
+    ClinicalTrialResearchFacility:
+      type: object
+      description: Details of a research facility where a clinical trial is conducted. All required parameters must be populated in order to send to Azure.
+      properties:
+        name:
+          type: string
+          description: The facility's name. Required.
+        city:
+          type: string
+          description: City name.
+        state:
+          type: string
+          description: State name.
+        countryOrRegion:
+          type: string
+          description: Country/region name. Required.
+      required:
+        - name
+        - countryOrRegion
+    ClinicalTrialRegistryFilter:
+      type: object
+      description: A filter defining a subset of clinical trials from a given clinical trial registry (e.g. clinicaltrials.gov).
+      properties:
+        conditions:
+          type: array
+          items:
+            type: string
+          description: Trials with any of the given medical conditions will be included in the selection (provided that other limitations are satisfied). Leaving this list empty will not limit the medical conditions.
+        studyTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClinicalTrialStudyType"
+          description: Trials with any of the given study types will be included in the selection (provided that other limitations are satisfied). Leaving this list empty will not limit the study types.
+        recruitmentStatuses:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClinicalTrialRecruitmentStatus"
+          description: Trials with any of the given recruitment statuses will be included in the selection (provided that other limitations are satisfied). Leaving this list empty will not limit the recruitment statuses.
+        sponsors:
+          type: array
+          items:
+            type: string
+          description: Trials with any of the given sponsors will be included in the selection (provided that other limitations are satisfied). Leaving this list empty will not limit the sponsors.
+        phases:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClinicalTrialPhase"
+          description: Trials with any of the given phases will be included in the selection (provided that other limitations are satisfied). Leaving this list empty will not limit the phases.
+        purposes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClinicalTrialPurpose"
+          description: Trials with any of the given purposes will be included in the selection (provided that other limitations are satisfied). Leaving this list empty will not limit the purposes.
+        ids:
+          type: array
+          items:
+            type: string
+          description: Trials with any of the given identifiers will be included in the selection (provided that other limitations are satisfied). Leaving this list empty will not limit the trial identifiers.
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClinicalTrialSource"
+          description: Trials with any of the given sources will be included in the selection (provided that other limitations are satisfied). Leaving this list empty will not limit the sources.
+        facilityNames:
+          type: array
+          items:
+            type: string
+          description: Trials with any of the given facility names will be included in the selection (provided that other limitations are satisfied). Leaving this list empty will not limit the trial facility names.
+        facilityLocations:
+          type: array
+          items:
+            $ref: "#/components/schemas/GeographicLocation"
+          description: Trials with any of the given facility locations will be included in the selection (provided that other limitations are satisfied). Leaving this list empty will not limit the trial facility locations.
+        facilityAreas:
+          type: array
+          items:
+            $ref: "#/components/schemas/GeographicArea"
+          description: Trials with any of the given facility area boundaries will be included in the selection (provided that other limitations are satisfied). Leaving this list empty will not limit the trial facility area boundaries.
+    ClinicalTrialPurpose:
+      type: string
+      enum:
+        - notApplicable
+        - screening
+        - diagnostic
+        - prevention
+        - healthServicesResearch
+        - treatment
+        - deviceFeasibility
+        - supportiveCare
+        - basicScience
+        - other
+    ClinicalTrialSource:
+      type: string
+      enum:
+        - custom
+        - clinicaltrials.gov
+    GeographicLocation:
+      type: object
+      description: A location given as a combination of city, state and country/region. It could specify a city, a state or a country/region. In case a city is specified, either state +country/region or country/region (for countries/regions where there are no states) should be added. In case a state is specified (without a city), country/region should be added. All required parameters must be populated in order to send to Azure.
+      properties:
+        city:
+          type: string
+          description: City name.
+        state:
+          type: string
+          description: State name.
+        countryOrRegion:
+          type: string
+          description: Country/region name. Required.
+      required:
+        - countryOrRegion
+    GeographicArea:
+      type: object
+      description: A geographic area, expressed as a `Circle` geometry represented using a `GeoJSON Feature` (see `GeoJSON spec `_ ). All required parameters must be populated in order to send to Azure.
+      properties:
+        type:
+          $ref: "#/components/schemas/GeoJsonType"
+          description: '`GeoJSON` type. Required. "Feature"'
+        geometry:
+          $ref: "#/components/schemas/AreaGeometry"
+          description: "`GeoJSON` geometry, representing the area circle's center. Required."
+        properties:
+          $ref: "#/components/schemas/AreaProperties"
+          description: "`GeoJSON` object properties. Required."
+      required:
+        - type
+        - geometry
+        - properties
+    GeoJsonType:
+      type: string
+      enum:
+        - Feature
+    AreaGeometry:
+      type: object
+      description: "`GeoJSON` geometry, representing the area circle's center. All required parameters must be populated in order to send to Azure."
+      properties:
+        type:
+          $ref: "#/components/schemas/GeoJsonGeometryType"
+          description: '`GeoJSON` geometry type. Required. "Point"'
+        coordinates:
+          type: array
+          items:
+            type: number
+          description: Coordinates of the area circle's center, represented according to the `GeoJSON` standard. This is an array of 2 decimal numbers, longitude and latitude (precisely in this order). Required.
+      required:
+        - type
+        - coordinates
+    GeoJsonGeometryType:
+      type: string
+      enum:
+        - Point
+    AreaProperties:
+      type: object
+      description: "`GeoJSON` object properties. All required parameters must be populated in order to send to Azure."
+      properties:
+        subType:
+          $ref: "#/components/schemas/GeoJsonPropertiesSubType"
+          description: '`GeoJSON` object sub-type. Required. "Circle"'
+        radius:
+          type: number
+          description: The radius of the area's circle, in meters. Required.
+      required:
+        - subType
+        - radius
+    GeoJsonPropertiesSubType:
+      type: string
+      enum:
+        - Circle
+    TrialMatcherResult:
+      type: object
+      description: The response for the Trial Matcher request. Readonly variables are only populated by the server, and will be ignored when sending a request. All required parameters must be populated in order to send to Azure.
+      properties:
+        jobId:
+          type: string
+          description: A processing job identifier. Required.
+        createdDateTime:
+          type: string
+          format: date-time
+          description: The date and time when the processing job was created. Required.
+        expirationDateTime:
+          type: string
+          format: date-time
+          description: The date and time when the processing job is set to expire. Required.
+        lastUpdateDateTime:
+          type: string
+          format: date-time
+          description: The date and time when the processing job was last updated. Required.
+        status:
+          $ref: "#/components/schemas/JobStatus"
+          description: 'The status of the processing job. Required. Known values are: "notStarted", "running", "succeeded", "failed", and "partiallyCompleted".'
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/Error"
+          description: An array of errors, if any errors occurred during the processing job.
+        results:
+          $ref: "#/components/schemas/TrialMatcherResults"
+          description: The inference results for the Trial Matcher request.
+      required:
+        - jobId
+        - createdDateTime
+        - expirationDateTime
+        - lastUpdateDateTime
+        - status
+    JobStatus:
+      type: string
+      enum:
+        - notStarted
+        - running
+        - succeeded
+        - failed
+        - partiallyCompleted
+    Error:
+      type: object
+      description: The error object. All required parameters must be populated in order to send to Azure.
+      properties:
+        code:
+          type: string
+          description: One of a server-defined set of error codes. Required.
+        message:
+          type: string
+          description: A human-readable representation of the error. Required.
+        target:
+          type: string
+          description: The target of the error.
+        details:
+          type: array
+          items:
+            $ref: "#/components/schemas/Error"
+          description: An array of details about specific errors that led to this reported error. Required.
+        innererror:
+          $ref: "#/components/schemas/InnerError"
+          description: An object containing more specific information than the current object about the error.
+      required:
+        - code
+        - message
+        - details
+    InnerError:
+      type: object
+      description: An object containing more specific information about the error. As per Microsoft One API guidelines - https://github.com/Microsoft/api-guidelines/blob/vNext/Guidelines.md#7102-error-condition-responses. All required parameters must be populated in order to send to Azure.
+      properties:
+        code:
+          type: string
+          description: One of a server-defined set of error codes. Required.
+        innererror:
+          $ref: "#/components/schemas/InnerError"
+          description: Inner error.
+      required:
+        - code
+    TrialMatcherResults:
+      type: object
+      description: The inference results for the Trial Matcher request. All required parameters must be populated in order to send to Azure.
+      properties:
+        patients:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrialMatcherPatientResult"
+          description: Results for the patients given in the request. Required.
+        modelVersion:
+          type: string
+          description: The version of the model used for inference, expressed as the model date. Required.
+        knowledgeGraphLastUpdateDate:
+          type: string
+          format: date
+          description: The date when the clinical trials knowledge graph was last updated.
+      required:
+        - patients
+        - modelVersion
+    TrialMatcherPatientResult:
+      type: object
+      description: The results of the model's work for a single patient. All required parameters must be populated in order to send to Azure.
+      properties:
+        id:
+          type: string
+          description: The identifier given for the patient in the request. Required.
+        inferences:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrialMatcherInference"
+          description: The model's inferences for the given patient. Required.
+        neededClinicalInfo:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExtendedClinicalCodedElement"
+          description: Clinical information which is needed to provide better trial matching results for the patient. Clinical information which is needed to provide better trial matching results for the patient.
+      required:
+        - id
+        - inferences
+    TrialMatcherInference:
+      type: object
+      description: An inference made by the Trial Matcher model regarding a patient. All required parameters must be populated in order to send to Azure.
+      properties:
+        type:
+          $ref: "#/components/schemas/TrialMatcherInferenceType"
+          description: The type of the Trial Matcher inference. Required. "trialEligibility"
+        value:
+          type: string
+          description: The value of the inference, as relevant for the given inference type. Required.
+        description:
+          type: string
+          description: The description corresponding to the inference value.
+        confidenceScore:
+          type: number
+          description: Confidence score for this inference.
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrialMatcherInferenceEvidence"
+          description: The evidence corresponding to the inference value.
+        id:
+          type: string
+          description: The identifier of the clinical trial.
+        source:
+          $ref: "#/components/schemas/ClinicalTrialSource"
+          description: 'Possible sources of a clinical trial. Known values are: "custom" and "clinicaltrials.gov".'
+        metadata:
+          $ref: "#/components/schemas/ClinicalTrialMetadata"
+          description: Trial data which is of interest to the potential participant.
+      required:
+        - type
+        - value
+    TrialMatcherInferenceType:
+      type: string
+      enum:
+        - trialEligibility
+    TrialMatcherInferenceEvidence:
+      type: object
+      description: A piece of evidence corresponding to a Trial Matcher inference.
+      properties:
+        eligibilityCriteriaEvidence:
+          type: string
+          description: A piece of evidence from the eligibility criteria text of a clinical trial.
+        patientDataEvidence:
+          $ref: "#/components/schemas/ClinicalNoteEvidence"
+          description: A piece of evidence from a clinical note (text document).
+        patientInfoEvidence:
+          $ref: "#/components/schemas/ClinicalCodedElement"
+          description: A piece of clinical information, expressed as a code in a clinical coding system.
+        importance:
+          type: number
+          description: A value indicating how important this piece of evidence is for the inference.
+    ClinicalNoteEvidence:
+      type: object
+      description: A piece of evidence from a clinical note (text document). All required parameters must be populated in order to send to Azure.
+      properties:
+        id:
+          type: string
+          description: The identifier of the document containing the evidence. Required.
+        text:
+          type: string
+          description: The actual text span which is evidence for the inference.
+        offset:
+          type: integer
+          description: The start index of the evidence text span in the document (0 based). Required.
+        length:
+          type: integer
+          description: The length of the evidence text span. Required.
+      required:
+        - id
+        - offset
+        - length
+    ExtendedClinicalCodedElement:
+      type: object
+      description: A piece of clinical information, expressed as a code in a clinical coding system, extended by semantic information. All required parameters must be populated in order to send to Azure.
+      properties:
+        system:
+          type: string
+          description: The clinical coding system, e.g. ICD-10, SNOMED-CT, UMLS. Required.
+        code:
+          type: string
+          description: The code within the given clinical coding system. Required.
+        name:
+          type: string
+          description: The name of this coded concept in the coding system.
+        value:
+          type: string
+          description: A value associated with the code within the given clinical coding system.
+        semanticType:
+          type: string
+          description: The `UMLS semantic type `_ associated with the coded concept.
+        category:
+          type: string
+          description: The bio-medical category related to the coded concept, e.g. Diagnosis, Symptom, Medication, Examination.
+      required:
+        - system
+        - code
+  x-stackQL-resources:
+    match_trials:
+      id: azure_extras.health_insights_clinical_matching.match_trials
+      name: match_trials
+      title: match_trials
+      methods:
+        match_trials:
+          operation:
+            $ref: "#/paths/~1trialmatcher~1jobs?api-version=2023-03-01-preview/post"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+          request:
+            nativeCasing: camel
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+      sqlVerbs:
+        select: []
+        insert: []
+        update: []
+        delete: []
+paths:
+  /trialmatcher/jobs?api-version=2023-03-01-preview:
+    post:
+      operationId: ClinicalMatchingClient_begin_match_trials
+      description: Create Trial Matcher job. Creates a Trial Matcher job with the given request body.
+      parameters:
+        - name: Repeatability-Request-ID
+          in: header
+          required: false
+          schema:
+            type: string
+          description: An opaque, globally-unique, client-generated string identifier for the request. Default value is None.
+        - name: Repeatability-First-Sent
+          in: header
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Specifies the date and time at which the request was first created. Default value is None.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                patients:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/PatientRecord"
+                  description: The list of patients, including their clinical information and data. Required.
+                configuration:
+                  $ref: "#/components/schemas/TrialMatcherModelConfiguration"
+                  description: Configuration affecting the Trial Matcher model's inference.
+              required:
+                - patients
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrialMatcherResult"

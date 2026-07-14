@@ -6,8 +6,8 @@ servers:
         default: ""
         description: The service endpoint host (no scheme), e.g. myaccount.table.cosmos.azure.com:443 - value of the client `endpoint` parameter.
 info:
-  title: Load Test Administration Client
-  description: LoadTestAdministrationClient.
+  title: Azure Load Testing (Data Plane)
+  description: Create and run load tests, test profiles and fetch results and metrics.
   contact:
     name: StackQL Studios
     url: https://stackql.io/
@@ -584,20 +584,6 @@ components:
           items:
             type: string
           description: The dimension values. Maximum values can be 20.
-    TimeSeriesElement:
-      type: object
-      description: The time series returned when a data query is performed.
-      properties:
-        data:
-          type: array
-          items:
-            $ref: "#/components/schemas/MetricValue"
-          description: An array of data points representing the metric values.
-        dimensionValues:
-          type: array
-          items:
-            $ref: "#/components/schemas/DimensionValue"
-          description: The dimension values.
     MetricValue:
       type: object
       description: Represents a metric value.
@@ -619,6 +605,20 @@ components:
         value:
           type: string
           description: The value of the dimension.
+    TimeSeriesElement:
+      type: object
+      description: The time series returned when a data query is performed.
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MetricValue"
+          description: An array of data points representing the metric values.
+        dimensionValues:
+          type: array
+          items:
+            $ref: "#/components/schemas/DimensionValue"
+          description: The dimension values.
     PagedTimeSeriesElement:
       type: object
       properties:
@@ -1547,10 +1547,17 @@ components:
             $ref: "#/paths/~1test-runs~1{test_run_id}~1metric-dimensions~1{name}~1values?api-version=2025-11-01-preview/get"
           response:
             openAPIDocKey: "200"
+            mediaType: application/json
+            objectKey: $.value
+            overrideMediaType: application/json
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{"value": [{{- range $i, $v := index . "value" }}{{ if $i }},{{ end }}{"value": {{ toJson $v }}}{{- end }}], "nextLink": {{ toJson (index . "nextLink") }}}'
           request:
             nativeCasing: camel
       sqlVerbs:
-        select: []
+        select:
+          - $ref: "#/components/x-stackQL-resources/metric_dimension_values/methods/list_metric_dimension_values"
         insert: []
         update: []
         delete: []
@@ -1565,13 +1572,15 @@ components:
           response:
             openAPIDocKey: "200"
             mediaType: application/json
+            objectKey: $.value
           request:
             nativeCasing: camel
           config:
             requestBodyTranslate:
               algorithm: naive
       sqlVerbs:
-        select: []
+        select:
+          - $ref: "#/components/x-stackQL-resources/metrics/methods/list_metrics"
         insert: []
         update: []
         delete: []
@@ -2530,6 +2539,20 @@ paths:
       responses:
         "200":
           description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        value:
+                          type: string
+                  nextLink:
+                    type: string
   /test-runs/{test_run_id}/metrics?api-version=2025-11-01-preview:
     post:
       operationId: _LoadTestRunClient_list_metrics
