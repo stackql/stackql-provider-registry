@@ -534,11 +534,11 @@ components:
       additionalProperties: false
       properties:
         LogGroupName:
-          description: 'Sets a custom AWS CloudWatch log group name for egress logs. If a log group name isn''t specified, the default name is used: /aws/MediaPackage/VodEgressAccessLogs.'
+          description: 'Sets a custom AWS CloudWatch log group name for access logs. If a log group name isn''t specified, the defaults are used: /aws/MediaPackage/EgressAccessLogs for egress access logs and /aws/MediaPackage/IngressAccessLogs for ingress access logs.'
           type: string
-          pattern: \A\/aws\/MediaPackage\/[0-9a-zA-Z-_\/\.#]+\Z
+          pattern: \A^(\/aws\/MediaPackage\/)[a-zA-Z0-9_-]+\Z
           minLength: 1
-          maxLength: 512
+          maxLength: 256
     Channel:
       type: object
       properties:
@@ -616,183 +616,328 @@ components:
         list:
           - mediapackage:ListChannels
     MssPackage:
+      description: A Microsoft Smooth Streaming (MSS) packaging configuration.
       type: object
-      description: A Microsoft Smooth Streaming (MSS) PackagingConfiguration.
       additionalProperties: false
       properties:
+        ManifestWindowSeconds:
+          description: The time window (in seconds) contained in each manifest.
+          type: integer
+        SegmentDurationSeconds:
+          description: The duration (in seconds) of each segment.
+          type: integer
         Encryption:
           $ref: '#/components/schemas/MssEncryption'
-        MssManifests:
-          description: A list of MSS manifest configurations.
-          type: array
-          items:
-            $ref: '#/components/schemas/MssManifest'
-        SegmentDurationSeconds:
-          $ref: '#/components/schemas/SegmentDurationSeconds'
-      required:
-        - MssManifests
+        StreamSelection:
+          $ref: '#/components/schemas/StreamSelection'
     MssEncryption:
-      description: A CMAF encryption configuration.
+      description: A Microsoft Smooth Streaming (MSS) encryption configuration.
       type: object
       additionalProperties: false
+      required:
+        - SpekeKeyProvider
       properties:
         SpekeKeyProvider:
           $ref: '#/components/schemas/SpekeKeyProvider'
-      required:
-        - SpekeKeyProvider
     DashPackage:
-      type: object
       description: A Dynamic Adaptive Streaming over HTTP (DASH) packaging configuration.
+      type: object
       additionalProperties: false
       properties:
-        DashManifests:
-          description: A list of DASH manifest configurations.
-          type: array
-          items:
-            $ref: '#/components/schemas/DashManifest'
-        Encryption:
-          $ref: '#/components/schemas/DashEncryption'
+        SegmentDurationSeconds:
+          description: Duration (in seconds) of each segment. Actual segments will be rounded to the nearest multiple of the source segment duration.
+          type: integer
+        ManifestWindowSeconds:
+          description: Time window (in seconds) contained in each manifest.
+          type: integer
+        Profile:
+          description: The Dynamic Adaptive Streaming over HTTP (DASH) profile type.  When set to "HBBTV_1_5", HbbTV 1.5 compliant output is enabled.
+          type: string
+          enum:
+            - NONE
+            - HBBTV_1_5
+            - HYBRIDCAST
+            - DVB_DASH_2014
+        MinUpdatePeriodSeconds:
+          description: Minimum duration (in seconds) between potential changes to the Dynamic Adaptive Streaming over HTTP (DASH) Media Presentation Description (MPD).
+          type: integer
+        MinBufferTimeSeconds:
+          description: Minimum duration (in seconds) that a player will buffer media before starting the presentation.
+          type: integer
+        SuggestedPresentationDelaySeconds:
+          description: Duration (in seconds) to delay live content before presentation.
+          type: integer
         PeriodTriggers:
-          description: A list of triggers that controls when the outgoing Dynamic Adaptive Streaming over HTTP (DASH) Media Presentation Description (MPD) will be partitioned into multiple periods. If empty, the content will not be partitioned into more than one period. If the list contains "ADS", new periods will be created where the Asset contains SCTE-35 ad markers.
+          description: A list of triggers that controls when the outgoing Dynamic Adaptive Streaming over HTTP (DASH) Media Presentation Description (MPD) will be partitioned into multiple periods. If empty, the content will not be partitioned into more than one period. If the list contains "ADS", new periods will be created where the Channel source contains SCTE-35 ad markers.
           type: array
           items:
             type: string
             enum:
               - ADS
-        SegmentDurationSeconds:
-          $ref: '#/components/schemas/SegmentDurationSeconds'
+        IncludeIframeOnlyStream:
+          description: When enabled, an I-Frame only stream will be included in the output.
+          type: boolean
+        ManifestLayout:
+          description: Determines the position of some tags in the Media Presentation Description (MPD).  When set to FULL, elements like SegmentTemplate and ContentProtection are included in each Representation.  When set to COMPACT, duplicate elements are combined and presented at the AdaptationSet level.
+          type: string
+          enum:
+            - FULL
+            - COMPACT
+            - DRM_TOP_LEVEL_COMPACT
         SegmentTemplateFormat:
-          description: Determines the type of SegmentTemplate included in the Media Presentation Description (MPD). When set to NUMBER_WITH_TIMELINE, a full timeline is presented in each SegmentTemplate, with $Number$ media URLs. When set to TIME_WITH_TIMELINE, a full timeline is presented in each SegmentTemplate, with $Time$ media URLs. When set to NUMBER_WITH_DURATION, only a duration is included in each SegmentTemplate, with $Number$ media URLs.
+          description: Determines the type of SegmentTemplate included in the Media Presentation Description (MPD).  When set to NUMBER_WITH_TIMELINE, a full timeline is presented in each SegmentTemplate, with $Number$ media URLs.  When set to TIME_WITH_TIMELINE, a full timeline is presented in each SegmentTemplate, with $Time$ media URLs. When set to NUMBER_WITH_DURATION, only a duration is included in each SegmentTemplate, with $Number$ media URLs.
           type: string
           enum:
             - NUMBER_WITH_TIMELINE
             - TIME_WITH_TIMELINE
             - NUMBER_WITH_DURATION
-        IncludeEncoderConfigurationInSegments:
-          description: When includeEncoderConfigurationInSegments is set to true, MediaPackage places your encoder's Sequence Parameter Set (SPS), Picture Parameter Set (PPS), and Video Parameter Set (VPS) metadata in every video segment instead of in the init fragment. This lets you use different SPS/PPS/VPS settings for your assets during content playback.
-          type: boolean
-        IncludeIframeOnlyStream:
-          description: When enabled, an I-Frame only stream will be included in the output.
-          type: boolean
-      required:
-        - DashManifests
+        AdTriggers:
+          description: A list of SCTE-35 message types that are treated as ad markers in the output.  If empty, no ad markers are output.  Specify multiple items to create ad markers for all of the included message types.
+          type: array
+          items:
+            type: string
+            enum:
+              - SPLICE_INSERT
+              - BREAK
+              - PROVIDER_ADVERTISEMENT
+              - DISTRIBUTOR_ADVERTISEMENT
+              - PROVIDER_PLACEMENT_OPPORTUNITY
+              - DISTRIBUTOR_PLACEMENT_OPPORTUNITY
+              - PROVIDER_OVERLAY_PLACEMENT_OPPORTUNITY
+              - DISTRIBUTOR_OVERLAY_PLACEMENT_OPPORTUNITY
+        AdsOnDeliveryRestrictions:
+          $ref: '#/components/schemas/AdsOnDeliveryRestrictions'
+        Encryption:
+          $ref: '#/components/schemas/DashEncryption'
+        StreamSelection:
+          $ref: '#/components/schemas/StreamSelection'
+        UtcTiming:
+          description: Determines the type of UTCTiming included in the Media Presentation Description (MPD)
+          type: string
+          enum:
+            - HTTP-XSDATE
+            - HTTP-ISO
+            - HTTP-HEAD
+            - NONE
+        UtcTimingUri:
+          description: Specifies the value attribute of the UTCTiming field when utcTiming is set to HTTP-ISO, HTTP-HEAD or HTTP-XSDATE
+          type: string
     DashEncryption:
-      type: object
       description: A Dynamic Adaptive Streaming over HTTP (DASH) encryption configuration.
+      type: object
       additionalProperties: false
-      properties:
-        SpekeKeyProvider:
-          $ref: '#/components/schemas/SpekeKeyProvider'
       required:
         - SpekeKeyProvider
+      properties:
+        KeyRotationIntervalSeconds:
+          description: Time (in seconds) between each encryption key rotation.
+          type: integer
+        SpekeKeyProvider:
+          $ref: '#/components/schemas/SpekeKeyProvider'
     Authorization:
+      description: CDN Authorization credentials
       type: object
       additionalProperties: false
+      required:
+        - SecretsRoleArn
+        - CdnIdentifierSecret
       properties:
-        CdnIdentifierSecret:
-          description: The Amazon Resource Name (ARN) for the secret in AWS Secrets Manager that is used for CDN authorization.
-          type: string
         SecretsRoleArn:
           description: The Amazon Resource Name (ARN) for the IAM role that allows MediaPackage to communicate with AWS Secrets Manager.
           type: string
-      required:
-        - CdnIdentifierSecret
-        - SecretsRoleArn
+        CdnIdentifierSecret:
+          description: The Amazon Resource Name (ARN) for the secret in Secrets Manager that your Content Distribution Network (CDN) uses for authorization to access your endpoint.
+          type: string
     HlsPackage:
       description: An HTTP Live Streaming (HLS) packaging configuration.
       type: object
       additionalProperties: false
       properties:
-        Encryption:
-          $ref: '#/components/schemas/HlsEncryption'
-        HlsManifests:
-          description: A list of HLS manifest configurations.
+        SegmentDurationSeconds:
+          description: Duration (in seconds) of each fragment. Actual fragments will be rounded to the nearest multiple of the source fragment duration.
+          type: integer
+        PlaylistWindowSeconds:
+          description: Time window (in seconds) contained in each parent manifest.
+          type: integer
+        PlaylistType:
+          description: The HTTP Live Streaming (HLS) playlist type. When either "EVENT" or "VOD" is specified, a corresponding EXT-X-PLAYLIST-TYPE entry will be included in the media playlist.
+          type: string
+          enum:
+            - NONE
+            - EVENT
+            - VOD
+        AdMarkers:
+          description: >-
+            This setting controls how ad markers are included in the packaged OriginEndpoint. "NONE" will omit all SCTE-35 ad markers from the output. "PASSTHROUGH" causes the manifest to contain a copy of the SCTE-35 ad markers (comments) taken directly from the input HTTP Live Streaming (HLS) manifest. "SCTE35_ENHANCED" generates ad markers and blackout tags based on SCTE-35 messages in the input source. "DATERANGE" inserts EXT-X-DATERANGE tags to signal ad and program transition events in HLS
+            and CMAF manifests. For this option, you must set a programDateTimeIntervalSeconds value that is greater than 0.
+          type: string
+          enum:
+            - NONE
+            - SCTE35_ENHANCED
+            - PASSTHROUGH
+            - DATERANGE
+        AdTriggers:
+          description: A list of SCTE-35 message types that are treated as ad markers in the output.  If empty, no ad markers are output.  Specify multiple items to create ad markers for all of the included message types.
           type: array
           items:
-            $ref: '#/components/schemas/HlsManifest'
-        IncludeDvbSubtitles:
-          description: When enabled, MediaPackage passes through digital video broadcasting (DVB) subtitles into the output.
+            type: string
+            enum:
+              - SPLICE_INSERT
+              - BREAK
+              - PROVIDER_ADVERTISEMENT
+              - DISTRIBUTOR_ADVERTISEMENT
+              - PROVIDER_PLACEMENT_OPPORTUNITY
+              - DISTRIBUTOR_PLACEMENT_OPPORTUNITY
+              - PROVIDER_OVERLAY_PLACEMENT_OPPORTUNITY
+              - DISTRIBUTOR_OVERLAY_PLACEMENT_OPPORTUNITY
+        AdsOnDeliveryRestrictions:
+          $ref: '#/components/schemas/AdsOnDeliveryRestrictions'
+        ProgramDateTimeIntervalSeconds:
+          description: >-
+            The interval (in seconds) between each EXT-X-PROGRAM-DATE-TIME tag inserted into manifests. Additionally, when an interval is specified ID3Timed Metadata messages will be generated every 5 seconds using the ingest time of the content. If the interval is not specified, or set to 0, then no EXT-X-PROGRAM-DATE-TIME tags will be inserted into manifests and no ID3Timed Metadata messages will be generated. Note that irrespective of this parameter, if any ID3 Timed Metadata is found in HTTP
+            Live Streaming (HLS) input, it will be passed through to HLS output.
+          type: integer
+        IncludeIframeOnlyStream:
+          description: When enabled, an I-Frame only stream will be included in the output.
           type: boolean
-        SegmentDurationSeconds:
-          $ref: '#/components/schemas/SegmentDurationSeconds'
         UseAudioRenditionGroup:
           description: When enabled, audio streams will be placed in rendition groups in the output.
           type: boolean
-      required:
-        - HlsManifests
+        IncludeDvbSubtitles:
+          description: When enabled, MediaPackage passes through digital video broadcasting (DVB) subtitles into the output.
+          type: boolean
+        Encryption:
+          $ref: '#/components/schemas/HlsEncryption'
+        StreamSelection:
+          $ref: '#/components/schemas/StreamSelection'
     HlsEncryption:
       description: An HTTP Live Streaming (HLS) encryption configuration.
       type: object
       additionalProperties: false
+      required:
+        - SpekeKeyProvider
       properties:
-        ConstantInitializationVector:
-          description: An HTTP Live Streaming (HLS) encryption configuration.
-          type: string
         EncryptionMethod:
           description: The encryption method to use.
           type: string
           enum:
             - AES_128
             - SAMPLE_AES
+        ConstantInitializationVector:
+          description: A constant initialization vector for encryption (optional). When not specified the initialization vector will be periodically rotated.
+          type: string
+        KeyRotationIntervalSeconds:
+          description: Interval (in seconds) between each encryption key rotation.
+          type: integer
+        RepeatExtXKey:
+          description: When enabled, the EXT-X-KEY tag will be repeated in output manifests.
+          type: boolean
         SpekeKeyProvider:
           $ref: '#/components/schemas/SpekeKeyProvider'
-      required:
-        - SpekeKeyProvider
     CmafPackage:
-      description: A CMAF packaging configuration.
+      description: A Common Media Application Format (CMAF) packaging configuration.
       type: object
       additionalProperties: false
       properties:
+        SegmentDurationSeconds:
+          description: Duration (in seconds) of each segment. Actual segments will be rounded to the nearest multiple of the source segment duration.
+          type: integer
+        SegmentPrefix:
+          description: An optional custom string that is prepended to the name of each segment. If not specified, it defaults to the ChannelId.
+          type: string
         Encryption:
           $ref: '#/components/schemas/CmafEncryption'
+        StreamSelection:
+          $ref: '#/components/schemas/StreamSelection'
         HlsManifests:
-          description: A list of HLS manifest configurations.
+          description: A list of HLS manifest configurations
           type: array
           items:
             $ref: '#/components/schemas/HlsManifest'
-        SegmentDurationSeconds:
-          $ref: '#/components/schemas/SegmentDurationSeconds'
-        IncludeEncoderConfigurationInSegments:
-          description: When includeEncoderConfigurationInSegments is set to true, MediaPackage places your encoder's Sequence Parameter Set (SPS), Picture Parameter Set (PPS), and Video Parameter Set (VPS) metadata in every video segment instead of in the init fragment. This lets you use different SPS/PPS/VPS settings for your assets during content playback.
-          type: boolean
-      required:
-        - HlsManifests
     CmafEncryption:
+      description: A Common Media Application Format (CMAF) encryption configuration.
       type: object
-      description: A CMAF encryption configuration.
       additionalProperties: false
-      properties:
-        SpekeKeyProvider:
-          $ref: '#/components/schemas/SpekeKeyProvider'
       required:
         - SpekeKeyProvider
+      properties:
+        KeyRotationIntervalSeconds:
+          description: Time (in seconds) between each encryption key rotation.
+          type: integer
+        SpekeKeyProvider:
+          $ref: '#/components/schemas/SpekeKeyProvider'
+        ConstantInitializationVector:
+          description: An optional 128-bit, 16-byte hex value represented by a 32-character string, used in conjunction with the key for encrypting blocks. If you don't specify a value, then MediaPackage creates the constant initialization vector (IV).
+          type: string
+          pattern: \A[0-9a-fA-F]+\Z
+          minLength: 32
+          maxLength: 32
+        EncryptionMethod:
+          description: The encryption method used
+          type: string
+          enum:
+            - SAMPLE_AES
+            - AES_CTR
     HlsManifest:
-      description: An HTTP Live Streaming (HLS) manifest configuration.
+      description: A HTTP Live Streaming (HLS) manifest configuration.
       type: object
       additionalProperties: false
+      required:
+        - Id
       properties:
+        Id:
+          description: The ID of the manifest. The ID must be unique within the OriginEndpoint and it cannot be changed after it is created.
+          type: string
+        ManifestName:
+          description: An optional short string appended to the end of the OriginEndpoint URL. If not specified, defaults to the manifestName for the OriginEndpoint.
+          type: string
+        Url:
+          description: The URL of the packaged OriginEndpoint for consumption.
+          type: string
+        PlaylistWindowSeconds:
+          description: Time window (in seconds) contained in each parent manifest.
+          type: integer
+        PlaylistType:
+          description: The HTTP Live Streaming (HLS) playlist type. When either "EVENT" or "VOD" is specified, a corresponding EXT-X-PLAYLIST-TYPE entry will be included in the media playlist.
+          type: string
+          enum:
+            - NONE
+            - EVENT
+            - VOD
         AdMarkers:
-          description: This setting controls how ad markers are included in the packaged OriginEndpoint. "NONE" will omit all SCTE-35 ad markers from the output. "PASSTHROUGH" causes the manifest to contain a copy of the SCTE-35 ad markers (comments) taken directly from the input HTTP Live Streaming (HLS) manifest. "SCTE35_ENHANCED" generates ad markers and blackout tags based on SCTE-35 messages in the input source.
+          description: >-
+            This setting controls how ad markers are included in the packaged OriginEndpoint. "NONE" will omit all SCTE-35 ad markers from the output. "PASSTHROUGH" causes the manifest to contain a copy of the SCTE-35 ad markers (comments) taken directly from the input HTTP Live Streaming (HLS) manifest. "SCTE35_ENHANCED" generates ad markers and blackout tags based on SCTE-35 messages in the input source. "DATERANGE" inserts EXT-X-DATERANGE tags to signal ad and program transition events in HLS
+            and CMAF manifests. For this option, you must set a programDateTimeIntervalSeconds value that is greater than 0.
           type: string
           enum:
             - NONE
             - SCTE35_ENHANCED
             - PASSTHROUGH
-        IncludeIframeOnlyStream:
-          description: When enabled, an I-Frame only stream will be included in the output.
-          type: boolean
-        ManifestName:
-          $ref: '#/components/schemas/ManifestName'
+            - DATERANGE
         ProgramDateTimeIntervalSeconds:
           description: >-
             The interval (in seconds) between each EXT-X-PROGRAM-DATE-TIME tag inserted into manifests. Additionally, when an interval is specified ID3Timed Metadata messages will be generated every 5 seconds using the ingest time of the content. If the interval is not specified, or set to 0, then no EXT-X-PROGRAM-DATE-TIME tags will be inserted into manifests and no ID3Timed Metadata messages will be generated. Note that irrespective of this parameter, if any ID3 Timed Metadata is found in HTTP
             Live Streaming (HLS) input, it will be passed through to HLS output.
           type: integer
-        RepeatExtXKey:
-          description: When enabled, the EXT-X-KEY tag will be repeated in output manifests.
+        IncludeIframeOnlyStream:
+          description: When enabled, an I-Frame only stream will be included in the output.
           type: boolean
-        StreamSelection:
-          $ref: '#/components/schemas/StreamSelection'
+        AdTriggers:
+          description: A list of SCTE-35 message types that are treated as ad markers in the output.  If empty, no ad markers are output.  Specify multiple items to create ad markers for all of the included message types.
+          type: array
+          items:
+            type: string
+            enum:
+              - SPLICE_INSERT
+              - BREAK
+              - PROVIDER_ADVERTISEMENT
+              - DISTRIBUTOR_ADVERTISEMENT
+              - PROVIDER_PLACEMENT_OPPORTUNITY
+              - DISTRIBUTOR_PLACEMENT_OPPORTUNITY
+              - PROVIDER_OVERLAY_PLACEMENT_OPPORTUNITY
+              - DISTRIBUTOR_OVERLAY_PLACEMENT_OPPORTUNITY
+        AdsOnDeliveryRestrictions:
+          $ref: '#/components/schemas/AdsOnDeliveryRestrictions'
     StreamSelection:
       description: A StreamSelection configuration.
       type: object
@@ -815,11 +960,15 @@ components:
       description: A configuration for accessing an external Secure Packager and Encoder Key Exchange (SPEKE) service that will provide encryption keys.
       type: object
       additionalProperties: false
+      required:
+        - ResourceId
+        - SystemIds
+        - Url
+        - RoleArn
       properties:
-        EncryptionContractConfiguration:
-          $ref: '#/components/schemas/EncryptionContractConfiguration'
-        RoleArn:
-          $ref: '#/components/schemas/RoleArn'
+        ResourceId:
+          description: The resource ID to include in key requests.
+          type: string
         SystemIds:
           description: The system IDs to include in key requests.
           type: array
@@ -828,10 +977,14 @@ components:
         Url:
           description: The URL of the external key provider service.
           type: string
-      required:
-        - RoleArn
-        - SystemIds
-        - Url
+        RoleArn:
+          description: An Amazon Resource Name (ARN) of an IAM role that AWS Elemental MediaPackage will assume when accessing the key provider service.
+          type: string
+        CertificateArn:
+          description: An Amazon Resource Name (ARN) of a Certificate Manager certificate that MediaPackage will use for enforcing secure end-to-end data transfer with the key provider service.
+          type: string
+        EncryptionContractConfiguration:
+          $ref: '#/components/schemas/EncryptionContractConfiguration'
     EncryptionContractConfiguration:
       description: The configuration to use for encrypting one or more content tracks separately for endpoints that use SPEKE 2.0.
       type: object
@@ -979,12 +1132,60 @@ components:
     RoleArn:
       description: An Amazon Resource Name (ARN) of an IAM role that AWS Elemental MediaPackage will assume when accessing the key provider service.
       type: string
+    PackagingConfiguration_SpekeKeyProvider:
+      description: A configuration for accessing an external Secure Packager and Encoder Key Exchange (SPEKE) service that will provide encryption keys.
+      type: object
+      additionalProperties: false
+      properties:
+        EncryptionContractConfiguration:
+          $ref: '#/components/schemas/EncryptionContractConfiguration'
+        RoleArn:
+          $ref: '#/components/schemas/RoleArn'
+        SystemIds:
+          description: The system IDs to include in key requests.
+          type: array
+          items:
+            type: string
+        Url:
+          description: The URL of the external key provider service.
+          type: string
+      required:
+        - RoleArn
+        - SystemIds
+        - Url
     SegmentDurationSeconds:
       description: Duration (in seconds) of each fragment. Actual fragments will be rounded to the nearest multiple of the source fragment duration.
       type: integer
     ManifestName:
       description: An optional string to include in the name of the manifest.
       type: string
+    PackagingConfiguration_HlsManifest:
+      description: An HTTP Live Streaming (HLS) manifest configuration.
+      type: object
+      additionalProperties: false
+      properties:
+        AdMarkers:
+          description: This setting controls how ad markers are included in the packaged OriginEndpoint. "NONE" will omit all SCTE-35 ad markers from the output. "PASSTHROUGH" causes the manifest to contain a copy of the SCTE-35 ad markers (comments) taken directly from the input HTTP Live Streaming (HLS) manifest. "SCTE35_ENHANCED" generates ad markers and blackout tags based on SCTE-35 messages in the input source.
+          type: string
+          enum:
+            - NONE
+            - SCTE35_ENHANCED
+            - PASSTHROUGH
+        IncludeIframeOnlyStream:
+          description: When enabled, an I-Frame only stream will be included in the output.
+          type: boolean
+        ManifestName:
+          $ref: '#/components/schemas/ManifestName'
+        ProgramDateTimeIntervalSeconds:
+          description: >-
+            The interval (in seconds) between each EXT-X-PROGRAM-DATE-TIME tag inserted into manifests. Additionally, when an interval is specified ID3Timed Metadata messages will be generated every 5 seconds using the ingest time of the content. If the interval is not specified, or set to 0, then no EXT-X-PROGRAM-DATE-TIME tags will be inserted into manifests and no ID3Timed Metadata messages will be generated. Note that irrespective of this parameter, if any ID3 Timed Metadata is found in HTTP
+            Live Streaming (HLS) input, it will be passed through to HLS output.
+          type: integer
+        RepeatExtXKey:
+          description: When enabled, the EXT-X-KEY tag will be repeated in output manifests.
+          type: boolean
+        StreamSelection:
+          $ref: '#/components/schemas/StreamSelection'
     DashManifest:
       description: A DASH manifest configuration.
       type: object
@@ -1024,6 +1225,144 @@ components:
           $ref: '#/components/schemas/ManifestName'
         StreamSelection:
           $ref: '#/components/schemas/StreamSelection'
+    PackagingConfiguration_CmafEncryption:
+      type: object
+      description: A CMAF encryption configuration.
+      additionalProperties: false
+      properties:
+        SpekeKeyProvider:
+          $ref: '#/components/schemas/PackagingConfiguration_SpekeKeyProvider'
+      required:
+        - SpekeKeyProvider
+    PackagingConfiguration_CmafPackage:
+      description: A CMAF packaging configuration.
+      type: object
+      additionalProperties: false
+      properties:
+        Encryption:
+          $ref: '#/components/schemas/PackagingConfiguration_CmafEncryption'
+        HlsManifests:
+          description: A list of HLS manifest configurations.
+          type: array
+          items:
+            $ref: '#/components/schemas/PackagingConfiguration_HlsManifest'
+        SegmentDurationSeconds:
+          $ref: '#/components/schemas/SegmentDurationSeconds'
+        IncludeEncoderConfigurationInSegments:
+          description: When includeEncoderConfigurationInSegments is set to true, MediaPackage places your encoder's Sequence Parameter Set (SPS), Picture Parameter Set (PPS), and Video Parameter Set (VPS) metadata in every video segment instead of in the init fragment. This lets you use different SPS/PPS/VPS settings for your assets during content playback.
+          type: boolean
+      required:
+        - HlsManifests
+    PackagingConfiguration_DashEncryption:
+      type: object
+      description: A Dynamic Adaptive Streaming over HTTP (DASH) encryption configuration.
+      additionalProperties: false
+      properties:
+        SpekeKeyProvider:
+          $ref: '#/components/schemas/PackagingConfiguration_SpekeKeyProvider'
+      required:
+        - SpekeKeyProvider
+    PackagingConfiguration_DashPackage:
+      type: object
+      description: A Dynamic Adaptive Streaming over HTTP (DASH) packaging configuration.
+      additionalProperties: false
+      properties:
+        DashManifests:
+          description: A list of DASH manifest configurations.
+          type: array
+          items:
+            $ref: '#/components/schemas/DashManifest'
+        Encryption:
+          $ref: '#/components/schemas/PackagingConfiguration_DashEncryption'
+        PeriodTriggers:
+          description: A list of triggers that controls when the outgoing Dynamic Adaptive Streaming over HTTP (DASH) Media Presentation Description (MPD) will be partitioned into multiple periods. If empty, the content will not be partitioned into more than one period. If the list contains "ADS", new periods will be created where the Asset contains SCTE-35 ad markers.
+          type: array
+          items:
+            type: string
+            enum:
+              - ADS
+        SegmentDurationSeconds:
+          $ref: '#/components/schemas/SegmentDurationSeconds'
+        SegmentTemplateFormat:
+          description: Determines the type of SegmentTemplate included in the Media Presentation Description (MPD). When set to NUMBER_WITH_TIMELINE, a full timeline is presented in each SegmentTemplate, with $Number$ media URLs. When set to TIME_WITH_TIMELINE, a full timeline is presented in each SegmentTemplate, with $Time$ media URLs. When set to NUMBER_WITH_DURATION, only a duration is included in each SegmentTemplate, with $Number$ media URLs.
+          type: string
+          enum:
+            - NUMBER_WITH_TIMELINE
+            - TIME_WITH_TIMELINE
+            - NUMBER_WITH_DURATION
+        IncludeEncoderConfigurationInSegments:
+          description: When includeEncoderConfigurationInSegments is set to true, MediaPackage places your encoder's Sequence Parameter Set (SPS), Picture Parameter Set (PPS), and Video Parameter Set (VPS) metadata in every video segment instead of in the init fragment. This lets you use different SPS/PPS/VPS settings for your assets during content playback.
+          type: boolean
+        IncludeIframeOnlyStream:
+          description: When enabled, an I-Frame only stream will be included in the output.
+          type: boolean
+      required:
+        - DashManifests
+    PackagingConfiguration_HlsEncryption:
+      description: An HTTP Live Streaming (HLS) encryption configuration.
+      type: object
+      additionalProperties: false
+      properties:
+        ConstantInitializationVector:
+          description: An HTTP Live Streaming (HLS) encryption configuration.
+          type: string
+        EncryptionMethod:
+          description: The encryption method to use.
+          type: string
+          enum:
+            - AES_128
+            - SAMPLE_AES
+        SpekeKeyProvider:
+          $ref: '#/components/schemas/PackagingConfiguration_SpekeKeyProvider'
+      required:
+        - SpekeKeyProvider
+    PackagingConfiguration_HlsPackage:
+      description: An HTTP Live Streaming (HLS) packaging configuration.
+      type: object
+      additionalProperties: false
+      properties:
+        Encryption:
+          $ref: '#/components/schemas/PackagingConfiguration_HlsEncryption'
+        HlsManifests:
+          description: A list of HLS manifest configurations.
+          type: array
+          items:
+            $ref: '#/components/schemas/PackagingConfiguration_HlsManifest'
+        IncludeDvbSubtitles:
+          description: When enabled, MediaPackage passes through digital video broadcasting (DVB) subtitles into the output.
+          type: boolean
+        SegmentDurationSeconds:
+          $ref: '#/components/schemas/SegmentDurationSeconds'
+        UseAudioRenditionGroup:
+          description: When enabled, audio streams will be placed in rendition groups in the output.
+          type: boolean
+      required:
+        - HlsManifests
+    PackagingConfiguration_MssEncryption:
+      description: A CMAF encryption configuration.
+      type: object
+      additionalProperties: false
+      properties:
+        SpekeKeyProvider:
+          $ref: '#/components/schemas/PackagingConfiguration_SpekeKeyProvider'
+      required:
+        - SpekeKeyProvider
+    PackagingConfiguration_MssPackage:
+      type: object
+      description: A Microsoft Smooth Streaming (MSS) PackagingConfiguration.
+      additionalProperties: false
+      properties:
+        Encryption:
+          $ref: '#/components/schemas/PackagingConfiguration_MssEncryption'
+        MssManifests:
+          description: A list of MSS manifest configurations.
+          type: array
+          items:
+            $ref: '#/components/schemas/MssManifest'
+        SegmentDurationSeconds:
+          $ref: '#/components/schemas/SegmentDurationSeconds'
+      required:
+        - MssManifests
     PackagingConfiguration:
       type: object
       properties:
@@ -1038,16 +1377,16 @@ components:
           type: string
         CmafPackage:
           description: A CMAF packaging configuration.
-          $ref: '#/components/schemas/CmafPackage'
+          $ref: '#/components/schemas/PackagingConfiguration_CmafPackage'
         DashPackage:
           description: A Dynamic Adaptive Streaming over HTTP (DASH) packaging configuration.
-          $ref: '#/components/schemas/DashPackage'
+          $ref: '#/components/schemas/PackagingConfiguration_DashPackage'
         HlsPackage:
           description: An HTTP Live Streaming (HLS) packaging configuration.
-          $ref: '#/components/schemas/HlsPackage'
+          $ref: '#/components/schemas/PackagingConfiguration_HlsPackage'
         MssPackage:
           description: A Microsoft Smooth Streaming (MSS) PackagingConfiguration.
-          $ref: '#/components/schemas/MssPackage'
+          $ref: '#/components/schemas/PackagingConfiguration_MssPackage'
         Tags:
           description: A collection of tags associated with a resource
           type: array
@@ -1093,6 +1432,29 @@ components:
         list:
           - mediapackage-vod:ListPackagingConfigurations
           - mediapackage-vod:DescribePackagingGroup
+    PackagingGroup_Authorization:
+      type: object
+      additionalProperties: false
+      properties:
+        CdnIdentifierSecret:
+          description: The Amazon Resource Name (ARN) for the secret in AWS Secrets Manager that is used for CDN authorization.
+          type: string
+        SecretsRoleArn:
+          description: The Amazon Resource Name (ARN) for the IAM role that allows MediaPackage to communicate with AWS Secrets Manager.
+          type: string
+      required:
+        - CdnIdentifierSecret
+        - SecretsRoleArn
+    PackagingGroup_LogConfiguration:
+      type: object
+      additionalProperties: false
+      properties:
+        LogGroupName:
+          description: 'Sets a custom AWS CloudWatch log group name for egress logs. If a log group name isn''t specified, the default name is used: /aws/MediaPackage/VodEgressAccessLogs.'
+          type: string
+          pattern: \A\/aws\/MediaPackage\/[0-9a-zA-Z-_\/\.#]+\Z
+          minLength: 1
+          maxLength: 512
     PackagingGroup:
       type: object
       properties:
@@ -1110,7 +1472,7 @@ components:
           type: string
         Authorization:
           description: CDN Authorization
-          $ref: '#/components/schemas/Authorization'
+          $ref: '#/components/schemas/PackagingGroup_Authorization'
         Tags:
           description: A collection of tags associated with a resource
           type: array
@@ -1119,7 +1481,7 @@ components:
             $ref: '#/components/schemas/Tag'
         EgressAccessLogs:
           description: The configuration parameters for egress access logging.
-          $ref: '#/components/schemas/LogConfiguration'
+          $ref: '#/components/schemas/PackagingGroup_LogConfiguration'
       required:
         - Id
       x-stackql-resource-name: packaging_group
@@ -1355,16 +1717,16 @@ components:
               type: string
             CmafPackage:
               description: A CMAF packaging configuration.
-              $ref: '#/components/schemas/CmafPackage'
+              $ref: '#/components/schemas/PackagingConfiguration_CmafPackage'
             DashPackage:
               description: A Dynamic Adaptive Streaming over HTTP (DASH) packaging configuration.
-              $ref: '#/components/schemas/DashPackage'
+              $ref: '#/components/schemas/PackagingConfiguration_DashPackage'
             HlsPackage:
               description: An HTTP Live Streaming (HLS) packaging configuration.
-              $ref: '#/components/schemas/HlsPackage'
+              $ref: '#/components/schemas/PackagingConfiguration_HlsPackage'
             MssPackage:
               description: A Microsoft Smooth Streaming (MSS) PackagingConfiguration.
-              $ref: '#/components/schemas/MssPackage'
+              $ref: '#/components/schemas/PackagingConfiguration_MssPackage'
             Tags:
               description: A collection of tags associated with a resource
               type: array
@@ -1402,7 +1764,7 @@ components:
               type: string
             Authorization:
               description: CDN Authorization
-              $ref: '#/components/schemas/Authorization'
+              $ref: '#/components/schemas/PackagingGroup_Authorization'
             Tags:
               description: A collection of tags associated with a resource
               type: array
@@ -1411,7 +1773,7 @@ components:
                 $ref: '#/components/schemas/Tag'
             EgressAccessLogs:
               description: The configuration parameters for egress access logging.
-              $ref: '#/components/schemas/LogConfiguration'
+              $ref: '#/components/schemas/PackagingGroup_LogConfiguration'
           x-stackQL-stringOnly: true
       x-title: CreatePackagingGroupRequest
       type: object
@@ -1429,7 +1791,7 @@ components:
       id: awscc.mediapackage.assets
       x-cfn-schema-name: Asset
       x-cfn-type-name: AWS::MediaPackage::Asset
-      x-identifiers:
+      x-identifiers: &ref_0
         - Id
       x-type: cloud_control
       methods:
@@ -1514,8 +1876,7 @@ components:
       id: awscc.mediapackage.assets_list_only
       x-cfn-schema-name: Asset
       x-cfn-type-name: AWS::MediaPackage::Asset
-      x-identifiers:
-        - Id
+      x-identifiers: *ref_0
       x-type: cloud_control_view
       methods: {}
       sqlVerbs:
@@ -1545,7 +1906,7 @@ components:
       id: awscc.mediapackage.channels
       x-cfn-schema-name: Channel
       x-cfn-type-name: AWS::MediaPackage::Channel
-      x-identifiers:
+      x-identifiers: &ref_1
         - Id
       x-type: cloud_control
       methods:
@@ -1643,8 +2004,7 @@ components:
       id: awscc.mediapackage.channels_list_only
       x-cfn-schema-name: Channel
       x-cfn-type-name: AWS::MediaPackage::Channel
-      x-identifiers:
-        - Id
+      x-identifiers: *ref_1
       x-type: cloud_control_view
       methods: {}
       sqlVerbs:
@@ -1674,7 +2034,7 @@ components:
       id: awscc.mediapackage.origin_endpoints
       x-cfn-schema-name: OriginEndpoint
       x-cfn-type-name: AWS::MediaPackage::OriginEndpoint
-      x-identifiers:
+      x-identifiers: &ref_2
         - Id
       x-type: cloud_control
       methods:
@@ -1790,8 +2150,7 @@ components:
       id: awscc.mediapackage.origin_endpoints_list_only
       x-cfn-schema-name: OriginEndpoint
       x-cfn-type-name: AWS::MediaPackage::OriginEndpoint
-      x-identifiers:
-        - Id
+      x-identifiers: *ref_2
       x-type: cloud_control_view
       methods: {}
       sqlVerbs:
@@ -1821,7 +2180,7 @@ components:
       id: awscc.mediapackage.packaging_configurations
       x-cfn-schema-name: PackagingConfiguration
       x-cfn-type-name: AWS::MediaPackage::PackagingConfiguration
-      x-identifiers:
+      x-identifiers: &ref_3
         - Id
       x-type: cloud_control
       methods:
@@ -1904,8 +2263,7 @@ components:
       id: awscc.mediapackage.packaging_configurations_list_only
       x-cfn-schema-name: PackagingConfiguration
       x-cfn-type-name: AWS::MediaPackage::PackagingConfiguration
-      x-identifiers:
-        - Id
+      x-identifiers: *ref_3
       x-type: cloud_control_view
       methods: {}
       sqlVerbs:
@@ -1935,7 +2293,7 @@ components:
       id: awscc.mediapackage.packaging_groups
       x-cfn-schema-name: PackagingGroup
       x-cfn-type-name: AWS::MediaPackage::PackagingGroup
-      x-identifiers:
+      x-identifiers: &ref_4
         - Id
       x-type: cloud_control
       methods:
@@ -2031,8 +2389,7 @@ components:
       id: awscc.mediapackage.packaging_groups_list_only
       x-cfn-schema-name: PackagingGroup
       x-cfn-type-name: AWS::MediaPackage::PackagingGroup
-      x-identifiers:
-        - Id
+      x-identifiers: *ref_4
       x-type: cloud_control_view
       methods: {}
       sqlVerbs:
