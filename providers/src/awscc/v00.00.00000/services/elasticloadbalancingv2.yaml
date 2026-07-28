@@ -480,6 +480,13 @@ components:
               +  authenticate```` - Redirect the request to the IdP authorization endpoint. This is the default value.
           type: string
         UserPoolClientId:
+          anyOf:
+            - relationshipRef:
+                typeName: AWS::Cognito::UserPoolClient
+                propertyPath: /properties/UserPoolId
+            - relationshipRef:
+                typeName: AWS::Cognito::UserPoolClient
+                propertyPath: /properties/ClientId
           description: The ID of the Amazon Cognito user pool client.
           type: string
         UserPoolDomain:
@@ -487,7 +494,7 @@ components:
           type: string
         SessionTimeout:
           description: The maximum duration of the authentication session, in seconds. The default is 604800 seconds (7 days).
-          type: integer
+          type: string
         Scope:
           description: |-
             The set of user claims to be requested from the IdP. The default is ``openid``.
@@ -504,7 +511,6 @@ components:
             '[a-zA-Z0-9]+':
               type: string
           description: The query parameters (up to 10) to include in the redirect request to the authorization endpoint.
-          additionalProperties: false
           type: object
       required:
         - UserPoolClientId
@@ -602,7 +608,6 @@ components:
         TargetGroups:
           uniqueItems: true
           description: Information about how traffic will be distributed between multiple target groups in a forward rule.
-          x-insertionOrder: false
           type: array
           items:
             $ref: '#/components/schemas/TargetGroupTuple'
@@ -631,7 +636,7 @@ components:
           type: boolean
         SessionTimeout:
           description: The maximum duration of the authentication session, in seconds. The default is 604800 seconds (7 days).
-          type: integer
+          type: string
         Scope:
           description: |-
             The set of user claims to be requested from the IdP. The default is ``openid``.
@@ -660,7 +665,6 @@ components:
             '[a-zA-Z0-9]+':
               type: string
           description: The query parameters (up to 10) to include in the redirect request to the authorization endpoint.
-          additionalProperties: false
           type: object
       required:
         - TokenEndpoint
@@ -777,6 +781,37 @@ components:
         delete:
           - elasticloadbalancing:DeleteListener
           - elasticloadbalancing:DescribeListeners
+    ListenerRule_Action:
+      description: Specifies an action for a listener rule.
+      additionalProperties: false
+      type: object
+      properties:
+        Order:
+          description: The order for the action. This value is required for rules with multiple actions. The action with the lowest value for order is performed first.
+          type: integer
+        TargetGroupArn:
+          description: The Amazon Resource Name (ARN) of the target group. Specify only when ``Type`` is ``forward`` and you want to route to a single target group. To route to one or more target groups, use ``ForwardConfig`` instead.
+          type: string
+        FixedResponseConfig:
+          description: '[Application Load Balancer] Information for creating an action that returns a custom HTTP response. Specify only when ``Type`` is ``fixed-response``.'
+          $ref: '#/components/schemas/FixedResponseConfig'
+        AuthenticateCognitoConfig:
+          description: '[HTTPS listeners] Information for using Amazon Cognito to authenticate users. Specify only when ``Type`` is ``authenticate-cognito``.'
+          $ref: '#/components/schemas/ListenerRule_AuthenticateCognitoConfig'
+        Type:
+          description: The type of action.
+          type: string
+        RedirectConfig:
+          description: '[Application Load Balancer] Information for creating a redirect action. Specify only when ``Type`` is ``redirect``.'
+          $ref: '#/components/schemas/RedirectConfig'
+        ForwardConfig:
+          description: Information for creating an action that distributes requests among one or more target groups. For Network Load Balancers, you can specify a single target group. Specify only when ``Type`` is ``forward``. If you specify both ``ForwardConfig`` and ``TargetGroupArn``, you can specify only one target group using ``ForwardConfig`` and it must be the same target group specified in ``TargetGroupArn``.
+          $ref: '#/components/schemas/ListenerRule_ForwardConfig'
+        AuthenticateOidcConfig:
+          description: '[HTTPS listeners] Information about an identity provider that is compliant with OpenID Connect (OIDC). Specify only when ``Type`` is ``authenticate-oidc``.'
+          $ref: '#/components/schemas/ListenerRule_AuthenticateOidcConfig'
+      required:
+        - Type
     RuleCondition:
       description: Specifies a condition for a listener rule.
       additionalProperties: false
@@ -874,6 +909,49 @@ components:
         HttpHeaderName:
           description: The name of the HTTP header field. The maximum size is 40 characters. The header name is case insensitive. The allowed characters are specified by RFC 7230. Wildcards are not supported.
           type: string
+    ListenerRule_AuthenticateCognitoConfig:
+      description: Specifies information required when integrating with Amazon Cognito to authenticate users.
+      additionalProperties: false
+      type: object
+      properties:
+        OnUnauthenticatedRequest:
+          description: |-
+            The behavior if the user is not authenticated. The following are possible values:
+              +  deny```` - Return an HTTP 401 Unauthorized error.
+              +  allow```` - Allow the request to be forwarded to the target.
+              +  authenticate```` - Redirect the request to the IdP authorization endpoint. This is the default value.
+          type: string
+        UserPoolClientId:
+          description: The ID of the Amazon Cognito user pool client.
+          type: string
+        UserPoolDomain:
+          description: The domain prefix or fully-qualified domain name of the Amazon Cognito user pool.
+          type: string
+        SessionTimeout:
+          description: The maximum duration of the authentication session, in seconds. The default is 604800 seconds (7 days).
+          type: integer
+        Scope:
+          description: |-
+            The set of user claims to be requested from the IdP. The default is ``openid``.
+             To verify which scope values your IdP supports and how to separate multiple values, see the documentation for your IdP.
+          type: string
+        SessionCookieName:
+          description: The name of the cookie used to maintain session information. The default is AWSELBAuthSessionCookie.
+          type: string
+        UserPoolArn:
+          description: The Amazon Resource Name (ARN) of the Amazon Cognito user pool.
+          type: string
+        AuthenticationRequestExtraParams:
+          x-patternProperties:
+            '[a-zA-Z0-9]+':
+              type: string
+          description: The query parameters (up to 10) to include in the redirect request to the authorization endpoint.
+          additionalProperties: false
+          type: object
+      required:
+        - UserPoolClientId
+        - UserPoolDomain
+        - UserPoolArn
     QueryStringKeyValue:
       description: Information about a key/value pair.
       additionalProperties: false
@@ -885,6 +963,21 @@ components:
         Key:
           description: The key. You can omit the key.
           type: string
+    ListenerRule_ForwardConfig:
+      description: Information for creating an action that distributes requests among one or more target groups. For Network Load Balancers, you can specify a single target group. Specify only when ``Type`` is ``forward``. If you specify both ``ForwardConfig`` and ``TargetGroupArn``, you can specify only one target group using ``ForwardConfig`` and it must be the same target group specified in ``TargetGroupArn``.
+      additionalProperties: false
+      type: object
+      properties:
+        TargetGroupStickinessConfig:
+          description: Information about the target group stickiness for a rule.
+          $ref: '#/components/schemas/TargetGroupStickinessConfig'
+        TargetGroups:
+          uniqueItems: true
+          description: Information about how traffic will be distributed between multiple target groups in a forward rule.
+          x-insertionOrder: false
+          type: array
+          items:
+            $ref: '#/components/schemas/TargetGroupTuple'
     HostHeaderConfig:
       description: Information about a host header condition.
       additionalProperties: false
@@ -907,6 +1000,68 @@ components:
             The name of the request method. The maximum size is 40 characters. The allowed characters are A-Z, hyphen (-), and underscore (_). The comparison is case sensitive. Wildcards are not supported; therefore, the method name must be an exact match.
              If you specify multiple strings, the condition is satisfied if one of the strings matches the HTTP request method. We recommend that you route GET and HEAD requests in the same way, because the response to a HEAD request may be cached.
           $ref: '#/components/schemas/ListOfStrings'
+    ListenerRule_AuthenticateOidcConfig:
+      anyOf:
+        - required:
+            - ClientSecret
+        - required:
+            - UseExistingClientSecret
+      description: Specifies information required using an identity provide (IdP) that is compliant with OpenID Connect (OIDC) to authenticate users.
+      additionalProperties: false
+      type: object
+      properties:
+        OnUnauthenticatedRequest:
+          description: |-
+            The behavior if the user is not authenticated. The following are possible values:
+              +  deny```` - Return an HTTP 401 Unauthorized error.
+              +  allow```` - Allow the request to be forwarded to the target.
+              +  authenticate```` - Redirect the request to the IdP authorization endpoint. This is the default value.
+          type: string
+        TokenEndpoint:
+          description: The token endpoint of the IdP. This must be a full URL, including the HTTPS protocol, the domain, and the path.
+          type: string
+        UseExistingClientSecret:
+          description: Indicates whether to use the existing client secret when modifying a rule. If you are creating a rule, you can omit this parameter or set it to false.
+          type: boolean
+        SessionTimeout:
+          description: The maximum duration of the authentication session, in seconds. The default is 604800 seconds (7 days).
+          type: integer
+        Scope:
+          description: |-
+            The set of user claims to be requested from the IdP. The default is ``openid``.
+             To verify which scope values your IdP supports and how to separate multiple values, see the documentation for your IdP.
+          type: string
+        Issuer:
+          description: The OIDC issuer identifier of the IdP. This must be a full URL, including the HTTPS protocol, the domain, and the path.
+          type: string
+        ClientSecret:
+          description: The OAuth 2.0 client secret. This parameter is required if you are creating a rule. If you are modifying a rule, you can omit this parameter if you set ``UseExistingClientSecret`` to true.
+          type: string
+        UserInfoEndpoint:
+          description: The user info endpoint of the IdP. This must be a full URL, including the HTTPS protocol, the domain, and the path.
+          type: string
+        ClientId:
+          description: The OAuth 2.0 client identifier.
+          type: string
+        AuthorizationEndpoint:
+          description: The authorization endpoint of the IdP. This must be a full URL, including the HTTPS protocol, the domain, and the path.
+          type: string
+        SessionCookieName:
+          description: The name of the cookie used to maintain session information. The default is AWSELBAuthSessionCookie.
+          type: string
+        AuthenticationRequestExtraParams:
+          x-patternProperties:
+            '[a-zA-Z0-9]+':
+              type: string
+          description: The query parameters (up to 10) to include in the redirect request to the authorization endpoint.
+          additionalProperties: false
+          type: object
+      required:
+        - TokenEndpoint
+        - Issuer
+        - UserInfoEndpoint
+        - ClientId
+        - AuthorizationEndpoint
     SourceIpConfig:
       description: |-
         Information about a source IP condition.
@@ -940,7 +1095,7 @@ components:
           x-insertionOrder: false
           type: array
           items:
-            $ref: '#/components/schemas/Action'
+            $ref: '#/components/schemas/ListenerRule_Action'
         Priority:
           description: |-
             The rule priority. A listener can't have multiple rules with the same priority.
@@ -1084,11 +1239,13 @@ components:
       properties:
         Value:
           type: string
+          description: The value of the tag.
         Key:
           type: string
+          description: The key of the tag.
       required:
-        - Value
         - Key
+      description: Information about a tag.
     LoadBalancer:
       type: object
       properties:
@@ -1278,6 +1435,19 @@ components:
         Key:
           description: The value of the attribute.
           type: string
+    TargetGroup_Tag:
+      additionalProperties: false
+      type: object
+      properties:
+        Value:
+          description: 'The key name of the tag. '
+          type: string
+        Key:
+          description: 'The value for the tag. '
+          type: string
+      required:
+        - Value
+        - Key
     TargetGroup:
       type: object
       properties:
@@ -1366,7 +1536,7 @@ components:
           x-insertionOrder: false
           type: array
           items:
-            $ref: '#/components/schemas/Tag'
+            $ref: '#/components/schemas/TargetGroup_Tag'
       x-stackql-resource-name: target_group
       description: Resource Type definition for AWS::ElasticLoadBalancingV2::TargetGroup
       x-type-name: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -1422,6 +1592,17 @@ components:
         delete:
           - elasticloadbalancing:DeleteTargetGroup
           - elasticloadbalancing:DescribeTargetGroups
+    TrustStore_Tag:
+      type: object
+      additionalProperties: false
+      properties:
+        Value:
+          type: string
+        Key:
+          type: string
+      required:
+        - Value
+        - Key
     TrustStore:
       type: object
       properties:
@@ -1449,7 +1630,7 @@ components:
           uniqueItems: false
           x-insertionOrder: false
           items:
-            $ref: '#/components/schemas/Tag'
+            $ref: '#/components/schemas/TrustStore_Tag'
         TrustStoreArn:
           type: string
           description: The Amazon Resource Name (ARN) of the trust store.
@@ -1516,6 +1697,19 @@ components:
           type: string
         RevocationType:
           type: string
+    TrustStoreRevocation_TrustStoreRevocation:
+      type: object
+      additionalProperties: false
+      properties:
+        TrustStoreArn:
+          type: string
+        RevocationId:
+          type: string
+        RevocationType:
+          type: string
+        NumberOfRevokedEntries:
+          type: integer
+          format: int64
     TrustStoreRevocation:
       type: object
       properties:
@@ -1539,7 +1733,7 @@ components:
           uniqueItems: true
           x-insertionOrder: false
           items:
-            $ref: '#/components/schemas/TrustStoreRevocation'
+            $ref: '#/components/schemas/TrustStoreRevocation_TrustStoreRevocation'
       x-stackql-resource-name: trust_store_revocation
       description: Resource Type definition for AWS::ElasticLoadBalancingV2::TrustStoreRevocation
       x-type-name: AWS::ElasticLoadBalancingV2::TrustStoreRevocation
@@ -1667,7 +1861,7 @@ components:
               x-insertionOrder: false
               type: array
               items:
-                $ref: '#/components/schemas/Action'
+                $ref: '#/components/schemas/ListenerRule_Action'
             Priority:
               description: |-
                 The rule priority. A listener can't have multiple rules with the same priority.
@@ -1903,7 +2097,7 @@ components:
               x-insertionOrder: false
               type: array
               items:
-                $ref: '#/components/schemas/Tag'
+                $ref: '#/components/schemas/TargetGroup_Tag'
           x-stackQL-stringOnly: true
       x-title: CreateTargetGroupRequest
       type: object
@@ -1945,7 +2139,7 @@ components:
               uniqueItems: false
               x-insertionOrder: false
               items:
-                $ref: '#/components/schemas/Tag'
+                $ref: '#/components/schemas/TrustStore_Tag'
             TrustStoreArn:
               type: string
               description: The Amazon Resource Name (ARN) of the trust store.
@@ -1986,7 +2180,7 @@ components:
               uniqueItems: true
               x-insertionOrder: false
               items:
-                $ref: '#/components/schemas/TrustStoreRevocation'
+                $ref: '#/components/schemas/TrustStoreRevocation_TrustStoreRevocation'
           x-stackQL-stringOnly: true
       x-title: CreateTrustStoreRevocationRequest
       type: object
@@ -2004,7 +2198,7 @@ components:
       id: awscc.elasticloadbalancingv2.listeners
       x-cfn-schema-name: Listener
       x-cfn-type-name: AWS::ElasticLoadBalancingV2::Listener
-      x-identifiers:
+      x-identifiers: &ref_0
         - ListenerArn
       x-type: cloud_control
       methods:
@@ -2108,8 +2302,7 @@ components:
       id: awscc.elasticloadbalancingv2.listeners_list_only
       x-cfn-schema-name: Listener
       x-cfn-type-name: AWS::ElasticLoadBalancingV2::Listener
-      x-identifiers:
-        - ListenerArn
+      x-identifiers: *ref_0
       x-type: cloud_control_view
       methods: {}
       sqlVerbs:
@@ -2139,7 +2332,7 @@ components:
       id: awscc.elasticloadbalancingv2.listener_rules
       x-cfn-schema-name: ListenerRule
       x-cfn-type-name: AWS::ElasticLoadBalancingV2::ListenerRule
-      x-identifiers:
+      x-identifiers: &ref_1
         - RuleArn
       x-type: cloud_control
       methods:
@@ -2235,8 +2428,7 @@ components:
       id: awscc.elasticloadbalancingv2.listener_rules_list_only
       x-cfn-schema-name: ListenerRule
       x-cfn-type-name: AWS::ElasticLoadBalancingV2::ListenerRule
-      x-identifiers:
-        - RuleArn
+      x-identifiers: *ref_1
       x-type: cloud_control_view
       methods: {}
       sqlVerbs:
@@ -2266,7 +2458,7 @@ components:
       id: awscc.elasticloadbalancingv2.load_balancers
       x-cfn-schema-name: LoadBalancer
       x-cfn-type-name: AWS::ElasticLoadBalancingV2::LoadBalancer
-      x-identifiers:
+      x-identifiers: &ref_2
         - LoadBalancerArn
       x-type: cloud_control
       methods:
@@ -2386,8 +2578,7 @@ components:
       id: awscc.elasticloadbalancingv2.load_balancers_list_only
       x-cfn-schema-name: LoadBalancer
       x-cfn-type-name: AWS::ElasticLoadBalancingV2::LoadBalancer
-      x-identifiers:
-        - LoadBalancerArn
+      x-identifiers: *ref_2
       x-type: cloud_control_view
       methods: {}
       sqlVerbs:
@@ -2417,7 +2608,7 @@ components:
       id: awscc.elasticloadbalancingv2.target_groups
       x-cfn-schema-name: TargetGroup
       x-cfn-type-name: AWS::ElasticLoadBalancingV2::TargetGroup
-      x-identifiers:
+      x-identifiers: &ref_3
         - TargetGroupArn
       x-type: cloud_control
       methods:
@@ -2547,8 +2738,7 @@ components:
       id: awscc.elasticloadbalancingv2.target_groups_list_only
       x-cfn-schema-name: TargetGroup
       x-cfn-type-name: AWS::ElasticLoadBalancingV2::TargetGroup
-      x-identifiers:
-        - TargetGroupArn
+      x-identifiers: *ref_3
       x-type: cloud_control_view
       methods: {}
       sqlVerbs:
@@ -2578,7 +2768,7 @@ components:
       id: awscc.elasticloadbalancingv2.trust_stores
       x-cfn-schema-name: TrustStore
       x-cfn-type-name: AWS::ElasticLoadBalancingV2::TrustStore
-      x-identifiers:
+      x-identifiers: &ref_4
         - TrustStoreArn
       x-type: cloud_control
       methods:
@@ -2678,8 +2868,7 @@ components:
       id: awscc.elasticloadbalancingv2.trust_stores_list_only
       x-cfn-schema-name: TrustStore
       x-cfn-type-name: AWS::ElasticLoadBalancingV2::TrustStore
-      x-identifiers:
-        - TrustStoreArn
+      x-identifiers: *ref_4
       x-type: cloud_control_view
       methods: {}
       sqlVerbs:
@@ -2709,7 +2898,7 @@ components:
       id: awscc.elasticloadbalancingv2.trust_store_revocations
       x-cfn-schema-name: TrustStoreRevocation
       x-cfn-type-name: AWS::ElasticLoadBalancingV2::TrustStoreRevocation
-      x-identifiers:
+      x-identifiers: &ref_5
         - RevocationId
         - TrustStoreArn
       x-type: cloud_control
@@ -2785,9 +2974,7 @@ components:
       id: awscc.elasticloadbalancingv2.trust_store_revocations_list_only
       x-cfn-schema-name: TrustStoreRevocation
       x-cfn-type-name: AWS::ElasticLoadBalancingV2::TrustStoreRevocation
-      x-identifiers:
-        - RevocationId
-        - TrustStoreArn
+      x-identifiers: *ref_5
       x-type: cloud_control_view
       methods: {}
       sqlVerbs:
