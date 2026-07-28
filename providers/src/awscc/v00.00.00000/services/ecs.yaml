@@ -433,29 +433,94 @@ components:
       type: object
       properties:
         Value:
+          minLength: 1
           type: string
         Key:
+          minLength: 1
           type: string
     CapacityProvider:
-      description: If using ec2 auto-scaling, the name of the associated capacity provider. Otherwise FARGATE, FARGATE_SPOT.
-      anyOf:
-        - type: string
-          enum:
-            - FARGATE
-            - FARGATE_SPOT
-        - minLength: 1
+      type: object
+      properties:
+        AutoScalingGroupProvider:
+          $ref: '#/components/schemas/AutoScalingGroupProvider'
+        Tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+        Name:
           type: string
-          maxLength: 2048
-      type: string
+      x-stackql-resource-name: capacity_provider
+      description: Resource Type definition for AWS::ECS::CapacityProvider.
+      x-type-name: AWS::ECS::CapacityProvider
+      x-stackql-primary-identifier:
+        - Name
+      x-create-only-properties:
+        - AutoScalingGroupProvider/AutoScalingGroupArn
+        - Name
+      x-tagging:
+        permissions:
+          - ecs:TagResource
+          - ecs:UntagResource
+          - ecs:ListTagsForResource
+        taggable: true
+        tagOnCreate: true
+        tagUpdatable: true
+        tagProperty: /properties/Tags
+        cloudFormationSystemTags: true
+      x-required-permissions:
+        read:
+          - ecs:DescribeCapacityProviders
+        create:
+          - autoscaling:CreateOrUpdateTags
+          - ecs:CreateCapacityProvider
+          - ecs:DescribeCapacityProviders
+          - ecs:TagResource
+        update:
+          - ecs:UpdateCapacityProvider
+          - ecs:DescribeCapacityProviders
+          - ecs:ListTagsForResource
+          - ecs:TagResource
+          - ecs:UntagResource
+        list:
+          - ecs:DescribeCapacityProviders
+        delete:
+          - ecs:DescribeCapacityProviders
+          - ecs:DeleteCapacityProvider
     CapacityProviderStrategyItem:
+      description: The ``CapacityProviderStrategyItem`` property specifies the details of the default capacity provider strategy for the cluster. When services or tasks are run in the cluster with no launch type or capacity provider strategy specified, the default capacity provider strategy is used.
       additionalProperties: false
       type: object
       properties:
         CapacityProvider:
+          description: The short name of the capacity provider.
           type: string
-        Base:
-          type: integer
         Weight:
+          description: |-
+            The *weight* value designates the relative percentage of the total number of tasks launched that should use the specified capacity provider. The ``weight`` value is taken into consideration after the ``base`` value, if defined, is satisfied.
+             If no ``weight`` value is specified, the default value of ``0`` is used. When multiple capacity providers are specified within a capacity provider strategy, at least one of the capacity providers must have a weight value greater than zero and any capacity providers with a weight of ``0`` can't be used to place tasks. If you specify multiple capacity providers in a strategy that all have a weight of ``0``, any ``RunTask`` or ``CreateService`` actions using the capacity provider strategy will fail.
+             Weight value characteristics:
+              +  Weight is considered after the base value is satisfied
+              +  Default value is ``0`` if not specified
+              +  Valid range: 0 to 1,000
+              +  At least one capacity provider must have a weight greater than zero
+              +  Capacity providers with weight of ``0`` cannot place tasks
+              
+             Task distribution logic:
+              1.  Base satisfaction: The minimum number of tasks specified by the base value are placed on that capacity provider
+              1.  Weight distribution: After base requirements are met, additional tasks are distributed according to weight ratios
+              
+             Examples:
+             Equal Distribution: Two capacity providers both with weight ``1`` will split tasks evenly after base requirements are met.
+             Weighted Distribution: If capacityProviderA has weight ``1`` and capacityProviderB has weight ``4``, then for every 1 task on A, 4 tasks will run on B.
+          type: integer
+        Base:
+          description: |-
+            The *base* value designates how many tasks, at a minimum, to run on the specified capacity provider for each service. Only one capacity provider in a capacity provider strategy can have a *base* defined. If no value is specified, the default value of ``0`` is used.
+             Base value characteristics:
+              +  Only one capacity provider in a strategy can have a base defined
+              +  Default value is ``0`` if not specified
+              +  Valid range: 0 to 100,000
+              +  Base requirements are satisfied first before weight distribution
           type: integer
     ExecuteCommandLogConfiguration:
       description: The log configuration for the results of the execute command actions. The logs can be sent to CloudWatch Logs or an Amazon S3 bucket.
@@ -532,6 +597,26 @@ components:
              If you update the cluster with an empty string ``""`` for the namespace name, the cluster configuration for Service Connect is removed. Note that the namespace will remain in CMAP and must be deleted separately.
              For more information about CMAPlong, see [Working with Services](https://docs.aws.amazon.com/cloud-map/latest/dg/working-with-services.html) in the *Developer Guide*.
           type: string
+    Cluster_Tag:
+      description: |-
+        The metadata that you apply to a resource to help you categorize and organize them. Each tag consists of a key and an optional value. You define them.
+         The following basic restrictions apply to tags:
+          +  Maximum number of tags per resource - 50
+          +  For each resource, each tag key must be unique, and each tag key can have only one value.
+          +  Maximum key length - 128 Unicode characters in UTF-8
+          +  Maximum value length - 256 Unicode characters in UTF-8
+          +  If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @.
+          +  Tag keys and values are case-sensitive.
+          +  Do not use ``aws:``, ``AWS:``, or any upper or lowercase combination of such as a prefix for either keys or values as it is reserved for AWS use. You cannot edit or delete tag keys or values with this prefix. Tags with this prefix do not count against your tags per resource limit.
+      additionalProperties: false
+      type: object
+      properties:
+        Value:
+          description: The optional part of a key-value pair that make up a tag. A ``value`` acts as a descriptor within a tag category (key).
+          type: string
+        Key:
+          description: One part of a key-value pair that make up a tag. A ``key`` is a general label that acts like a category for more specific tag values.
+          type: string
     ClusterConfiguration:
       description: The execute command and managed storage configuration for the cluster.
       additionalProperties: false
@@ -562,27 +647,141 @@ components:
           description: The log configuration for the results of the execute command actions. The logs can be sent to CloudWatch Logs or an Amazon S3 bucket. When ``logging=OVERRIDE`` is specified, a ``logConfiguration`` must be provided.
           $ref: '#/components/schemas/ExecuteCommandLogConfiguration'
     Cluster:
-      minLength: 1
-      description: The name of the cluster
-      type: string
-      maxLength: 2048
+      type: object
+      properties:
+        ClusterSettings:
+          description: |-
+            The settings to use when creating a cluster. This parameter is used to turn on CloudWatch Container Insights with enhanced observability or CloudWatch Container Insights for a cluster.
+             Container Insights with enhanced observability provides all the Container Insights metrics, plus additional task and container metrics. This version supports enhanced observability for Amazon ECS clusters using the Amazon EC2 and Fargate launch types. After you configure Container Insights with enhanced observability on Amazon ECS, Container Insights auto-collects detailed infrastructure telemetry from the cluster level down to the container level in your environment and displays these critical performance data in curated dashboards removing the heavy lifting in observability set-up. 
+             For more information, see [Monitor Amazon ECS containers using Container Insights with enhanced observability](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/cloudwatch-container-insights.html) in the *Amazon Elastic Container Service Developer Guide*.
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterSettings'
+        DefaultCapacityProviderStrategy:
+          description: The default capacity provider strategy for the cluster. When services or tasks are run in the cluster with no launch type or capacity provider strategy specified, the default capacity provider strategy is used.
+          type: array
+          items:
+            $ref: '#/components/schemas/CapacityProviderStrategyItem'
+        Configuration:
+          description: The execute command and managed storage configuration for the cluster.
+          $ref: '#/components/schemas/ClusterConfiguration'
+        ServiceConnectDefaults:
+          description: >-
+            Use this parameter to set a default Service Connect namespace. After you set a default Service Connect namespace, any new services with Service Connect turned on that are created in the cluster are added as client services in the namespace. This setting only applies to new services that set the ``enabled`` parameter to ``true`` in the ``ServiceConnectConfiguration``. You can set the namespace of each service individually in the ``ServiceConnectConfiguration`` to override this default
+            parameter.
+             Tasks that run in a namespace can use short names to connect to services in the namespace. Tasks can connect to services across all of the clusters in the namespace. Tasks connect through a managed proxy container that collects logs and metrics for increased visibility. Only the tasks that Amazon ECS services create are supported with Service Connect. For more information, see [Service Connect](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-connect.html) in the *Amazon Elastic Container Service Developer Guide*.
+          $ref: '#/components/schemas/ServiceConnectDefaults'
+        CapacityProviders:
+          description: |-
+            The short name of one or more capacity providers to associate with the cluster. A capacity provider must be associated with a cluster before it can be included as part of the default capacity provider strategy of the cluster or used in a capacity provider strategy when calling the [CreateService](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_CreateService.html) or [RunTask](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RunTask.html) actions.
+             If specifying a capacity provider that uses an Auto Scaling group, the capacity provider must be created but not associated with another cluster. New Auto Scaling group capacity providers can be created with the [CreateCapacityProvider](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_CreateCapacityProvider.html) API operation.
+             To use a FARGATElong capacity provider, specify either the ``FARGATE`` or ``FARGATE_SPOT`` capacity providers. The FARGATElong capacity providers are available to all accounts and only need to be associated with a cluster to be used.
+             The [PutCapacityProvider](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_PutCapacityProvider.html) API operation is used to update the list of available capacity providers for a cluster after the cluster is created.
+          type: array
+          items:
+            type: string
+        ClusterName:
+          description: A user-generated string that you use to identify your cluster. If you don't specify a name, CFNlong generates a unique physical ID for the name.
+          type: string
+        Arn:
+          description: ''
+          type: string
+        Tags:
+          description: |-
+            The metadata that you apply to the cluster to help you categorize and organize them. Each tag consists of a key and an optional value. You define both.
+             The following basic restrictions apply to tags:
+              +  Maximum number of tags per resource - 50
+              +  For each resource, each tag key must be unique, and each tag key can have only one value.
+              +  Maximum key length - 128 Unicode characters in UTF-8
+              +  Maximum value length - 256 Unicode characters in UTF-8
+              +  If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @.
+              +  Tag keys and values are case-sensitive.
+              +  Do not use ``aws:``, ``AWS:``, or any upper or lowercase combination of such as a prefix for either keys or values as it is reserved for AWS use. You cannot edit or delete tag keys or values with this prefix. Tags with this prefix do not count against your tags per resource limit.
+          type: array
+          items:
+            $ref: '#/components/schemas/Cluster_Tag'
+      x-stackql-resource-name: cluster
+      description: The ``AWS::ECS::Cluster`` resource creates an Amazon Elastic Container Service (Amazon ECS) cluster.
+      x-type-name: AWS::ECS::Cluster
+      x-stackql-primary-identifier:
+        - ClusterName
+      x-create-only-properties:
+        - ClusterName
+      x-write-only-properties:
+        - ServiceConnectDefaults
+      x-read-only-properties:
+        - Arn
+      x-tagging:
+        permissions:
+          - ecs:TagResource
+          - ecs:UntagResource
+          - ecs:ListTagsForResource
+        taggable: true
+        tagOnCreate: true
+        tagUpdatable: true
+        tagProperty: /properties/Tags
+        cloudFormationSystemTags: true
+      x-required-permissions:
+        read:
+          - ecs:DescribeClusters
+          - kms:DescribeKey
+        create:
+          - ecs:CreateCluster
+          - ecs:DescribeClusters
+          - iam:CreateServiceLinkedRole
+          - ecs:TagResource
+          - kms:DescribeKey
+        update:
+          - ecs:PutAccountSettingDefault
+          - ecs:DescribeClusters
+          - ecs:TagResource
+          - ecs:UntagResource
+          - ecs:PutAccountSetting
+          - ecs:ListTagsForResource
+          - ecs:UpdateCluster
+          - ecs:UpdateClusterSettings
+          - ecs:PutClusterCapacityProviders
+          - kms:DescribeKey
+        list:
+          - ecs:DescribeClusters
+          - ecs:ListClusters
+        delete:
+          - ecs:DeleteCluster
+          - ecs:DescribeClusters
+          - kms:DescribeKey
     DefaultCapacityProviderStrategy:
       description: List of capacity providers to associate with the cluster
       type: array
       items:
         $ref: '#/components/schemas/CapacityProviderStrategy'
+    ClusterCapacityProviderAssociations_CapacityProvider:
+      description: If using ec2 auto-scaling, the name of the associated capacity provider. Otherwise FARGATE, FARGATE_SPOT.
+      anyOf:
+        - type: string
+          enum:
+            - FARGATE
+            - FARGATE_SPOT
+        - minLength: 1
+          type: string
+          maxLength: 2048
+      type: string
     CapacityProviders:
       uniqueItems: true
       description: List of capacity providers to associate with the cluster
       type: array
       items:
-        $ref: '#/components/schemas/CapacityProvider'
+        $ref: '#/components/schemas/ClusterCapacityProviderAssociations_CapacityProvider'
+    ClusterCapacityProviderAssociations_Cluster:
+      minLength: 1
+      description: The name of the cluster
+      type: string
+      maxLength: 2048
     CapacityProviderStrategy:
       additionalProperties: false
       type: object
       properties:
         CapacityProvider:
-          $ref: '#/components/schemas/CapacityProvider'
+          $ref: '#/components/schemas/ClusterCapacityProviderAssociations_CapacityProvider'
         Base:
           maximum: 100000
           type: integer
@@ -601,7 +800,7 @@ components:
         CapacityProviders:
           $ref: '#/components/schemas/CapacityProviders'
         Cluster:
-          $ref: '#/components/schemas/Cluster'
+          $ref: '#/components/schemas/ClusterCapacityProviderAssociations_Cluster'
       required:
         - CapacityProviders
         - Cluster
@@ -743,11 +942,18 @@ components:
       required:
         - Type
     LogConfiguration:
-      description: The ``LogConfiguration`` property specifies log configuration options to send to a custom log driver for the container.
+      description: |-
+        The log configuration for the container. This parameter maps to ``LogConfig`` in the docker container create command and the ``--log-driver`` option to docker run.
+         By default, containers use the same logging driver that the Docker daemon uses. However, the container might use a different logging driver than the Docker daemon by specifying a log driver configuration in the container definition.
+         Understand the following when specifying a log configuration for your containers.
+          +  Amazon ECS currently supports a subset of the logging drivers available to the Docker daemon. Additional log drivers may be available in future releases of the Amazon ECS container agent.
+         For tasks on FARGATElong, the supported log drivers are ``awslogs``, ``splunk``, and ``awsfirelens``.
+         For tasks hosted on Amazon EC2 instances, the supported log drivers are ``awslogs``, ``fluentd``, ``gelf``, ``json-file``, ``journald``,``syslog``, ``splunk``, and ``awsfirelens``.
+          +  This parameter requires version 1.18 of the Docker Remote API or greater on your container instance.
+          +  For tasks that are hosted on Amazon EC2 instances, the Amazon ECS container agent must register the available logging drivers with the ``ECS_AVAILABLE_LOGGING_DRIVERS`` environment variable before containers placed on that instance can use these log configuration options. For more information, see [Amazon ECS container agent configuration](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-agent-config.html) in the *Amazon Elastic Container Service Developer Guide*.
+          +  For tasks that are on FARGATElong, because you don't have access to the underlying infrastructure your tasks are hosted on, any additional software needed must be installed outside of the task. For example, the Fluentd output aggregators or a remote host running Logstash to send Gelf logs to.
       additionalProperties: false
       type: object
-      required:
-        - LogDriver
       properties:
         SecretOptions:
           description: The secrets to pass to the log configuration. For more information, see [Specifying sensitive data](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/specifying-sensitive-data.html) in the *Amazon Elastic Container Service Developer Guide*.
@@ -846,11 +1052,14 @@ components:
           description: The name of the volume. This value must match the volume name from the ``Volume`` object in the task definition.
           type: string
     NetworkConfiguration:
-      description: An object representing the network configuration for a task or service.
+      description: The network configuration for a task or service.
       additionalProperties: false
       type: object
       properties:
-        AwsVpcConfiguration:
+        AwsvpcConfiguration:
+          description: |-
+            The VPC subnets and security groups that are associated with a task.
+              All specified subnets and security groups must be from the same VPC.
           $ref: '#/components/schemas/AwsVpcConfiguration'
     ServiceConnectTestTrafficRulesHeaderValue:
       description: ''
@@ -899,7 +1108,7 @@ components:
           description: The tags applied to this Amazon EBS volume. ``AmazonECSCreated`` and ``AmazonECSManaged`` are reserved tags that can't be used.
           type: array
           items:
-            $ref: '#/components/schemas/Tag'
+            $ref: '#/components/schemas/Service_Tag'
     AdvancedConfiguration:
       description: The advanced settings for a load balancer used in blue/green deployments. Specify the alternate target group, listener rules, and IAM role required for traffic shifting during blue/green deployments. For more information, see [Required resources for Amazon ECS blue/green deployments](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/blue-green-deployment-implementation.html) in the *Amazon Elastic Container Service Developer Guide*.
       additionalProperties: false
@@ -919,6 +1128,46 @@ components:
           type: string
       required:
         - AlternateTargetGroupArn
+    Service_CapacityProviderStrategyItem:
+      description: |-
+        The details of a capacity provider strategy. A capacity provider strategy can be set when using the ``RunTask`` or ``CreateService`` APIs or as the default capacity provider strategy for a cluster with the ``CreateCluster`` API.
+         Only capacity providers that are already associated with a cluster and have an ``ACTIVE`` or ``UPDATING`` status can be used in a capacity provider strategy. The ``PutClusterCapacityProviders`` API is used to associate a capacity provider with a cluster.
+         If specifying a capacity provider that uses an Auto Scaling group, the capacity provider must already be created. New Auto Scaling group capacity providers can be created with the ``CreateCapacityProvider`` API operation.
+         To use an FARGATElong capacity provider, specify either the ``FARGATE`` or ``FARGATE_SPOT`` capacity providers. The FARGATElong capacity providers are available to all accounts and only need to be associated with a cluster to be used in a capacity provider strategy.
+      additionalProperties: false
+      type: object
+      properties:
+        CapacityProvider:
+          description: The short name of the capacity provider.
+          type: string
+        Base:
+          description: |-
+            The *base* value designates how many tasks, at a minimum, to run on the specified capacity provider for each service. Only one capacity provider in a capacity provider strategy can have a *base* defined. If no value is specified, the default value of ``0`` is used.
+             Base value characteristics:
+              +  Only one capacity provider in a strategy can have a base defined
+              +  Default value is ``0`` if not specified
+              +  Valid range: 0 to 100,000
+              +  Base requirements are satisfied first before weight distribution
+          type: integer
+        Weight:
+          description: |-
+            The *weight* value designates the relative percentage of the total number of tasks launched that should use the specified capacity provider. The ``weight`` value is taken into consideration after the ``base`` value, if defined, is satisfied.
+             If no ``weight`` value is specified, the default value of ``0`` is used. When multiple capacity providers are specified within a capacity provider strategy, at least one of the capacity providers must have a weight value greater than zero and any capacity providers with a weight of ``0`` can't be used to place tasks. If you specify multiple capacity providers in a strategy that all have a weight of ``0``, any ``RunTask`` or ``CreateService`` actions using the capacity provider strategy will fail.
+             Weight value characteristics:
+              +  Weight is considered after the base value is satisfied
+              +  Default value is ``0`` if not specified
+              +  Valid range: 0 to 1,000
+              +  At least one capacity provider must have a weight greater than zero
+              +  Capacity providers with weight of ``0`` cannot place tasks
+              
+             Task distribution logic:
+              1.  Base satisfaction: The minimum number of tasks specified by the base value are placed on that capacity provider
+              1.  Weight distribution: After base requirements are met, additional tasks are distributed according to weight ratios
+              
+             Examples:
+             Equal Distribution: Two capacity providers both with weight ``1`` will split tasks evenly after base requirements are met.
+             Weighted Distribution: If capacityProviderA has weight ``1`` and capacityProviderB has weight ``4``, then for every 1 task on A, 4 tasks will run on B.
+          type: integer
     ForceNewDeployment:
       description: ''
       additionalProperties: false
@@ -960,22 +1209,37 @@ components:
         - Rollback
         - Enable
     LoadBalancer:
-      description: 'A load balancer object representing the load balancer to use with the task set. The supported load balancer types are either an Application Load Balancer or a Network Load Balancer. '
+      description: |-
+        The ``LoadBalancer`` property specifies details on a load balancer that is used with a service.
+         If the service is using the ``CODE_DEPLOY`` deployment controller, the service is required to use either an Application Load Balancer or Network Load Balancer. When you are creating an ACDlong deployment group, you specify two target groups (referred to as a ``targetGroupPair``). Each target group binds to a separate task set in the deployment. The load balancer can also have up to two listeners, a required listener for production traffic and an optional listener that allows you to test new revisions of the service before routing production traffic to it.
+         Services with tasks that use the ``awsvpc`` network mode (for example, those with the Fargate launch type) only support Application Load Balancers and Network Load Balancers. Classic Load Balancers are not supported. Also, when you create any target groups for these services, you must choose ``ip`` as the target type, not ``instance``. Tasks that use the ``awsvpc`` network mode are associated with an elastic network interface, not an Amazon EC2 instance.
       additionalProperties: false
       type: object
       properties:
         TargetGroupArn:
-          description: >-
-            The full Amazon Resource Name (ARN) of the Elastic Load Balancing target group or groups associated with a service or task set. A target group ARN is only specified when using an Application Load Balancer or Network Load Balancer. If you are using a Classic Load Balancer this should be omitted. For services using the ECS deployment controller, you can specify one or multiple target groups. For more information, see
-            https://docs.aws.amazon.com/AmazonECS/latest/developerguide/register-multiple-targetgroups.html in the Amazon Elastic Container Service Developer Guide. For services using the CODE_DEPLOY deployment controller, you are required to define two target groups for the load balancer. For more information, see https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-type-bluegreen.html in the Amazon Elastic Container Service Developer Guide. If your service's task definition
-            uses the awsvpc network mode (which is required for the Fargate launch type), you must choose ip as the target type, not instance, when creating your target groups because tasks that use the awsvpc network mode are associated with an elastic network interface, not an Amazon EC2 instance.
+          description: |-
+            The full Amazon Resource Name (ARN) of the Elastic Load Balancing target group or groups associated with a service or task set.
+             A target group ARN is only specified when using an Application Load Balancer or Network Load Balancer. 
+             For services using the ``ECS`` deployment controller, you can specify one or multiple target groups. For more information, see [Registering multiple target groups with a service](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/register-multiple-targetgroups.html) in the *Amazon Elastic Container Service Developer Guide*.
+             For services using the ``CODE_DEPLOY`` deployment controller, you're required to define two target groups for the load balancer. For more information, see [Blue/green deployment with CodeDeploy](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-type-bluegreen.html) in the *Amazon Elastic Container Service Developer Guide*.
+              If your service's task definition uses the ``awsvpc`` network mode, you must choose ``ip`` as the target type, not ``instance``. Do this when creating your target groups because tasks that use the ``awsvpc`` network mode are associated with an elastic network interface, not an Amazon EC2 instance. This network mode is required for the Fargate launch type.
+          type: string
+        LoadBalancerName:
+          description: |-
+            The name of the load balancer to associate with the Amazon ECS service or task set.
+             If you are using an Application Load Balancer or a Network Load Balancer the load balancer name parameter should be omitted.
           type: string
         ContainerName:
-          description: The name of the container (as it appears in a container definition) to associate with the load balancer.
+          description: |-
+            The name of the container (as it appears in a container definition) to associate with the load balancer.
+             You need to specify the container name when configuring the target group for an Amazon ECS load balancer.
           type: string
         ContainerPort:
-          description: The port on the container to associate with the load balancer. This port must correspond to a containerPort in the task definition the tasks in the service are using. For tasks that use the EC2 launch type, the container instance they are launched on must allow ingress traffic on the hostPort of the port mapping.
+          description: The port on the container to associate with the load balancer. This port must correspond to a ``containerPort`` in the task definition the tasks in the service are using. For tasks that use the EC2 launch type, the container instance they're launched on must allow ingress traffic on the ``hostPort`` of the port mapping.
           type: integer
+        AdvancedConfiguration:
+          description: The advanced settings for the load balancer used in blue/green deployments. Specify the alternate target group, listener rules, and IAM role required for traffic shifting during blue/green deployments.
+          $ref: '#/components/schemas/AdvancedConfiguration'
     ServiceConnectConfiguration:
       description: |-
         The Service Connect configuration of your Amazon ECS service. The configuration for this service to discover and connect to services, and be discovered by, and connected from, other services within a namespace.
@@ -1155,30 +1419,36 @@ components:
           description: The name of the secret.
           type: string
     AwsVpcConfiguration:
-      description: The VPC subnets and security groups associated with a task. All specified subnets and security groups must be from the same VPC.
+      description: An object representing the networking details for a task or service. For example ``awsVpcConfiguration={subnets=["subnet-12344321"],securityGroups=["sg-12344321"]}``.
       additionalProperties: false
       type: object
       properties:
         SecurityGroups:
-          maxItems: 5
-          description: The security groups associated with the task or service. If you do not specify a security group, the default security group for the VPC is used. There is a limit of 5 security groups that can be specified per AwsVpcConfiguration.
+          description: |-
+            The IDs of the security groups associated with the task or service. If you don't specify a security group, the default security group for the VPC is used. There's a limit of 5 security groups that can be specified.
+              All specified security groups must be from the same VPC.
+          x-insertionOrder: false
           type: array
           items:
             type: string
         Subnets:
-          maxItems: 16
-          description: The subnets associated with the task or service. There is a limit of 16 subnets that can be specified per AwsVpcConfiguration.
+          description: |-
+            The IDs of the subnets associated with the task or service. There's a limit of 16 subnets that can be specified.
+              All specified subnets must be from the same VPC.
+          x-insertionOrder: false
           type: array
           items:
             type: string
         AssignPublicIp:
-          description: Whether the task's elastic network interface receives a public IP address. The default value is DISABLED.
+          description: |-
+            Whether the task's elastic network interface receives a public IP address. 
+             Consider the following when you set this value:
+              +  When you use ``create-service`` or ``update-service``, the default is ``DISABLED``. 
+              +  When the service ``deploymentController`` is ``ECS``, the value must be ``DISABLED``.
           type: string
           enum:
             - DISABLED
             - ENABLED
-      required:
-        - Subnets
     PlacementConstraint:
       description: |-
         An object representing a constraint on task placement. For more information, see [Task placement constraints](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-placement-constraints.html) in the *Amazon Elastic Container Service Developer Guide*.
@@ -1269,24 +1539,55 @@ components:
           description: The ARN of the IAM role to associate with this volume. This is the Amazon ECS infrastructure IAM role that is used to manage your AWS infrastructure. We recommend using the Amazon ECS-managed ``AmazonECSInfrastructureRolePolicyForVolumes`` IAM policy with this role. For more information, see [Amazon ECS infrastructure IAM role](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/infrastructure_IAM_role.html) in the *Amazon ECS Developer Guide*.
           type: string
     ServiceRegistry:
+      description: |-
+        The details for the service registry.
+         Each service may be associated with one service registry. Multiple service registries for each service are not supported.
+         When you add, update, or remove the service registries configuration, Amazon ECS starts a new deployment. New tasks are registered and deregistered to the updated service registry configuration.
       additionalProperties: false
       type: object
       properties:
         ContainerName:
           description: >-
-            The container name value, already specified in the task definition, to be used for your service discovery service. If the task definition that your service task specifies uses the bridge or host network mode, you must specify a containerName and containerPort combination from the task definition. If the task definition that your service task specifies uses the awsvpc network mode and a type SRV DNS record is used, you must specify either a containerName and containerPort combination
-            or a port value, but not both.
+            The container name value to be used for your service discovery service. It's already specified in the task definition. If the task definition that your service task specifies uses the ``bridge`` or ``host`` network mode, you must specify a ``containerName`` and ``containerPort`` combination from the task definition. If the task definition that your service task specifies uses the ``awsvpc`` network mode and a type SRV DNS record is used, you must specify either a ``containerName``
+            and ``containerPort`` combination or a ``port`` value. However, you can't specify both.
           type: string
         Port:
-          description: The port value used if your service discovery service specified an SRV record. This field may be used if both the awsvpc network mode and SRV records are used.
+          description: The port value used if your service discovery service specified an SRV record. This field might be used if both the ``awsvpc`` network mode and SRV records are used.
           type: integer
         ContainerPort:
           description: >-
-            The port value, already specified in the task definition, to be used for your service discovery service. If the task definition your service task specifies uses the bridge or host network mode, you must specify a containerName and containerPort combination from the task definition. If the task definition your service task specifies uses the awsvpc network mode and a type SRV DNS record is used, you must specify either a containerName and containerPort combination or a port value, but
-            not both.
+            The port value to be used for your service discovery service. It's already specified in the task definition. If the task definition your service task specifies uses the ``bridge`` or ``host`` network mode, you must specify a ``containerName`` and ``containerPort`` combination from the task definition. If the task definition your service task specifies uses the ``awsvpc`` network mode and a type SRV DNS record is used, you must specify either a ``containerName`` and ``containerPort``
+            combination or a ``port`` value. However, you can't specify both.
           type: integer
         RegistryArn:
-          description: The Amazon Resource Name (ARN) of the service registry. The currently supported service registry is AWS Cloud Map. For more information, see https://docs.aws.amazon.com/cloud-map/latest/api/API_CreateService.html
+          description: The Amazon Resource Name (ARN) of the service registry. The currently supported service registry is CMAP. For more information, see [CreateService](https://docs.aws.amazon.com/cloud-map/latest/api/API_CreateService.html).
+          type: string
+    Service_Tag:
+      description: |-
+        The metadata that you apply to a resource to help you categorize and organize them. Each tag consists of a key and an optional value. You define them.
+         The following basic restrictions apply to tags:
+          +  Maximum number of tags per resource - 50
+          +  For each resource, each tag key must be unique, and each tag key can have only one value.
+          +  Maximum key length - 128 Unicode characters in UTF-8
+          +  Maximum value length - 256 Unicode characters in UTF-8
+          +  If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @.
+          +  Tag keys and values are case-sensitive.
+          +  Do not use ``aws:``, ``AWS:``, or any upper or lowercase combination of such as a prefix for either keys or values as it is reserved for AWS use. You cannot edit or delete tag keys or values with this prefix. Tags with this prefix do not count against your tags per resource limit.
+          
+         In order to tag a service that has the following ARN format, you need to migrate the service to the long ARN. You must use the API, CLI or console to migrate the service ARN. For more information, see [Migrate an short service ARN to a long ARN](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-arn-migration.html) in the *Developer Guide*.
+          ``arn:aws:ecs:region:aws_account_id:service/service-name`` 
+         After the migration is complete, the following are true:
+          +   The service ARN is: ``arn:aws:ecs:region:aws_account_id:service/cluster-name/service-name``
+          +  You can use CFN to tag the service as you would a service with a long ARN format.
+          +  When the ``PhysicalResourceId`` in the CFN stack represents a service, the value does not change and will be the short service ARN.
+      additionalProperties: false
+      type: object
+      properties:
+        Value:
+          description: The optional part of a key-value pair that make up a tag. A ``value`` acts as a descriptor within a tag category (key).
+          type: string
+        Key:
+          description: One part of a key-value pair that make up a tag. A ``key`` is a general label that acts like a category for more specific tag values.
           type: string
     DeploymentConfiguration:
       description: Optional deployment parameters that control how many tasks run during a deployment and the ordering of stopping and starting tasks.
@@ -1439,7 +1740,7 @@ components:
               To remove this property from your service resource, specify an empty ``CapacityProviderStrategyItem`` array.
           type: array
           items:
-            $ref: '#/components/schemas/CapacityProviderStrategyItem'
+            $ref: '#/components/schemas/Service_CapacityProviderStrategyItem'
         LaunchType:
           description: The launch type on which to run your service. For more information, see [Amazon ECS Launch Types](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/launch_types.html) in the *Amazon Elastic Container Service Developer Guide*.
           type: string
@@ -1486,7 +1787,7 @@ components:
               +  Do not use ``aws:``, ``AWS:``, or any upper or lowercase combination of such as a prefix for either keys or values as it is reserved for AWS use. You cannot edit or delete tag keys or values with this prefix. Tags with this prefix do not count against your tags per resource limit.
           type: array
           items:
-            $ref: '#/components/schemas/Tag'
+            $ref: '#/components/schemas/Service_Tag'
         ForceNewDeployment:
           description: Determines whether to force a new deployment of the service. By default, deployments aren't forced. You can use this option to start a new deployment with no service definition changes. For example, you can update a service's tasks to use a newer Docker image with the same image/tag combination (``my_image:latest``) or to roll Fargate tasks onto a newer platform version.
           $ref: '#/components/schemas/ForceNewDeployment'
@@ -1838,7 +2139,7 @@ components:
               Amazon ECS currently supports a subset of the logging drivers available to the Docker daemon (shown in the [LogConfiguration](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_LogConfiguration.html) data type). Additional log drivers may be available in future releases of the Amazon ECS container agent.
               This parameter requires version 1.18 of the Docker Remote API or greater on your container instance. To check the Docker Remote API version on your container instance, log in to your container instance and run the following command: ``sudo docker version --format '{{.Server.APIVersion}}'``
               The Amazon ECS container agent running on a container instance must register the logging drivers available on that instance with the ``ECS_AVAILABLE_LOGGING_DRIVERS`` environment variable before containers placed on that instance can use these log configuration options. For more information, see [Container Agent Configuration](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-agent-config.html) in the *Developer Guide*.
-          $ref: '#/components/schemas/LogConfiguration'
+          $ref: '#/components/schemas/TaskDefinition_LogConfiguration'
         ResourceRequirements:
           description: The type and amount of a resource to assign to a container. The only supported resource is a GPU.
           x-insertionOrder: false
@@ -2098,6 +2399,47 @@ components:
           description: Custom metadata to add to your Docker volume. This parameter maps to ``Labels`` in the docker container create command and the ``xxlabel`` option to docker volume create.
           additionalProperties: false
           type: object
+    TaskDefinition_LogConfiguration:
+      description: The ``LogConfiguration`` property specifies log configuration options to send to a custom log driver for the container.
+      additionalProperties: false
+      type: object
+      required:
+        - LogDriver
+      properties:
+        SecretOptions:
+          description: The secrets to pass to the log configuration. For more information, see [Specifying sensitive data](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/specifying-sensitive-data.html) in the *Amazon Elastic Container Service Developer Guide*.
+          x-insertionOrder: false
+          type: array
+          items:
+            $ref: '#/components/schemas/Secret'
+        Options:
+          x-patternProperties:
+            .{1,}:
+              type: string
+          description: |-
+            The configuration options to send to the log driver.
+             The options you can specify depend on the log driver. Some of the options you can specify when you use the ``awslogs`` log driver to route logs to Amazon CloudWatch include the following:
+              + awslogs-create-group Required: No Specify whether you want the log group to be created automatically. If this option isn't specified, it defaults to false. Your IAM policy must include the logs:CreateLogGroup permission before you attempt to use awslogs-create-group. + awslogs-region Required: Yes Specify the Region that the awslogs log driver is to send your Docker logs to. You can choose to send all of your logs from clusters in different Regions to a single region in CloudWatch Logs. This is so that they're all visible in one location. Otherwise, you can separate them by Region for more granularity. Make sure that the specified log group exists in the Region that you specify with this option. + awslogs-group Required: Yes Make sure to specify a log group that the awslogs log driver sends its log streams to. + awslogs-stream-prefix Required: Yes, when using Fargate.Optional when using EC2. Use the awslogs-stream-prefix option to associate a log stream with the specified prefix, the container name, and the ID of the Amazon ECS task that the container belongs to. If you specify a prefix with this option, then the log stream takes the format prefix-name/container-name/ecs-task-id. If you don't specify a prefix with this option, then the log stream is named after the container ID that's assigned by the Docker daemon on the container instance. Because it's difficult to trace logs back to the container that sent them with just the Docker container ID (which is only available on the container instance), we recommend that you specify a prefix with this option. For Amazon ECS services, you can use the service name as the prefix. Doing so, you can trace log streams to the service that the container belongs to, the name of the container that sent them, and the ID of the task that the container belongs to. You must specify a stream-prefix for your logs to have your logs appear in the Log pane when using the Amazon ECS console. + awslogs-datetime-format Required: No This option defines a multiline start pattern in Python strftime format. A log message consists of a line that matches the pattern and any following lines that don’t match the pattern. The matched line is the delimiter between log messages. One example of a use case for using this format is for parsing output such as a stack dump, which might otherwise be logged in multiple entries. The correct pattern allows it to be captured in a single entry. For more information, see awslogs-datetime-format. You cannot configure both the awslogs-datetime-format and awslogs-multiline-pattern options. Multiline logging performs regular expression parsing and matching of all log messages. This might have a negative impact on logging performance. + awslogs-multiline-pattern Required: No This option defines a multiline start pattern that uses a regular expression. A log message consists of a line that matches the pattern and any following lines that don’t match the pattern. The matched line is the delimiter between log messages. For more information, see awslogs-multiline-pattern. This option is ignored if awslogs-datetime-format is also configured. You cannot configure both the awslogs-datetime-format and awslogs-multiline-pattern options. Multiline logging performs regular expression parsing and matching of all log messages. This might have a negative impact on logging performance. 
+             The following options apply to all supported log drivers.
+              + mode Required: No Valid values: non-blocking | blocking This option defines the delivery mode of log messages from the container to the log driver specified using logDriver. The delivery mode you choose affects application availability when the flow of logs from container is interrupted. If you use the blocking mode and the flow of logs is interrupted, calls from container code to write to the stdout and stderr streams will block. The logging thread of the application will block as a result. This may cause the application to become unresponsive and lead to container healthcheck failure. If you use the non-blocking mode, the container's logs are instead stored in an in-memory intermediate buffer configured with the max-buffer-size option. This prevents the application from becoming unresponsive when logs cannot be sent. We recommend using this mode if you want to ensure service availability and are okay with some log loss. For more information, see Preventing log loss with non-blocking mode in the awslogs container log driver. You can set a default mode for all containers in a specific Region by using the defaultLogDriverMode account setting. If you don't specify the mode option or configure the account setting, Amazon ECS will default to the non-blocking mode. For more information about the account setting, see Default log driver mode in the Amazon Elastic Container Service Developer Guide. On June 25, 2025, Amazon ECS changed the default log driver mode from blocking to non-blocking to prioritize task availability over logging. To continue using the blocking mode after this change, do one of the following: Set the mode option in your container definition's logConfiguration as blocking. Set the defaultLogDriverMode account setting to blocking. + max-buffer-size Required: No Default value: 10m When non-blocking mode is used, the max-buffer-size log option controls the size of the buffer that's used for intermediate message storage. Make sure to specify an adequate buffer size based on your application. When the buffer fills up, further logs cannot be stored. Logs that cannot be stored are lost. 
+             To route logs using the ``splunk`` log router, you need to specify a ``splunk-token`` and a ``splunk-url``.
+             When you use the ``awsfirelens`` log router to route logs to an AWS Service or AWS Partner Network destination for log storage and analytics, you can set the ``log-driver-buffer-limit`` option to limit the number of events that are buffered in memory, before being sent to the log router container. It can help to resolve potential log loss issue because high throughput might result in memory running out for the buffer inside of Docker.
+             Other options you can specify when using ``awsfirelens`` to route logs depend on the destination. When you export logs to Amazon Data Firehose, you can specify the AWS Region with ``region`` and a name for the log stream with ``delivery_stream``.
+             When you export logs to Amazon Kinesis Data Streams, you can specify an AWS Region with ``region`` and a data stream name with ``stream``.
+              When you export logs to Amazon OpenSearch Service, you can specify options like ``Name``, ``Host`` (OpenSearch Service endpoint without protocol), ``Port``, ``Index``, ``Type``, ``Aws_auth``, ``Aws_region``, ``Suppress_Type_Name``, and ``tls``. For more information, see [Under the hood: FireLens for Amazon ECS Tasks](https://docs.aws.amazon.com/containers/under-the-hood-firelens-for-amazon-ecs-tasks/).
+             When you export logs to Amazon S3, you can specify the bucket using the ``bucket`` option. You can also specify ``region``, ``total_file_size``, ``upload_timeout``, and ``use_put_object`` as options.
+             This parameter requires version 1.19 of the Docker Remote API or greater on your container instance. To check the Docker Remote API version on your container instance, log in to your container instance and run the following command: ``sudo docker version --format '{{.Server.APIVersion}}'``
+          additionalProperties: false
+          type: object
+        LogDriver:
+          description: |-
+            The log driver to use for the container.
+             For tasks on FARGATElong, the supported log drivers are ``awslogs``, ``splunk``, and ``awsfirelens``.
+             For tasks hosted on Amazon EC2 instances, the supported log drivers are ``awslogs``, ``fluentd``, ``gelf``, ``json-file``, ``journald``, ``syslog``, ``splunk``, and ``awsfirelens``.
+             For more information about using the ``awslogs`` log driver, see [Send Amazon ECS logs to CloudWatch](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/using_awslogs.html) in the *Amazon Elastic Container Service Developer Guide*.
+             For more information about using the ``awsfirelens`` log driver, see [Send Amazon ECS logs to an service or Partner](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/using_firelens.html).
+              If you have a custom driver that isn't listed, you can fork the Amazon ECS container agent project that's [available on GitHub](https://docs.aws.amazon.com/https://github.com/aws/amazon-ecs-agent) and customize it to work with that driver. We encourage you to submit pull requests for changes that you would like to have included. However, we don't currently provide support for running modified copies of this software.
+          type: string
     FirelensConfiguration:
       description: The FireLens configuration for the container. This is used to specify and configure a log router for container logs. For more information, see [Custom log routing](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/using_firelens.html) in the *Amazon Elastic Container Service Developer Guide*.
       additionalProperties: false
@@ -2591,6 +2933,26 @@ components:
           type: string
         DeviceName:
           type: string
+    TaskDefinition_Tag:
+      description: |-
+        The metadata that you apply to a resource to help you categorize and organize them. Each tag consists of a key and an optional value. You define them.
+         The following basic restrictions apply to tags:
+          +  Maximum number of tags per resource - 50
+          +  For each resource, each tag key must be unique, and each tag key can have only one value.
+          +  Maximum key length - 128 Unicode characters in UTF-8
+          +  Maximum value length - 256 Unicode characters in UTF-8
+          +  If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @.
+          +  Tag keys and values are case-sensitive.
+          +  Do not use ``aws:``, ``AWS:``, or any upper or lowercase combination of such as a prefix for either keys or values as it is reserved for AWS use. You cannot edit or delete tag keys or values with this prefix. Tags with this prefix do not count against your tags per resource limit.
+      additionalProperties: false
+      type: object
+      properties:
+        Value:
+          description: The optional part of a key-value pair that make up a tag. A ``value`` acts as a descriptor within a tag category (key).
+          type: string
+        Key:
+          description: One part of a key-value pair that make up a tag. A ``key`` is a general label that acts like a category for more specific tag values.
+          type: string
     EphemeralStorage:
       description: |-
         The amount of ephemeral storage to allocate for the task. This parameter is used to expand the total amount of ephemeral storage available, beyond the default amount, for tasks hosted on FARGATElong. For more information, see [Using data volumes in tasks](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/using_data_volumes.html) in the *Amazon ECS Developer Guide;*.
@@ -2758,7 +3120,7 @@ components:
           x-insertionOrder: false
           type: array
           items:
-            $ref: '#/components/schemas/Tag'
+            $ref: '#/components/schemas/TaskDefinition_Tag'
         TaskDefinitionArn:
           description: ''
           type: string
@@ -2826,6 +3188,65 @@ components:
           - ecs:DescribeTaskDefinition
           - iam:GetRole
           - iam:PassRole
+    TaskSet_CapacityProviderStrategyItem:
+      additionalProperties: false
+      type: object
+      properties:
+        CapacityProvider:
+          type: string
+        Base:
+          type: integer
+        Weight:
+          type: integer
+    TaskSet_AwsVpcConfiguration:
+      description: The VPC subnets and security groups associated with a task. All specified subnets and security groups must be from the same VPC.
+      additionalProperties: false
+      type: object
+      properties:
+        SecurityGroups:
+          maxItems: 5
+          description: The security groups associated with the task or service. If you do not specify a security group, the default security group for the VPC is used. There is a limit of 5 security groups that can be specified per AwsVpcConfiguration.
+          type: array
+          items:
+            type: string
+        Subnets:
+          maxItems: 16
+          description: The subnets associated with the task or service. There is a limit of 16 subnets that can be specified per AwsVpcConfiguration.
+          type: array
+          items:
+            type: string
+        AssignPublicIp:
+          description: Whether the task's elastic network interface receives a public IP address. The default value is DISABLED.
+          type: string
+          enum:
+            - DISABLED
+            - ENABLED
+      required:
+        - Subnets
+    TaskSet_LoadBalancer:
+      description: 'A load balancer object representing the load balancer to use with the task set. The supported load balancer types are either an Application Load Balancer or a Network Load Balancer. '
+      additionalProperties: false
+      type: object
+      properties:
+        TargetGroupArn:
+          description: >-
+            The full Amazon Resource Name (ARN) of the Elastic Load Balancing target group or groups associated with a service or task set. A target group ARN is only specified when using an Application Load Balancer or Network Load Balancer. If you are using a Classic Load Balancer this should be omitted. For services using the ECS deployment controller, you can specify one or multiple target groups. For more information, see
+            https://docs.aws.amazon.com/AmazonECS/latest/developerguide/register-multiple-targetgroups.html in the Amazon Elastic Container Service Developer Guide. For services using the CODE_DEPLOY deployment controller, you are required to define two target groups for the load balancer. For more information, see https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-type-bluegreen.html in the Amazon Elastic Container Service Developer Guide. If your service's task definition
+            uses the awsvpc network mode (which is required for the Fargate launch type), you must choose ip as the target type, not instance, when creating your target groups because tasks that use the awsvpc network mode are associated with an elastic network interface, not an Amazon EC2 instance.
+          type: string
+        ContainerName:
+          description: The name of the container (as it appears in a container definition) to associate with the load balancer.
+          type: string
+        ContainerPort:
+          description: The port on the container to associate with the load balancer. This port must correspond to a containerPort in the task definition the tasks in the service are using. For tasks that use the EC2 launch type, the container instance they are launched on must allow ingress traffic on the hostPort of the port mapping.
+          type: integer
+    TaskSet_NetworkConfiguration:
+      description: An object representing the network configuration for a task or service.
+      additionalProperties: false
+      type: object
+      properties:
+        AwsVpcConfiguration:
+          $ref: '#/components/schemas/TaskSet_AwsVpcConfiguration'
     Scale:
       additionalProperties: false
       type: object
@@ -2840,6 +3261,34 @@ components:
           type: string
           enum:
             - PERCENT
+    TaskSet_ServiceRegistry:
+      additionalProperties: false
+      type: object
+      properties:
+        ContainerName:
+          description: >-
+            The container name value, already specified in the task definition, to be used for your service discovery service. If the task definition that your service task specifies uses the bridge or host network mode, you must specify a containerName and containerPort combination from the task definition. If the task definition that your service task specifies uses the awsvpc network mode and a type SRV DNS record is used, you must specify either a containerName and containerPort combination
+            or a port value, but not both.
+          type: string
+        Port:
+          description: The port value used if your service discovery service specified an SRV record. This field may be used if both the awsvpc network mode and SRV records are used.
+          type: integer
+        ContainerPort:
+          description: >-
+            The port value, already specified in the task definition, to be used for your service discovery service. If the task definition your service task specifies uses the bridge or host network mode, you must specify a containerName and containerPort combination from the task definition. If the task definition your service task specifies uses the awsvpc network mode and a type SRV DNS record is used, you must specify either a containerName and containerPort combination or a port value, but
+            not both.
+          type: integer
+        RegistryArn:
+          description: The Amazon Resource Name (ARN) of the service registry. The currently supported service registry is AWS Cloud Map. For more information, see https://docs.aws.amazon.com/cloud-map/latest/api/API_CreateService.html
+          type: string
+    TaskSet_Tag:
+      additionalProperties: false
+      type: object
+      properties:
+        Value:
+          type: string
+        Key:
+          type: string
     TaskSet:
       type: object
       properties:
@@ -2855,7 +3304,7 @@ components:
         LoadBalancers:
           type: array
           items:
-            $ref: '#/components/schemas/LoadBalancer'
+            $ref: '#/components/schemas/TaskSet_LoadBalancer'
         Service:
           description: The short name or full Amazon Resource Name (ARN) of the service to create the task set in.
           type: string
@@ -2866,11 +3315,11 @@ components:
           description: The details of the service discovery registries to assign to this task set. For more information, see https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-discovery.html.
           type: array
           items:
-            $ref: '#/components/schemas/ServiceRegistry'
+            $ref: '#/components/schemas/TaskSet_ServiceRegistry'
         CapacityProviderStrategy:
           type: array
           items:
-            $ref: '#/components/schemas/CapacityProviderStrategyItem'
+            $ref: '#/components/schemas/TaskSet_CapacityProviderStrategyItem'
         LaunchType:
           description: 'The launch type that new tasks in the task set will use. For more information, see https://docs.aws.amazon.com/AmazonECS/latest/developerguide/launch_types.html in the Amazon Elastic Container Service Developer Guide. '
           type: string
@@ -2881,14 +3330,14 @@ components:
           description: The short name or full Amazon Resource Name (ARN) of the task definition for the tasks in the task set to use.
           type: string
         NetworkConfiguration:
-          $ref: '#/components/schemas/NetworkConfiguration'
+          $ref: '#/components/schemas/TaskSet_NetworkConfiguration'
         Id:
           description: The ID of the task set.
           type: string
         Tags:
           type: array
           items:
-            $ref: '#/components/schemas/Tag'
+            $ref: '#/components/schemas/TaskSet_Tag'
       required:
         - Cluster
         - Service
@@ -2942,6 +3391,99 @@ components:
         delete:
           - ecs:DeleteTaskSet
           - ecs:DescribeTaskSets
+    CreateCapacityProviderRequest:
+      properties:
+        ClientToken:
+          type: string
+        RoleArn:
+          type: string
+        TypeName:
+          type: string
+        TypeVersionId:
+          type: string
+        DesiredState:
+          type: object
+          properties:
+            AutoScalingGroupProvider:
+              $ref: '#/components/schemas/AutoScalingGroupProvider'
+            Tags:
+              type: array
+              items:
+                $ref: '#/components/schemas/Tag'
+            Name:
+              type: string
+          x-stackQL-stringOnly: true
+      x-title: CreateCapacityProviderRequest
+      type: object
+      required: []
+    CreateClusterRequest:
+      properties:
+        ClientToken:
+          type: string
+        RoleArn:
+          type: string
+        TypeName:
+          type: string
+        TypeVersionId:
+          type: string
+        DesiredState:
+          type: object
+          properties:
+            ClusterSettings:
+              description: |-
+                The settings to use when creating a cluster. This parameter is used to turn on CloudWatch Container Insights with enhanced observability or CloudWatch Container Insights for a cluster.
+                 Container Insights with enhanced observability provides all the Container Insights metrics, plus additional task and container metrics. This version supports enhanced observability for Amazon ECS clusters using the Amazon EC2 and Fargate launch types. After you configure Container Insights with enhanced observability on Amazon ECS, Container Insights auto-collects detailed infrastructure telemetry from the cluster level down to the container level in your environment and displays these critical performance data in curated dashboards removing the heavy lifting in observability set-up. 
+                 For more information, see [Monitor Amazon ECS containers using Container Insights with enhanced observability](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/cloudwatch-container-insights.html) in the *Amazon Elastic Container Service Developer Guide*.
+              type: array
+              items:
+                $ref: '#/components/schemas/ClusterSettings'
+            DefaultCapacityProviderStrategy:
+              description: The default capacity provider strategy for the cluster. When services or tasks are run in the cluster with no launch type or capacity provider strategy specified, the default capacity provider strategy is used.
+              type: array
+              items:
+                $ref: '#/components/schemas/CapacityProviderStrategyItem'
+            Configuration:
+              description: The execute command and managed storage configuration for the cluster.
+              $ref: '#/components/schemas/ClusterConfiguration'
+            ServiceConnectDefaults:
+              description: >-
+                Use this parameter to set a default Service Connect namespace. After you set a default Service Connect namespace, any new services with Service Connect turned on that are created in the cluster are added as client services in the namespace. This setting only applies to new services that set the ``enabled`` parameter to ``true`` in the ``ServiceConnectConfiguration``. You can set the namespace of each service individually in the ``ServiceConnectConfiguration`` to override this
+                default parameter.
+                 Tasks that run in a namespace can use short names to connect to services in the namespace. Tasks can connect to services across all of the clusters in the namespace. Tasks connect through a managed proxy container that collects logs and metrics for increased visibility. Only the tasks that Amazon ECS services create are supported with Service Connect. For more information, see [Service Connect](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-connect.html) in the *Amazon Elastic Container Service Developer Guide*.
+              $ref: '#/components/schemas/ServiceConnectDefaults'
+            CapacityProviders:
+              description: |-
+                The short name of one or more capacity providers to associate with the cluster. A capacity provider must be associated with a cluster before it can be included as part of the default capacity provider strategy of the cluster or used in a capacity provider strategy when calling the [CreateService](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_CreateService.html) or [RunTask](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RunTask.html) actions.
+                 If specifying a capacity provider that uses an Auto Scaling group, the capacity provider must be created but not associated with another cluster. New Auto Scaling group capacity providers can be created with the [CreateCapacityProvider](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_CreateCapacityProvider.html) API operation.
+                 To use a FARGATElong capacity provider, specify either the ``FARGATE`` or ``FARGATE_SPOT`` capacity providers. The FARGATElong capacity providers are available to all accounts and only need to be associated with a cluster to be used.
+                 The [PutCapacityProvider](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_PutCapacityProvider.html) API operation is used to update the list of available capacity providers for a cluster after the cluster is created.
+              type: array
+              items:
+                type: string
+            ClusterName:
+              description: A user-generated string that you use to identify your cluster. If you don't specify a name, CFNlong generates a unique physical ID for the name.
+              type: string
+            Arn:
+              description: ''
+              type: string
+            Tags:
+              description: |-
+                The metadata that you apply to the cluster to help you categorize and organize them. Each tag consists of a key and an optional value. You define both.
+                 The following basic restrictions apply to tags:
+                  +  Maximum number of tags per resource - 50
+                  +  For each resource, each tag key must be unique, and each tag key can have only one value.
+                  +  Maximum key length - 128 Unicode characters in UTF-8
+                  +  Maximum value length - 256 Unicode characters in UTF-8
+                  +  If your tagging schema is used across multiple services and resources, remember that other services may have restrictions on allowed characters. Generally allowed characters are: letters, numbers, and spaces representable in UTF-8, and the following characters: + - = . _ : / @.
+                  +  Tag keys and values are case-sensitive.
+                  +  Do not use ``aws:``, ``AWS:``, or any upper or lowercase combination of such as a prefix for either keys or values as it is reserved for AWS use. You cannot edit or delete tag keys or values with this prefix. Tags with this prefix do not count against your tags per resource limit.
+              type: array
+              items:
+                $ref: '#/components/schemas/Cluster_Tag'
+          x-stackQL-stringOnly: true
+      x-title: CreateClusterRequest
+      type: object
+      required: []
     CreateClusterCapacityProviderAssociationsRequest:
       properties:
         ClientToken:
@@ -2960,7 +3502,7 @@ components:
             CapacityProviders:
               $ref: '#/components/schemas/CapacityProviders'
             Cluster:
-              $ref: '#/components/schemas/Cluster'
+              $ref: '#/components/schemas/ClusterCapacityProviderAssociations_Cluster'
           x-stackQL-stringOnly: true
       x-title: CreateClusterCapacityProviderAssociationsRequest
       type: object
@@ -3050,7 +3592,7 @@ components:
                   To remove this property from your service resource, specify an empty ``CapacityProviderStrategyItem`` array.
               type: array
               items:
-                $ref: '#/components/schemas/CapacityProviderStrategyItem'
+                $ref: '#/components/schemas/Service_CapacityProviderStrategyItem'
             LaunchType:
               description: The launch type on which to run your service. For more information, see [Amazon ECS Launch Types](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/launch_types.html) in the *Amazon Elastic Container Service Developer Guide*.
               type: string
@@ -3097,7 +3639,7 @@ components:
                   +  Do not use ``aws:``, ``AWS:``, or any upper or lowercase combination of such as a prefix for either keys or values as it is reserved for AWS use. You cannot edit or delete tag keys or values with this prefix. Tags with this prefix do not count against your tags per resource limit.
               type: array
               items:
-                $ref: '#/components/schemas/Tag'
+                $ref: '#/components/schemas/Service_Tag'
             ForceNewDeployment:
               description: Determines whether to force a new deployment of the service. By default, deployments aren't forced. You can use this option to start a new deployment with no service definition changes. For example, you can update a service's tasks to use a newer Docker image with the same image/tag combination (``my_image:latest``) or to roll Fargate tasks onto a newer platform version.
               $ref: '#/components/schemas/ForceNewDeployment'
@@ -3320,7 +3862,7 @@ components:
               x-insertionOrder: false
               type: array
               items:
-                $ref: '#/components/schemas/Tag'
+                $ref: '#/components/schemas/TaskDefinition_Tag'
             TaskDefinitionArn:
               description: ''
               type: string
@@ -3353,7 +3895,7 @@ components:
             LoadBalancers:
               type: array
               items:
-                $ref: '#/components/schemas/LoadBalancer'
+                $ref: '#/components/schemas/TaskSet_LoadBalancer'
             Service:
               description: The short name or full Amazon Resource Name (ARN) of the service to create the task set in.
               type: string
@@ -3364,11 +3906,11 @@ components:
               description: The details of the service discovery registries to assign to this task set. For more information, see https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-discovery.html.
               type: array
               items:
-                $ref: '#/components/schemas/ServiceRegistry'
+                $ref: '#/components/schemas/TaskSet_ServiceRegistry'
             CapacityProviderStrategy:
               type: array
               items:
-                $ref: '#/components/schemas/CapacityProviderStrategyItem'
+                $ref: '#/components/schemas/TaskSet_CapacityProviderStrategyItem'
             LaunchType:
               description: 'The launch type that new tasks in the task set will use. For more information, see https://docs.aws.amazon.com/AmazonECS/latest/developerguide/launch_types.html in the Amazon Elastic Container Service Developer Guide. '
               type: string
@@ -3379,14 +3921,14 @@ components:
               description: The short name or full Amazon Resource Name (ARN) of the task definition for the tasks in the task set to use.
               type: string
             NetworkConfiguration:
-              $ref: '#/components/schemas/NetworkConfiguration'
+              $ref: '#/components/schemas/TaskSet_NetworkConfiguration'
             Id:
               description: The ID of the task set.
               type: string
             Tags:
               type: array
               items:
-                $ref: '#/components/schemas/Tag'
+                $ref: '#/components/schemas/TaskSet_Tag'
           x-stackQL-stringOnly: true
       x-title: CreateTaskSetRequest
       type: object
@@ -3399,12 +3941,262 @@ components:
       description: Amazon Signature authorization v4
       x-amazon-apigateway-authtype: awsSigv4
   x-stackQL-resources:
+    capacity_providers:
+      name: capacity_providers
+      id: awscc.ecs.capacity_providers
+      x-cfn-schema-name: CapacityProvider
+      x-cfn-type-name: AWS::ECS::CapacityProvider
+      x-identifiers: &ref_0
+        - Name
+      x-type: cloud_control
+      methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__CapacityProvider&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::ECS::CapacityProvider"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.ProgressEvent
+        update_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::ECS::CapacityProvider"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.ProgressEvent
+        delete_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::ECS::CapacityProvider"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.ProgressEvent
+      sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/capacity_providers/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/capacity_providers/methods/delete_resource'
+        update:
+          - $ref: '#/components/x-stackQL-resources/capacity_providers/methods/update_resource'
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ Identifier ]
+            ddl: |-
+              SELECT
+              region,
+              Identifier,
+              JSON_EXTRACT(Properties, '$.AutoScalingGroupProvider') as auto_scaling_group_provider,
+              JSON_EXTRACT(Properties, '$.Tags') as tags,
+              JSON_EXTRACT(Properties, '$.Name') as name
+              FROM awscc.cloud_control.resource WHERE TypeName = 'AWS::ECS::CapacityProvider'
+              AND Identifier = '<Name>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres" && requiredParams == [ Identifier ]
+              ddl: |-
+                SELECT
+                region,
+                Identifier,
+                json_extract_path_text(Properties, 'AutoScalingGroupProvider') as auto_scaling_group_provider,
+                json_extract_path_text(Properties, 'Tags') as tags,
+                json_extract_path_text(Properties, 'Name') as name
+                FROM awscc.cloud_control.resource WHERE TypeName = 'AWS::ECS::CapacityProvider'
+                AND Identifier = '<Name>'
+                AND region = 'us-east-1'
+    capacity_providers_list_only:
+      name: capacity_providers_list_only
+      id: awscc.ecs.capacity_providers_list_only
+      x-cfn-schema-name: CapacityProvider
+      x-cfn-type-name: AWS::ECS::CapacityProvider
+      x-identifiers: *ref_0
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.Name') as name
+              FROM awscc.cloud_control.resources WHERE TypeName = 'AWS::ECS::CapacityProvider'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                json_extract_path_text(Properties, 'Name') as name
+                FROM awscc.cloud_control.resources WHERE TypeName = 'AWS::ECS::CapacityProvider'
+                AND region = 'us-east-1'
+    clusters:
+      name: clusters
+      id: awscc.ecs.clusters
+      x-cfn-schema-name: Cluster
+      x-cfn-type-name: AWS::ECS::Cluster
+      x-identifiers: &ref_1
+        - ClusterName
+      x-type: cloud_control
+      methods:
+        create_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive_DesiredState
+          operation:
+            $ref: '#/paths/~1?Action=CreateResource&Version=2021-09-30&__Cluster&__detailTransformed=true/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::ECS::Cluster"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.ProgressEvent
+        update_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1?Action=UpdateResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::ECS::Cluster"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.ProgressEvent
+        delete_resource:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1?Action=DeleteResource&Version=2021-09-30/post'
+          request:
+            mediaType: application/x-amz-json-1.0
+            base: |-
+              {
+                "TypeName": "AWS::ECS::Cluster"
+              }
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.ProgressEvent
+      sqlVerbs:
+        insert:
+          - $ref: '#/components/x-stackQL-resources/clusters/methods/create_resource'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/clusters/methods/delete_resource'
+        update:
+          - $ref: '#/components/x-stackQL-resources/clusters/methods/update_resource'
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3" && requiredParams == [ Identifier ]
+            ddl: |-
+              SELECT
+              region,
+              Identifier,
+              JSON_EXTRACT(Properties, '$.ClusterSettings') as cluster_settings,
+              JSON_EXTRACT(Properties, '$.DefaultCapacityProviderStrategy') as default_capacity_provider_strategy,
+              JSON_EXTRACT(Properties, '$.Configuration') as configuration,
+              JSON_EXTRACT(Properties, '$.ServiceConnectDefaults') as service_connect_defaults,
+              JSON_EXTRACT(Properties, '$.CapacityProviders') as capacity_providers,
+              JSON_EXTRACT(Properties, '$.ClusterName') as cluster_name,
+              JSON_EXTRACT(Properties, '$.Arn') as arn,
+              JSON_EXTRACT(Properties, '$.Tags') as tags
+              FROM awscc.cloud_control.resource WHERE TypeName = 'AWS::ECS::Cluster'
+              AND Identifier = '<ClusterName>'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres" && requiredParams == [ Identifier ]
+              ddl: |-
+                SELECT
+                region,
+                Identifier,
+                json_extract_path_text(Properties, 'ClusterSettings') as cluster_settings,
+                json_extract_path_text(Properties, 'DefaultCapacityProviderStrategy') as default_capacity_provider_strategy,
+                json_extract_path_text(Properties, 'Configuration') as configuration,
+                json_extract_path_text(Properties, 'ServiceConnectDefaults') as service_connect_defaults,
+                json_extract_path_text(Properties, 'CapacityProviders') as capacity_providers,
+                json_extract_path_text(Properties, 'ClusterName') as cluster_name,
+                json_extract_path_text(Properties, 'Arn') as arn,
+                json_extract_path_text(Properties, 'Tags') as tags
+                FROM awscc.cloud_control.resource WHERE TypeName = 'AWS::ECS::Cluster'
+                AND Identifier = '<ClusterName>'
+                AND region = 'us-east-1'
+    clusters_list_only:
+      name: clusters_list_only
+      id: awscc.ecs.clusters_list_only
+      x-cfn-schema-name: Cluster
+      x-cfn-type-name: AWS::ECS::Cluster
+      x-identifiers: *ref_1
+      x-type: cloud_control_view
+      methods: {}
+      sqlVerbs:
+        insert: []
+        delete: []
+        update: []
+      config:
+        views:
+          select:
+            predicate: sqlDialect == "sqlite3"
+            ddl: |-
+              SELECT
+              region,
+              JSON_EXTRACT(Properties, '$.ClusterName') as cluster_name
+              FROM awscc.cloud_control.resources WHERE TypeName = 'AWS::ECS::Cluster'
+              AND region = 'us-east-1'
+            fallback:
+              predicate: sqlDialect == "postgres"
+              ddl: |-
+                SELECT
+                region,
+                json_extract_path_text(Properties, 'ClusterName') as cluster_name
+                FROM awscc.cloud_control.resources WHERE TypeName = 'AWS::ECS::Cluster'
+                AND region = 'us-east-1'
     cluster_capacity_provider_associations:
       name: cluster_capacity_provider_associations
       id: awscc.ecs.cluster_capacity_provider_associations
       x-cfn-schema-name: ClusterCapacityProviderAssociations
       x-cfn-type-name: AWS::ECS::ClusterCapacityProviderAssociations
-      x-identifiers:
+      x-identifiers: &ref_2
         - Cluster
       x-type: cloud_control
       methods:
@@ -3494,8 +4286,7 @@ components:
       id: awscc.ecs.cluster_capacity_provider_associations_list_only
       x-cfn-schema-name: ClusterCapacityProviderAssociations
       x-cfn-type-name: AWS::ECS::ClusterCapacityProviderAssociations
-      x-identifiers:
-        - Cluster
+      x-identifiers: *ref_2
       x-type: cloud_control_view
       methods: {}
       sqlVerbs:
@@ -3573,7 +4364,7 @@ components:
       id: awscc.ecs.services
       x-cfn-schema-name: Service
       x-cfn-type-name: AWS::ECS::Service
-      x-identifiers:
+      x-identifiers: &ref_3
         - ServiceArn
         - Cluster
       x-type: cloud_control
@@ -3714,9 +4505,7 @@ components:
       id: awscc.ecs.services_list_only
       x-cfn-schema-name: Service
       x-cfn-type-name: AWS::ECS::Service
-      x-identifiers:
-        - ServiceArn
-        - Cluster
+      x-identifiers: *ref_3
       x-type: cloud_control_view
       methods: {}
       sqlVerbs:
@@ -3748,7 +4537,7 @@ components:
       id: awscc.ecs.task_definitions
       x-cfn-schema-name: TaskDefinition
       x-cfn-type-name: AWS::ECS::TaskDefinition
-      x-identifiers:
+      x-identifiers: &ref_4
         - TaskDefinitionArn
       x-type: cloud_control
       methods:
@@ -3870,8 +4659,7 @@ components:
       id: awscc.ecs.task_definitions_list_only
       x-cfn-schema-name: TaskDefinition
       x-cfn-type-name: AWS::ECS::TaskDefinition
-      x-identifiers:
-        - TaskDefinitionArn
+      x-identifiers: *ref_4
       x-type: cloud_control_view
       methods: {}
       sqlVerbs:
@@ -4144,6 +4932,90 @@ paths:
                 - Identifier
                 - PatchDocument
               type: object
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/x-cloud-control-schemas/ProgressEventResponse'
+          description: Success
+  /?Action=CreateResource&Version=2021-09-30&__CapacityProvider&__detailTransformed=true:
+    parameters:
+      - $ref: '#/components/parameters/X-Amz-Content-Sha256'
+      - $ref: '#/components/parameters/X-Amz-Date'
+      - $ref: '#/components/parameters/X-Amz-Algorithm'
+      - $ref: '#/components/parameters/X-Amz-Credential'
+      - $ref: '#/components/parameters/X-Amz-Security-Token'
+      - $ref: '#/components/parameters/X-Amz-Signature'
+      - $ref: '#/components/parameters/X-Amz-SignedHeaders'
+    post:
+      operationId: CreateCapacityProvider
+      parameters:
+        - description: Action Header
+          in: header
+          name: X-Amz-Target
+          required: false
+          schema:
+            default: CloudApiService.CreateResource
+            enum:
+              - CloudApiService.CreateResource
+            type: string
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            default: application/x-amz-json-1.0
+            enum:
+              - application/x-amz-json-1.0
+            type: string
+      requestBody:
+        content:
+          application/x-amz-json-1.0:
+            schema:
+              $ref: '#/components/schemas/CreateCapacityProviderRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/x-cloud-control-schemas/ProgressEventResponse'
+          description: Success
+  /?Action=CreateResource&Version=2021-09-30&__Cluster&__detailTransformed=true:
+    parameters:
+      - $ref: '#/components/parameters/X-Amz-Content-Sha256'
+      - $ref: '#/components/parameters/X-Amz-Date'
+      - $ref: '#/components/parameters/X-Amz-Algorithm'
+      - $ref: '#/components/parameters/X-Amz-Credential'
+      - $ref: '#/components/parameters/X-Amz-Security-Token'
+      - $ref: '#/components/parameters/X-Amz-Signature'
+      - $ref: '#/components/parameters/X-Amz-SignedHeaders'
+    post:
+      operationId: CreateCluster
+      parameters:
+        - description: Action Header
+          in: header
+          name: X-Amz-Target
+          required: false
+          schema:
+            default: CloudApiService.CreateResource
+            enum:
+              - CloudApiService.CreateResource
+            type: string
+        - in: header
+          name: Content-Type
+          required: false
+          schema:
+            default: application/x-amz-json-1.0
+            enum:
+              - application/x-amz-json-1.0
+            type: string
+      requestBody:
+        content:
+          application/x-amz-json-1.0:
+            schema:
+              $ref: '#/components/schemas/CreateClusterRequest'
         required: true
       responses:
         '200':
