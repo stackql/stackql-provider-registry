@@ -5,8 +5,8 @@ info:
     OpenAPI specification for the Databricks database service (workspace-level
     APIs), generated from the Databricks Python SDK.
   version: 0.1.0
-  x-stackql-sdk-version: 0.86.0
-  x-stackql-date-generated: '2026-03-20'
+  x-stackql-sdk-version: 0.123.0
+  x-stackql-date-generated: '2026-07-31'
   x-stackql-sdk-namespace: databricks.sdk.service.database
 servers:
   - url: https://{deployment_name}.cloud.databricks.com
@@ -44,10 +44,20 @@ paths:
                     database_name:
                       type: string
                       description: >-
-                        The name of the database (in a instance) associated with
-                        the catalog.
+                        The name of the database (in an instance) associated
+                        with the catalog.
                     create_database_if_not_exists:
                       type: boolean
+                    database_branch_id:
+                      type: string
+                      description: >-
+                        The branch_id of the database branch associated with the
+                        catalog.
+                    database_project_id:
+                      type: string
+                      description: >-
+                        The project_id of the database project associated with
+                        the catalog.
                     uid:
                       type: string
                   required:
@@ -346,6 +356,7 @@ paths:
                         - STARTING
                         - STOPPED
                         - UPDATING
+                        - UPGRADING
                       description: The current state of the instance.
                     stopped:
                       type: boolean
@@ -655,6 +666,9 @@ paths:
                         postgres database. Registration of database tables via
                         /database/tables is currently only supported in standard
                         catalogs.
+                    table_serving_url:
+                      type: string
+                      description: Data serving REST API URL for this table
                   required:
                     - name
               required:
@@ -967,6 +981,11 @@ paths:
                             synced table is in the SYNCED_TRIGGERED_UPDATE
                                 or the SYNCED_NO_PENDING_UPDATE state.
                       description: Synced Table data synchronization status
+                    database_branch_id:
+                      type: string
+                      description: >-
+                        The branch_id of the database branch associated with the
+                        table.
                     database_instance_name:
                       type: string
                       description: >-
@@ -978,6 +997,19 @@ paths:
                         registered catalogs, the database instance name MUST
                         match that of the registered catalog (or the request
                         will be rejected).
+                    database_project_id:
+                      type: string
+                      description: >-
+                        The project_id of the database project associated with
+                        the table.
+                    effective_database_branch_id:
+                      type: string
+                      description: >-
+                        The branch_id of the database branch associated with the
+                        table. This is an output only field that contains the
+                        value computed from the input field combined with server
+                        side defaults. Use the field without the effective_
+                        prefix to set the value.
                     effective_database_instance_name:
                       type: string
                       description: >-
@@ -988,6 +1020,14 @@ paths:
                         only field that contains the value computed from the
                         input field combined with server side defaults. Use the
                         field without the effective_ prefix to set the value.
+                    effective_database_project_id:
+                      type: string
+                      description: >-
+                        The project_id of the database project associated with
+                        the table. This is an output only field that contains
+                        the value computed from the input field combined with
+                        server side defaults. Use the field without the
+                        effective_ prefix to set the value.
                     effective_logical_database_name:
                       type: string
                       description: >-
@@ -1010,10 +1050,18 @@ paths:
                         field is required. In this scenario, specifying this
                         field will allow targeting an arbitrary postgres
                         database. Note that this has implications for the
-                        `create_database_objects_is_missing` field in `spec`.
+                        ``create_database_objects_is_missing`` field in
+                        ``spec``.
                     spec:
                       type: object
                       properties:
+                        accelerated_sync:
+                          type: boolean
+                          description: >-
+                            When true, enables accelerated sync mode for the
+                            initial data load. This significantly improves
+                            performance for large tables. Requires
+                            workspace-level enablement.
                         create_database_objects_if_missing:
                           type: boolean
                           description: >-
@@ -1031,6 +1079,74 @@ paths:
                             allows sharing existing compute. In this case, the
                             scheduling_policy of this synced table must match
                             the scheduling policy of the existing pipeline.
+                        extra_columns:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              column_name:
+                                type: string
+                                description: Name of the column.
+                              column_type:
+                                type: string
+                                description: >-
+                                  PostgreSQL type of the column, for example
+                                  "tsvector" or "vector(1024)".
+                              compute:
+                                type: string
+                                description: >-
+                                  SQL expression used to compute the column's
+                                  value, for example "to_tsvector('english',
+                                  content)".
+                              maintenance:
+                                type: string
+                                x-enum:
+                                  - DEFAULT_VALUE
+                                  - STORED_GENERATED
+                                description: >-
+                                  How the column's value is populated and kept
+                                  up to date.
+                            required:
+                              - column_name
+                              - column_type
+                            description: >-
+                              An extra PostgreSQL column to add to the synced
+                              table.
+                          description: >-
+                            Extra PostgreSQL-only columns to add to the synced
+                            table.
+                        extra_index_definitions:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                                description: >-
+                                  Name of the index as it will appear in
+                                  PostgreSQL.
+                              definition:
+                                type: string
+                                description: >-
+                                  The definition portion of a CREATE INDEX
+                                  statement, placed after ON table_name. For
+                                  example: USING hnsw (embedding
+                                  vector_cosine_ops) WITH (m = 16,
+                                  ef_construction = 64).
+                              creation_point:
+                                type: string
+                                x-enum:
+                                  - CREATION_POINT_AFTER_DATA_LOAD
+                                description: >-
+                                  When the index should be created relative to
+                                  the initial data load.
+                            required:
+                              - name
+                              - definition
+                            description: >-
+                              Definition of a secondary index to create on the
+                              synced table.
+                          description: Secondary indexes to create on the synced table.
                         new_pipeline_spec:
                           type: object
                           properties:
@@ -1039,6 +1155,16 @@ paths:
                               description: >-
                                 Budget policy to set on the newly created
                                 pipeline.
+                            pipeline_channel:
+                              type: string
+                              x-enum:
+                                - CURRENT
+                                - PREVIEW
+                              description: >-
+                                Release channel of the underlying pipeline's
+                                runtime. Some source table configurations (e.g.,
+                                read-time CDF) require PREVIEW. Defaults to
+                                CURRENT if not specified.
                             storage_catalog:
                               type: string
                               description: >-
@@ -1093,7 +1219,47 @@ paths:
                           description: >-
                             Time series key to deduplicate (tie-break) rows with
                             the same primary key.
+                        type_overrides:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              column_name:
+                                type: string
+                                description: >-
+                                  Name of the source column whose target
+                                  PostgreSQL type should be overridden.
+                              pg_type:
+                                type: string
+                                x-enum:
+                                  - PG_SPECIFIC_TYPE_HALFVEC
+                                  - PG_SPECIFIC_TYPE_VARCHAR
+                                  - PG_SPECIFIC_TYPE_VECTOR
+                                description: >-
+                                  PostgreSQL-specific target type to use for the
+                                  column.
+                              size:
+                                type: integer
+                                description: >-
+                                  Size parameter for the target type, for types
+                                  that take one (e.g. vector dimension, varchar
+                                  length). Required when the chosen pg_type
+                                  needs a size.
+                            required:
+                              - column_name
+                              - pg_type
+                            description: >-
+                              Overrides the default Delta-to-PostgreSQL type
+                              mapping for a single column.
+                          description: >-
+                            Override the default Delta->PG type mapping for
+                            specific columns. A TypeOverride with
+                            PG_SPECIFIC_TYPE_UNSPECIFIED is rejected; a valid
+                            pg_type must be set.
                       description: Specification of a synced database table.
+                    table_serving_url:
+                      type: string
+                      description: Data serving REST API URL for this table
                     unity_catalog_provisioning_state:
                       type: string
                       x-enum:
@@ -1247,10 +1413,20 @@ paths:
                     database_name:
                       type: string
                       description: >-
-                        The name of the database (in a instance) associated with
-                        the catalog.
+                        The name of the database (in an instance) associated
+                        with the catalog.
                     create_database_if_not_exists:
                       type: boolean
+                    database_branch_id:
+                      type: string
+                      description: >-
+                        The branch_id of the database branch associated with the
+                        catalog.
+                    database_project_id:
+                      type: string
+                      description: >-
+                        The project_id of the database project associated with
+                        the catalog.
                     uid:
                       type: string
                   required:
@@ -1291,7 +1467,7 @@ paths:
         :param name: str
           Name of the instance to delete.
         :param force: bool (optional)
-          By default, a instance cannot be deleted if it has descendant instances created via PITR. If this
+          By default, an instance cannot be deleted if it has descendant instances created via PITR. If this
           flag is specified as true, all descendent instances will be deleted as well.
         :param purge: bool (optional)
           Deprecated. Omitting the field or setting it to true will result in the field being hard deleted.
@@ -1309,7 +1485,7 @@ paths:
           schema:
             type: boolean
           description: >-
-            By default, a instance cannot be deleted if it has descendant
+            By default, an instance cannot be deleted if it has descendant
             instances created via PITR. If this flag is specified as true, all
             descendent instances will be deleted as well.
         - name: purge
@@ -1664,6 +1840,7 @@ paths:
                         - STARTING
                         - STOPPED
                         - UPDATING
+                        - UPGRADING
                       description: The current state of the instance.
                     stopped:
                       type: boolean
@@ -1715,7 +1892,7 @@ paths:
         :param instance_name: str
         :param name: str
         :param allow_missing: bool (optional)
-          This is the AIP standard name for the equivalent of Postgres' `IF EXISTS` option
+          This is the AIP standard name for the equivalent of Postgres' ``IF EXISTS`` option
         :param reassign_owned_to: str (optional)
       parameters:
         - name: instance_name
@@ -1734,8 +1911,8 @@ paths:
           schema:
             type: boolean
           description: >-
-            This is the AIP standard name for the equivalent of Postgres' `IF
-            EXISTS` option
+            This is the AIP standard name for the equivalent of Postgres' ``IF
+            EXISTS`` option
         - name: reassign_owned_to
           in: query
           required: false
@@ -1779,6 +1956,124 @@ paths:
           required: true
           schema:
             type: string
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseInstanceRole'
+        default:
+          description: Error response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+      x-stackql-sdk-source: DatabaseAPI
+    patch:
+      operationId: database_update_database_instance_role
+      summary: Update a role for a Database Instance.
+      tags:
+        - database
+      description: |-
+        Update a role for a Database Instance.
+
+        :param instance_name: str
+        :param name: str
+          The name of the role. This is the unique identifier for the role in an instance.
+        :param database_instance_role: :class:`DatabaseInstanceRole`
+        :param database_instance_name: str (optional)
+
+        :returns: :class:`DatabaseInstanceRole`
+      parameters:
+        - name: instance_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The name of the role. This is the unique identifier for the role in
+            an instance.
+        - name: database_instance_name
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                database_instance_role:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                      description: >-
+                        The name of the role. This is the unique identifier for
+                        the role in an instance.
+                    attributes:
+                      type: object
+                      properties:
+                        bypassrls:
+                          type: boolean
+                        createdb:
+                          type: boolean
+                        createrole:
+                          type: boolean
+                      description: >-
+                        The desired API-exposed Postgres role attribute to
+                        associate with the role. Optional.
+                    effective_attributes:
+                      type: object
+                      properties:
+                        bypassrls:
+                          type: boolean
+                        createdb:
+                          type: boolean
+                        createrole:
+                          type: boolean
+                      description: >-
+                        The attributes that are applied to the role. This is an
+                        output only field that contains the value computed from
+                        the input field combined with server side defaults. Use
+                        the field without the effective_ prefix to set the
+                        value.
+                    identity_type:
+                      type: string
+                      x-enum:
+                        - GROUP
+                        - PG_ONLY
+                        - SERVICE_PRINCIPAL
+                        - USER
+                      description: The type of the role.
+                    instance_name:
+                      type: string
+                    membership_role:
+                      type: string
+                      x-enum:
+                        - DATABRICKS_SUPERUSER
+                      description: >-
+                        An enum value for a standard role that this role is a
+                        member of.
+                  required:
+                    - name
+                  description: >-
+                    A DatabaseInstanceRole represents a Postgres role in a
+                    database instance.
+              required:
+                - database_instance_role
       responses:
         '200':
           description: Success
@@ -2250,6 +2545,11 @@ paths:
                             synced table is in the SYNCED_TRIGGERED_UPDATE
                                 or the SYNCED_NO_PENDING_UPDATE state.
                       description: Synced Table data synchronization status
+                    database_branch_id:
+                      type: string
+                      description: >-
+                        The branch_id of the database branch associated with the
+                        table.
                     database_instance_name:
                       type: string
                       description: >-
@@ -2261,6 +2561,19 @@ paths:
                         registered catalogs, the database instance name MUST
                         match that of the registered catalog (or the request
                         will be rejected).
+                    database_project_id:
+                      type: string
+                      description: >-
+                        The project_id of the database project associated with
+                        the table.
+                    effective_database_branch_id:
+                      type: string
+                      description: >-
+                        The branch_id of the database branch associated with the
+                        table. This is an output only field that contains the
+                        value computed from the input field combined with server
+                        side defaults. Use the field without the effective_
+                        prefix to set the value.
                     effective_database_instance_name:
                       type: string
                       description: >-
@@ -2271,6 +2584,14 @@ paths:
                         only field that contains the value computed from the
                         input field combined with server side defaults. Use the
                         field without the effective_ prefix to set the value.
+                    effective_database_project_id:
+                      type: string
+                      description: >-
+                        The project_id of the database project associated with
+                        the table. This is an output only field that contains
+                        the value computed from the input field combined with
+                        server side defaults. Use the field without the
+                        effective_ prefix to set the value.
                     effective_logical_database_name:
                       type: string
                       description: >-
@@ -2293,10 +2614,18 @@ paths:
                         field is required. In this scenario, specifying this
                         field will allow targeting an arbitrary postgres
                         database. Note that this has implications for the
-                        `create_database_objects_is_missing` field in `spec`.
+                        ``create_database_objects_is_missing`` field in
+                        ``spec``.
                     spec:
                       type: object
                       properties:
+                        accelerated_sync:
+                          type: boolean
+                          description: >-
+                            When true, enables accelerated sync mode for the
+                            initial data load. This significantly improves
+                            performance for large tables. Requires
+                            workspace-level enablement.
                         create_database_objects_if_missing:
                           type: boolean
                           description: >-
@@ -2314,6 +2643,74 @@ paths:
                             allows sharing existing compute. In this case, the
                             scheduling_policy of this synced table must match
                             the scheduling policy of the existing pipeline.
+                        extra_columns:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              column_name:
+                                type: string
+                                description: Name of the column.
+                              column_type:
+                                type: string
+                                description: >-
+                                  PostgreSQL type of the column, for example
+                                  "tsvector" or "vector(1024)".
+                              compute:
+                                type: string
+                                description: >-
+                                  SQL expression used to compute the column's
+                                  value, for example "to_tsvector('english',
+                                  content)".
+                              maintenance:
+                                type: string
+                                x-enum:
+                                  - DEFAULT_VALUE
+                                  - STORED_GENERATED
+                                description: >-
+                                  How the column's value is populated and kept
+                                  up to date.
+                            required:
+                              - column_name
+                              - column_type
+                            description: >-
+                              An extra PostgreSQL column to add to the synced
+                              table.
+                          description: >-
+                            Extra PostgreSQL-only columns to add to the synced
+                            table.
+                        extra_index_definitions:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                                description: >-
+                                  Name of the index as it will appear in
+                                  PostgreSQL.
+                              definition:
+                                type: string
+                                description: >-
+                                  The definition portion of a CREATE INDEX
+                                  statement, placed after ON table_name. For
+                                  example: USING hnsw (embedding
+                                  vector_cosine_ops) WITH (m = 16,
+                                  ef_construction = 64).
+                              creation_point:
+                                type: string
+                                x-enum:
+                                  - CREATION_POINT_AFTER_DATA_LOAD
+                                description: >-
+                                  When the index should be created relative to
+                                  the initial data load.
+                            required:
+                              - name
+                              - definition
+                            description: >-
+                              Definition of a secondary index to create on the
+                              synced table.
+                          description: Secondary indexes to create on the synced table.
                         new_pipeline_spec:
                           type: object
                           properties:
@@ -2322,6 +2719,16 @@ paths:
                               description: >-
                                 Budget policy to set on the newly created
                                 pipeline.
+                            pipeline_channel:
+                              type: string
+                              x-enum:
+                                - CURRENT
+                                - PREVIEW
+                              description: >-
+                                Release channel of the underlying pipeline's
+                                runtime. Some source table configurations (e.g.,
+                                read-time CDF) require PREVIEW. Defaults to
+                                CURRENT if not specified.
                             storage_catalog:
                               type: string
                               description: >-
@@ -2376,7 +2783,47 @@ paths:
                           description: >-
                             Time series key to deduplicate (tie-break) rows with
                             the same primary key.
+                        type_overrides:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              column_name:
+                                type: string
+                                description: >-
+                                  Name of the source column whose target
+                                  PostgreSQL type should be overridden.
+                              pg_type:
+                                type: string
+                                x-enum:
+                                  - PG_SPECIFIC_TYPE_HALFVEC
+                                  - PG_SPECIFIC_TYPE_VARCHAR
+                                  - PG_SPECIFIC_TYPE_VECTOR
+                                description: >-
+                                  PostgreSQL-specific target type to use for the
+                                  column.
+                              size:
+                                type: integer
+                                description: >-
+                                  Size parameter for the target type, for types
+                                  that take one (e.g. vector dimension, varchar
+                                  length). Required when the chosen pg_type
+                                  needs a size.
+                            required:
+                              - column_name
+                              - pg_type
+                            description: >-
+                              Overrides the default Delta-to-PostgreSQL type
+                              mapping for a single column.
+                          description: >-
+                            Override the default Delta->PG type mapping for
+                            specific columns. A TypeOverride with
+                            PG_SPECIFIC_TYPE_UNSPECIFIED is rejected; a valid
+                            pg_type must be set.
                       description: Specification of a synced database table.
+                    table_serving_url:
+                      type: string
+                      description: Data serving REST API URL for this table
                     unity_catalog_provisioning_state:
                       type: string
                       x-enum:
@@ -2406,6 +2853,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SyncedDatabaseTable'
+        default:
+          description: Error response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+      x-stackql-sdk-source: DatabaseAPI
+  /api/2.0/database/instances/{name}/failover:
+    post:
+      operationId: database_failover_database_instance
+      summary: Failover the primary node of a Database Instance to a secondary.
+      tags:
+        - database
+      description: |-
+        Failover the primary node of a Database Instance to a secondary.
+
+        :param name: str
+          Name of the instance to failover.
+        :param failover_target_database_instance_name: str (optional)
+
+        :returns: :class:`DatabaseInstance`
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Name of the instance to failover.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                failover_target_database_instance_name:
+                  type: string
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseInstance'
         default:
           description: Error response
           content:
@@ -2653,6 +3148,39 @@ paths:
                   message:
                     type: string
       x-stackql-sdk-source: DatabaseAPI
+  /api/2.0/database/instances/{name}/upgrade:
+    patch:
+      operationId: database_upgrade_instance_to_autoscaling
+      summary: Upgrade a Database Instance to Autoscaling.
+      tags:
+        - database
+      description: |-
+        Upgrade a Database Instance to Autoscaling.
+
+        :param name: str
+          Name of the instance to upgrade.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Name of the instance to upgrade.
+      responses:
+        '200':
+          description: Success
+        default:
+          description: Error response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+      x-stackql-sdk-source: DatabaseAPI
 components:
   schemas:
     CustomTag:
@@ -2674,10 +3202,16 @@ components:
         database_name:
           type: string
           description: >-
-            The name of the database (in a instance) associated with the
+            The name of the database (in an instance) associated with the
             catalog.
         create_database_if_not_exists:
           type: boolean
+        database_branch_id:
+          type: string
+          description: The branch_id of the database branch associated with the catalog.
+        database_project_id:
+          type: string
+          description: The project_id of the database project associated with the catalog.
         uid:
           type: string
       required:
@@ -2959,6 +3493,9 @@ components:
             targeting an arbitrary postgres database. Registration of database
             tables via /database/tables is currently only supported in standard
             catalogs.
+        table_serving_url:
+          type: string
+          description: Data serving REST API URL for this table
       required:
         - name
     DeltaTableSyncInfo:
@@ -3014,6 +3551,12 @@ components:
         budget_policy_id:
           type: string
           description: Budget policy to set on the newly created pipeline.
+        pipeline_channel:
+          $ref: '#/components/schemas/PipelineChannel'
+          description: >-
+            Release channel of the underlying pipeline's runtime. Some source
+            table configurations (e.g., read-time CDF) require PREVIEW. Defaults
+            to CURRENT if not specified.
         storage_catalog:
           type: string
           description: >-
@@ -3058,6 +3601,9 @@ components:
         data_synchronization_status:
           $ref: '#/components/schemas/SyncedTableStatus'
           description: Synced Table data synchronization status
+        database_branch_id:
+          type: string
+          description: The branch_id of the database branch associated with the table.
         database_instance_name:
           type: string
           description: >-
@@ -3067,12 +3613,29 @@ components:
             field is specified when creating synced database tables in
             registered catalogs, the database instance name MUST match that of
             the registered catalog (or the request will be rejected).
+        database_project_id:
+          type: string
+          description: The project_id of the database project associated with the table.
+        effective_database_branch_id:
+          type: string
+          description: >-
+            The branch_id of the database branch associated with the table. This
+            is an output only field that contains the value computed from the
+            input field combined with server side defaults. Use the field
+            without the effective_ prefix to set the value.
         effective_database_instance_name:
           type: string
           description: >-
             The name of the database instance that this table is registered to.
             This field is always returned, and for tables inside database
             catalogs is inferred database instance associated with the catalog.
+            This is an output only field that contains the value computed from
+            the input field combined with server side defaults. Use the field
+            without the effective_ prefix to set the value.
+        effective_database_project_id:
+          type: string
+          description: >-
+            The project_id of the database project associated with the table.
             This is an output only field that contains the value computed from
             the input field combined with server side defaults. Use the field
             without the effective_ prefix to set the value.
@@ -3095,9 +3658,12 @@ components:
             standard catalog, this field is required. In this scenario,
             specifying this field will allow targeting an arbitrary postgres
             database. Note that this has implications for the
-            `create_database_objects_is_missing` field in `spec`.
+            ``create_database_objects_is_missing`` field in ``spec``.
         spec:
           $ref: '#/components/schemas/SyncedTableSpec'
+        table_serving_url:
+          type: string
+          description: Data serving REST API URL for this table
         unity_catalog_provisioning_state:
           $ref: '#/components/schemas/ProvisioningInfoState'
           description: >-
@@ -3208,6 +3774,12 @@ components:
     SyncedTableSpec:
       type: object
       properties:
+        accelerated_sync:
+          type: boolean
+          description: >-
+            When true, enables accelerated sync mode for the initial data load.
+            This significantly improves performance for large tables. Requires
+            workspace-level enablement.
         create_database_objects_if_missing:
           type: boolean
           description: >-
@@ -3222,6 +3794,16 @@ components:
             creating a new pipeline and allows sharing existing compute. In this
             case, the scheduling_policy of this synced table must match the
             scheduling policy of the existing pipeline.
+        extra_columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncedTableSpecExtraColumn'
+          description: Extra PostgreSQL-only columns to add to the synced table.
+        extra_index_definitions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncedTableSpecSecondaryIndex'
+          description: Secondary indexes to create on the synced table.
         new_pipeline_spec:
           $ref: '#/components/schemas/NewPipelineSpec'
           description: >-
@@ -3250,7 +3832,79 @@ components:
           description: >-
             Time series key to deduplicate (tie-break) rows with the same
             primary key.
+        type_overrides:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncedTableSpecTypeOverride'
+          description: >-
+            Override the default Delta->PG type mapping for specific columns. A
+            TypeOverride with PG_SPECIFIC_TYPE_UNSPECIFIED is rejected; a valid
+            pg_type must be set.
       description: Specification of a synced database table.
+    SyncedTableSpecExtraColumn:
+      type: object
+      properties:
+        column_name:
+          type: string
+          description: Name of the column.
+        column_type:
+          type: string
+          description: >-
+            PostgreSQL type of the column, for example "tsvector" or
+            "vector(1024)".
+        compute:
+          type: string
+          description: >-
+            SQL expression used to compute the column's value, for example
+            "to_tsvector('english', content)".
+        maintenance:
+          $ref: '#/components/schemas/SyncedTableSpecExtraColumnMaintenance'
+      required:
+        - column_name
+        - column_type
+      description: An extra PostgreSQL column to add to the synced table.
+    SyncedTableSpecSecondaryIndex:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the index as it will appear in PostgreSQL.
+        definition:
+          type: string
+          description: >-
+            The definition portion of a CREATE INDEX statement, placed after ON
+            table_name. For example: USING hnsw (embedding vector_cosine_ops)
+            WITH (m = 16, ef_construction = 64).
+        creation_point:
+          $ref: '#/components/schemas/SyncedTableSpecSecondaryIndexCreationPoint'
+          description: When the index should be created relative to the initial data load.
+      required:
+        - name
+        - definition
+      description: Definition of a secondary index to create on the synced table.
+    SyncedTableSpecTypeOverride:
+      type: object
+      properties:
+        column_name:
+          type: string
+          description: >-
+            Name of the source column whose target PostgreSQL type should be
+            overridden.
+        pg_type:
+          $ref: '#/components/schemas/SyncedTableSpecPgSpecificType'
+          description: PostgreSQL-specific target type to use for the column.
+        size:
+          type: integer
+          description: >-
+            Size parameter for the target type, for types that take one (e.g.
+            vector dimension, varchar length). Required when the chosen pg_type
+            needs a size.
+      required:
+        - column_name
+        - pg_type
+      description: >-
+        Overrides the default Delta-to-PostgreSQL type mapping for a single
+        column.
     SyncedTableStatus:
       type: object
       properties:
@@ -3366,6 +4020,7 @@ components:
         - STARTING
         - STOPPED
         - UPDATING
+        - UPGRADING
       description: |-
         Create a collection of name/value pairs.
 
@@ -3403,6 +4058,19 @@ components:
 
         Methods can be added to enumerations, and members can have their own
         attributes -- see the documentation for details.
+    PipelineChannel:
+      type: string
+      x-enum:
+        - CURRENT
+        - PREVIEW
+      description: >-
+        Release channel of the underlying pipeline's runtime. PREVIEW provides
+        early access to the
+
+        latest features but may be less stable. Some source table configurations
+        (e.g., read-time CDF)
+
+        require PREVIEW. Defaults to CURRENT if not specified.
     ProvisioningInfoState:
       type: string
       x-enum:
@@ -3540,6 +4208,26 @@ components:
 
         Methods can be added to enumerations, and members can have their own
         attributes -- see the documentation for details.
+    SyncedTableSpecExtraColumnMaintenance:
+      type: string
+      x-enum:
+        - DEFAULT_VALUE
+        - STORED_GENERATED
+      description: How the column's value is populated and kept up to date.
+    SyncedTableSpecPgSpecificType:
+      type: string
+      x-enum:
+        - PG_SPECIFIC_TYPE_HALFVEC
+        - PG_SPECIFIC_TYPE_VARCHAR
+        - PG_SPECIFIC_TYPE_VECTOR
+      description: >-
+        PostgreSQL-specific target types that can override the default
+        Delta-to-PG mapping.
+    SyncedTableSpecSecondaryIndexCreationPoint:
+      type: string
+      x-enum:
+        - CREATION_POINT_AFTER_DATA_LOAD
+      description: Controls when the index is created relative to the initial data load.
     SyncedTableState:
       type: string
       x-enum:
@@ -3815,6 +4503,48 @@ components:
         delete:
           - $ref: >-
               #/components/x-stackQL-resources/synced_database_tables/methods/delete
+        replace: []
+    database:
+      id: databricks_workspace.database.database
+      name: database
+      title: Database
+      methods:
+        database_update_database_instance_role:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: >-
+              #/paths/~1api~12.0~1database~1instances~1{instance_name}~1roles~1{name}/patch
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        database_failover_database_instance:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1api~12.0~1database~1instances~1{name}~1failover/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        database_upgrade_instance_to_autoscaling:
+          operation:
+            $ref: '#/paths/~1api~12.0~1database~1instances~1{name}~1upgrade/patch'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select: []
+        insert:
+          - $ref: >-
+              #/components/x-stackQL-resources/database/methods/database_failover_database_instance
+        update:
+          - $ref: >-
+              #/components/x-stackQL-resources/database/methods/database_update_database_instance_role
+          - $ref: >-
+              #/components/x-stackQL-resources/database/methods/database_upgrade_instance_to_autoscaling
+        delete: []
         replace: []
     database_credentials:
       id: databricks_workspace.database.database_credentials
