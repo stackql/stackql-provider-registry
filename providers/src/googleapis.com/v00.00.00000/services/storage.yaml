@@ -7,8 +7,8 @@ info:
   title: Cloud Storage JSON API
   description: Stores and retrieves potentially large, immutable data objects.
   version: v1
-  x-discovery-doc-revision: '20251206'
-  x-generated-date: '2025-12-10'
+  x-discovery-doc-revision: '20260719'
+  x-generated-date: '2026-07-31'
 externalDocs:
   url: https://developers.google.com/storage/docs/json_api/
 servers:
@@ -490,6 +490,18 @@ components:
                           date in UTC. This condition is relevant only for
                           versioned objects.
                         format: date
+                      sizeAboveBytes:
+                        type: string
+                        description: >-
+                          Objects having a size greater than this value in bytes
+                          will be matched.
+                        format: int64
+                      sizeBelowBytes:
+                        type: string
+                        description: >-
+                          Objects having a size less than this value in bytes
+                          will be matched.
+                        format: int64
                       numNewerVersions:
                         type: integer
                         description: >-
@@ -782,6 +794,9 @@ components:
           description: >-
             True if the cache instance has an active Update long-running
             operation.
+        ingestOnWrite:
+          type: boolean
+          description: Specifies whether objects are ingested into the cache upon write.
     AnywhereCaches:
       id: AnywhereCaches
       type: object
@@ -2060,6 +2075,12 @@ components:
           description: >-
             If true, validate the operation, but do not actually relocate the
             bucket.
+        destinationKmsKeyName:
+          type: string
+          description: >-
+            Resource name of a Cloud KMS key, of the form
+            projects/my-project/locations/global/keyRings/my-kr/cryptoKeys/my-key.
+            If set, is used to encrypt all objects in the destination bucket.
     RewriteResponse:
       id: RewriteResponse
       type: object
@@ -2681,6 +2702,25 @@ components:
         replace: []
         delete:
           - $ref: '#/components/x-stackQL-resources/folders/methods/delete'
+    recursive:
+      id: google.storage.recursive
+      name: recursive
+      title: Recursive
+      methods:
+        delete_recursive:
+          operation:
+            $ref: '#/paths/~1b~1{bucket}~1folders~1{folder}~1deleteRecursive/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select: []
+        insert: []
+        update: []
+        replace: []
+        delete:
+          - $ref: >-
+              #/components/x-stackQL-resources/recursive/methods/delete_recursive
     managed_folders:
       id: google.storage.managed_folders
       name: managed_folders
@@ -2924,12 +2964,6 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        watch_all:
-          operation:
-            $ref: '#/paths/~1b~1{bucket}~1o~1watch/post'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
         restore:
           operation:
             $ref: '#/paths/~1b~1{bucket}~1o~1{object}~1restore/post'
@@ -3149,9 +3183,7 @@ paths:
   /b/{bucket}/anywhereCaches/{anywhereCacheId}:
     parameters: *ref_1
     patch:
-      description: >-
-        Updates the config(ttl and admissionPolicy) of an Anywhere Cache
-        instance.
+      description: Updates the config of an Anywhere Cache instance.
       operationId: storage.anywhereCaches.update
       requestBody:
         content:
@@ -4712,6 +4744,54 @@ paths:
           schema:
             type: string
             format: int64
+  /b/{bucket}/folders/{folder}/deleteRecursive:
+    parameters: *ref_1
+    post:
+      description: >-
+        Deletes a folder recursively. Only applicable to buckets with
+        hierarchical namespace enabled.
+      operationId: storage.folders.deleteRecursive
+      security:
+        - Oauth2:
+            - https://www.googleapis.com/auth/cloud-platform
+          Oauth2c:
+            - https://www.googleapis.com/auth/cloud-platform
+        - Oauth2:
+            - https://www.googleapis.com/auth/devstorage.full_control
+          Oauth2c:
+            - https://www.googleapis.com/auth/devstorage.full_control
+        - Oauth2:
+            - https://www.googleapis.com/auth/devstorage.read_write
+          Oauth2c:
+            - https://www.googleapis.com/auth/devstorage.read_write
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleLongrunningOperation'
+      parameters:
+        - in: path
+          name: bucket
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: folder
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: ifMetagenerationMatch
+          schema:
+            type: string
+            format: int64
+        - in: query
+          name: ifMetagenerationNotMatch
+          schema:
+            type: string
+            format: int64
   /b/{bucket}/folders:
     parameters: *ref_1
     post:
@@ -5684,6 +5764,10 @@ paths:
           schema:
             type: string
         - in: query
+          name: dropContextGroups
+          schema:
+            type: string
+        - in: query
           name: ifGenerationMatch
           schema:
             type: string
@@ -6451,6 +6535,10 @@ paths:
           schema:
             type: string
         - in: query
+          name: dropContextGroups
+          schema:
+            type: string
+        - in: query
           name: ifGenerationMatch
           schema:
             type: string
@@ -6661,91 +6749,6 @@ paths:
           name: userProject
           schema:
             type: string
-  /b/{bucket}/o/watch:
-    parameters: *ref_1
-    post:
-      description: Watch for changes on all objects in a bucket.
-      operationId: storage.objects.watchAll
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Channel'
-      security:
-        - Oauth2:
-            - https://www.googleapis.com/auth/cloud-platform
-          Oauth2c:
-            - https://www.googleapis.com/auth/cloud-platform
-        - Oauth2:
-            - https://www.googleapis.com/auth/cloud-platform.read-only
-          Oauth2c:
-            - https://www.googleapis.com/auth/cloud-platform.read-only
-        - Oauth2:
-            - https://www.googleapis.com/auth/devstorage.full_control
-          Oauth2c:
-            - https://www.googleapis.com/auth/devstorage.full_control
-        - Oauth2:
-            - https://www.googleapis.com/auth/devstorage.read_only
-          Oauth2c:
-            - https://www.googleapis.com/auth/devstorage.read_only
-        - Oauth2:
-            - https://www.googleapis.com/auth/devstorage.read_write
-          Oauth2c:
-            - https://www.googleapis.com/auth/devstorage.read_write
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Channel'
-      parameters:
-        - in: path
-          name: bucket
-          required: true
-          schema:
-            type: string
-        - in: query
-          name: delimiter
-          schema:
-            type: string
-        - in: query
-          name: endOffset
-          schema:
-            type: string
-        - in: query
-          name: includeTrailingDelimiter
-          schema:
-            type: boolean
-        - in: query
-          name: maxResults
-          schema:
-            type: integer
-            format: uint32
-        - in: query
-          name: pageToken
-          schema:
-            type: string
-        - in: query
-          name: prefix
-          schema:
-            type: string
-        - in: query
-          name: projection
-          schema:
-            type: string
-        - in: query
-          name: startOffset
-          schema:
-            type: string
-        - in: query
-          name: userProject
-          schema:
-            type: string
-        - in: query
-          name: versions
-          schema:
-            type: boolean
   /b/{bucket}/o/{object}/restore:
     parameters: *ref_1
     post:
