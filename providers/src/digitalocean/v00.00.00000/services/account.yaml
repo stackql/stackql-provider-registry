@@ -179,8 +179,131 @@ paths:
       security:
         - bearer_auth:
             - actions:read
+  /v2/organizations/team:
+    post:
+      operationId: organizations_create_team
+      summary: Create a Team in an Organization
+      description: >
+        To create a new team within an organization, send a POST request to
+
+        `/v2/organizations/team`.
+
+
+        This endpoint must be called in an organization context. Optionally
+        include
+
+        `invitations` to invite users to the new team. The `owner` role cannot
+        be
+
+        assigned via invitation.
+      tags:
+        - Organizations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/create_team_request'
+            examples:
+              Create Team:
+                value:
+                  name: production
+              Create Team With Invitations:
+                value:
+                  name: production
+                  invitations:
+                    - email: member@example.com
+                      role: member
+                    - email: biller@example.com
+                      role: biller
+      responses:
+        '201':
+          $ref: '#/components/responses/create_team'
+        '400':
+          $ref: '#/components/responses/bad_request'
+        '401':
+          $ref: '#/components/responses/unauthorized'
+        '403':
+          $ref: '#/components/responses/forbidden'
+        '412':
+          $ref: '#/components/responses/precondition_failed'
+        '429':
+          $ref: '#/components/responses/too_many_requests'
+        '500':
+          $ref: '#/components/responses/server_error'
+        default:
+          $ref: '#/components/responses/unexpected_error'
+      x-codeSamples:
+        - lang: cURL
+          source: |-
+            curl -X POST \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
+              -d '{"name":"production","invitations":[{"email":"member@example.com","role":"member"},{"email":"biller@example.com","role":"biller"}]}' \
+              "https://api.digitalocean.com/v2/organizations/team"
+      security:
+        - bearer_auth:
+            - organization:create
+  /v2/organizations/teams:
+    get:
+      operationId: organizations_list_teams
+      summary: List Teams in an Organization
+      description: |
+        To list all teams in an organization, send a GET request to
+        `/v2/organizations/teams`.
+
+        This endpoint must be called in an organization context.
+      tags:
+        - Organizations
+      responses:
+        '200':
+          $ref: '#/components/responses/list_teams'
+        '401':
+          $ref: '#/components/responses/unauthorized'
+        '403':
+          $ref: '#/components/responses/forbidden'
+        '412':
+          $ref: '#/components/responses/precondition_failed'
+        '429':
+          $ref: '#/components/responses/too_many_requests'
+        '500':
+          $ref: '#/components/responses/server_error'
+        default:
+          $ref: '#/components/responses/unexpected_error'
+      x-codeSamples:
+        - lang: cURL
+          source: |-
+            curl -X GET \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
+              "https://api.digitalocean.com/v2/organizations/teams"
+      security:
+        - bearer_auth:
+            - organization:read
 components:
   schemas:
+    create_team_request:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: production
+          description: The human-readable name for the team to create.
+        invitations:
+          type: array
+          description: >
+            Optional invitations to send when creating the team. Each invitation
+            includes an email address and a role. The `owner` role cannot be
+            assigned via invitation.
+          items:
+            $ref: '#/components/schemas/team_invitation'
+          example:
+            - email: member@example.com
+              role: member
+            - email: biller@example.com
+              role: biller
     account:
       type: object
       properties:
@@ -353,12 +476,119 @@ components:
       type: object
       properties:
         meta:
-          allOf:
-            - $ref: '#/components/schemas/meta_properties'
-            - required:
-                - total
+          type: object
+          description: Information about the response itself.
+          properties:
+            total:
+              description: Number of objects returned by the request.
+              type: integer
+              example: 1
+          required:
+            - total
       required:
         - meta
+    team_invitation:
+      type: object
+      description: An invitation to join a newly created team.
+      required:
+        - email
+        - role
+      properties:
+        email:
+          type: string
+          format: email
+          example: member@example.com
+          description: The email address of the user to invite.
+        role:
+          type: string
+          enum:
+            - member
+            - biller
+            - billing viewer
+            - resource viewer
+            - modifier
+          example: member
+          description: >
+            The role to assign to the invited user. The `owner` role cannot be
+            assigned via invitation.
+    create_team:
+      type: object
+      description: The team resource returned when a team is created in an organization.
+      required:
+        - uuid
+        - name
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+          example: 4e1bfbc3-dc3e-41f2-a18f-1b4d7ba71679
+          description: A unique universal identifier for the newly created team.
+        name:
+          type: string
+          example: production
+          description: The human-readable name for the newly created team.
+    team_invitation_status:
+      type: object
+      description: The result of attempting to send a team invitation.
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - daily_invite_limit_reached
+          example: ok
+          description: The invitation delivery status for the email address.
+    organization_team:
+      type: object
+      description: A team that belongs to an organization.
+      properties:
+        id:
+          type: integer
+          format: uint64
+          readOnly: true
+          example: 4126873
+          description: A unique identifier for the team.
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+          example: 4e1bfbc3-dc3e-41f2-a18f-1b4d7ba71679
+          description: A unique universal identifier for the team.
+        name:
+          type: string
+          example: production
+          description: The human-readable name for the team.
+        email:
+          type: string
+          format: email
+          example: sammy@example.com
+          description: The email address associated with the team.
+        member_count:
+          type: integer
+          format: uint64
+          readOnly: true
+          example: 3
+          description: The number of members on the team.
+        status:
+          type: string
+          enum:
+            - joined
+            - pending
+          example: joined
+          description: The team's membership status within the organization.
+        joined_organization_at:
+          type: string
+          format: date-time
+          readOnly: true
+          example: '2024-06-12T15:04:05Z'
+          description: >
+            A time value given in ISO8601 combined date and time format that
+            represents when the team joined the organization.
+        company:
+          type: string
+          example: DigitalOcean
+          description: The company name associated with the team, if set.
     region:
       type: object
       properties:
@@ -428,14 +658,28 @@ components:
       type: object
       properties:
         pages:
-          anyOf:
-            - $ref: '#/components/schemas/forward_links'
-            - $ref: '#/components/schemas/backward_links'
-            - {}
           example:
             pages:
               first: https://api.digitalocean.com/v2/account/keys?page=1
               prev: https://api.digitalocean.com/v2/account/keys?page=2
+          type: object
+          properties:
+            last:
+              description: URI of the last page of the results.
+              type: string
+              example: https://api.digitalocean.com/v2/images?page=2
+            next:
+              description: URI of the next page of the results.
+              type: string
+              example: https://api.digitalocean.com/v2/images?page=2
+            first:
+              description: URI of the first page of the results.
+              type: string
+              example: https://api.digitalocean.com/v2/images?page=1
+            prev:
+              description: URI of the previous page of the results.
+              type: string
+              example: https://api.digitalocean.com/v2/images?page=1
     meta_properties:
       type: object
       description: Information about the response itself.
@@ -445,13 +689,27 @@ components:
           type: integer
           example: 1
     forward_links:
-      allOf:
-        - $ref: '#/components/schemas/link_to_last_page'
-        - $ref: '#/components/schemas/link_to_next_page'
+      type: object
+      properties:
+        last:
+          description: URI of the last page of the results.
+          type: string
+          example: https://api.digitalocean.com/v2/images?page=2
+        next:
+          description: URI of the next page of the results.
+          type: string
+          example: https://api.digitalocean.com/v2/images?page=2
     backward_links:
-      allOf:
-        - $ref: '#/components/schemas/link_to_first_page'
-        - $ref: '#/components/schemas/link_to_prev_page'
+      type: object
+      properties:
+        first:
+          description: URI of the first page of the results.
+          type: string
+          example: https://api.digitalocean.com/v2/images?page=1
+        prev:
+          description: URI of the previous page of the results.
+          type: string
+          example: https://api.digitalocean.com/v2/images?page=1
     link_to_last_page:
       type: object
       properties:
@@ -578,15 +836,26 @@ components:
       content:
         application/json:
           schema:
-            allOf:
-              - type: object
+            type: object
+            properties:
+              actions:
+                type: array
+                items:
+                  $ref: '#/components/schemas/action'
+              links:
+                $ref: '#/components/schemas/page_links'
+              meta:
+                type: object
+                description: Information about the response itself.
                 properties:
-                  actions:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/action'
-              - $ref: '#/components/schemas/pagination'
-              - $ref: '#/components/schemas/meta'
+                  total:
+                    description: Number of objects returned by the request.
+                    type: integer
+                    example: 1
+                required:
+                  - total
+            required:
+              - meta
     action:
       description: >-
         The result will be a JSON object with an action key.  This will be set
@@ -621,6 +890,139 @@ components:
           example:
             id: not_found
             message: The resource you requested could not be found.
+    create_team:
+      description: >
+        The response will be a JSON object with a `team` key containing the
+        created team and an optional `invitations` key mapping invitee email
+        addresses to invitation status objects.
+      headers:
+        ratelimit-limit:
+          $ref: '#/components/headers/ratelimit-limit'
+        ratelimit-remaining:
+          $ref: '#/components/headers/ratelimit-remaining'
+        ratelimit-reset:
+          $ref: '#/components/headers/ratelimit-reset'
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - team
+            properties:
+              team:
+                $ref: '#/components/schemas/create_team'
+              invitations:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/team_invitation_status'
+                description: |
+                  A map of invitee email addresses to invitation status results.
+                example:
+                  member@example.com:
+                    status: ok
+                  biller@example.com:
+                    status: ok
+          example:
+            team:
+              uuid: 4e1bfbc3-dc3e-41f2-a18f-1b4d7ba71679
+              name: production
+            invitations:
+              member@example.com:
+                status: ok
+              biller@example.com:
+                status: ok
+    bad_request:
+      description: There was an error parsing the request body.
+      headers:
+        ratelimit-limit:
+          $ref: '#/components/headers/ratelimit-limit'
+        ratelimit-remaining:
+          $ref: '#/components/headers/ratelimit-remaining'
+        ratelimit-reset:
+          $ref: '#/components/headers/ratelimit-reset'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/error'
+          example:
+            id: bad_request
+            message: error parsing request body
+            request_id: 4851a473-1621-42ea-b2f9-5071c0ea8414
+    forbidden:
+      description: >
+        The authenticated principal does not have permission to perform this
+        action on the requested resource.
+      headers:
+        ratelimit-limit:
+          $ref: '#/components/headers/ratelimit-limit'
+        ratelimit-remaining:
+          $ref: '#/components/headers/ratelimit-remaining'
+        ratelimit-reset:
+          $ref: '#/components/headers/ratelimit-reset'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/error'
+          example:
+            id: forbidden
+            message: You do not have permission to perform this action.
+    precondition_failed:
+      description: >
+        The request could not be completed because a required precondition was
+        not met.
+      headers:
+        ratelimit-limit:
+          $ref: '#/components/headers/ratelimit-limit'
+        ratelimit-remaining:
+          $ref: '#/components/headers/ratelimit-remaining'
+        ratelimit-reset:
+          $ref: '#/components/headers/ratelimit-reset'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/error'
+          example:
+            id: precondition_failed
+            message: teamgroup limit reached
+    list_teams:
+      description: >
+        The response will be a JSON object with a `teams` key. This will be set
+        to an array of team objects belonging to the organization.
+      headers:
+        ratelimit-limit:
+          $ref: '#/components/headers/ratelimit-limit'
+        ratelimit-remaining:
+          $ref: '#/components/headers/ratelimit-remaining'
+        ratelimit-reset:
+          $ref: '#/components/headers/ratelimit-reset'
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - teams
+            properties:
+              teams:
+                type: array
+                items:
+                  $ref: '#/components/schemas/organization_team'
+          example:
+            teams:
+              - id: 4126873
+                uuid: 4e1bfbc3-dc3e-41f2-a18f-1b4d7ba71679
+                name: production
+                email: sammy@example.com
+                member_count: 3
+                status: joined
+                joined_organization_at: '2024-06-12T15:04:05Z'
+                company: DigitalOcean
+              - id: 4126874
+                uuid: addb4547-6bab-419a-8542-76263a033cf6
+                name: staging
+                email: staging@example.com
+                member_count: 2
+                status: joined
+                joined_organization_at: '2024-07-01T10:00:00Z'
   parameters:
     per_page:
       in: query
@@ -728,5 +1130,48 @@ components:
         update: []
         delete: []
         replace: []
+    teams:
+      id: digitalocean.account.teams
+      name: teams
+      title: Teams
+      methods:
+        organizations_create_team:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v2~1organizations~1team/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '201'
+        organizations_list_teams:
+          operation:
+            $ref: '#/paths/~1v2~1organizations~1teams/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.teams
+      sqlVerbs:
+        select:
+          - $ref: >-
+              #/components/x-stackQL-resources/teams/methods/organizations_list_teams
+        insert:
+          - $ref: >-
+              #/components/x-stackQL-resources/teams/methods/organizations_create_team
+        update: []
+        delete: []
+        replace: []
 servers:
   - url: https://api.digitalocean.com
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: ''
+      location: request
+    responseToken:
+      key: $.links.pages.next
+      location: body
+  queryParamPushdown:
+    top:
+      paramName: per_page
+      maxValue: 200
