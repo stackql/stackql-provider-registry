@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: hook_keys API
   description: okta hook_keys API
-  version: 5.1.0
+  version: 2026.07.2
 paths:
   /api/v1/hook-keys:
     get:
@@ -15,9 +15,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/HookKey'
+                $ref: '#/components/schemas/ListHookKeysResponse'
               examples:
                 ResponseExample:
                   $ref: '#/components/examples/ListAllKeysResponse'
@@ -48,9 +46,9 @@ paths:
         The total number of keys that you can create in an Okta org is limited
         to 50.
 
-         The response is a [Key object](https://developer.okta.com/docs/reference/api/hook-keys/#key-object) that represents the 
-         key that you create. The `id` property in the response serves as the unique ID for the key, which you can specify when 
-         invoking other CRUD operations. The `keyId` provided in the response is the alias of the public key that you can use to get 
+         The response is a [Key object](https://developer.okta.com/docs/reference/api/hook-keys/#key-object) that represents the
+         key that you create. The `id` property in the response serves as the unique ID for the key, which you can specify when
+         invoking other CRUD operations. The `keyId` provided in the response is the alias of the public key that you can use to get
          details of the public key data in a separate call.
 
         > **Note:** The keyId is the alias of the public key that you can use to
@@ -121,8 +119,8 @@ paths:
       x-okta-lifecycle:
         lifecycle: GA
         isGenerallyAvailable: true
-    parameters:
-      - $ref: '#/components/parameters/pathPublicKeyId'
+      parameters:
+        - $ref: '#/components/parameters/pathPublicKeyId'
   /api/v1/hook-keys/{id}:
     get:
       summary: Retrieve a key by ID
@@ -211,6 +209,8 @@ paths:
       x-okta-lifecycle:
         lifecycle: GA
         isGenerallyAvailable: true
+      parameters:
+        - $ref: '#/components/parameters/pathHookKeyId'
     delete:
       summary: Delete a key
       description: >
@@ -239,8 +239,8 @@ paths:
       x-okta-lifecycle:
         lifecycle: GA
         isGenerallyAvailable: true
-    parameters:
-      - $ref: '#/components/parameters/pathHookKeyId'
+      parameters:
+        - $ref: '#/components/parameters/pathHookKeyId'
 components:
   schemas:
     HookKey:
@@ -409,6 +409,13 @@ components:
       properties:
         errorSummary:
           type: string
+    ListHookKeysResponse:
+      type: object
+      properties:
+        hook_keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/HookKey'
   responses:
     ErrorAccessDenied403:
       description: Forbidden
@@ -569,7 +576,19 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+            objectKey: $.hook_keys
+            overrideMediaType: application/json
+            schema_override:
+              $ref: '#/components/schemas/ListHookKeysResponse'
+            transform:
+              body: |-
+                {{- $wrapped := printf "{\"hook_keys\":%s}" . -}}
+                {{- $wrapped -}}
+              type: golang_template_text_v0.3.0
         create_hook_key:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
           operation:
             $ref: '#/paths/~1api~1v1~1hook-keys/post'
           response:
@@ -582,6 +601,9 @@ components:
             mediaType: application/json
             openAPIDocKey: '200'
         replace_hook_key:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
           operation:
             $ref: '#/paths/~1api~1v1~1hook-keys~1{id}/put'
           response:
@@ -591,12 +613,12 @@ components:
           operation:
             $ref: '#/paths/~1api~1v1~1hook-keys~1{id}/delete'
           response:
-            mediaType: ''
+            mediaType: application/json
             openAPIDocKey: '204'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/hook_keys/methods/list_hook_keys'
           - $ref: '#/components/x-stackQL-resources/hook_keys/methods/get_hook_key'
+          - $ref: '#/components/x-stackQL-resources/hook_keys/methods/list_hook_keys'
         insert:
           - $ref: '#/components/x-stackQL-resources/hook_keys/methods/create_hook_key'
         update: []
@@ -629,7 +651,15 @@ servers:
     variables:
       subdomain:
         default: my-org
-        description: >-
-          The domain of your organization. This can be a provided subdomain of
-          an official okta domain (okta.com, oktapreview.com, etc) or one of
-          your configured custom domains.
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: ''
+      location: request
+    responseToken:
+      key: Link
+      location: header
+  queryParamPushdown:
+    top:
+      paramName: limit
+      maxValue: 200
