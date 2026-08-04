@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: principal_rate_limits API
   description: okta principal_rate_limits API
-  version: 5.1.0
+  version: 2026.07.2
 paths:
   /api/v1/principal-rate-limits:
     get:
@@ -46,9 +46,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PrincipalRateLimitEntity'
+                $ref: '#/components/schemas/ListPrincipalRateLimitEntitiesResponse'
               examples:
                 SSWSListAll:
                   $ref: '#/components/examples/PrincipalRateLimitsSSWSListAllExample'
@@ -145,6 +143,8 @@ paths:
       x-okta-lifecycle:
         lifecycle: GA
         isGenerallyAvailable: true
+      parameters:
+        - $ref: '#/components/parameters/pathPrincipalRateLimitId'
     put:
       summary: Replace a principal rate limit
       description: Replaces a principal rate limit entity by `principalRateLimitId`
@@ -188,8 +188,8 @@ paths:
       x-okta-lifecycle:
         lifecycle: GA
         isGenerallyAvailable: true
-    parameters:
-      - $ref: '#/components/parameters/pathPrincipalRateLimitId'
+      parameters:
+        - $ref: '#/components/parameters/pathPrincipalRateLimitId'
 components:
   schemas:
     PrincipalRateLimitEntity:
@@ -283,6 +283,13 @@ components:
       properties:
         errorSummary:
           type: string
+    ListPrincipalRateLimitEntitiesResponse:
+      type: object
+      properties:
+        principal_rate_limit_entities:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrincipalRateLimitEntity'
   responses:
     ErrorApiValidationFailed400:
       description: Bad Request
@@ -470,7 +477,21 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+            objectKey: $.principal_rate_limit_entities
+            overrideMediaType: application/json
+            schema_override:
+              $ref: '#/components/schemas/ListPrincipalRateLimitEntitiesResponse'
+            transform:
+              body: >-
+                {{- $wrapped := printf "{\"principal_rate_limit_entities\":%s}"
+                . -}}
+
+                {{- $wrapped -}}
+              type: golang_template_text_v0.3.0
         create_principal_rate_limit_entity:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
           operation:
             $ref: '#/paths/~1api~1v1~1principal-rate-limits/post'
           response:
@@ -484,6 +505,9 @@ components:
             mediaType: application/json
             openAPIDocKey: '200'
         replace_principal_rate_limit_entity:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
           operation:
             $ref: >-
               #/paths/~1api~1v1~1principal-rate-limits~1{principalRateLimitId}/put
@@ -493,9 +517,9 @@ components:
       sqlVerbs:
         select:
           - $ref: >-
-              #/components/x-stackQL-resources/principal_rate_limit_entities/methods/list_principal_rate_limit_entities
-          - $ref: >-
               #/components/x-stackQL-resources/principal_rate_limit_entities/methods/get_principal_rate_limit_entity
+          - $ref: >-
+              #/components/x-stackQL-resources/principal_rate_limit_entities/methods/list_principal_rate_limit_entities
         insert:
           - $ref: >-
               #/components/x-stackQL-resources/principal_rate_limit_entities/methods/create_principal_rate_limit_entity
@@ -509,7 +533,15 @@ servers:
     variables:
       subdomain:
         default: my-org
-        description: >-
-          The domain of your organization. This can be a provided subdomain of
-          an official okta domain (okta.com, oktapreview.com, etc) or one of
-          your configured custom domains.
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: ''
+      location: request
+    responseToken:
+      key: Link
+      location: header
+  queryParamPushdown:
+    top:
+      paramName: limit
+      maxValue: 200

@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: api_tokens API
   description: okta api_tokens API
-  version: 5.1.0
+  version: 2026.07.2
 paths:
   /api/v1/api-tokens:
     get:
@@ -15,9 +15,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ApiToken'
+                $ref: '#/components/schemas/ListApiTokensResponse'
               examples:
                 List Tokens:
                   $ref: '#/components/examples/ApiTokenListMetadataResponse'
@@ -83,6 +81,8 @@ paths:
       x-okta-lifecycle:
         lifecycle: GA
         isGenerallyAvailable: true
+      parameters:
+        - $ref: '#/components/parameters/pathApiTokenId'
     put:
       summary: Upsert an API token network condition
       description: Upserts an API Token Network Condition by `apiTokenId`
@@ -127,6 +127,8 @@ paths:
       x-okta-lifecycle:
         lifecycle: GA
         isGenerallyAvailable: true
+      parameters:
+        - $ref: '#/components/parameters/pathApiTokenId'
     delete:
       summary: Revoke an API token
       description: Revokes an API token by `apiTokenId`
@@ -149,8 +151,8 @@ paths:
       x-okta-lifecycle:
         lifecycle: GA
         isGenerallyAvailable: true
-    parameters:
-      - $ref: '#/components/parameters/pathApiTokenId'
+      parameters:
+        - $ref: '#/components/parameters/pathApiTokenId'
 components:
   schemas:
     ApiToken:
@@ -290,15 +292,43 @@ components:
             contains dynamically-generated information about your specific
             error.
     HrefObjectSelfLink:
-      allOf:
-        - $ref: '#/components/schemas/HrefObject'
-        - description: Link to the resource (self)
+      x-okta-ignore-redocly-rules-for-sdk: true
+      title: Link Object
+      additionalProperties: true
+      type: object
+      properties:
+        hints:
+          $ref: '#/components/schemas/HrefHints'
+          readOnly: true
+        href:
+          type: string
+          description: Link URI
+        name:
+          type: string
+          description: Link name
+          readOnly: true
+        templated:
+          type: boolean
+          description: >-
+            Indicates whether the link object's `href` property is a URI
+            template.
+          readOnly: true
+        type:
+          type: string
+          description: >-
+            The media type of the link. If omitted, it is implicitly
+            `application/json`.
+          readOnly: true
+      required:
+        - href
+      description: Link to the resource (self)
     ErrorCause:
       type: object
       properties:
         errorSummary:
           type: string
     HrefObject:
+      x-okta-ignore-redocly-rules-for-sdk: true
       title: Link Object
       additionalProperties: true
       type: object
@@ -342,6 +372,13 @@ components:
         - GET
         - POST
         - PUT
+    ListApiTokensResponse:
+      type: object
+      properties:
+        api_tokens:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiToken'
   responses:
     ErrorAccessDenied403:
       description: Forbidden
@@ -501,11 +538,20 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+            objectKey: $.api_tokens
+            overrideMediaType: application/json
+            schema_override:
+              $ref: '#/components/schemas/ListApiTokensResponse'
+            transform:
+              body: |-
+                {{- $wrapped := printf "{\"api_tokens\":%s}" . -}}
+                {{- $wrapped -}}
+              type: golang_template_text_v0.3.0
         revoke_current_api_token:
           operation:
             $ref: '#/paths/~1api~1v1~1api-tokens~1current/delete'
           response:
-            mediaType: ''
+            mediaType: application/json
             openAPIDocKey: '204'
         get_api_token:
           operation:
@@ -514,6 +560,9 @@ components:
             mediaType: application/json
             openAPIDocKey: '200'
         upsert_api_token:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
           operation:
             $ref: '#/paths/~1api~1v1~1api-tokens~1{apiTokenId}/put'
           response:
@@ -523,20 +572,20 @@ components:
           operation:
             $ref: '#/paths/~1api~1v1~1api-tokens~1{apiTokenId}/delete'
           response:
-            mediaType: ''
+            mediaType: application/json
             openAPIDocKey: '204'
       sqlVerbs:
         select:
+          - $ref: '#/components/x-stackQL-resources/api_tokens/methods/get_api_token'
           - $ref: >-
               #/components/x-stackQL-resources/api_tokens/methods/list_api_tokens
-          - $ref: '#/components/x-stackQL-resources/api_tokens/methods/get_api_token'
         insert: []
         update: []
         delete:
           - $ref: >-
-              #/components/x-stackQL-resources/api_tokens/methods/revoke_current_api_token
-          - $ref: >-
               #/components/x-stackQL-resources/api_tokens/methods/revoke_api_token
+          - $ref: >-
+              #/components/x-stackQL-resources/api_tokens/methods/revoke_current_api_token
         replace:
           - $ref: >-
               #/components/x-stackQL-resources/api_tokens/methods/upsert_api_token
@@ -545,7 +594,15 @@ servers:
     variables:
       subdomain:
         default: my-org
-        description: >-
-          The domain of your organization. This can be a provided subdomain of
-          an official okta domain (okta.com, oktapreview.com, etc) or one of
-          your configured custom domains.
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: ''
+      location: request
+    responseToken:
+      key: Link
+      location: header
+  queryParamPushdown:
+    top:
+      paramName: limit
+      maxValue: 200

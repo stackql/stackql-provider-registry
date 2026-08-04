@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: behaviors API
   description: okta behaviors API
-  version: 5.1.0
+  version: 2026.07.2
 paths:
   /api/v1/behaviors:
     get:
@@ -15,9 +15,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/BehaviorRule'
+                $ref: '#/components/schemas/ListBehaviorDetectionRulesResponse'
         '403':
           $ref: '#/components/responses/ErrorAccessDenied403'
         '429':
@@ -114,6 +112,8 @@ paths:
       x-okta-lifecycle:
         lifecycle: GA
         isGenerallyAvailable: true
+      parameters:
+        - $ref: '#/components/parameters/pathBehaviorId'
     put:
       summary: Replace a behavior detection rule
       description: Replaces a Behavior Detection Rule by `behaviorId`
@@ -169,6 +169,8 @@ paths:
       x-okta-lifecycle:
         lifecycle: GA
         isGenerallyAvailable: true
+      parameters:
+        - $ref: '#/components/parameters/pathBehaviorId'
     delete:
       summary: Delete a behavior detection rule
       description: Deletes a Behavior Detection Rule by `behaviorId`
@@ -198,8 +200,8 @@ paths:
       x-okta-lifecycle:
         lifecycle: GA
         isGenerallyAvailable: true
-    parameters:
-      - $ref: '#/components/parameters/pathBehaviorId'
+      parameters:
+        - $ref: '#/components/parameters/pathBehaviorId'
   /api/v1/behaviors/{behaviorId}/lifecycle/activate:
     post:
       summary: Activate a behavior detection rule
@@ -230,8 +232,8 @@ paths:
       x-okta-lifecycle:
         lifecycle: GA
         isGenerallyAvailable: true
-    parameters:
-      - $ref: '#/components/parameters/pathBehaviorId'
+      parameters:
+        - $ref: '#/components/parameters/pathBehaviorId'
   /api/v1/behaviors/{behaviorId}/lifecycle/deactivate:
     post:
       summary: Deactivate a behavior detection rule
@@ -262,8 +264,8 @@ paths:
       x-okta-lifecycle:
         lifecycle: GA
         isGenerallyAvailable: true
-    parameters:
-      - $ref: '#/components/parameters/pathBehaviorId'
+      parameters:
+        - $ref: '#/components/parameters/pathBehaviorId'
 components:
   schemas:
     BehaviorRule:
@@ -302,6 +304,7 @@ components:
           ANOMALOUS_IP: '#/components/schemas/BehaviorRuleAnomalousIP'
           ANOMALOUS_DEVICE: '#/components/schemas/BehaviorRuleAnomalousDevice'
           VELOCITY: '#/components/schemas/BehaviorRuleVelocity'
+          ANOMALOUS_ASN: '#/components/schemas/BehaviorRuleASN'
     Error:
       title: Error
       type: object
@@ -339,6 +342,7 @@ components:
         - ANOMALOUS_IP
         - ANOMALOUS_LOCATION
         - VELOCITY
+        - ANOMALOUS_ASN
     LinksSelf:
       description: >-
         Specifies link relations (see [Web
@@ -358,10 +362,38 @@ components:
         errorSummary:
           type: string
     HrefObjectSelfLink:
-      allOf:
-        - $ref: '#/components/schemas/HrefObject'
-        - description: Link to the resource (self)
+      x-okta-ignore-redocly-rules-for-sdk: true
+      title: Link Object
+      additionalProperties: true
+      type: object
+      properties:
+        hints:
+          $ref: '#/components/schemas/HrefHints'
+          readOnly: true
+        href:
+          type: string
+          description: Link URI
+        name:
+          type: string
+          description: Link name
+          readOnly: true
+        templated:
+          type: boolean
+          description: >-
+            Indicates whether the link object's `href` property is a URI
+            template.
+          readOnly: true
+        type:
+          type: string
+          description: >-
+            The media type of the link. If omitted, it is implicitly
+            `application/json`.
+          readOnly: true
+      required:
+        - href
+      description: Link to the resource (self)
     HrefObject:
+      x-okta-ignore-redocly-rules-for-sdk: true
       title: Link Object
       additionalProperties: true
       type: object
@@ -405,6 +437,13 @@ components:
         - GET
         - POST
         - PUT
+    ListBehaviorDetectionRulesResponse:
+      type: object
+      properties:
+        behavior_detection_rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/BehaviorRule'
   responses:
     ErrorAccessDenied403:
       description: Forbidden
@@ -510,7 +549,19 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+            objectKey: $.behavior_detection_rules
+            overrideMediaType: application/json
+            schema_override:
+              $ref: '#/components/schemas/ListBehaviorDetectionRulesResponse'
+            transform:
+              body: |-
+                {{- $wrapped := printf "{\"behavior_detection_rules\":%s}" . -}}
+                {{- $wrapped -}}
+              type: golang_template_text_v0.3.0
         create_behavior_detection_rule:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
           operation:
             $ref: '#/paths/~1api~1v1~1behaviors/post'
           response:
@@ -523,6 +574,9 @@ components:
             mediaType: application/json
             openAPIDocKey: '200'
         replace_behavior_detection_rule:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
           operation:
             $ref: '#/paths/~1api~1v1~1behaviors~1{behaviorId}/put'
           response:
@@ -532,7 +586,7 @@ components:
           operation:
             $ref: '#/paths/~1api~1v1~1behaviors~1{behaviorId}/delete'
           response:
-            mediaType: ''
+            mediaType: application/json
             openAPIDocKey: '204'
         activate_behavior_detection_rule:
           operation:
@@ -551,9 +605,9 @@ components:
       sqlVerbs:
         select:
           - $ref: >-
-              #/components/x-stackQL-resources/behavior_detection_rules/methods/list_behavior_detection_rules
-          - $ref: >-
               #/components/x-stackQL-resources/behavior_detection_rules/methods/get_behavior_detection_rule
+          - $ref: >-
+              #/components/x-stackQL-resources/behavior_detection_rules/methods/list_behavior_detection_rules
         insert:
           - $ref: >-
               #/components/x-stackQL-resources/behavior_detection_rules/methods/create_behavior_detection_rule
@@ -569,7 +623,15 @@ servers:
     variables:
       subdomain:
         default: my-org
-        description: >-
-          The domain of your organization. This can be a provided subdomain of
-          an official okta domain (okta.com, oktapreview.com, etc) or one of
-          your configured custom domains.
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: ''
+      location: request
+    responseToken:
+      key: Link
+      location: header
+  queryParamPushdown:
+    top:
+      paramName: limit
+      maxValue: 200
