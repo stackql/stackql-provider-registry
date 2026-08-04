@@ -2,14 +2,20 @@ openapi: 3.0.3
 info:
   title: realms API
   description: okta realms API
-  version: 5.1.0
+  version: 2026.07.2
 paths:
   /api/v1/realms:
     get:
       x-okta-lifecycle:
         lifecycle: GA
       summary: List all realms
-      description: Lists all Realms
+      description: >-
+        Lists all realms.
+
+
+        > **Note:** The `search` parameter results are sourced from an
+        eventually consistent datasource and may not reflect the latest
+        information.
       operationId: listRealms
       parameters:
         - name: limit
@@ -42,23 +48,14 @@ paths:
           schema:
             type: string
             example: profile.name
-        - name: sortOrder
-          in: query
-          description: >-
-            Specifies the sort order: `asc` or `desc` (for search queries only).
-            This parameter is ignored if `sortBy` isn't present.
-          schema:
-            type: string
-            default: asc
+        - $ref: '#/components/parameters/querySortOrder'
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Realm'
+                $ref: '#/components/schemas/ListRealmsResponse'
               examples:
                 Realm Lists:
                   $ref: '#/components/examples/ListRealmsResponse'
@@ -147,6 +144,8 @@ paths:
             - okta.realms.read
       tags:
         - Realm
+      parameters:
+        - $ref: '#/components/parameters/pathRealmId'
     put:
       x-okta-lifecycle:
         lifecycle: GA
@@ -184,6 +183,8 @@ paths:
             - okta.realms.manage
       tags:
         - Realm
+      parameters:
+        - $ref: '#/components/parameters/pathRealmId'
     delete:
       x-okta-lifecycle:
         lifecycle: GA
@@ -223,8 +224,8 @@ paths:
             - okta.realms.manage
       tags:
         - Realm
-    parameters:
-      - $ref: '#/components/parameters/pathRealmId'
+      parameters:
+        - $ref: '#/components/parameters/pathRealmId'
 components:
   schemas:
     Realm:
@@ -245,7 +246,7 @@ components:
             Indicates the default realm. Existing users will start out in the
             default realm and can be moved to other realms individually or
             through realm assignments. See [Realms Assignments
-            API](https://developer.okta.com/docs/api/openapi/okta-management/management/tag/RealmAssignment/).
+            API](https://developer.okta.com/docs/api/openapi/okta-management/management/tags/realmassignment/).
           readOnly: true
         lastUpdated:
           type: string
@@ -292,10 +293,13 @@ components:
         profile:
           $ref: '#/components/schemas/RealmProfile'
     RealmProfile:
+      x-okta-ignore-redocly-rules-for-sdk: true
       type: object
       properties:
         domains:
           type: array
+          items:
+            type: string
           description: >-
             Array of allowed domains. No user in this realm can be created or
             updated unless they have a username and email from one of these
@@ -339,10 +343,38 @@ components:
         errorSummary:
           type: string
     HrefObjectSelfLink:
-      allOf:
-        - $ref: '#/components/schemas/HrefObject'
-        - description: Link to the resource (self)
+      x-okta-ignore-redocly-rules-for-sdk: true
+      title: Link Object
+      additionalProperties: true
+      type: object
+      properties:
+        hints:
+          $ref: '#/components/schemas/HrefHints'
+          readOnly: true
+        href:
+          type: string
+          description: Link URI
+        name:
+          type: string
+          description: Link name
+          readOnly: true
+        templated:
+          type: boolean
+          description: >-
+            Indicates whether the link object's `href` property is a URI
+            template.
+          readOnly: true
+        type:
+          type: string
+          description: >-
+            The media type of the link. If omitted, it is implicitly
+            `application/json`.
+          readOnly: true
+      required:
+        - href
+      description: Link to the resource (self)
     HrefObject:
+      x-okta-ignore-redocly-rules-for-sdk: true
       title: Link Object
       additionalProperties: true
       type: object
@@ -386,6 +418,13 @@ components:
         - GET
         - POST
         - PUT
+    ListRealmsResponse:
+      type: object
+      properties:
+        realms:
+          type: array
+          items:
+            $ref: '#/components/schemas/Realm'
   responses:
     ErrorTooManyRequests429:
       description: Too Many Requests
@@ -433,7 +472,17 @@ components:
         The cursor to use for pagination. It is an opaque string that specifies
         your current location in the list and is obtained from the `Link`
         response header. See
-        [Pagination](https://developer.okta.com/docs/api/#pagination).
+        [Pagination](https://developer.okta.com/docs/api/#pagination) and [Link
+        header](https://developer.okta.com/docs/api/#link-header).
+    querySortOrder:
+      name: sortOrder
+      in: query
+      description: >-
+        Specifies sort order: `asc` or `desc` (for search queries only). This
+        parameter is ignored if `sortBy` isn't present.
+      schema:
+        type: string
+        default: asc
     pathRealmId:
       name: realmId
       description: ID of the realm
@@ -542,7 +591,19 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+            objectKey: $.realms
+            overrideMediaType: application/json
+            schema_override:
+              $ref: '#/components/schemas/ListRealmsResponse'
+            transform:
+              body: |-
+                {{- $wrapped := printf "{\"realms\":%s}" . -}}
+                {{- $wrapped -}}
+              type: golang_template_text_v0.3.0
         create_realm:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
           operation:
             $ref: '#/paths/~1api~1v1~1realms/post'
           response:
@@ -555,6 +616,9 @@ components:
             mediaType: application/json
             openAPIDocKey: '200'
         replace_realm:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
           operation:
             $ref: '#/paths/~1api~1v1~1realms~1{realmId}/put'
           response:
@@ -564,12 +628,12 @@ components:
           operation:
             $ref: '#/paths/~1api~1v1~1realms~1{realmId}/delete'
           response:
-            mediaType: ''
+            mediaType: application/json
             openAPIDocKey: '204'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/realms/methods/list_realms'
           - $ref: '#/components/x-stackQL-resources/realms/methods/get_realm'
+          - $ref: '#/components/x-stackQL-resources/realms/methods/list_realms'
         insert:
           - $ref: '#/components/x-stackQL-resources/realms/methods/create_realm'
         update: []
@@ -582,7 +646,15 @@ servers:
     variables:
       subdomain:
         default: my-org
-        description: >-
-          The domain of your organization. This can be a provided subdomain of
-          an official okta domain (okta.com, oktapreview.com, etc) or one of
-          your configured custom domains.
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: ''
+      location: request
+    responseToken:
+      key: Link
+      location: header
+  queryParamPushdown:
+    top:
+      paramName: limit
+      maxValue: 200
