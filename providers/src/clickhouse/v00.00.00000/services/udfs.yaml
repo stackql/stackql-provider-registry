@@ -1,0 +1,2581 @@
+openapi: 3.1.1
+info:
+  title: udfs API
+  description: clickhouse udfs API
+  version: '1.0'
+paths:
+  /udfs/{functionName}/attachments/{serviceId}:
+    put:
+      operationId: udfAttach
+      summary: Attach UDF to service
+      description: '**Disclaimer:** This beta endpoint is evolving; the API contract may change. <br /><br /> Attaches one UDF version to a service, replacing the current version when necessary. When version is omitted, the latest ready version is attached.'
+      tags:
+        - UDF
+      parameters:
+        - in: path
+          name: functionName
+          schema:
+            description: Name of the UDF.
+            type: string
+            pattern: ^[A-Za-z][A-Za-z0-9_]*$
+          required: true
+          description: Name of the UDF.
+        - in: path
+          name: serviceId
+          schema:
+            description: ID of the requested service.
+            type: string
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+          required: true
+          description: ID of the requested service.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                version:
+                  description: Version to attach. When omitted, the latest ready version is attached.
+                  example: 1
+                  type: integer
+                  exclusiveMinimum: true
+                  minimum: 0
+      responses:
+        '200':
+          description: Current attachment state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    description: HTTP status code.
+                    example: 200
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                  result:
+                    $ref: '#/components/schemas/UdfAttachment'
+                required:
+                  - status
+                  - requestId
+                  - result
+                additionalProperties: false
+        '400':
+          description: The service does not support UDFs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 400
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '404':
+          description: UDF, version, or service not found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 404
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '409':
+          description: The requested version is not ready or another attachment transition is in progress.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 409
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '422':
+          description: Service UDF attachment limit exceeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 422
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '424':
+          description: The service must be running before the UDF can be attached.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  code:
+                    description: Reason the attachment could not be started.
+                    type: string
+                    enum:
+                      - SERVICE_IDLE
+                      - SERVICE_NOT_RUNNING
+                      - SERVICE_STOPPED
+                  serviceState:
+                    description: Current state of the service.
+                    type: string
+                    enum:
+                      - starting
+                      - stopping
+                      - terminating
+                      - softdeleting
+                      - awaking
+                      - partially_running
+                      - provisioning
+                      - running
+                      - stopped
+                      - terminated
+                      - softdeleted
+                      - degraded
+                      - failed
+                      - idle
+                  canWake:
+                    description: Whether the service can be woken before retrying the attachment.
+                    type: boolean
+                  status:
+                    description: HTTP status code.
+                    example: 424
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - code
+                  - serviceState
+                  - canWake
+                  - status
+                  - requestId
+                additionalProperties: false
+        '500':
+          description: An internal server error has occurred. If this issue persists, please contact ClickHouse Cloud support for assistance.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 500
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: {}
+      x-badges:
+        - name: Beta
+          position: after
+    get:
+      operationId: udfAttachmentGet
+      summary: Get UDF attachment
+      description: '**Disclaimer:** This beta endpoint is evolving; the API contract may change. <br /><br /> Returns the current attachment of a UDF to one service.'
+      tags:
+        - UDF
+      parameters:
+        - in: path
+          name: functionName
+          schema:
+            description: Name of the UDF.
+            type: string
+            pattern: ^[A-Za-z][A-Za-z0-9_]*$
+          required: true
+          description: Name of the UDF.
+        - in: path
+          name: serviceId
+          schema:
+            description: ID of the requested service.
+            type: string
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+          required: true
+          description: ID of the requested service.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    description: HTTP status code.
+                    example: 200
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                  result:
+                    $ref: '#/components/schemas/UdfAttachment'
+                required:
+                  - status
+                  - requestId
+                  - result
+                additionalProperties: false
+        '400':
+          description: The request cannot be processed due to a client error. Please verify your request parameters and try again.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  issues:
+                    description: Validation issues that caused the request to be rejected.
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          description: Path to the invalid field.
+                          type: array
+                          items:
+                            anyOf:
+                              - type: string
+                              - type: number
+                        code:
+                          description: Validation issue code.
+                          type: string
+                        message:
+                          description: Human-readable description of the issue.
+                          type: string
+                      required:
+                        - path
+                        - code
+                        - message
+                      additionalProperties: false
+                  status:
+                    description: HTTP status code.
+                    example: 400
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '404':
+          description: UDF not found or not attached to this service.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 404
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '500':
+          description: An internal server error has occurred. If this issue persists, please contact ClickHouse Cloud support for assistance.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 500
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: {}
+      x-badges:
+        - name: Beta
+          position: after
+    delete:
+      operationId: udfDetach
+      summary: Detach UDF from service
+      description: '**Disclaimer:** This beta endpoint is evolving; the API contract may change. <br /><br /> Detaches a UDF from a service.'
+      tags:
+        - UDF
+      parameters:
+        - in: path
+          name: functionName
+          schema:
+            description: Name of the UDF.
+            type: string
+            pattern: ^[A-Za-z][A-Za-z0-9_]*$
+          required: true
+          description: Name of the UDF.
+        - in: path
+          name: serviceId
+          schema:
+            description: ID of the requested service.
+            type: string
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+          required: true
+          description: ID of the requested service.
+      responses:
+        '200':
+          description: UDF detached.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    description: HTTP status code.
+                    example: 200
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - status
+                  - requestId
+                additionalProperties: false
+        '400':
+          description: The request cannot be processed due to a client error. Please verify your request parameters and try again.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  issues:
+                    description: Validation issues that caused the request to be rejected.
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          description: Path to the invalid field.
+                          type: array
+                          items:
+                            anyOf:
+                              - type: string
+                              - type: number
+                        code:
+                          description: Validation issue code.
+                          type: string
+                        message:
+                          description: Human-readable description of the issue.
+                          type: string
+                      required:
+                        - path
+                        - code
+                        - message
+                      additionalProperties: false
+                  status:
+                    description: HTTP status code.
+                    example: 400
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '404':
+          description: UDF not found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 404
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '409':
+          description: An attachment transition is already in progress.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 409
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '500':
+          description: An internal server error has occurred. If this issue persists, please contact ClickHouse Cloud support for assistance.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 500
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: {}
+      x-badges:
+        - name: Beta
+          position: after
+  /udfs/{functionName}/attachments:
+    get:
+      operationId: udfAttachmentList
+      summary: List UDF attachments
+      description: '**Disclaimer:** This beta endpoint is evolving; the API contract may change. <br /><br /> Returns the current service attachments for a UDF, with at most one attachment per service.'
+      tags:
+        - UDF
+      parameters:
+        - in: path
+          name: functionName
+          schema:
+            description: Name of the UDF.
+            type: string
+            pattern: ^[A-Za-z][A-Za-z0-9_]*$
+          required: true
+          description: Name of the UDF.
+        - in: query
+          name: cursor
+          schema:
+            description: Cursor returned in `pagination.nextCursor` from the previous page.
+            type: string
+          description: Cursor returned in `pagination.nextCursor` from the previous page.
+        - in: query
+          name: limit
+          schema:
+            description: Maximum number of records to return per page. Defaults to 100. Maximum is 100.
+            default: 100
+            type: integer
+            exclusiveMinimum: true
+            maximum: 100
+            minimum: 0
+          description: Maximum number of records to return per page. Defaults to 100. Maximum is 100.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    description: HTTP status code.
+                    example: 200
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                  result:
+                    $ref: '#/components/schemas/UdfAttachmentListResponse'
+                required:
+                  - status
+                  - requestId
+                  - result
+                additionalProperties: false
+        '400':
+          description: The request cannot be processed due to a client error. Please verify your request parameters and try again.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  issues:
+                    description: Validation issues that caused the request to be rejected.
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          description: Path to the invalid field.
+                          type: array
+                          items:
+                            anyOf:
+                              - type: string
+                              - type: number
+                        code:
+                          description: Validation issue code.
+                          type: string
+                        message:
+                          description: Human-readable description of the issue.
+                          type: string
+                      required:
+                        - path
+                        - code
+                        - message
+                      additionalProperties: false
+                  status:
+                    description: HTTP status code.
+                    example: 400
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '404':
+          description: UDF not found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 404
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '500':
+          description: An internal server error has occurred. If this issue persists, please contact ClickHouse Cloud support for assistance.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 500
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: {}
+      x-badges:
+        - name: Beta
+          position: after
+  /udfs:
+    post:
+      operationId: udfCreate
+      summary: Create UDF
+      description: '**Disclaimer:** This beta endpoint is evolving; the API contract may change. <br /><br /> Creates a new UDF. See [User-defined functions in Cloud](https://clickhouse.com/docs/products/cloud/features/sql-console-features/user-defined-functions).'
+      tags:
+        - UDF
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UdfCreateRequest'
+      responses:
+        '201':
+          description: UDF created and building.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    description: HTTP status code.
+                    example: 201
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                  result:
+                    $ref: '#/components/schemas/Udf'
+                required:
+                  - status
+                  - requestId
+                  - result
+                additionalProperties: false
+        '400':
+          description: The request cannot be processed due to a client error. Please verify your request parameters and try again.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  issues:
+                    description: Validation issues that caused the request to be rejected.
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          description: Path to the invalid field.
+                          type: array
+                          items:
+                            anyOf:
+                              - type: string
+                              - type: number
+                        code:
+                          description: Validation issue code.
+                          type: string
+                        message:
+                          description: Human-readable description of the issue.
+                          type: string
+                      required:
+                        - path
+                        - code
+                        - message
+                      additionalProperties: false
+                  status:
+                    description: HTTP status code.
+                    example: 400
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '403':
+          description: Requested UDF features are not enabled.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 403
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '409':
+          description: The function name already exists.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 409
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '410':
+          description: The source archive is unavailable.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 410
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '500':
+          description: An internal server error has occurred. If this issue persists, please contact ClickHouse Cloud support for assistance.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 500
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: {}
+      x-badges:
+        - name: Beta
+          position: after
+    get:
+      operationId: udfList
+      summary: List UDFs
+      description: '**Disclaimer:** This beta endpoint is evolving; the API contract may change. <br /><br /> Returns the latest version of each UDF in the organization.'
+      tags:
+        - UDF
+      parameters:
+        - in: query
+          name: cursor
+          schema:
+            description: Cursor returned in `pagination.nextCursor` from the previous page.
+            type: string
+          description: Cursor returned in `pagination.nextCursor` from the previous page.
+        - in: query
+          name: limit
+          schema:
+            description: Maximum number of records to return per page. Defaults to 100. Maximum is 100.
+            default: 100
+            type: integer
+            exclusiveMinimum: true
+            maximum: 100
+            minimum: 0
+          description: Maximum number of records to return per page. Defaults to 100. Maximum is 100.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    description: HTTP status code.
+                    example: 200
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                  result:
+                    $ref: '#/components/schemas/UdfListResponse'
+                required:
+                  - status
+                  - requestId
+                  - result
+                additionalProperties: false
+        '400':
+          description: The request cannot be processed due to a client error. Please verify your request parameters and try again.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  issues:
+                    description: Validation issues that caused the request to be rejected.
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          description: Path to the invalid field.
+                          type: array
+                          items:
+                            anyOf:
+                              - type: string
+                              - type: number
+                        code:
+                          description: Validation issue code.
+                          type: string
+                        message:
+                          description: Human-readable description of the issue.
+                          type: string
+                      required:
+                        - path
+                        - code
+                        - message
+                      additionalProperties: false
+                  status:
+                    description: HTTP status code.
+                    example: 400
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '500':
+          description: An internal server error has occurred. If this issue persists, please contact ClickHouse Cloud support for assistance.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 500
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: {}
+      x-badges:
+        - name: Beta
+          position: after
+  /udfs/{functionName}:
+    delete:
+      operationId: udfDelete
+      summary: Delete UDF
+      description: '**Disclaimer:** This beta endpoint is evolving; the API contract may change. <br /><br /> Deletes every version of a UDF and detaches it from all services. Removal from services completes asynchronously.'
+      tags:
+        - UDF
+      parameters:
+        - in: path
+          name: functionName
+          schema:
+            description: Name of the UDF.
+            type: string
+            pattern: ^[A-Za-z][A-Za-z0-9_]*$
+          required: true
+          description: Name of the UDF.
+      responses:
+        '200':
+          description: UDF deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    description: HTTP status code.
+                    example: 200
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - status
+                  - requestId
+                additionalProperties: false
+        '400':
+          description: The request cannot be processed due to a client error. Please verify your request parameters and try again.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  issues:
+                    description: Validation issues that caused the request to be rejected.
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          description: Path to the invalid field.
+                          type: array
+                          items:
+                            anyOf:
+                              - type: string
+                              - type: number
+                        code:
+                          description: Validation issue code.
+                          type: string
+                        message:
+                          description: Human-readable description of the issue.
+                          type: string
+                      required:
+                        - path
+                        - code
+                        - message
+                      additionalProperties: false
+                  status:
+                    description: HTTP status code.
+                    example: 400
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '404':
+          description: UDF not found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 404
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '409':
+          description: A UDF version is still building.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 409
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '500':
+          description: An internal server error has occurred. If this issue persists, please contact ClickHouse Cloud support for assistance.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 500
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: {}
+      x-badges:
+        - name: Beta
+          position: after
+    get:
+      operationId: udfGet
+      summary: Get UDF
+      description: '**Disclaimer:** This beta endpoint is evolving; the API contract may change. <br /><br /> Returns the latest version of a UDF.'
+      tags:
+        - UDF
+      parameters:
+        - in: path
+          name: functionName
+          schema:
+            description: Name of the UDF.
+            type: string
+            pattern: ^[A-Za-z][A-Za-z0-9_]*$
+          required: true
+          description: Name of the UDF.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    description: HTTP status code.
+                    example: 200
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                  result:
+                    $ref: '#/components/schemas/Udf'
+                required:
+                  - status
+                  - requestId
+                  - result
+                additionalProperties: false
+        '400':
+          description: The request cannot be processed due to a client error. Please verify your request parameters and try again.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  issues:
+                    description: Validation issues that caused the request to be rejected.
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          description: Path to the invalid field.
+                          type: array
+                          items:
+                            anyOf:
+                              - type: string
+                              - type: number
+                        code:
+                          description: Validation issue code.
+                          type: string
+                        message:
+                          description: Human-readable description of the issue.
+                          type: string
+                      required:
+                        - path
+                        - code
+                        - message
+                      additionalProperties: false
+                  status:
+                    description: HTTP status code.
+                    example: 400
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '404':
+          description: UDF not found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 404
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '500':
+          description: An internal server error has occurred. If this issue persists, please contact ClickHouse Cloud support for assistance.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 500
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: {}
+      x-badges:
+        - name: Beta
+          position: after
+  /udfUploads/url:
+    post:
+      operationId: udfUploadSessionCreate
+      summary: Create UDF upload URL
+      description: '**Disclaimer:** This beta endpoint is evolving; the API contract may change. <br /><br /> Creates an org-scoped presigned application/zip upload URL. Callers must use an upload ID for only one create or version attempt and request a new upload URL when retrying.'
+      tags:
+        - UDF
+      parameters: []
+      responses:
+        '201':
+          description: Upload URL created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    description: HTTP status code.
+                    example: 201
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                  result:
+                    $ref: '#/components/schemas/UdfUploadSession'
+                required:
+                  - status
+                  - requestId
+                  - result
+                additionalProperties: false
+        '400':
+          description: The request cannot be processed due to a client error. Please verify your request parameters and try again.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  issues:
+                    description: Validation issues that caused the request to be rejected.
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          description: Path to the invalid field.
+                          type: array
+                          items:
+                            anyOf:
+                              - type: string
+                              - type: number
+                        code:
+                          description: Validation issue code.
+                          type: string
+                        message:
+                          description: Human-readable description of the issue.
+                          type: string
+                      required:
+                        - path
+                        - code
+                        - message
+                      additionalProperties: false
+                  status:
+                    description: HTTP status code.
+                    example: 400
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '500':
+          description: An internal server error has occurred. If this issue persists, please contact ClickHouse Cloud support for assistance.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 500
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: {}
+      x-badges:
+        - name: Beta
+          position: after
+  /udfs/{functionName}/versions:
+    post:
+      operationId: udfVersionCreate
+      summary: Create UDF version
+      description: '**Disclaimer:** This beta endpoint is evolving; the API contract may change. <br /><br /> Consumes a source archive, assigns a version, and starts the UDF build. Optional configuration fields omitted from the request use the defaults documented in the request schema; values are not inherited from the previous version. Retry by requesting a new upload URL and re-uploading.'
+      tags:
+        - UDF
+      parameters:
+        - in: path
+          name: functionName
+          schema:
+            description: Name of the UDF.
+            type: string
+            pattern: ^[A-Za-z][A-Za-z0-9_]*$
+          required: true
+          description: Name of the UDF.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UdfVersionCreateRequest'
+      responses:
+        '201':
+          description: UDF version created and building.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    description: HTTP status code.
+                    example: 201
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                  result:
+                    $ref: '#/components/schemas/Udf'
+                required:
+                  - status
+                  - requestId
+                  - result
+                additionalProperties: false
+        '400':
+          description: The request cannot be processed due to a client error. Please verify your request parameters and try again.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  issues:
+                    description: Validation issues that caused the request to be rejected.
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          description: Path to the invalid field.
+                          type: array
+                          items:
+                            anyOf:
+                              - type: string
+                              - type: number
+                        code:
+                          description: Validation issue code.
+                          type: string
+                        message:
+                          description: Human-readable description of the issue.
+                          type: string
+                      required:
+                        - path
+                        - code
+                        - message
+                      additionalProperties: false
+                  status:
+                    description: HTTP status code.
+                    example: 400
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '403':
+          description: Requested UDF features are not enabled.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 403
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '404':
+          description: UDF not found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 404
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '409':
+          description: A concurrent request conflicted with this request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 409
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '410':
+          description: The source archive is unavailable.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 410
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '500':
+          description: An internal server error has occurred. If this issue persists, please contact ClickHouse Cloud support for assistance.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 500
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: {}
+      x-badges:
+        - name: Beta
+          position: after
+    get:
+      operationId: udfVersionList
+      summary: List UDF versions
+      description: '**Disclaimer:** This beta endpoint is evolving; the API contract may change. <br /><br /> Returns all versions of a UDF.'
+      tags:
+        - UDF
+      parameters:
+        - in: path
+          name: functionName
+          schema:
+            description: Name of the UDF.
+            type: string
+            pattern: ^[A-Za-z][A-Za-z0-9_]*$
+          required: true
+          description: Name of the UDF.
+        - in: query
+          name: cursor
+          schema:
+            description: Cursor returned in `pagination.nextCursor` from the previous page.
+            type: string
+          description: Cursor returned in `pagination.nextCursor` from the previous page.
+        - in: query
+          name: limit
+          schema:
+            description: Maximum number of records to return per page. Defaults to 100. Maximum is 100.
+            default: 100
+            type: integer
+            exclusiveMinimum: true
+            maximum: 100
+            minimum: 0
+          description: Maximum number of records to return per page. Defaults to 100. Maximum is 100.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    description: HTTP status code.
+                    example: 200
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                  result:
+                    $ref: '#/components/schemas/UdfVersionListResponse'
+                required:
+                  - status
+                  - requestId
+                  - result
+                additionalProperties: false
+        '400':
+          description: The request cannot be processed due to a client error. Please verify your request parameters and try again.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  issues:
+                    description: Validation issues that caused the request to be rejected.
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          description: Path to the invalid field.
+                          type: array
+                          items:
+                            anyOf:
+                              - type: string
+                              - type: number
+                        code:
+                          description: Validation issue code.
+                          type: string
+                        message:
+                          description: Human-readable description of the issue.
+                          type: string
+                      required:
+                        - path
+                        - code
+                        - message
+                      additionalProperties: false
+                  status:
+                    description: HTTP status code.
+                    example: 400
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '404':
+          description: UDF not found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 404
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '500':
+          description: An internal server error has occurred. If this issue persists, please contact ClickHouse Cloud support for assistance.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 500
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: {}
+      x-badges:
+        - name: Beta
+          position: after
+  /udfs/{functionName}/versions/{version}:
+    delete:
+      operationId: udfVersionDelete
+      summary: Delete UDF version
+      description: '**Disclaimer:** This beta endpoint is evolving; the API contract may change. <br /><br /> Deletes a UDF version. The UDF must not be attached to any services.'
+      tags:
+        - UDF
+      parameters:
+        - in: path
+          name: functionName
+          schema:
+            description: Name of the UDF.
+            type: string
+            pattern: ^[A-Za-z][A-Za-z0-9_]*$
+          required: true
+          description: Name of the UDF.
+        - in: path
+          name: version
+          schema:
+            description: Version number of the UDF.
+            example: 1
+            type: integer
+            exclusiveMinimum: true
+            minimum: 0
+          required: true
+          description: Version number of the UDF.
+      responses:
+        '200':
+          description: UDF version deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    description: HTTP status code.
+                    example: 200
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - status
+                  - requestId
+                additionalProperties: false
+        '400':
+          description: The request cannot be processed due to a client error. Please verify your request parameters and try again.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  issues:
+                    description: Validation issues that caused the request to be rejected.
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          description: Path to the invalid field.
+                          type: array
+                          items:
+                            anyOf:
+                              - type: string
+                              - type: number
+                        code:
+                          description: Validation issue code.
+                          type: string
+                        message:
+                          description: Human-readable description of the issue.
+                          type: string
+                      required:
+                        - path
+                        - code
+                        - message
+                      additionalProperties: false
+                  status:
+                    description: HTTP status code.
+                    example: 400
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '404':
+          description: UDF or version not found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 404
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '409':
+          description: The UDF version is the latest version, is attached to a service, or is still building.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Human-readable error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 409
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: false
+        '500':
+          description: An internal server error has occurred. If this issue persists, please contact ClickHouse Cloud support for assistance.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    description: Error message.
+                    type: string
+                  status:
+                    description: HTTP status code.
+                    example: 500
+                    type: integer
+                  requestId:
+                    description: Unique id assigned to every request. UUIDv4
+                    type: string
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+                required:
+                  - error
+                  - status
+                  - requestId
+                additionalProperties: {}
+      x-badges:
+        - name: Beta
+          position: after
+components:
+  schemas:
+    UdfAttachment:
+      type: object
+      properties:
+        functionName:
+          description: Name of the UDF.
+          type: string
+        serviceId:
+          description: ID of the attached service.
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+        status:
+          description: Current attachment lifecycle state.
+          type: string
+          enum:
+            - deployed
+            - deprovisioning
+            - error
+            - provisioning
+            - standby
+        version:
+          description: Attached UDF version.
+          example: 1
+          type: integer
+          exclusiveMinimum: true
+          minimum: 0
+      required:
+        - functionName
+        - serviceId
+        - status
+        - version
+      additionalProperties: false
+    UdfAttachmentListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UdfAttachment'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+        - items
+        - pagination
+      additionalProperties: false
+    UdfCreateRequest:
+      type: object
+      properties:
+        uploadId:
+          description: Identifier of the uploaded source archive.
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+        runtime:
+          type: string
+          enum:
+            - python3.11
+            - native
+        arguments:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                description: Name of the argument. Required for Native and JSONEachRow formats.
+                type: string
+                pattern: ^[A-Za-z][A-Za-z0-9_]*$
+              type:
+                description: ClickHouse data type of the argument.
+                type: string
+            required:
+              - name
+              - type
+        returnType:
+          type: string
+        returnName:
+          default: null
+          anyOf:
+            - type: string
+              pattern: ^[A-Za-z][A-Za-z0-9_]*$
+            - type: 'null'
+        commandReadTimeout:
+          default: 10000
+          type: integer
+          exclusiveMinimum: true
+          minimum: 0
+        commandWriteTimeout:
+          default: 10000
+          type: integer
+          exclusiveMinimum: true
+          minimum: 0
+        memoryLimitMib:
+          default: null
+          anyOf:
+            - type: integer
+              minimum: 1
+              maximum: 1048576
+            - type: 'null'
+        sendChunkHeader:
+          default: false
+          type: boolean
+        format:
+          default: TabSeparated
+          type: string
+        sandboxType:
+          default: basic
+          type: string
+          enum:
+            - basic
+            - netenable
+        sandboxVersion:
+          default: v2
+          type: string
+          enum:
+            - v1
+            - v2
+            - v3
+        type:
+          type: string
+          const: executable
+        poolSize:
+          default: null
+          type: 'null'
+        maxCommandExecutionTime:
+          default: 10
+          anyOf:
+            - type: integer
+              exclusiveMinimum: true
+              minimum: 0
+            - type: 'null'
+        functionName:
+          type: string
+          pattern: ^[A-Za-z][A-Za-z0-9_]*$
+      required:
+        - uploadId
+        - runtime
+        - arguments
+        - returnType
+        - type
+        - functionName
+    Udf:
+      type: object
+      properties:
+        functionName:
+          description: Name of the UDF. Unique within the organization.
+          type: string
+        version:
+          description: Version number of the UDF.
+          example: 1
+          type: integer
+          exclusiveMinimum: true
+          minimum: 0
+        status:
+          description: Build state of this UDF version.
+          type: string
+          enum:
+            - building
+            - error
+            - ready
+        runtime:
+          description: Runtime used to execute the UDF command.
+          type: string
+          enum:
+            - python3.11
+            - native
+        type:
+          description: Executable UDF type.
+          type: string
+          enum:
+            - executable
+            - executable_pool
+        arguments:
+          description: Arguments passed to the UDF command.
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                description: Name of the argument. Required for Native and JSONEachRow formats.
+                type: string
+                pattern: ^[A-Za-z][A-Za-z0-9_]*$
+              type:
+                description: ClickHouse data type of the argument.
+                type: string
+            required:
+              - name
+              - type
+            additionalProperties: false
+        returnType:
+          description: ClickHouse data type of the returned value.
+          type: string
+        returnName:
+          description: Name of the returned value, or null when unnamed.
+          type: string
+        poolSize:
+          description: Command pool size for executable_pool UDFs.
+          type: integer
+          exclusiveMinimum: true
+          minimum: 0
+        commandReadTimeout:
+          description: Command stdout read timeout in milliseconds.
+          type: integer
+          exclusiveMinimum: true
+          minimum: 0
+        commandWriteTimeout:
+          description: Command stdin write timeout in milliseconds.
+          type: integer
+          exclusiveMinimum: true
+          minimum: 0
+        maxCommandExecutionTime:
+          description: Maximum command execution time in seconds for executable_pool UDFs.
+          type: integer
+          exclusiveMinimum: true
+          minimum: 0
+        memoryLimitMib:
+          description: Maximum memory, in MiB, available to each UDF sandbox process. Null uses the sandbox default.
+          default: null
+          type: integer
+          minimum: 1
+          maximum: 1048576
+        sendChunkHeader:
+          description: Whether ClickHouse sends a row-count chunk header.
+          type: boolean
+        format:
+          description: Input and output format used by the UDF command.
+          type: string
+        sandboxType:
+          description: Sandbox isolation level.
+          type: string
+          enum:
+            - basic
+            - netenable
+        sandboxVersion:
+          description: Sandbox runtime version.
+          type: string
+          enum:
+            - v1
+            - v2
+            - v3
+        error:
+          description: Build error, or null when no build error is present.
+          type: string
+        createdAt:
+          description: Creation timestamp.
+          type: string
+          format: date-time
+        updatedAt:
+          description: Last-update timestamp.
+          type: string
+          format: date-time
+      required:
+        - functionName
+        - version
+        - status
+        - runtime
+        - type
+        - arguments
+        - returnType
+        - returnName
+        - poolSize
+        - commandReadTimeout
+        - commandWriteTimeout
+        - maxCommandExecutionTime
+        - memoryLimitMib
+        - sendChunkHeader
+        - format
+        - sandboxType
+        - sandboxVersion
+        - error
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+    UdfListResponse:
+      type: object
+      properties:
+        items:
+          description: Latest version of each UDF in the organization.
+          type: array
+          items:
+            $ref: '#/components/schemas/Udf'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+        - items
+        - pagination
+      additionalProperties: false
+    UdfUploadSession:
+      type: object
+      properties:
+        uploadId:
+          description: Identifier of the uploaded source archive.
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+        uploadUrl:
+          description: Presigned URL for uploading the source archive.
+          type: string
+          format: uri
+        expiresAt:
+          description: Presigned-URL expiry timestamp.
+          type: string
+          format: date-time
+      required:
+        - uploadId
+        - uploadUrl
+        - expiresAt
+      additionalProperties: false
+    UdfVersionCreateRequest:
+      type: object
+      properties:
+        uploadId:
+          description: Identifier of the uploaded source archive.
+          type: string
+          format: uuid
+          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000)$
+        runtime:
+          type: string
+          enum:
+            - python3.11
+            - native
+        arguments:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                description: Name of the argument. Required for Native and JSONEachRow formats.
+                type: string
+                pattern: ^[A-Za-z][A-Za-z0-9_]*$
+              type:
+                description: ClickHouse data type of the argument.
+                type: string
+            required:
+              - name
+              - type
+        returnType:
+          type: string
+        returnName:
+          default: null
+          anyOf:
+            - type: string
+              pattern: ^[A-Za-z][A-Za-z0-9_]*$
+            - type: 'null'
+        commandReadTimeout:
+          default: 10000
+          type: integer
+          exclusiveMinimum: true
+          minimum: 0
+        commandWriteTimeout:
+          default: 10000
+          type: integer
+          exclusiveMinimum: true
+          minimum: 0
+        memoryLimitMib:
+          default: null
+          anyOf:
+            - type: integer
+              minimum: 1
+              maximum: 1048576
+            - type: 'null'
+        sendChunkHeader:
+          default: false
+          type: boolean
+        format:
+          default: TabSeparated
+          type: string
+        sandboxType:
+          default: basic
+          type: string
+          enum:
+            - basic
+            - netenable
+        sandboxVersion:
+          default: v2
+          type: string
+          enum:
+            - v1
+            - v2
+            - v3
+        type:
+          type: string
+          const: executable
+        poolSize:
+          default: null
+          type: 'null'
+        maxCommandExecutionTime:
+          default: 10
+          anyOf:
+            - type: integer
+              exclusiveMinimum: true
+              minimum: 0
+            - type: 'null'
+      required:
+        - uploadId
+        - runtime
+        - arguments
+        - returnType
+        - type
+    UdfVersionListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Udf'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+        - items
+        - pagination
+      additionalProperties: false
+    Pagination:
+      type: object
+      properties:
+        totalRecords:
+          description: Total number of records available.
+          type: integer
+        currentCursor:
+          description: Cursor for the current page. Null for the first page.
+          type: string
+        nextCursor:
+          description: Cursor for the next page. Null if there are no more results.
+          type: string
+        limit:
+          description: Maximum number of records returned per page.
+          type: integer
+      required:
+        - totalRecords
+        - currentCursor
+        - nextCursor
+        - limit
+      additionalProperties: false
+  x-stackQL-resources:
+    attachments:
+      id: clickhouse.udfs.attachments
+      name: attachments
+      title: Attachments
+      methods:
+        update:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1udfs~1{functionName}~1attachments~1{serviceId}/put'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+          request:
+            nativeCasing: camel
+        get:
+          operation:
+            $ref: '#/paths/~1udfs~1{functionName}~1attachments~1{serviceId}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.result
+          request:
+            nativeCasing: camel
+        delete:
+          operation:
+            $ref: '#/paths/~1udfs~1{functionName}~1attachments~1{serviceId}/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+          request:
+            nativeCasing: camel
+        list:
+          operation:
+            $ref: '#/paths/~1udfs~1{functionName}~1attachments/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.result.items
+          request:
+            nativeCasing: camel
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/attachments/methods/get'
+          - $ref: '#/components/x-stackQL-resources/attachments/methods/list'
+        insert: []
+        update:
+          - $ref: '#/components/x-stackQL-resources/attachments/methods/update'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/attachments/methods/delete'
+        replace: []
+    functions:
+      id: clickhouse.udfs.functions
+      name: functions
+      title: Functions
+      methods:
+        create:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1udfs/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '201'
+          request:
+            nativeCasing: camel
+        list:
+          operation:
+            $ref: '#/paths/~1udfs/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.result.items
+          request:
+            nativeCasing: camel
+        delete:
+          operation:
+            $ref: '#/paths/~1udfs~1{functionName}/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+          request:
+            nativeCasing: camel
+        get:
+          operation:
+            $ref: '#/paths/~1udfs~1{functionName}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.result
+          request:
+            nativeCasing: camel
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/functions/methods/get'
+          - $ref: '#/components/x-stackQL-resources/functions/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/functions/methods/create'
+        update: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/functions/methods/delete'
+        replace: []
+    upload_urls:
+      id: clickhouse.udfs.upload_urls
+      name: upload_urls
+      title: Upload Urls
+      methods:
+        create:
+          operation:
+            $ref: '#/paths/~1udfUploads~1url/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '201'
+          request:
+            nativeCasing: camel
+      sqlVerbs:
+        select: []
+        insert:
+          - $ref: '#/components/x-stackQL-resources/upload_urls/methods/create'
+        update: []
+        delete: []
+        replace: []
+    versions:
+      id: clickhouse.udfs.versions
+      name: versions
+      title: Versions
+      methods:
+        create:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1udfs~1{functionName}~1versions/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '201'
+          request:
+            nativeCasing: camel
+        list:
+          operation:
+            $ref: '#/paths/~1udfs~1{functionName}~1versions/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.result.items
+          request:
+            nativeCasing: camel
+        delete:
+          operation:
+            $ref: '#/paths/~1udfs~1{functionName}~1versions~1{version}/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+          request:
+            nativeCasing: camel
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/versions/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/versions/methods/create'
+        update: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/versions/methods/delete'
+        replace: []
+servers:
+  - url: https://api.clickhouse.cloud/v1/organizations/{organization_id}
+    variables:
+      organization_id:
+        description: ClickHouse Cloud organization ID. Resolved from the CLICKHOUSE_ORG_ID environment variable when it is set (x-stackQL-envVar); otherwise it must be supplied on every query as WHERE organization_id = <uuid>. A WHERE value always takes precedence over the environment.
+        x-stackQL-envVar: CLICKHOUSE_ORG_ID
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: cursor
+      location: query
+    responseToken:
+      key: $.result.pagination.nextCursor
+      location: body
