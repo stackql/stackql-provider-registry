@@ -1976,6 +1976,9 @@ paths:
             schema:
               type: object
               properties:
+                maintainIntegration:
+                  $ref: "#/components/schemas/Boolean"
+                  description: "If true, maintain existing data sharing, zero-ETL and S3 event integrations when restoring. Otherwise, integrations will not be maintained after the restore operation. Integrations are only maintained when restored to the same serverless namespace. Default: true"
                 namespaceName:
                   $ref: "#/components/schemas/NamespaceName"
                   description: The name of the namespace to restore data into.
@@ -2020,6 +2023,9 @@ paths:
                 adminPasswordSecretKmsKeyId:
                   $ref: "#/components/schemas/KmsKeyId"
                   description: The ID of the Key Management Service (KMS) key used to encrypt and store the namespace's admin credentials secret.
+                maintainIntegration:
+                  $ref: "#/components/schemas/Boolean"
+                  description: "If true, maintain existing data sharing, zero-ETL and S3 event integrations when restoring. Otherwise, integrations will not be maintained after the restore operation. Integrations are only maintained when restored to the same serverless namespace. Default: true"
                 manageAdminPassword:
                   $ref: "#/components/schemas/Boolean"
                   description: If true, Amazon Redshift uses Secrets Manager to manage the restored snapshot's admin credentials. If MmanageAdminPassword is false or not set, Amazon Redshift uses the admin credentials that the namespace or cluster had at the time the snapshot was taken.
@@ -2380,7 +2386,7 @@ paths:
   /UpdateNamespace:
     post:
       operationId: UpdateNamespace
-      description: Updates a namespace with the specified settings. Unless required, you can't update multiple parameters in one request. For example, you must specify both adminUsername and adminUserPassword to update either field, but you can't update both kmsKeyId and logExports in a single request.
+      description: Updates a namespace with the specified settings. Unless required, you can't update multiple parameters in one request. For example, you must specify both adminUsername and adminUserPassword to update either field, but you can't update both kmsKeyId and logExports in a single request. Similarly, an S3 Tables log-publishing update (a request where logDestinationType is s3table) cannot be combined with any other namespace configuration change and must be submitted as its own request.
       parameters:
         - name: X-Amz-Target
           in: header
@@ -2403,7 +2409,7 @@ paths:
                   description: The ID of the Key Management Service (KMS) key used to encrypt and store the namespace's admin credentials secret. You can only use this parameter if manageAdminPassword is true.
                 adminUserPassword:
                   $ref: "#/components/schemas/DbPassword"
-                  description: The password of the administrator for the first database created in the namespace. This parameter must be updated together with adminUsername. You can't use adminUserPassword if manageAdminPassword is true.
+                  description: The password of the administrator for the first database created in the namespace. This parameter must be updated together with adminUsername. You can't use adminUserPassword if manageAdminPassword is true. If your admin user account is locked, this operation also unlocks your account and resets the failed-login counter. This option is available only when account lockout security is enabled for the namespace.
                 adminUsername:
                   $ref: "#/components/schemas/DbUser"
                   description: The username of the administrator for the first database created in the namespace. This parameter must be updated together with adminUserPassword.
@@ -2416,6 +2422,9 @@ paths:
                 kmsKeyId:
                   $ref: "#/components/schemas/String"
                   description: The ID of the Amazon Web Services Key Management Service key used to encrypt your data.
+                logDestinationType:
+                  $ref: "#/components/schemas/LogDestinationType"
+                  description: The destination for the log data. Valid values are s3table and cloudwatch. Set this to s3table to manage Amazon S3 Tables system-table publishing for the namespace.
                 logExports:
                   $ref: "#/components/schemas/LogExportList"
                   description: The types of logs the namespace can export. The export types are userlog, connectionlog, and useractivitylog.
@@ -2425,6 +2434,18 @@ paths:
                 namespaceName:
                   $ref: "#/components/schemas/NamespaceName"
                   description: The name of the namespace to update. You can't update the name of a namespace once it is created.
+                s3TableAction:
+                  $ref: "#/components/schemas/S3TableAction"
+                  description: Whether to enable or disable Amazon S3 Tables publishing. Valid values are Enable and Disable, matched case-insensitively. When omitted, defaults to Enable. Valid only when logDestinationType is s3table.
+                s3TableGranularity:
+                  $ref: "#/components/schemas/S3TableGranularity"
+                  description: The scope of the Amazon S3 Tables destination. Valid values are namespace and account, matched case-insensitively. namespace scopes the published tables to this namespace; account scopes them to the Amazon Web Services account. Required when enabling. Omitting this parameter or passing a blank value fails with ValidationException. Valid only when logDestinationType is s3table.
+                s3TableKmsKeyId:
+                  $ref: "#/components/schemas/KmsKeyId"
+                  description: The identifier of the Key Management Service key used to encrypt the published Amazon S3 Tables data. When omitted, the data is encrypted with SSE-S3 (Amazon S3 managed keys). Valid only when logDestinationType is s3table.
+                s3TableNames:
+                  $ref: "#/components/schemas/S3TableNameList"
+                  description: The system tables to publish (on enable) or to stop publishing (on disable). Each value is either a system table view name that begins with sys_ or the keyword all. Omitting this parameter, passing an empty list, or including all each select every current and future system table. Each name must be 1-128 characters, and the list can contain up to 256 names. Valid only when logDestinationType is s3table.
               required:
                 - namespaceName
       responses:
@@ -3061,9 +3082,49 @@ components:
         namespaceName:
           $ref: "#/components/schemas/NamespaceName"
           description: The name of the namespace. Must be between 3-64 alphanumeric characters in lowercase, and it cannot be a reserved word. A list of reserved words can be found in Reserved Words in the Amazon Redshift Database Developer Guide.
+        s3TablePublishStatus:
+          $ref: "#/components/schemas/S3TablePublishStatus"
+          description: The current Amazon S3 Tables log-publishing status for the namespace. Not returned when S3 Tables publishing has never been configured for the namespace.
         status:
           $ref: "#/components/schemas/NamespaceStatus"
           description: The status of the namespace.
+    S3TablePublishStatus:
+      description: Describes the state of Amazon S3 Tables system-table log publishing for a namespace.
+      type: object
+      properties:
+        enabledAll:
+          $ref: "#/components/schemas/Boolean"
+          description: true when the namespace is enrolled in every current and future system table rather than an explicit list of tables.
+        lastIngestionTimes:
+          type: object
+          properties: {}
+          description: A map of system table name to the time that table last received data, as an ISO-8601 timestamp. A table that has not yet been ingested is absent from the map. Use it to judge data freshness.
+        s3TableGranularity:
+          $ref: "#/components/schemas/S3TableGranularity"
+          description: The scope currently in effect. Values are namespace or account.
+        s3TableNamespace:
+          $ref: "#/components/schemas/String"
+          description: The identifier of the namespace in the S3 table bucket that holds the published tables.
+        s3Tables:
+          $ref: "#/components/schemas/S3TableNameList"
+          description: The system tables currently being published.
+    S3TableGranularity:
+      description: Granularity for S3 Table scoping in serverless.
+      type: string
+      enum:
+        - namespace
+        - account
+    S3TableNameList:
+      description: List of system table names (or "all") to publish to S3 Tables. Sized to hold the full SYS_* universe (28+ today, grows as new views are onboarded) plus headroom.
+      type: array
+      items:
+        $ref: "#/components/schemas/S3TableName"
+    S3TableName:
+      description: A system-table view name to publish to S3 Tables (e.g. "sys_query_history"), or the keyword "all" to publish every current and future system table.
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: ^(all|sys_[a-z0-9_]+)$
     NamespaceStatus:
       type: string
       enum:
@@ -3349,7 +3410,7 @@ components:
       properties:
         parameterKey:
           $ref: "#/components/schemas/ParameterKey"
-          description: The key of the parameter. The options are auto_mv, datestyle, enable_case_sensitive_identifier, enable_user_activity_logging, query_group, search_path, require_ssl, use_fips_ssl, and either wlm_json_configuration or query monitoring metrics that let you define performance boundaries. You can either specify individual query monitoring metrics (such as max_scan_row_count, max_query_execution_time) or use wlm_json_configuration to define query queues with rules, but not both. For more information about query monitoring rules and available metrics, see Query monitoring metrics for Amazon Redshift Serverless.
+          description: The key of the parameter. The options are auto_mv, datestyle, enable_case_sensitive_identifier, enable_user_activity_logging, query_group, search_path, require_ssl, use_fips_ssl, and either wlm_json_configuration or query monitoring metrics that let you define performance boundaries. You can either specify individual query monitoring metrics (such as max_scan_row_count, max_query_execution_time) or use wlm_json_configuration to define query queues with rules, but not both. If you're using wlm_json_configuration, the maximum size of parameterValue is 8000 characters. For more information about query monitoring rules and available metrics, see Query monitoring metrics for Amazon Redshift Serverless.
         parameterValue:
           $ref: "#/components/schemas/ParameterValue"
           description: The value of the parameter to set.
@@ -4223,6 +4284,18 @@ components:
         namespaceName:
           $ref: "#/components/schemas/NamespaceName"
           description: The name of the namespace.
+    LogDestinationType:
+      description: Destination type for log publishing.
+      type: string
+      enum:
+        - s3table
+        - cloudwatch
+    S3TableAction:
+      description: Action to perform for S3 Table log publishing.
+      type: string
+      enum:
+        - Enable
+        - Disable
     UpdateNamespaceResponse:
       type: object
       properties:

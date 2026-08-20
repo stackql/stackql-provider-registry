@@ -4841,7 +4841,7 @@ paths:
   /things/{thing_name}/connectivity-data:
     post:
       operationId: GetThingConnectivityData
-      description: Retrieves the live connectivity status per device.
+      description: Retrieves the live connectivity status per device. If a device has never connected to IoT Core or was disconnected for more than 1 hour before fleet indexing's thingConnectivityIndexingMode was enabled, the response will have the connected field set to false with no additional session details.
       parameters:
         - name: thing_name
           in: path
@@ -4849,6 +4849,15 @@ paths:
           schema:
             $ref: "#/components/schemas/ConnectivityApiThingName"
           description: The name of your IoT thing.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                includeSocketInformation:
+                  $ref: "#/components/schemas/Boolean"
       responses:
         "200":
           description: Success
@@ -7245,7 +7254,7 @@ paths:
   /indices/search:
     post:
       operationId: SearchIndex
-      description: The query search index. Requires permission to access the SearchIndex action.
+      description: Searches the specified index. If a device has never connected to IoT Core or was disconnected for more than 1 hour before fleet indexing's thingConnectivityIndexingMode was enabled, the connectivity object for this device in the response will have the connected field set to false with no additional session details. Requires permission to access the SearchIndex action.
       parameters: []
       requestBody:
         required: true
@@ -10857,7 +10866,7 @@ components:
           description: Maximum size of a message batch, in bytes.
         batchAcrossTopics:
           $ref: "#/components/schemas/BatchAcrossTopics"
-          description: Whether to allow batching messages from different MQTT topics into a single HTTP request. By default, only messages from the same topic are batched together. The default value is false.
+          description: "Whether to allow batching messages from different MQTT topics into a single HTTP request. By default, only messages from the same topic are batched together. The default value is false. When batchAcrossTopics is enabled, the error payload format changes: the topic field moves from the top level to inside each entry in the payloadsWithMetadata array, since each message in the batch may originate from a different topic. Messages are always batched within the scope of the same account, rule name, target HTTP endpoint URL, and billing group. Messages that differ in any of these attributes are never combined into the same batch, regardless of the batchAcrossTopics setting."
     MaxBatchOpenMs:
       type: integer
       minimum: 5
@@ -13238,6 +13247,9 @@ components:
         geoLocations:
           $ref: "#/components/schemas/GeoLocationsFilter"
           description: The list of geolocation targets that you select to index. The default maximum number of geolocation targets for indexing is 1. To increase the limit, see Amazon Web Services IoT Device Management Quotas in the Amazon Web Services General Reference.
+        connectivity:
+          $ref: "#/components/schemas/ConnectivityFilter"
+          description: Provides additional connectivity filter selections for the fleet indexing configuration.
     NamedShadowNamesFilter:
       type: array
       items:
@@ -13268,6 +13280,21 @@ components:
       enum:
         - LatLon
         - LonLat
+    ConnectivityFilter:
+      description: Provides connectivity filter selections for the fleet indexing configuration.
+      type: object
+      properties:
+        includeSocketInformation:
+          $ref: "#/components/schemas/FleetIndexingApiList"
+          description: A list of fleet indexing APIs for which to enable socket information retrieval. Currently, the only supported value is GET_THING_CONNECTIVITY_DATA.
+    FleetIndexingApiList:
+      type: array
+      items:
+        $ref: "#/components/schemas/FleetIndexingApi"
+    FleetIndexingApi:
+      type: string
+      enum:
+        - GET_THING_CONNECTIVITY_DATA
     ThingGroupIndexingConfiguration:
       description: Thing group indexing configuration.
       type: object
@@ -13627,10 +13654,37 @@ components:
           description: A Boolean that indicates the connectivity status.
         timestamp:
           $ref: "#/components/schemas/Timestamp"
-          description: The timestamp of when the event occurred.
+          description: The timestamp of when the device connected or disconnected.
         disconnectReason:
           $ref: "#/components/schemas/DisconnectReasonValue"
-          description: The reason why the client is disconnecting.
+          description: The reason that the client is disconnected.
+        sourceIp:
+          $ref: "#/components/schemas/SourceIp"
+          description: The IP address of the client that initiated the connection.
+        sourcePort:
+          $ref: "#/components/schemas/SourcePort"
+          description: The client's source port.
+        targetIp:
+          $ref: "#/components/schemas/TargetIp"
+          description: The IP address of the Amazon Web Services IoT Core endpoint that the client connected to.
+        targetPort:
+          $ref: "#/components/schemas/TargetPort"
+          description: The port number of the Amazon Web Services IoT Core endpoint that the client connected to.
+        vpcEndpointId:
+          $ref: "#/components/schemas/VpcEndpointId"
+          description: The ID of the VPC endpoint. Present for clients connected to Amazon Web Services IoT Core via a VPC endpoint.
+        keepAliveDuration:
+          $ref: "#/components/schemas/KeepAliveDuration"
+          description: The keep-alive interval in seconds that the client specified when establishing the connection.
+        cleanSession:
+          $ref: "#/components/schemas/Boolean"
+          description: Indicates whether the client is using a clean session. Returns true for clean sessions.
+        sessionExpiry:
+          $ref: "#/components/schemas/SessionExpiry"
+          description: The session expiry interval in seconds for the MQTT client connection. This value indicates how long the session will remain active after the client disconnects.
+        clientId:
+          $ref: "#/components/schemas/ClientId"
+          description: The unique identifier of the MQTT client.
     DisconnectReasonValue:
       type: string
       enum:
@@ -13643,11 +13697,27 @@ components:
         - MQTT_KEEP_ALIVE_TIMEOUT
         - SERVER_ERROR
         - SERVER_INITIATED_DISCONNECT
+        - API_INITIATED_DISCONNECT
         - THROTTLED
         - WEBSOCKET_TTL_EXPIRATION
         - CUSTOMAUTH_TTL_EXPIRATION
         - UNKNOWN
         - NONE
+    SourceIp:
+      type: string
+    SourcePort:
+      type: integer
+    TargetIp:
+      type: string
+    TargetPort:
+      type: integer
+    VpcEndpointId:
+      type: string
+    KeepAliveDuration:
+      type: integer
+    SessionExpiry:
+      type: integer
+      format: int64
     GetTopicRuleResponse:
       description: The output from the GetTopicRule operation.
       type: object
@@ -15628,10 +15698,22 @@ components:
           description: True if the thing is connected to the Amazon Web Services IoT Core service; false if it is not connected.
         timestamp:
           $ref: "#/components/schemas/ConnectivityTimestamp"
-          description: The epoch time (in milliseconds) when the thing last connected or disconnected. If the thing has been disconnected for approximately an hour, the time value might be missing.
+          description: The epoch time (in milliseconds) when the thing last connected or disconnected.
         disconnectReason:
           $ref: "#/components/schemas/DisconnectReason"
-          description: The reason why the client is disconnected. If the thing has been disconnected for approximately an hour, the disconnectReason value might be missing.
+          description: The reason that the client is disconnected.
+        keepAliveDuration:
+          $ref: "#/components/schemas/KeepAliveDuration"
+          description: The keep-alive interval in seconds that the client specified when establishing the connection.
+        cleanSession:
+          $ref: "#/components/schemas/Boolean"
+          description: Indicates whether the client is using a clean session. Returns true for clean sessions.
+        sessionExpiry:
+          $ref: "#/components/schemas/SessionExpiry"
+          description: The session expiry interval in seconds for the MQTT client connection. This value indicates how long the session will remain active after the client disconnects.
+        clientId:
+          $ref: "#/components/schemas/ClientId"
+          description: The unique identifier of the MQTT client.
     ConnectivityTimestamp:
       type: integer
       format: int64
@@ -19351,6 +19433,11 @@ components:
           response:
             openAPIDocKey: "200"
             mediaType: application/json
+          request:
+            nativeCasing: pascal
+          config:
+            requestBodyTranslate:
+              algorithm: naive
       sqlVerbs:
         select:
           - $ref: "#/components/x-stackQL-resources/thing_connectivity_datas/methods/get_thing_connectivity_data"

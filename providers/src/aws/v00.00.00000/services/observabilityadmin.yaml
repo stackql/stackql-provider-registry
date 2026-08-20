@@ -729,6 +729,8 @@ paths:
                   $ref: "#/components/schemas/Records"
                 Configuration:
                   $ref: "#/components/schemas/TelemetryPipelineConfiguration"
+                SignalType:
+                  $ref: "#/components/schemas/SignalType"
               required:
                 - Records
                 - Configuration
@@ -964,6 +966,9 @@ components:
         SourceLogsConfiguration:
           $ref: "#/components/schemas/SourceLogsConfiguration"
           description: Log specific configuration for centralization source log groups.
+        SourceMetricsConfiguration:
+          $ref: "#/components/schemas/SourceMetricsConfiguration"
+          description: Metric specific configuration for centralization source metrics.
       required:
         - Regions
     Regions:
@@ -1005,6 +1010,17 @@ components:
       enum:
         - ALLOW
         - SKIP
+    SourceMetricsConfiguration:
+      description: Configuration for selecting source metrics for centralization.
+      type: object
+      properties:
+        MetricsSelectionCriteria:
+          $ref: "#/components/schemas/MetricsFilterString"
+          description: The filter expression that selects which source metrics to centralize. Currently, only * (all metrics) is supported. Other values return a validation error.
+    MetricsFilterString:
+      type: string
+      minLength: 1
+      maxLength: 2000
     CentralizationRuleDestination:
       description: Configuration specifying the primary destination for centralized telemetry data.
       type: object
@@ -1018,6 +1034,9 @@ components:
         DestinationLogsConfiguration:
           $ref: "#/components/schemas/DestinationLogsConfiguration"
           description: Log specific configuration for centralization destination log groups.
+        DestinationMetricsConfiguration:
+          $ref: "#/components/schemas/DestinationMetricsConfiguration"
+          description: Metric specific configuration for centralization destination metrics.
       required:
         - Region
     AccountIdentifier:
@@ -1038,8 +1057,11 @@ components:
         LogGroupNameConfiguration:
           $ref: "#/components/schemas/LogGroupNameConfiguration"
           description: Configuration that specifies a naming pattern for destination log groups created during centralization. The pattern supports static text and dynamic variables that are replaced with source attributes when log groups are created.
+        TagPropagationConfiguration:
+          $ref: "#/components/schemas/TagPropagationConfiguration"
+          description: Specifies the tag propagation configuration for this centralization rule. When present, LogGroupNameConfiguration must use a LogGroupNamePattern that contains ${source.logGroup}, ${source.accountId}, and ${source.region}.
     LogsEncryptionConfiguration:
-      description: Configuration for encrypting centralized log groups. This configuration is only applied to destination log groups for which the corresponding source log groups are encrypted using Customer Managed KMS Keys.
+      description: Configuration for encrypting centralized destination log groups. By default, this configuration applies only to destination log groups whose corresponding source log groups are encrypted using customer managed KMS keys. To encrypt all destination log groups created by the rule, set EncryptionScope to NEW_DESTINATION_LOG_GROUPS.
       type: object
       properties:
         EncryptionStrategy:
@@ -1051,6 +1073,9 @@ components:
         EncryptionConflictResolutionStrategy:
           $ref: "#/components/schemas/EncryptionConflictResolutionStrategy"
           description: Conflict resolution strategy for centralization if the encryption strategy is set to CUSTOMER_MANAGED and the destination log group is encrypted with an AWS_OWNED KMS Key. ALLOW lets centralization go through while SKIP prevents centralization into the destination log group.
+        EncryptionScope:
+          $ref: "#/components/schemas/EncryptionScope"
+          description: Determines which newly created destination log groups are encrypted with the configured KmsKeyArn when EncryptionStrategy is CUSTOMER_MANAGED. If you set this to ENCRYPTED_SOURCE_ONLY (the default), only destination log groups whose source log group is encrypted with a customer managed KMS key use the configured KmsKeyArn. Destination log groups derived from Amazon Web Services owned encrypted source log groups remain Amazon Web Services owned encrypted. If you set this to NEW_DESTINATION_LOG_GROUPS, every new destination log group created by this rule uses the configured KmsKeyArn, regardless of the source log group's encryption posture. This field is not valid when EncryptionStrategy is AWS_OWNED.
       required:
         - EncryptionStrategy
     EncryptionStrategy:
@@ -1068,6 +1093,12 @@ components:
       enum:
         - ALLOW
         - SKIP
+    EncryptionScope:
+      description: Determines which newly created destination log groups are encrypted with the configured KMS key.
+      type: string
+      enum:
+        - ENCRYPTED_SOURCE_ONLY
+        - NEW_DESTINATION_LOG_GROUPS
     LogsBackupConfiguration:
       description: Configuration for backing up centralized log data to a secondary region.
       type: object
@@ -1095,6 +1126,46 @@ components:
       minLength: 1
       maxLength: 512
       pattern: (?:[\._\-/#A-Za-z0-9]+|\$\{[A-Za-z]+(?:\.[A-Za-z]+){1,2}\})+
+    TagPropagationConfiguration:
+      description: Specifies configuration for propagating resource tags from source log groups to centralized destination log groups. The service uses a customer-managed IAM role in the destination account to add, update, and remove tags on destination log groups.
+      type: object
+      properties:
+        DestinationRoleArn:
+          $ref: "#/components/schemas/IamRoleArn"
+          description: The ARN of a customer-managed IAM role in the destination account. The service assumes this role to propagate tags to destination log groups. You must have iam:PassRole permission on this role.
+        TagConflictResolutionStrategy:
+          $ref: "#/components/schemas/TagConflictResolutionStrategy"
+          description: The strategy for resolving conflicts when a tag key exists on both the source and destination log groups. If not specified, defaults to UPDATE_SYNC. ADD_ONLY – Only adds new tags from the source without modifying existing destination tags. UPDATE_SYNC – Adds new tags and updates existing tags from the source. Does not remove destination tags that are absent from the source. IN_SYNC – Keeps destination tags fully synchronized with source tags, including removing destination tags that do not exist on the source.
+      required:
+        - DestinationRoleArn
+    IamRoleArn:
+      type: string
+      minLength: 20
+      maxLength: 2048
+      pattern: arn:aws[a-zA-Z-]*:iam::\d{12}:role/[\w+=,.@/-]+
+    TagConflictResolutionStrategy:
+      description: The strategy for resolving tag conflicts between source and destination log groups. ADD_ONLY – Only adds new tags from the source without modifying existing destination tags. UPDATE_SYNC – Adds new tags and updates existing tags from the source. Does not remove destination tags that are absent from the source. IN_SYNC – Keeps destination tags fully synchronized with source tags, including removing destination tags that do not exist on the source.
+      type: string
+      enum:
+        - IN_SYNC
+        - ADD_ONLY
+        - UPDATE_SYNC
+    DestinationMetricsConfiguration:
+      description: Configuration for centralization destination metrics, including backup settings.
+      type: object
+      properties:
+        BackupConfiguration:
+          $ref: "#/components/schemas/MetricsBackupConfiguration"
+          description: Configuration defining the backup region for the metrics backup destination.
+    MetricsBackupConfiguration:
+      description: Configuration for backing up centralized metrics data to a secondary region.
+      type: object
+      properties:
+        Region:
+          $ref: "#/components/schemas/Region"
+          description: Metrics specific backup destination region within the primary destination account to which metrics data should be centralized.
+      required:
+        - Region
     TagMapInput:
       type: object
       properties: {}
@@ -1157,7 +1228,7 @@ components:
       properties:
         ResourceType:
           $ref: "#/components/schemas/ResourceType"
-          description: The type of Amazon Web Services resource to configure telemetry for (e.g., "AWS::EC2::VPC", "AWS::EKS::Cluster", "AWS::WAFv2::WebACL").
+          description: The type of Amazon Web Services resource to configure telemetry for (for example, AWS::EC2::VPC, AWS::EKS::Cluster, AWS::ElasticLoadBalancingV2::LoadBalancer, or AWS::Bedrock::KnowledgeBase).
         TelemetryType:
           $ref: "#/components/schemas/TelemetryType"
           description: The type of telemetry to collect (Logs, Metrics, or Traces).
@@ -1206,6 +1277,8 @@ components:
         - AWS::SecurityHub::HubV2
         - AWS::CloudWatch::OTelEnrichment
         - AWS::MSK::Cluster
+        - AWS::S3::Bucket
+        - AWS::Bedrock::KnowledgeBase
     TelemetryType:
       type: string
       enum:
@@ -1255,10 +1328,13 @@ components:
           description: Configuration parameters specific to WAF logging when WAF is the resource type.
         LogDeliveryParameters:
           $ref: "#/components/schemas/LogDeliveryParameters"
-          description: Configuration parameters specific to Amazon Bedrock AgentCore logging when Amazon Bedrock AgentCore is the resource type.
+          description: The configuration parameters for log delivery when the resource type supports configurable log types, such as Amazon Bedrock Knowledge Bases or Elastic Load Balancing Application Load Balancers.
         MskMonitoringParameters:
           $ref: "#/components/schemas/MskMonitoringParameters"
           description: Configuration parameters specific to MSK monitoring when MSK is the resource type.
+        KmsKeyArn:
+          $ref: "#/components/schemas/KmsKeyArn"
+          description: The Amazon Resource Name (ARN) of the customer-managed Amazon Web Services KMS key used to encrypt the log groups created during telemetry rule remediation.
     DestinationType:
       type: string
       enum:
@@ -1495,17 +1571,18 @@ components:
       enum:
         - WAF_LOGS
     LogDeliveryParameters:
-      description: Configuration parameters for Amazon Bedrock AgentCore logging, including logType settings.
+      description: The configuration parameters for log delivery, including logType settings. Applies to resource types that support configurable log delivery, such as Amazon Bedrock Knowledge Bases and Elastic Load Balancing Application Load Balancers.
       type: object
       properties:
         LogTypes:
           $ref: "#/components/schemas/LogTypes"
-          description: The type of log that the source is sending.
+          description: The types of logs to collect from the resource.
     LogTypes:
       type: array
       items:
         $ref: "#/components/schemas/LogType"
     LogType:
+      description: "The following log types are supported for log delivery configuration: APPLICATION_LOGS – Application-level logs. USAGE_LOGS – Resource usage logs. SECURITY_FINDING_LOGS – Security finding logs. ACCESS_LOGS – Access logs (such as Elastic Load Balancing access logs). CONNECTION_LOGS – Connection logs. S3_SERVER_ACCESS_LOGS – Amazon S3 server access logs."
       type: string
       enum:
         - APPLICATION_LOGS
@@ -1513,6 +1590,10 @@ components:
         - SECURITY_FINDING_LOGS
         - ACCESS_LOGS
         - CONNECTION_LOGS
+        - S3_SERVER_ACCESS_LOGS
+        - ALB_ACCESS_LOGS
+        - ALB_CONNECTION_LOGS
+        - ALB_HEALTH_CHECK_LOGS
     MskMonitoringParameters:
       description: Configuration parameters for Amazon MSK cluster monitoring, including enhanced monitoring level settings.
       type: object
@@ -1528,6 +1609,11 @@ components:
         - PER_BROKER
         - PER_TOPIC_PER_BROKER
         - PER_TOPIC_PER_PARTITION
+    KmsKeyArn:
+      type: string
+      minLength: 1
+      maxLength: 2048
+      pattern: arn:aws[a-zA-Z-]*:kms:[a-z0-9-]+:\d{12}:key/(mrk-)?[a-f0-9-]+
     Boolean:
       type: boolean
     AllRegions:
@@ -1581,6 +1667,12 @@ components:
         FailureReason:
           $ref: "#/components/schemas/CentralizationFailureReason"
           description: The reason why an organization centralization rule is marked UNHEALTHY.
+        TagPropagationStatus:
+          $ref: "#/components/schemas/TagPropagationStatus"
+          description: The health status of tag propagation for this rule. This status is independent of the overall RuleHealth for log delivery. Returns Healthy when the most recent tag-propagation attempt succeeded, or Unhealthy when the most recent attempt failed.
+        TagPropagationFailureReason:
+          $ref: "#/components/schemas/TagPropagationFailureReason"
+          description: The reason tag propagation is unhealthy for this rule. Only present when TagPropagationStatus is Unhealthy.
         CentralizationRule:
           $ref: "#/components/schemas/CentralizationRule"
           description: The configuration details for the organization centralization rule.
@@ -1599,6 +1691,18 @@ components:
         - TRUSTED_ACCESS_NOT_ENABLED
         - DESTINATION_ACCOUNT_NOT_IN_ORGANIZATION
         - INTERNAL_SERVER_ERROR
+    TagPropagationStatus:
+      description: The health status of tag propagation for a centralization rule. This status is independent of the overall RuleHealth for log delivery.
+      type: string
+      enum:
+        - Healthy
+        - Unhealthy
+    TagPropagationFailureReason:
+      description: The reason tag propagation is unhealthy for a centralization rule. RoleNotAssumable – The service cannot assume the destination role due to a trust policy or external ID misconfiguration. RoleLacksPermissions – The role was assumed successfully but the tag API call was denied by the role's permissions policy.
+      type: string
+      enum:
+        - RoleNotAssumable
+        - RoleLacksPermissions
     GetS3TableIntegrationOutput:
       type: object
       properties:
@@ -1865,6 +1969,12 @@ components:
         FailureReason:
           $ref: "#/components/schemas/CentralizationFailureReason"
           description: The reason why an organization centralization rule is marked UNHEALTHY.
+        TagPropagationStatus:
+          $ref: "#/components/schemas/TagPropagationStatus"
+          description: The health status of tag propagation for this rule. This status is independent of the overall RuleHealth for log delivery. Returns Healthy when the most recent tag-propagation attempt succeeded, or Unhealthy when the most recent attempt failed.
+        TagPropagationFailureReason:
+          $ref: "#/components/schemas/TagPropagationFailureReason"
+          description: The reason tag propagation is unhealthy for this rule. Only present when TagPropagationStatus is Unhealthy.
         DestinationAccountId:
           $ref: "#/components/schemas/String"
           description: The primary destination account of the organization centralization rule.
@@ -2171,6 +2281,11 @@ components:
       enum:
         - STRING
         - JSON
+    SignalType:
+      type: string
+      enum:
+        - LOG
+        - METRIC
     TestTelemetryPipelineOutput:
       type: object
       properties:

@@ -923,7 +923,10 @@ paths:
                   description: A unique name for the imported image. The name must be between 1 and 100 characters and can contain letters, numbers, underscores, periods, and hyphens.
                 SourceAmiId:
                   $ref: "#/components/schemas/PhotonAmiId"
-                  description: The ID of the EC2 AMI to import. The AMI must meet specific requirements including Windows Server 2022 Full Base, UEFI boot mode, TPM 2.0 support, and proper drivers.
+                  description: The ID of the EC2 AMI to import.
+                WorkspaceImageId:
+                  $ref: "#/components/schemas/WorkspaceImageId"
+                  description: The ID of the Workspaces Image to import.
                 IamRoleArn:
                   $ref: "#/components/schemas/Arn"
                   description: The ARN of the IAM role that allows WorkSpaces Applications to access your AMI. The role must have permissions to modify image attributes and describe images, with a trust relationship allowing appstream.amazonaws.com to assume the role.
@@ -948,9 +951,6 @@ paths:
                 DryRun:
                   $ref: "#/components/schemas/Boolean"
                   description: When set to true, performs validation checks without actually creating the imported image. Use this to verify your configuration before executing the actual import operation.
-              required:
-                - SourceAmiId
-                - IamRoleArn
       responses:
         "200":
           description: Success
@@ -4497,6 +4497,7 @@ components:
         - EXPORTING
         - COMPLETED
         - FAILED
+        - TIMED_OUT
     PhotonAmiId:
       type: string
       pattern: ^ami-[a-z0-9]{8,17}$
@@ -4841,6 +4842,11 @@ components:
         Expires:
           $ref: "#/components/schemas/Timestamp"
           description: The elapsed time, in seconds after the Unix epoch, when this URL expires.
+    WorkspaceImageId:
+      type: string
+      minLength: 12
+      maxLength: 67
+      pattern: ^wsi-[0-9a-z]{8,63}$
     ImageImportDescription:
       type: string
       maxLength: 256
@@ -5057,6 +5063,7 @@ components:
       enum:
         - CUSTOM
         - NATIVE
+        - BYOL
     StorageConnectorList:
       description: The storage connectors.
       type: array
@@ -5230,6 +5237,9 @@ components:
         ScreenImageFormat:
           $ref: "#/components/schemas/ScreenImageFormat"
           description: The image format for agent screen captures.
+        UserControlMode:
+          $ref: "#/components/schemas/UserControlMode"
+          description: The user control mode for agent sessions. This setting determines how users can interact with agent sessions.
       required:
         - Settings
         - ScreenResolution
@@ -5245,7 +5255,7 @@ components:
       properties:
         AgentAction:
           $ref: "#/components/schemas/AgentAction"
-          description: The agent action to configure. Valid values are COMPUTER_VISION and COMPUTER_INPUT. If you enable COMPUTER_INPUT, you must also enable COMPUTER_VISION.
+          description: The agent action to configure. Valid values are COMPUTER_VISION, COMPUTER_INPUT, and FORWARD_MCP_TOOLS. If you enable COMPUTER_INPUT, you must also enable COMPUTER_VISION.
         Permission:
           $ref: "#/components/schemas/Permission"
           description: Whether the agent action is enabled or disabled.
@@ -5253,11 +5263,12 @@ components:
         - AgentAction
         - Permission
     AgentAction:
-      description: The type of agent action. COMPUTER_VISION - Allows agents to take screenshots of the desktop. COMPUTER_INPUT - Allows agents to click, type, and scroll on the desktop. Requires COMPUTER_VISION to also be enabled.
+      description: The type of agent action. COMPUTER_VISION - Allows agents to take screenshots of the desktop. COMPUTER_INPUT - Allows agents to click, type, and scroll on the desktop. Requires COMPUTER_VISION to also be enabled. FORWARD_MCP_TOOLS - Allows agents to interact with applications and the desktop operating system through direct MCP calls rather than using computer use tools. Forwards MCP tools configured on the WorkSpaces application session to the agent.
       type: string
       enum:
         - COMPUTER_VISION
         - COMPUTER_INPUT
+        - FORWARD_MCP_TOOLS
     S3BucketArn:
       type: string
       pattern: ^arn:aws(?:\-cn|\-iso\-b|\-iso|\-us\-gov)?:s3:::[a-z0-9][a-z0-9.\-]{1,61}[a-z0-9]$
@@ -5272,6 +5283,13 @@ components:
       enum:
         - PNG
         - JPEG
+    UserControlMode:
+      description: The user control mode for agent sessions. VIEW_ONLY - Users can view and observe agent actions as they happen. VIEW_STOP - Users can view agent actions and stop the agent if needed. DISABLED - Users cannot view or stop the agent session.
+      type: string
+      enum:
+        - VIEW_ONLY
+        - VIEW_STOP
+        - DISABLED
     CreateStackResult:
       type: object
       properties:
@@ -6254,6 +6272,9 @@ components:
         ScreenImageFormat:
           $ref: "#/components/schemas/ScreenImageFormat"
           description: The image format for agent screen captures.
+        UserControlMode:
+          $ref: "#/components/schemas/UserControlMode"
+          description: The user control mode for agent sessions. This setting determines how users can interact with agent sessions.
     UpdateStackResult:
       type: object
       properties:
@@ -7096,8 +7117,8 @@ components:
         select:
           - $ref: "#/components/x-stackQL-resources/images/methods/describe_images"
         insert:
-          - $ref: "#/components/x-stackQL-resources/images/methods/create_imported_image"
           - $ref: "#/components/x-stackQL-resources/images/methods/create_updated_image"
+          - $ref: "#/components/x-stackQL-resources/images/methods/create_imported_image"
         update: []
         delete:
           - $ref: "#/components/x-stackQL-resources/images/methods/delete_image"

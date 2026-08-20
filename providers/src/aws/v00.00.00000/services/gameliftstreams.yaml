@@ -96,7 +96,7 @@ paths:
   /applications:
     post:
       operationId: CreateApplication
-      description: Creates an application resource in Amazon GameLift Streams, which specifies the application content you want to stream, such as a game build or other software, and configures the settings to run it. Before you create an application, upload your application content files to an Amazon Simple Storage Service (Amazon S3) bucket. For more information, see Getting Started in the Amazon GameLift Streams Developer Guide. Make sure that your files in the Amazon S3 bucket are the correct version you want to use. If you change the files at a later time, you will need to create a new Amazon GameLift Streams application. If the request is successful, Amazon GameLift Streams begins to create an application and sets the status to INITIALIZED. When an application reaches READY status, you can use the application to set up stream groups and start streams. To track application status, call GetApplication.
+      description: Creates an application resource in Amazon GameLift Streams, which specifies the application content you want to stream, such as a game build or other software, and configures the settings to run it. Before you create an application, upload your application content files to an Amazon Simple Storage Service (Amazon S3) bucket. For more information, see Getting Started in the Amazon GameLift Streams Developer Guide. Make sure that your files in the Amazon S3 bucket are the correct version you want to use. If you change the files at a later time, you will need to create a new Amazon GameLift Streams application. Creating an application is the only time Amazon GameLift Streams accesses your Amazon S3 bucket. After the application reaches READY status, you can delete the original files from your Amazon S3 bucket without affecting the application. If the request is successful, Amazon GameLift Streams begins to create an application and sets the status to INITIALIZED. When an application reaches READY status, you can use the application to set up stream groups and start streams. To track application status, call GetApplication.
       parameters: []
       requestBody:
         required: true
@@ -211,6 +211,30 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ListStreamGroupsOutput"
+  /streamgroups/{identifier}/streamsessions/{stream_session_identifier}/access:
+    post:
+      operationId: CreateStreamSessionAdminShell
+      description: "Creates an administrative terminal session with full access to the live runtime environment of the Amazon GameLift Streams stream session. Use the returned credentials (SessionId, StreamUrl and TokenValue) with the Amazon Web Services Systems Manager Session Manager plugin for the CLI to access the terminal session. The stream session must be in one of the following statuses: ACTIVE, CONNECTED, PENDING_CLIENT_RECONNECTION, or RECONNECTING. The StreamUrl is valid for 60 seconds. After it expires, call this operation again to get a new URL. The returned credentials grant full access to the live runtime environment of the Amazon GameLift Streams stream session. The operator who connects to the terminal session has the same level of access that your Amazon GameLift Streams applications have, including potentially user input, screen images, and application data files. Grant permissions to call this operation only to trusted IAM identities that require live runtime environment access."
+      parameters:
+        - name: identifier
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Identifier"
+          description: "The stream group that runs this stream session. This value is an Amazon Resource Name (ARN) or ID that uniquely identifies the stream group resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:streamgroup/sg-1AB2C3De4. Example ID: sg-1AB2C3De4."
+        - name: stream_session_identifier
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Identifier"
+          description: "An Amazon Resource Name (ARN) or ID that uniquely identifies the stream session resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:streamsession/sg-1AB2C3De4/ABC123def4567. Example ID: ABC123def4567."
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateStreamSessionAdminShellOutput"
   /streamgroups/{identifier}/streamsessions/{stream_session_identifier}/connections:
     post:
       operationId: CreateStreamSessionConnection
@@ -248,6 +272,58 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CreateStreamSessionConnectionOutput"
+  /streamgroups/{identifier}/streamurls:
+    post:
+      operationId: CreateStreamUrl
+      description: Creates a stream URL that grants temporary access to a stream session in a web browser without requiring an Amazon Web Services account or client integration. You can use the stream URL to start a stream session up to the number of times set by UsageLimit, until it expires after UrlExpiresAfterMinutes. Each successful use starts a new stream session. To make the request idempotent, provide a ClientToken.
+      parameters:
+        - name: identifier
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Identifier"
+          description: "An Amazon Resource Name (ARN) or ID that uniquely identifies the stream group resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:streamgroup/sg-1AB2C3De4. Example ID: sg-1AB2C3De4. The stream session runs in this stream group."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ApplicationIdentifier:
+                  $ref: "#/components/schemas/Identifier"
+                Protocol:
+                  $ref: "#/components/schemas/Protocol"
+                UrlExpiresAfterMinutes:
+                  $ref: "#/components/schemas/UrlExpiresAfterMinutes"
+                UsageLimit:
+                  $ref: "#/components/schemas/UsageLimit"
+                Description:
+                  $ref: "#/components/schemas/Description"
+                Locations:
+                  $ref: "#/components/schemas/LocationList"
+                SessionLengthSeconds:
+                  $ref: "#/components/schemas/SessionLengthSeconds"
+                AdditionalLaunchArgs:
+                  $ref: "#/components/schemas/GameLaunchArgList"
+                AdditionalEnvironmentVariables:
+                  $ref: "#/components/schemas/EnvironmentVariables"
+                RoleArn:
+                  $ref: "#/components/schemas/IamRoleArn"
+                DisplayConfiguration:
+                  $ref: "#/components/schemas/DisplayConfiguration"
+                ClientToken:
+                  $ref: "#/components/schemas/ClientToken"
+              required:
+                - ApplicationIdentifier
+                - UrlExpiresAfterMinutes
+      responses:
+        "201":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateStreamUrlOutput"
   /applications/{identifier}:
     delete:
       operationId: DeleteApplication
@@ -477,6 +553,48 @@ paths:
       responses:
         "204":
           description: Success
+  /streamgroups/{identifier}/streamurls/{stream_url_identifier}:
+    get:
+      operationId: GetStreamUrl
+      description: Retrieves properties for a stream URL, including its current status, usage, and the stream sessions started through it. If you delete the stream group or application that backs the stream URL, this operation updates the status of the stream URL to REVOKED.
+      parameters:
+        - name: identifier
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Identifier"
+          description: "An Amazon Resource Name (ARN) or ID that uniquely identifies the stream group resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:streamgroup/sg-1AB2C3De4. Example ID: sg-1AB2C3De4. This is the stream group that owns the stream URL."
+        - name: stream_url_identifier
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Identifier"
+          description: "The unique identifier of the stream URL. Specify a stream URL ID or Amazon Resource Name (ARN). Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:streamurl/sg-1AB2C3De4/su-1AB2C3De4. Example ID: su-1AB2C3De4."
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetStreamUrlOutput"
+  /applications/{identifier}/shadercaches:
+    get:
+      operationId: ListApplicationShaderCaches
+      description: Lists the shader caches associated with an Amazon GameLift Streams application. Each shader cache entry includes its status, associated stream groups, and size in bytes. Returns shader caches associated with the specified Amazon GameLift Streams application in all statuses.
+      parameters:
+        - name: identifier
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Identifier"
+          description: "An Amazon Resource Name (ARN) or ID that uniquely identifies the application resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:application/a-9ZY8X7Wv6. Example ID: a-9ZY8X7Wv6."
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListApplicationShaderCachesOutput"
   /streamgroups/{identifier}/streamsessions:
     get:
       operationId: ListStreamSessions
@@ -560,6 +678,10 @@ paths:
                   $ref: "#/components/schemas/EnvironmentVariables"
                 PerformanceStatsConfiguration:
                   $ref: "#/components/schemas/PerformanceStatsConfiguration"
+                RoleArn:
+                  $ref: "#/components/schemas/IamRoleArn"
+                DisplayConfiguration:
+                  $ref: "#/components/schemas/DisplayConfiguration"
               required:
                 - SignalRequest
                 - ApplicationIdentifier
@@ -606,6 +728,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ListStreamSessionsByAccountOutput"
+  /streamurls:
+    get:
+      operationId: ListStreamUrls
+      description: Retrieves a list of the stream URLs in the current Amazon Web Services Region for your Amazon Web Services account. You can filter the results by status or by stream group. Use the pagination parameters to retrieve results as a set of sequential pages. If you delete the stream group or application that backs a stream URL, this operation updates that stream URL's status to REVOKED.
+      parameters:
+        - name: Status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/StreamUrlStatus"
+          description: "Filters the list to stream URLs with the specified status. ACTIVE: The stream URL is valid and can start stream sessions. EXPIRED: The stream URL has passed its expiration time and can no longer start stream sessions. REVOKED: The stream URL was revoked and can no longer start stream sessions. LIMIT_REACHED: The stream URL has been used the maximum number of times and can no longer start stream sessions."
+        - name: StreamGroupIdentifier
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/Identifier"
+          description: "Filters the list to stream URLs that belong to the specified stream group. This value is an Amazon Resource Name (ARN) or ID that uniquely identifies the stream group resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:streamgroup/sg-1AB2C3De4. Example ID: sg-1AB2C3De4."
+        - name: NextToken
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/NextToken"
+          description: The token that marks the start of the next set of results. Use this token when you retrieve results as sequential pages. To get the first page of results, omit a token value. To get the remaining pages, provide the token returned with the previous result set.
+        - name: MaxResults
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/MaxResults"
+          description: The maximum number of results to return per page. Valid values are 1-100. The default is 25.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListStreamUrlsOutput"
   /tags/{resource_arn}:
     get:
       operationId: ListTagsForResource
@@ -673,6 +831,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UntagResourceResponse"
+  /streamgroups/{identifier}/streamurls/{stream_url_identifier}/revoke:
+    post:
+      operationId: RevokeStreamUrl
+      description: Revokes a stream URL so that it can no longer start new stream sessions. By default, stream sessions that are already running continue until they end on their own. To also end running sessions, set RevocationMode to REVOKE_AND_TERMINATE_SESSIONS. Revoking a stream URL is permanent. The status of the stream URL changes to REVOKED.
+      parameters:
+        - name: identifier
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Identifier"
+          description: "An Amazon Resource Name (ARN) or ID that uniquely identifies the stream group resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:streamgroup/sg-1AB2C3De4. Example ID: sg-1AB2C3De4. This is the stream group that owns the stream URL."
+        - name: stream_url_identifier
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/Identifier"
+          description: "The unique identifier of the stream URL to revoke. Specify a stream URL ID or Amazon Resource Name (ARN). Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:streamurl/sg-1AB2C3De4/su-1AB2C3De4. Example ID: su-1AB2C3De4."
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                RevocationMode:
+                  $ref: "#/components/schemas/RevocationMode"
+      responses:
+        "204":
+          description: Success
 components:
   parameters:
     X-Amz-Content-Sha256:
@@ -1077,7 +1264,7 @@ components:
           description: "This value is the set of locations, including their name, current status, and capacities. A location can be in one of the following states: ACTIVATING: Amazon GameLift Streams is preparing the location. You cannot stream from, scale the capacity of, or remove this location yet. ACTIVE: The location is provisioned with initial capacity. You can now stream from, scale the capacity of, or remove this location. ERROR: Amazon GameLift Streams failed to set up this location. The StatusReason field describes the error. You can remove this location and try to add it again. REMOVING: Amazon GameLift Streams is working to remove this location. This will release all provisioned capacity for this location in this stream group."
         StreamClass:
           $ref: "#/components/schemas/StreamClass"
-          description: "The target stream quality for the stream group. A stream class can be one of the following: gen6n_pro_win2022 (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 64 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_pro (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Uses dedicated NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 64 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_ultra_win2022 (NVIDIA, ultra) Supports applications with high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_ultra (NVIDIA, ultra) Supports applications with high 3D scene complexity. Uses dedicated NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 12 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen6n_medium (NVIDIA, medium) Supports applications with moderate 3D scene complexity. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 2 vCPUs, 8 GB RAM, 6 GB VRAM Tenancy: Supports up to 4 concurrent stream sessions gen6n_small (NVIDIA, small) Supports applications with lightweight 3D scene complexity and low CPU usage. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 1 vCPUs, 4 GB RAM, 2 GB VRAM Tenancy: Supports up to 12 concurrent stream sessions gen6n_medium_win2022 (NVIDIA, medium) Supports applications with low 3D scene complexity. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 6 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_small_win2022 (NVIDIA, small) Supports applications with low 3D scene complexity. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 2 vCPUs, 8 GB RAM, 3 GB VRAM Tenancy: Supports 1 concurrent stream session gen5n_win2022 (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Uses NVIDIA A10G Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen5n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Uses NVIDIA A10G Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 12 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen5n_ultra (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Uses dedicated NVIDIA A10G Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen4n_win2022 (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Uses NVIDIA T4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 16 GB VRAM Tenancy: Supports 1 concurrent stream session gen4n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Uses NVIDIA T4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 8 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen4n_ultra (NVIDIA, ultra) Supports applications with high 3D scene complexity. Uses dedicated NVIDIA T4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 16 GB VRAM Tenancy: Supports 1 concurrent stream session"
+          description: "The target stream quality for the stream group. A stream class can be one of the following: gen6n_pro_win2022 (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 64 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_pro (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 64 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_ultra_win2022 (NVIDIA, ultra) Supports applications with high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_ultra (NVIDIA, ultra) Supports applications with high 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 12 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen6n_medium (NVIDIA, medium) Supports applications with moderate 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 2 vCPUs, 8 GB RAM, 6 GB VRAM Tenancy: Supports up to 4 concurrent stream sessions gen6n_small (NVIDIA, small) Supports applications with lightweight 3D scene complexity and low CPU usage. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 1 vCPUs, 4 GB RAM, 2 GB VRAM Tenancy: Supports up to 12 concurrent stream sessions gen6n_medium_win2022 (NVIDIA, medium) Supports applications with low 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 6 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_small_win2022 (NVIDIA, small) Supports applications with low 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 2 vCPUs, 8 GB RAM, 3 GB VRAM Tenancy: Supports 1 concurrent stream session gen6e_pro_win2022 (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA L40S Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 128 GB RAM, 48 GB VRAM Tenancy: Supports 1 concurrent stream session gen6e_pro (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Powered by NVIDIA L40S Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 128 GB RAM, 48 GB VRAM Tenancy: Supports 1 concurrent stream session gen5n_win2022 (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA A10G Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen5n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Powered by NVIDIA A10G Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 12 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen5n_ultra (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Powered by NVIDIA A10G Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen4n_win2022 (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA T4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 16 GB VRAM Tenancy: Supports 1 concurrent stream session gen4n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Powered by NVIDIA T4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 8 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen4n_ultra (NVIDIA, ultra) Supports applications with high 3D scene complexity. Powered by NVIDIA T4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 16 GB VRAM Tenancy: Supports 1 concurrent stream session"
         Id:
           $ref: "#/components/schemas/Id"
           description: "A unique ID value that is assigned to the resource when it's created. Format example: sg-1AB2C3De4."
@@ -1126,6 +1313,28 @@ components:
       enum:
         - internalError
         - noAvailableInstances
+    CreateStreamSessionAdminShellOutput:
+      type: object
+      properties:
+        SessionId:
+          $ref: "#/components/schemas/SessionId"
+          description: An Amazon Web Services Systems Manager session identifier that uniquely identifies the requested terminal session. Use this value with the Amazon Web Services Systems Manager Session Manager plugin.
+        StreamUrl:
+          $ref: "#/components/schemas/StreamUrl"
+          description: An Amazon Web Services Systems Manager WebSocket connection endpoint for the requested terminal session.
+        TokenValue:
+          $ref: "#/components/schemas/TokenValue"
+          description: An Amazon Web Services Systems Manager authentication token that authenticates your access to the session ID and WebSocket URL. This token must be treated with the same level of security as other user credentials. The token value is only valid for establishing a new connection within 60 seconds of generation.
+    SessionId:
+      type: string
+      minLength: 1
+      maxLength: 256
+    StreamUrl:
+      type: string
+    TokenValue:
+      type: string
+      minLength: 0
+      maxLength: 1024
     SignalRequest:
       type: string
       minLength: 1
@@ -1137,6 +1346,149 @@ components:
           description: The WebRTC answer string that the stream server generates in response to the SignalRequest.
     SignalResponse:
       type: string
+    Protocol:
+      type: string
+      enum:
+        - WebRTC
+    UrlExpiresAfterMinutes:
+      type: integer
+      minimum: 1
+    UsageLimit:
+      type: integer
+      minimum: 1
+    LocationList:
+      type: array
+      items:
+        $ref: "#/components/schemas/LocationName"
+    SessionLengthSeconds:
+      type: integer
+      minimum: 1
+      maximum: 86400
+    GameLaunchArgList:
+      type: array
+      items:
+        $ref: "#/components/schemas/String"
+    EnvironmentVariables:
+      type: object
+      properties: {}
+    IamRoleArn:
+      type: string
+      minLength: 20
+      maxLength: 2048
+      pattern: arn:aws[a-zA-Z-]*:iam::\d{12}:role/.+
+    DisplayConfiguration:
+      description: The virtual monitor settings for a stream session, including the resolution. If not specified, the stream session uses the default resolution of 1920 × 1080.
+      type: object
+      properties:
+        Resolution:
+          $ref: "#/components/schemas/Resolution"
+          description: The resolution to apply to the stream session's virtual monitor. When specified, this value overrides the default resolution of 1920 × 1080.
+    Resolution:
+      description: Contains the width and height dimensions, in pixels, that define the resolution of the stream session's virtual monitor. The total number of pixels (width × height) must not exceed 2,073,600 (equivalent to 1920 × 1080).
+      type: object
+      properties:
+        Width:
+          $ref: "#/components/schemas/ResolutionWidth"
+          description: The width of the stream session's virtual monitor, in pixels. The value must be an even number.
+        Height:
+          $ref: "#/components/schemas/ResolutionHeight"
+          description: The height of the stream session's virtual monitor, in pixels. The value must be an even number.
+      required:
+        - Width
+        - Height
+    ResolutionWidth:
+      type: integer
+      minimum: 320
+      maximum: 4096
+    ResolutionHeight:
+      type: integer
+      minimum: 320
+      maximum: 4096
+    CreateStreamUrlOutput:
+      type: object
+      properties:
+        Arn:
+          $ref: "#/components/schemas/Arn"
+          description: The Amazon Resource Name (ARN) that uniquely identifies the stream URL across all Amazon Web Services Regions. Format is arn:aws:gameliftstreams:[AWS Region]:[AWS account]:streamurl/[stream group resource ID]/[stream URL resource ID].
+        StreamUrlId:
+          $ref: "#/components/schemas/Id"
+          description: The unique identifier for the stream URL resource, for example su-1AB2C3De4.
+        StreamUrl:
+          $ref: "#/components/schemas/StreamSessionStreamUrl"
+          description: The shareable stream URL. Distribute this URL to end users so that they can start and play a stream session in a hosted web player. Treat the stream URL as a secret. Anyone who has it can start a stream session until the stream URL expires, is revoked, or reaches its usage limit.
+        Status:
+          $ref: "#/components/schemas/StreamUrlStatus"
+          description: "The current status of the stream URL. Possible statuses include the following: ACTIVE: The stream URL is valid and can start stream sessions. EXPIRED: The stream URL has passed its expiration time and can no longer start stream sessions. REVOKED: The stream URL was revoked and can no longer start stream sessions. LIMIT_REACHED: The stream URL has been used the maximum number of times and can no longer start stream sessions."
+        StatusReason:
+          $ref: "#/components/schemas/StreamUrlStatusReason"
+          description: "Additional information about why the stream URL is in its current status. Amazon GameLift Streams populates this value when the status is REVOKED. Possible values include the following: userRevoked: You revoked the stream URL. revokedAndTerminatingSessions: You revoked the stream URL and Amazon GameLift Streams is ending its running stream sessions. revokedAndSessionsTerminated: You revoked the stream URL and its running stream sessions have ended. streamGroupDeleted: The stream group was deleted, which revoked the stream URL. applicationDeleted: The application was deleted, which revoked the stream URL."
+        ExpiresAt:
+          $ref: "#/components/schemas/Timestamp"
+          description: "The date and time when the stream URL expires and stops accepting new stream sessions. Timestamps are expressed using in ISO8601 format, such as: 2022-12-27T22:29:40+00:00 (UTC)."
+        CreatedAt:
+          $ref: "#/components/schemas/Timestamp"
+          description: "A timestamp that indicates when this resource was created. Timestamps are expressed using in ISO8601 format, such as: 2022-12-27T22:29:40+00:00 (UTC)."
+        UsageLimit:
+          $ref: "#/components/schemas/UsageLimit"
+          description: The maximum number of times the stream URL can start a stream session.
+        RemainingUses:
+          $ref: "#/components/schemas/RemainingUses"
+          description: The number of times the stream URL can still be used to start a stream session.
+        StreamGroupArn:
+          $ref: "#/components/schemas/Arn"
+          description: "The stream group that runs the stream sessions. This value is an Amazon Resource Name (ARN) that uniquely identifies the stream group resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:streamgroup/sg-1AB2C3De4."
+        ApplicationArn:
+          $ref: "#/components/schemas/Arn"
+          description: "The application that runs in the stream sessions. This value is an Amazon Resource Name (ARN) that uniquely identifies the application resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:application/a-9ZY8X7Wv6."
+        Protocol:
+          $ref: "#/components/schemas/Protocol"
+          description: The data transport protocol used for stream sessions started from this stream URL.
+        Locations:
+          $ref: "#/components/schemas/LocationList"
+          description: The list of locations, in order of preference, where Amazon GameLift Streams places the stream session. For a complete list of locations that Amazon GameLift Streams supports, refer to Regions, quotas, and limitations in the Amazon GameLift Streams Developer Guide.
+        SessionLengthSeconds:
+          $ref: "#/components/schemas/SessionLengthSeconds"
+          description: The maximum length of time, in seconds, that a stream session started from this stream URL can run.
+        Description:
+          $ref: "#/components/schemas/Description"
+          description: The descriptive label for the stream URL.
+        AdditionalLaunchArgs:
+          $ref: "#/components/schemas/GameLaunchArgList"
+          description: The command-line arguments passed to the application when a stream session starts.
+        AdditionalEnvironmentVariables:
+          type: object
+          properties: {}
+          description: The environment variables made available to the application when a stream session starts.
+        RoleArn:
+          $ref: "#/components/schemas/IamRoleArn"
+          description: The Amazon Resource Name (ARN) of the IAM role that Amazon GameLift Streams assumes during stream sessions started from this stream URL. For more information, see Provide AWS credentials to your streaming application in the Amazon GameLift Streams Developer Guide.
+        DisplayConfiguration:
+          $ref: "#/components/schemas/DisplayConfiguration"
+          description: The display settings, such as resolution, for stream sessions started from this stream URL.
+      required:
+        - Arn
+    StreamSessionStreamUrl:
+      type: string
+      minLength: 1
+      maxLength: 2048
+    StreamUrlStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - EXPIRED
+        - REVOKED
+        - LIMIT_REACHED
+    StreamUrlStatusReason:
+      type: string
+      enum:
+        - userRevoked
+        - revokedAndTerminatingSessions
+        - revokedAndSessionsTerminated
+        - streamGroupDeleted
+        - applicationDeleted
+    RemainingUses:
+      type: integer
+      minimum: 0
     DisassociateApplicationsOutput:
       type: object
       properties:
@@ -1217,7 +1569,7 @@ components:
           description: "This value is the set of locations, including their name, current status, and capacities. A location can be in one of the following states: ACTIVATING: Amazon GameLift Streams is preparing the location. You cannot stream from, scale the capacity of, or remove this location yet. ACTIVE: The location is provisioned with initial capacity. You can now stream from, scale the capacity of, or remove this location. ERROR: Amazon GameLift Streams failed to set up this location. The StatusReason field describes the error. You can remove this location and try to add it again. REMOVING: Amazon GameLift Streams is working to remove this location. This will release all provisioned capacity for this location in this stream group."
         StreamClass:
           $ref: "#/components/schemas/StreamClass"
-          description: "The target stream quality for the stream group. A stream class can be one of the following: gen6n_pro_win2022 (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 64 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_pro (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Uses dedicated NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 64 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_ultra_win2022 (NVIDIA, ultra) Supports applications with high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_ultra (NVIDIA, ultra) Supports applications with high 3D scene complexity. Uses dedicated NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 12 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen6n_medium (NVIDIA, medium) Supports applications with moderate 3D scene complexity. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 2 vCPUs, 8 GB RAM, 6 GB VRAM Tenancy: Supports up to 4 concurrent stream sessions gen6n_small (NVIDIA, small) Supports applications with lightweight 3D scene complexity and low CPU usage. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 1 vCPUs, 4 GB RAM, 2 GB VRAM Tenancy: Supports up to 12 concurrent stream sessions gen6n_medium_win2022 (NVIDIA, medium) Supports applications with low 3D scene complexity. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 6 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_small_win2022 (NVIDIA, small) Supports applications with low 3D scene complexity. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 2 vCPUs, 8 GB RAM, 3 GB VRAM Tenancy: Supports 1 concurrent stream session gen5n_win2022 (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Uses NVIDIA A10G Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen5n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Uses NVIDIA A10G Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 12 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen5n_ultra (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Uses dedicated NVIDIA A10G Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen4n_win2022 (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Uses NVIDIA T4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 16 GB VRAM Tenancy: Supports 1 concurrent stream session gen4n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Uses NVIDIA T4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 8 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen4n_ultra (NVIDIA, ultra) Supports applications with high 3D scene complexity. Uses dedicated NVIDIA T4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 16 GB VRAM Tenancy: Supports 1 concurrent stream session"
+          description: "The target stream quality for the stream group. A stream class can be one of the following: gen6n_pro_win2022 (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 64 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_pro (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 64 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_ultra_win2022 (NVIDIA, ultra) Supports applications with high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_ultra (NVIDIA, ultra) Supports applications with high 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 12 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen6n_medium (NVIDIA, medium) Supports applications with moderate 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 2 vCPUs, 8 GB RAM, 6 GB VRAM Tenancy: Supports up to 4 concurrent stream sessions gen6n_small (NVIDIA, small) Supports applications with lightweight 3D scene complexity and low CPU usage. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 1 vCPUs, 4 GB RAM, 2 GB VRAM Tenancy: Supports up to 12 concurrent stream sessions gen6n_medium_win2022 (NVIDIA, medium) Supports applications with low 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 6 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_small_win2022 (NVIDIA, small) Supports applications with low 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 2 vCPUs, 8 GB RAM, 3 GB VRAM Tenancy: Supports 1 concurrent stream session gen6e_pro_win2022 (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA L40S Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 128 GB RAM, 48 GB VRAM Tenancy: Supports 1 concurrent stream session gen6e_pro (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Powered by NVIDIA L40S Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 128 GB RAM, 48 GB VRAM Tenancy: Supports 1 concurrent stream session gen5n_win2022 (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA A10G Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen5n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Powered by NVIDIA A10G Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 12 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen5n_ultra (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Powered by NVIDIA A10G Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen4n_win2022 (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA T4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 16 GB VRAM Tenancy: Supports 1 concurrent stream session gen4n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Powered by NVIDIA T4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 8 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen4n_ultra (NVIDIA, ultra) Supports applications with high 3D scene complexity. Powered by NVIDIA T4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 16 GB VRAM Tenancy: Supports 1 concurrent stream session"
         Id:
           $ref: "#/components/schemas/Id"
           description: "A unique ID value that is assigned to the resource when it's created. Format example: sg-1AB2C3De4."
@@ -1308,6 +1660,12 @@ components:
         ExportFilesMetadata:
           $ref: "#/components/schemas/ExportFilesMetadata"
           description: Provides details about the stream session's exported files.
+        RoleArn:
+          $ref: "#/components/schemas/IamRoleArn"
+          description: The ARN of the AWS Identity and Access Management (IAM) role that Amazon GameLift Streams assumes on behalf of your application during the stream session.
+        DisplayConfiguration:
+          $ref: "#/components/schemas/DisplayConfiguration"
+          description: The configuration for the stream session's virtual monitor.
     UserId:
       type: string
       minLength: 0
@@ -1331,28 +1689,17 @@ components:
         - invalidSignalRequest
         - placementTimeout
         - applicationLogS3DestinationError
+        - assumeRoleFailed
         - applicationExit
         - connectionTimeout
         - reconnectionTimeout
         - maxSessionLengthTimeout
         - idleTimeout
         - apiTerminated
-    Protocol:
-      type: string
-      enum:
-        - WebRTC
     ConnectionTimeoutSeconds:
       type: integer
       minimum: 1
       maximum: 3600
-    SessionLengthSeconds:
-      type: integer
-      minimum: 1
-      maximum: 86400
-    GameLaunchArgList:
-      type: array
-      items:
-        $ref: "#/components/schemas/String"
     PerformanceStatsConfiguration:
       description: Configuration settings for sharing the stream session's performance stats with the client
       type: object
@@ -1389,6 +1736,159 @@ components:
       type: string
       minLength: 0
       maxLength: 1024
+    GetStreamUrlOutput:
+      type: object
+      properties:
+        Arn:
+          $ref: "#/components/schemas/Arn"
+          description: The Amazon Resource Name (ARN) that uniquely identifies the stream URL across all Amazon Web Services Regions. Format is arn:aws:gameliftstreams:[AWS Region]:[AWS account]:streamurl/[stream group resource ID]/[stream URL resource ID].
+        StreamUrlId:
+          $ref: "#/components/schemas/Id"
+          description: The unique identifier for the stream URL resource, for example su-1AB2C3De4.
+        StreamUrl:
+          $ref: "#/components/schemas/StreamSessionStreamUrl"
+          description: The shareable stream URL. Distribute this URL to end users so that they can start and play a stream session in a hosted web player. Treat the stream URL as a secret. Anyone who has it can start a stream session until the stream URL expires, is revoked, or reaches its usage limit.
+        Status:
+          $ref: "#/components/schemas/StreamUrlStatus"
+          description: "The current status of the stream URL. Possible statuses include the following: ACTIVE: The stream URL is valid and can start stream sessions. EXPIRED: The stream URL has passed its expiration time and can no longer start stream sessions. REVOKED: The stream URL was revoked and can no longer start stream sessions. LIMIT_REACHED: The stream URL has been used the maximum number of times and can no longer start stream sessions."
+        StatusReason:
+          $ref: "#/components/schemas/StreamUrlStatusReason"
+          description: "Additional information about why the stream URL is in its current status. Amazon GameLift Streams populates this value when the status is REVOKED. Possible values include the following: userRevoked: You revoked the stream URL. revokedAndTerminatingSessions: You revoked the stream URL and Amazon GameLift Streams is ending its running stream sessions. revokedAndSessionsTerminated: You revoked the stream URL and its running stream sessions have ended. streamGroupDeleted: The stream group was deleted, which revoked the stream URL. applicationDeleted: The application was deleted, which revoked the stream URL."
+        ExpiresAt:
+          $ref: "#/components/schemas/Timestamp"
+          description: "The date and time when the stream URL expires and stops accepting new stream sessions. Timestamps are expressed using in ISO8601 format, such as: 2022-12-27T22:29:40+00:00 (UTC)."
+        CreatedAt:
+          $ref: "#/components/schemas/Timestamp"
+          description: "A timestamp that indicates when this resource was created. Timestamps are expressed using in ISO8601 format, such as: 2022-12-27T22:29:40+00:00 (UTC)."
+        UsageLimit:
+          $ref: "#/components/schemas/UsageLimit"
+          description: The maximum number of times the stream URL can start a stream session.
+        RemainingUses:
+          $ref: "#/components/schemas/RemainingUses"
+          description: The number of times the stream URL can still be used to start a stream session.
+        StreamGroupArn:
+          $ref: "#/components/schemas/Arn"
+          description: "The stream group that runs the stream sessions. This value is an Amazon Resource Name (ARN) that uniquely identifies the stream group resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:streamgroup/sg-1AB2C3De4."
+        ApplicationArn:
+          $ref: "#/components/schemas/Arn"
+          description: "The application that runs in the stream sessions. This value is an Amazon Resource Name (ARN) that uniquely identifies the application resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:application/a-9ZY8X7Wv6."
+        Protocol:
+          $ref: "#/components/schemas/Protocol"
+          description: The data transport protocol used for stream sessions started from this stream URL.
+        Locations:
+          $ref: "#/components/schemas/LocationList"
+          description: The list of locations, in order of preference, where Amazon GameLift Streams places the stream session. For a complete list of locations that Amazon GameLift Streams supports, refer to Regions, quotas, and limitations in the Amazon GameLift Streams Developer Guide.
+        SessionLengthSeconds:
+          $ref: "#/components/schemas/SessionLengthSeconds"
+          description: The maximum length of time, in seconds, that a stream session started from this stream URL can run.
+        Description:
+          $ref: "#/components/schemas/Description"
+          description: The descriptive label for the stream URL.
+        AdditionalLaunchArgs:
+          $ref: "#/components/schemas/GameLaunchArgList"
+          description: The command-line arguments passed to the application when a stream session starts.
+        AdditionalEnvironmentVariables:
+          type: object
+          properties: {}
+          description: The environment variables made available to the application when a stream session starts.
+        RoleArn:
+          $ref: "#/components/schemas/IamRoleArn"
+          description: The Amazon Resource Name (ARN) of the IAM role that Amazon GameLift Streams assumes during stream sessions started from this stream URL. For more information, see Provide AWS credentials to your streaming application in the Amazon GameLift Streams Developer Guide.
+        DisplayConfiguration:
+          $ref: "#/components/schemas/DisplayConfiguration"
+          description: The display settings, such as resolution, for stream sessions started from this stream URL.
+        StreamSessions:
+          $ref: "#/components/schemas/StreamSessionSummaryList"
+          description: A list of the stream sessions that have been started through this stream URL.
+      required:
+        - Arn
+    StreamSessionSummaryList:
+      type: array
+      items:
+        $ref: "#/components/schemas/StreamSessionSummary"
+    StreamSessionSummary:
+      description: Describes an Amazon GameLift Streams stream session. To retrieve additional details for the stream session, call GetStreamSession.
+      type: object
+      properties:
+        Arn:
+          $ref: "#/components/schemas/Arn"
+          description: "An Amazon Resource Name (ARN) that uniquely identifies the stream session resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:streamsession/sg-1AB2C3De4/ABC123def4567."
+        UserId:
+          $ref: "#/components/schemas/UserId"
+          description: An opaque, unique identifier for an end-user, defined by the developer.
+        Status:
+          $ref: "#/components/schemas/StreamSessionStatus"
+          description: "The current status of the stream session resource. ACTIVATING: The stream session is starting and preparing to stream. ACTIVE: The stream session is ready and waiting for a client connection. A client has ConnectionTimeoutSeconds (specified in StartStreamSession) from when the session reaches ACTIVE state to establish a connection. If no client connects within this timeframe, the session automatically terminates. CONNECTED: The stream session has a connected client. A session will automatically terminate if there is no user input for 60 minutes, or if the maximum length of a session specified by SessionLengthSeconds in StartStreamSession is exceeded. ERROR: The stream session failed to activate. See StatusReason (returned by GetStreamSession and StartStreamSession) for more information. PENDING_CLIENT_RECONNECTION: A client has recently disconnected and the stream session is waiting for the client to reconnect. A client has ConnectionTimeoutSeconds (specified in StartStreamSession) from when the session reaches PENDING_CLIENT_RECONNECTION state to re-establish a connection. If no client connects within this timeframe, the session automatically terminates. RECONNECTING: A client has initiated a reconnect to a session that was in PENDING_CLIENT_RECONNECTION state. TERMINATING: The stream session is ending. TERMINATED: The stream session has ended."
+        StatusReason:
+          $ref: "#/components/schemas/StreamSessionStatusReason"
+          description: "A short description of the reason the stream session is in ERROR status or TERMINATED status. ERROR status reasons: applicationLogS3DestinationError: Could not write the application log to the Amazon S3 bucket that is configured for the streaming application. Make sure the bucket still exists. internalError: An internal service error occurred. Start a new stream session to continue streaming. invalidSignalRequest: The WebRTC signal request that was sent is not valid. When starting or reconnecting to a stream session, use generateSignalRequest in the Amazon GameLift Streams Web SDK to generate a new signal request. placementTimeout: Amazon GameLift Streams could not find available stream capacity to start a stream session. Increase the stream capacity in the stream group or wait until capacity becomes available. TERMINATED status reasons: apiTerminated: The stream session was terminated by an API call to TerminateStreamSession. applicationExit: The streaming application exited or crashed. The stream session was terminated because the application is no longer running. connectionTimeout: The stream session was terminated because the client failed to connect within the connection timeout period specified by ConnectionTimeoutSeconds. maxSessionLengthTimeout: The stream session was terminated because it exceeded the maximum session length timeout period specified by SessionLengthSeconds. reconnectionTimeout: The stream session was terminated because the client failed to reconnect within the reconnection timeout period specified by ConnectionTimeoutSeconds after losing connection."
+        Protocol:
+          $ref: "#/components/schemas/Protocol"
+          description: The data transfer protocol in use with the stream session.
+        LastUpdatedAt:
+          $ref: "#/components/schemas/Timestamp"
+          description: "A timestamp that indicates when this resource was last updated. Timestamps are expressed using in ISO8601 format, such as: 2022-12-27T22:29:40+00:00 (UTC)."
+        CreatedAt:
+          $ref: "#/components/schemas/Timestamp"
+          description: "A timestamp that indicates when this resource was created. Timestamps are expressed using in ISO8601 format, such as: 2022-12-27T22:29:40+00:00 (UTC)."
+        ApplicationArn:
+          $ref: "#/components/schemas/Arn"
+          description: "An Amazon Resource Name (ARN) that uniquely identifies the application resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:application/a-9ZY8X7Wv6."
+        ExportFilesMetadata:
+          $ref: "#/components/schemas/ExportFilesMetadata"
+          description: Provides details about the stream session's exported files.
+        Location:
+          $ref: "#/components/schemas/LocationName"
+          description: The location where Amazon GameLift Streams hosts and streams your application. For example, us-east-1. For a complete list of locations that Amazon GameLift Streams supports, refer to Regions, quotas, and limitations in the Amazon GameLift Streams Developer Guide.
+        RoleArn:
+          $ref: "#/components/schemas/IamRoleArn"
+          description: The ARN of the AWS Identity and Access Management (IAM) role that Amazon GameLift Streams assumes on behalf of your application during the stream session.
+    ListApplicationShaderCachesOutput:
+      type: object
+      properties:
+        Items:
+          $ref: "#/components/schemas/ShaderCacheSummaryList"
+          description: A collection of shader cache metadata for the specified Amazon GameLift Streams application. Each item includes the shader cache status, associated stream groups, and storage size.
+    ShaderCacheSummaryList:
+      type: array
+      items:
+        $ref: "#/components/schemas/ShaderCacheSummary"
+    ShaderCacheSummary:
+      description: Describes a shader cache associated with an Amazon GameLift Streams application.
+      type: object
+      properties:
+        Identifier:
+          $ref: "#/components/schemas/Identifier"
+          description: A unique identifier for the shader cache, formatted as a 32-character hexadecimal string. Format is 1271e693c50b940e228582f1ccdd4e27.
+        ApplicationArn:
+          $ref: "#/components/schemas/Arn"
+          description: "An Amazon Resource Name (ARN) that uniquely identifies the application resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:application/a-9ZY8X7Wv6."
+        Status:
+          $ref: "#/components/schemas/ShaderCacheStatus"
+          description: "The current status of the shader cache. Possible statuses include the following: INITIALIZED: Amazon GameLift Streams received the request and is preparing the shader cache. PROCESSING: Amazon GameLift Streams is replicating the shader cache to the streaming locations in the associated stream groups. READY: The shader cache is replicated and available for use in stream sessions. DELETING: Amazon GameLift Streams is deleting the shader cache. ERROR: An error occurred during shader cache processing. Create a new shader cache to try again."
+        LastUpdatedAt:
+          $ref: "#/components/schemas/Timestamp"
+          description: "A timestamp that indicates when this resource was last updated. Timestamps are expressed using in ISO8601 format, such as: 2022-12-27T22:29:40+00:00 (UTC)."
+        StorageBytes:
+          $ref: "#/components/schemas/Long"
+          description: The total storage used by all compiled shader files in this shader cache, in bytes.
+        AssociatedStreamGroups:
+          $ref: "#/components/schemas/ArnList"
+          description: "The stream groups compatible with this shader cache. Compatibility is based on GPU type and GPU driver version. For more information on shader cache compatibility, see Shader caches in the Amazon GameLift Streams Developer Guide. This value is a set of Amazon Resource Names (ARNs) that uniquely identify stream group resources. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:streamgroup/sg-1AB2C3De4."
+      required:
+        - Identifier
+        - ApplicationArn
+    ShaderCacheStatus:
+      type: string
+      enum:
+        - INITIALIZED
+        - PROCESSING
+        - READY
+        - DELETING
+        - ERROR
+    Long:
+      type: integer
+      format: int64
     NextToken:
       type: string
     MaxResults:
@@ -1466,7 +1966,7 @@ components:
           description: Object that identifies the Amazon GameLift Streams application to stream with this stream group.
         StreamClass:
           $ref: "#/components/schemas/StreamClass"
-          description: "The target stream quality for the stream group. A stream class can be one of the following: gen6n_pro_win2022 (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 64 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_pro (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Uses dedicated NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 64 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_ultra_win2022 (NVIDIA, ultra) Supports applications with high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_ultra (NVIDIA, ultra) Supports applications with high 3D scene complexity. Uses dedicated NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 12 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen6n_medium (NVIDIA, medium) Supports applications with moderate 3D scene complexity. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 2 vCPUs, 8 GB RAM, 6 GB VRAM Tenancy: Supports up to 4 concurrent stream sessions gen6n_small (NVIDIA, small) Supports applications with lightweight 3D scene complexity and low CPU usage. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 1 vCPUs, 4 GB RAM, 2 GB VRAM Tenancy: Supports up to 12 concurrent stream sessions gen6n_medium_win2022 (NVIDIA, medium) Supports applications with low 3D scene complexity. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 6 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_small_win2022 (NVIDIA, small) Supports applications with low 3D scene complexity. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 2 vCPUs, 8 GB RAM, 3 GB VRAM Tenancy: Supports 1 concurrent stream session gen5n_win2022 (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Uses NVIDIA A10G Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen5n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Uses NVIDIA A10G Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 12 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen5n_ultra (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Uses dedicated NVIDIA A10G Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen4n_win2022 (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Uses NVIDIA T4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 16 GB VRAM Tenancy: Supports 1 concurrent stream session gen4n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Uses NVIDIA T4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 8 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen4n_ultra (NVIDIA, ultra) Supports applications with high 3D scene complexity. Uses dedicated NVIDIA T4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 16 GB VRAM Tenancy: Supports 1 concurrent stream session"
+          description: "The target stream quality for the stream group. A stream class can be one of the following: gen6n_pro_win2022 (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 64 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_pro (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 64 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_ultra_win2022 (NVIDIA, ultra) Supports applications with high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_ultra (NVIDIA, ultra) Supports applications with high 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 12 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen6n_medium (NVIDIA, medium) Supports applications with moderate 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 2 vCPUs, 8 GB RAM, 6 GB VRAM Tenancy: Supports up to 4 concurrent stream sessions gen6n_small (NVIDIA, small) Supports applications with lightweight 3D scene complexity and low CPU usage. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 1 vCPUs, 4 GB RAM, 2 GB VRAM Tenancy: Supports up to 12 concurrent stream sessions gen6n_medium_win2022 (NVIDIA, medium) Supports applications with low 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 6 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_small_win2022 (NVIDIA, small) Supports applications with low 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 2 vCPUs, 8 GB RAM, 3 GB VRAM Tenancy: Supports 1 concurrent stream session gen6e_pro_win2022 (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA L40S Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 128 GB RAM, 48 GB VRAM Tenancy: Supports 1 concurrent stream session gen6e_pro (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Powered by NVIDIA L40S Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 128 GB RAM, 48 GB VRAM Tenancy: Supports 1 concurrent stream session gen5n_win2022 (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA A10G Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen5n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Powered by NVIDIA A10G Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 12 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen5n_ultra (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Powered by NVIDIA A10G Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen4n_win2022 (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA T4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 16 GB VRAM Tenancy: Supports 1 concurrent stream session gen4n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Powered by NVIDIA T4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 8 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen4n_ultra (NVIDIA, ultra) Supports applications with high 3D scene complexity. Powered by NVIDIA T4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 16 GB VRAM Tenancy: Supports 1 concurrent stream session"
         Status:
           $ref: "#/components/schemas/StreamGroupStatus"
           description: "The current status of the stream group resource. Possible statuses include the following: ACTIVATING: The stream group is deploying and isn't ready to host streams. ACTIVE: The stream group is ready to host streams. ACTIVE_WITH_ERRORS: One or more locations in the stream group are in an error state. Verify the details of individual locations and remove any locations which are in error. DELETING: Amazon GameLift Streams is in the process of deleting the stream group. ERROR: An error occurred when the stream group deployed. See StatusReason (returned by CreateStreamGroup, GetStreamGroup, and UpdateStreamGroup) for more information. EXPIRED: The stream group is expired and can no longer host streams. This typically occurs when a stream group is 365 days old, as indicated by the value of ExpiresAt. Create a new stream group to resume streaming capabilities. UPDATING_LOCATIONS: One or more locations in the stream group are in the process of updating (either activating or deleting)."
@@ -1490,44 +1990,6 @@ components:
         NextToken:
           $ref: "#/components/schemas/NextToken"
           description: A token that marks the start of the next sequential page of results. If an operation doesn't return a token, you've reached the end of the list.
-    StreamSessionSummaryList:
-      type: array
-      items:
-        $ref: "#/components/schemas/StreamSessionSummary"
-    StreamSessionSummary:
-      description: Describes an Amazon GameLift Streams stream session. To retrieve additional details for the stream session, call GetStreamSession.
-      type: object
-      properties:
-        Arn:
-          $ref: "#/components/schemas/Arn"
-          description: "An Amazon Resource Name (ARN) that uniquely identifies the stream session resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:streamsession/sg-1AB2C3De4/ABC123def4567."
-        UserId:
-          $ref: "#/components/schemas/UserId"
-          description: An opaque, unique identifier for an end-user, defined by the developer.
-        Status:
-          $ref: "#/components/schemas/StreamSessionStatus"
-          description: "The current status of the stream session resource. ACTIVATING: The stream session is starting and preparing to stream. ACTIVE: The stream session is ready and waiting for a client connection. A client has ConnectionTimeoutSeconds (specified in StartStreamSession) from when the session reaches ACTIVE state to establish a connection. If no client connects within this timeframe, the session automatically terminates. CONNECTED: The stream session has a connected client. A session will automatically terminate if there is no user input for 60 minutes, or if the maximum length of a session specified by SessionLengthSeconds in StartStreamSession is exceeded. ERROR: The stream session failed to activate. See StatusReason (returned by GetStreamSession and StartStreamSession) for more information. PENDING_CLIENT_RECONNECTION: A client has recently disconnected and the stream session is waiting for the client to reconnect. A client has ConnectionTimeoutSeconds (specified in StartStreamSession) from when the session reaches PENDING_CLIENT_RECONNECTION state to re-establish a connection. If no client connects within this timeframe, the session automatically terminates. RECONNECTING: A client has initiated a reconnect to a session that was in PENDING_CLIENT_RECONNECTION state. TERMINATING: The stream session is ending. TERMINATED: The stream session has ended."
-        StatusReason:
-          $ref: "#/components/schemas/StreamSessionStatusReason"
-          description: "A short description of the reason the stream session is in ERROR status or TERMINATED status. ERROR status reasons: applicationLogS3DestinationError: Could not write the application log to the Amazon S3 bucket that is configured for the streaming application. Make sure the bucket still exists. internalError: An internal service error occurred. Start a new stream session to continue streaming. invalidSignalRequest: The WebRTC signal request that was sent is not valid. When starting or reconnecting to a stream session, use generateSignalRequest in the Amazon GameLift Streams Web SDK to generate a new signal request. placementTimeout: Amazon GameLift Streams could not find available stream capacity to start a stream session. Increase the stream capacity in the stream group or wait until capacity becomes available. TERMINATED status reasons: apiTerminated: The stream session was terminated by an API call to TerminateStreamSession. applicationExit: The streaming application exited or crashed. The stream session was terminated because the application is no longer running. connectionTimeout: The stream session was terminated because the client failed to connect within the connection timeout period specified by ConnectionTimeoutSeconds. maxSessionLengthTimeout: The stream session was terminated because it exceeded the maximum session length timeout period specified by SessionLengthSeconds. reconnectionTimeout: The stream session was terminated because the client failed to reconnect within the reconnection timeout period specified by ConnectionTimeoutSeconds after losing connection."
-        Protocol:
-          $ref: "#/components/schemas/Protocol"
-          description: The data transfer protocol in use with the stream session.
-        LastUpdatedAt:
-          $ref: "#/components/schemas/Timestamp"
-          description: "A timestamp that indicates when this resource was last updated. Timestamps are expressed using in ISO8601 format, such as: 2022-12-27T22:29:40+00:00 (UTC)."
-        CreatedAt:
-          $ref: "#/components/schemas/Timestamp"
-          description: "A timestamp that indicates when this resource was created. Timestamps are expressed using in ISO8601 format, such as: 2022-12-27T22:29:40+00:00 (UTC)."
-        ApplicationArn:
-          $ref: "#/components/schemas/Arn"
-          description: "An Amazon Resource Name (ARN) that uniquely identifies the application resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:application/a-9ZY8X7Wv6."
-        ExportFilesMetadata:
-          $ref: "#/components/schemas/ExportFilesMetadata"
-          description: Provides details about the stream session's exported files.
-        Location:
-          $ref: "#/components/schemas/LocationName"
-          description: The location where Amazon GameLift Streams hosts and streams your application. For example, us-east-1. For a complete list of locations that Amazon GameLift Streams supports, refer to Regions, quotas, and limitations in the Amazon GameLift Streams Developer Guide.
     ListStreamSessionsByAccountOutput:
       type: object
       properties:
@@ -1537,6 +1999,64 @@ components:
         NextToken:
           $ref: "#/components/schemas/NextToken"
           description: A token that marks the start of the next sequential page of results. If an operation doesn't return a token, you've reached the end of the list.
+    ListStreamUrlsOutput:
+      type: object
+      properties:
+        Items:
+          $ref: "#/components/schemas/StreamUrlSummaryList"
+          description: A collection of stream URL summaries. Each summary includes the identity, status, and usage of the stream URL, but not its full configuration.
+        NextToken:
+          $ref: "#/components/schemas/NextToken"
+          description: A token that marks the start of the next sequential page of results. If an operation doesn't return a token, you've reached the end of the list.
+    StreamUrlSummaryList:
+      type: array
+      items:
+        $ref: "#/components/schemas/StreamUrlSummary"
+    StreamUrlSummary:
+      description: Describes a stream URL. This is a summary view that omits the full configuration, such as launch arguments and display settings. To retrieve the complete configuration, call GetStreamUrl.
+      type: object
+      properties:
+        Arn:
+          $ref: "#/components/schemas/Arn"
+          description: The Amazon Resource Name (ARN) that uniquely identifies the stream URL across all Amazon Web Services Regions. Format is arn:aws:gameliftstreams:[AWS Region]:[AWS account]:streamurl/[stream group resource ID]/[stream URL resource ID].
+        StreamUrlId:
+          $ref: "#/components/schemas/Id"
+          description: The unique identifier for the stream URL resource, for example su-1AB2C3De4.
+        StreamUrl:
+          $ref: "#/components/schemas/StreamSessionStreamUrl"
+          description: The shareable stream URL. Distribute this URL to end users so that they can start and play a stream session in a hosted web player. Treat the stream URL as a secret. Anyone who has it can start a stream session until the stream URL expires, is revoked, or reaches its usage limit.
+        Status:
+          $ref: "#/components/schemas/StreamUrlStatus"
+          description: "The current status of the stream URL. Possible statuses include the following: ACTIVE: The stream URL is valid and can start stream sessions. EXPIRED: The stream URL has passed its expiration time and can no longer start stream sessions. REVOKED: The stream URL was revoked and can no longer start stream sessions. LIMIT_REACHED: The stream URL has been used the maximum number of times and can no longer start stream sessions."
+        StatusReason:
+          $ref: "#/components/schemas/StreamUrlStatusReason"
+          description: "Additional information about why the stream URL is in its current status. Amazon GameLift Streams populates this value when the status is REVOKED. Possible values include the following: userRevoked: You revoked the stream URL. revokedAndTerminatingSessions: You revoked the stream URL and Amazon GameLift Streams is ending its running stream sessions. revokedAndSessionsTerminated: You revoked the stream URL and its running stream sessions have ended. streamGroupDeleted: The stream group was deleted, which revoked the stream URL. applicationDeleted: The application was deleted, which revoked the stream URL."
+        ExpiresAt:
+          $ref: "#/components/schemas/Timestamp"
+          description: "The date and time when the stream URL expires and stops accepting new stream sessions. Timestamps are expressed using in ISO8601 format, such as: 2022-12-27T22:29:40+00:00 (UTC)."
+        CreatedAt:
+          $ref: "#/components/schemas/Timestamp"
+          description: "A timestamp that indicates when this resource was created. Timestamps are expressed using in ISO8601 format, such as: 2022-12-27T22:29:40+00:00 (UTC)."
+        UsageLimit:
+          $ref: "#/components/schemas/UsageLimit"
+          description: The maximum number of times the stream URL can start a stream session.
+        RemainingUses:
+          $ref: "#/components/schemas/RemainingUses"
+          description: The number of times the stream URL can still be used to start a stream session.
+        StreamGroupArn:
+          $ref: "#/components/schemas/Arn"
+          description: "The stream group that runs the stream sessions. This value is an Amazon Resource Name (ARN) that uniquely identifies the stream group resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:streamgroup/sg-1AB2C3De4."
+        ApplicationArn:
+          $ref: "#/components/schemas/Arn"
+          description: "The application that runs in the stream sessions. This value is an Amazon Resource Name (ARN) that uniquely identifies the application resource. Example ARN: arn:aws:gameliftstreams:us-west-2:111122223333:application/a-9ZY8X7Wv6."
+        SessionLengthSeconds:
+          $ref: "#/components/schemas/SessionLengthSeconds"
+          description: The maximum length of time, in seconds, that a stream session started from this stream URL can run.
+        Description:
+          $ref: "#/components/schemas/Description"
+          description: The descriptive label for the stream URL.
+      required:
+        - Arn
     ListTagsForResourceResponse:
       type: object
       properties:
@@ -1548,13 +2068,11 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/String"
-    LocationList:
-      type: array
-      items:
-        $ref: "#/components/schemas/LocationName"
-    EnvironmentVariables:
-      type: object
-      properties: {}
+    RevocationMode:
+      type: string
+      enum:
+        - REVOKE_URL
+        - REVOKE_AND_TERMINATE_SESSIONS
     StartStreamSessionOutput:
       type: object
       properties:
@@ -1622,6 +2140,12 @@ components:
         ExportFilesMetadata:
           $ref: "#/components/schemas/ExportFilesMetadata"
           description: Provides details about the stream session's exported files.
+        RoleArn:
+          $ref: "#/components/schemas/IamRoleArn"
+          description: The ARN of the AWS Identity and Access Management (IAM) role that Amazon GameLift Streams assumes on behalf of your application during the stream session.
+        DisplayConfiguration:
+          $ref: "#/components/schemas/DisplayConfiguration"
+          description: The configuration for the stream session's virtual monitor.
     TagResourceResponse:
       type: object
     TagKeyList:
@@ -1698,7 +2222,7 @@ components:
           description: "This value is set of locations, including their name, current status, and capacities. A location can be in one of the following states: ACTIVATING: Amazon GameLift Streams is preparing the location. You cannot stream from, scale the capacity of, or remove this location yet. ACTIVE: The location is provisioned with initial capacity. You can now stream from, scale the capacity of, or remove this location. ERROR: Amazon GameLift Streams failed to set up this location. The StatusReason field describes the error. You can remove this location and try to add it again. REMOVING: Amazon GameLift Streams is working to remove this location. This will release all provisioned capacity for this location in this stream group."
         StreamClass:
           $ref: "#/components/schemas/StreamClass"
-          description: "The target stream quality for the stream group. A stream class can be one of the following: gen6n_pro_win2022 (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 64 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_pro (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Uses dedicated NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 64 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_ultra_win2022 (NVIDIA, ultra) Supports applications with high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_ultra (NVIDIA, ultra) Supports applications with high 3D scene complexity. Uses dedicated NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 12 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen6n_medium (NVIDIA, medium) Supports applications with moderate 3D scene complexity. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 2 vCPUs, 8 GB RAM, 6 GB VRAM Tenancy: Supports up to 4 concurrent stream sessions gen6n_small (NVIDIA, small) Supports applications with lightweight 3D scene complexity and low CPU usage. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 1 vCPUs, 4 GB RAM, 2 GB VRAM Tenancy: Supports up to 12 concurrent stream sessions gen6n_medium_win2022 (NVIDIA, medium) Supports applications with low 3D scene complexity. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 6 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_small_win2022 (NVIDIA, small) Supports applications with low 3D scene complexity. Uses NVIDIA L4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 2 vCPUs, 8 GB RAM, 3 GB VRAM Tenancy: Supports 1 concurrent stream session gen5n_win2022 (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Uses NVIDIA A10G Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen5n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Uses NVIDIA A10G Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 12 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen5n_ultra (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Uses dedicated NVIDIA A10G Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen4n_win2022 (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Uses NVIDIA T4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 16 GB VRAM Tenancy: Supports 1 concurrent stream session gen4n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Uses NVIDIA T4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 8 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen4n_ultra (NVIDIA, ultra) Supports applications with high 3D scene complexity. Uses dedicated NVIDIA T4 Tensor Core GPU. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 16 GB VRAM Tenancy: Supports 1 concurrent stream session"
+          description: "The target stream quality for the stream group. A stream class can be one of the following: gen6n_pro_win2022 (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 64 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_pro (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 64 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_ultra_win2022 (NVIDIA, ultra) Supports applications with high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_ultra (NVIDIA, ultra) Supports applications with high 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 12 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen6n_medium (NVIDIA, medium) Supports applications with moderate 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 2 vCPUs, 8 GB RAM, 6 GB VRAM Tenancy: Supports up to 4 concurrent stream sessions gen6n_small (NVIDIA, small) Supports applications with lightweight 3D scene complexity and low CPU usage. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 1 vCPUs, 4 GB RAM, 2 GB VRAM Tenancy: Supports up to 12 concurrent stream sessions gen6n_medium_win2022 (NVIDIA, medium) Supports applications with low 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 6 GB VRAM Tenancy: Supports 1 concurrent stream session gen6n_small_win2022 (NVIDIA, small) Supports applications with low 3D scene complexity. Powered by NVIDIA L4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 2 vCPUs, 8 GB RAM, 3 GB VRAM Tenancy: Supports 1 concurrent stream session gen6e_pro_win2022 (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA L40S Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 128 GB RAM, 48 GB VRAM Tenancy: Supports 1 concurrent stream session gen6e_pro (NVIDIA, pro) Supports applications with extremely high 3D scene complexity which require maximum resources. Powered by NVIDIA L40S Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 16 vCPUs, 128 GB RAM, 48 GB VRAM Tenancy: Supports 1 concurrent stream session gen5n_win2022 (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA A10G Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen5n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Powered by NVIDIA A10G Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 12 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen5n_ultra (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Powered by NVIDIA A10G Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 24 GB VRAM Tenancy: Supports 1 concurrent stream session gen4n_win2022 (NVIDIA, ultra) Supports applications with extremely high 3D scene complexity. Runs applications on Microsoft Windows Server 2022 Base and supports DirectX 12. Compatible with Unreal Engine versions up through 5.6, 32 and 64-bit applications, and anti-cheat technology. Powered by NVIDIA T4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 16 GB VRAM Tenancy: Supports 1 concurrent stream session gen4n_high (NVIDIA, high) Supports applications with moderate to high 3D scene complexity. Powered by NVIDIA T4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 4 vCPUs, 16 GB RAM, 8 GB VRAM Tenancy: Supports up to 2 concurrent stream sessions gen4n_ultra (NVIDIA, ultra) Supports applications with high 3D scene complexity. Powered by NVIDIA T4 Tensor Core GPUs. Reference resolution: 1080p Reference frame rate: 60 fps Workload specifications: 8 vCPUs, 32 GB RAM, 16 GB VRAM Tenancy: Supports 1 concurrent stream session"
         Id:
           $ref: "#/components/schemas/Id"
           description: "A unique ID value that is assigned to the resource when it's created. Format example: sg-1AB2C3De4."
@@ -1912,6 +2436,12 @@ components:
       name: stream_sessions
       title: stream_sessions
       methods:
+        create_stream_session_admin_shell:
+          operation:
+            $ref: "#/paths/~1streamgroups~1{identifier}~1streamsessions~1{stream_session_identifier}~1access/post"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
         create_stream_session_connection:
           operation:
             $ref: "#/paths/~1streamgroups~1{identifier}~1streamsessions~1{stream_session_identifier}~1connections/post"
@@ -1968,9 +2498,85 @@ components:
           - $ref: "#/components/x-stackQL-resources/stream_sessions/methods/list_stream_sessions"
         insert:
           - $ref: "#/components/x-stackQL-resources/stream_sessions/methods/create_stream_session_connection"
+          - $ref: "#/components/x-stackQL-resources/stream_sessions/methods/create_stream_session_admin_shell"
         update: []
         delete:
           - $ref: "#/components/x-stackQL-resources/stream_sessions/methods/terminate_stream_session"
+    stream_urls:
+      id: aws.gameliftstreams.stream_urls
+      name: stream_urls
+      title: stream_urls
+      methods:
+        create_stream_url:
+          operation:
+            $ref: "#/paths/~1streamgroups~1{identifier}~1streamurls/post"
+          response:
+            openAPIDocKey: "201"
+            mediaType: application/json
+          request:
+            nativeCasing: pascal
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+        get_stream_url:
+          operation:
+            $ref: "#/paths/~1streamgroups~1{identifier}~1streamurls~1{stream_url_identifier}/get"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+        list_stream_urls:
+          operation:
+            $ref: "#/paths/~1streamurls/get"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+            objectKey: $.Items
+          request:
+            nativeCasing: pascal
+          config:
+            pagination:
+              requestToken:
+                key: NextToken
+                location: query
+              responseToken:
+                key: $.NextToken
+                location: body
+        revoke_stream_url:
+          operation:
+            $ref: "#/paths/~1streamgroups~1{identifier}~1streamurls~1{stream_url_identifier}~1revoke/post"
+          response:
+            openAPIDocKey: "204"
+          request:
+            nativeCasing: pascal
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+      sqlVerbs:
+        select:
+          - $ref: "#/components/x-stackQL-resources/stream_urls/methods/get_stream_url"
+          - $ref: "#/components/x-stackQL-resources/stream_urls/methods/list_stream_urls"
+        insert:
+          - $ref: "#/components/x-stackQL-resources/stream_urls/methods/create_stream_url"
+        update:
+          - $ref: "#/components/x-stackQL-resources/stream_urls/methods/revoke_stream_url"
+        delete: []
+    application_shader_caches:
+      id: aws.gameliftstreams.application_shader_caches
+      name: application_shader_caches
+      title: application_shader_caches
+      methods:
+        list_application_shader_caches:
+          operation:
+            $ref: "#/paths/~1applications~1{identifier}~1shadercaches/get"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+      sqlVerbs:
+        select:
+          - $ref: "#/components/x-stackQL-resources/application_shader_caches/methods/list_application_shader_caches"
+        insert: []
+        update: []
+        delete: []
     stream_sessions_by_accounts:
       id: aws.gameliftstreams.stream_sessions_by_accounts
       name: stream_sessions_by_accounts

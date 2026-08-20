@@ -201,6 +201,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GetAsyncInvokeResponse"
+  /guardrail-checks/invoke:
+    post:
+      operationId: InvokeGuardrailChecks
+      description: Evaluates messages against inline guardrail checks. You specify the check configurations directly in the request, and Amazon Bedrock returns per-check results with severity or confidence scores.
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                messages:
+                  $ref: "#/components/schemas/GuardrailChecksMessageList"
+                checks:
+                  $ref: "#/components/schemas/GuardrailChecksConfig"
+              required:
+                - messages
+                - checks
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvokeGuardrailChecksResponse"
   /model/{model_id}/invoke:
     post:
       operationId: InvokeModel
@@ -254,6 +280,12 @@ paths:
           schema:
             $ref: "#/components/schemas/ServiceTierType"
           description: Specifies the processing tier type used for serving the request.
+        - name: X-Amzn-Bedrock-Request-Metadata
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/RequestMetadataJson"
+          description: Key-value pairs that you can use to filter invocation logs.
       requestBody:
         required: false
         content:
@@ -352,6 +384,12 @@ paths:
           schema:
             $ref: "#/components/schemas/ServiceTierType"
           description: Specifies the processing tier type used for serving the request.
+        - name: X-Amzn-Bedrock-Request-Metadata
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/RequestMetadataJson"
+          description: Key-value pairs that you can use to filter invocation logs.
       requestBody:
         required: false
         content:
@@ -1406,6 +1444,7 @@ components:
       enum:
         - user
         - assistant
+        - system
     ContentBlocks:
       type: array
       items:
@@ -1450,6 +1489,10 @@ components:
         searchResult:
           $ref: "#/components/schemas/SearchResultBlock"
           description: Search result to include in the message.
+        toolAddition:
+          $ref: "#/components/schemas/ToolAdditionBlock"
+        toolRemoval:
+          $ref: "#/components/schemas/ToolRemovalBlock"
     ImageBlock:
       description: Image content for a message.
       type: object
@@ -2075,6 +2118,49 @@ components:
     SearchResultLocationEndInteger:
       type: integer
       minimum: 0
+    ToolAdditionBlock:
+      description: A content block for adding a tool to the available tool set mid-conversation. Each block references a single tool via its tool field. Use within a system role message to make a tool available without re-sending the full tool configuration.
+      type: object
+      properties:
+        tool:
+          $ref: "#/components/schemas/ToolReference"
+          description: A reference to the tool to add to the available tool set.
+      required:
+        - tool
+    ToolReference:
+      description: A reference to a tool in the tool configuration. Used with ToolAdditionBlock and ToolRemovalBlock to identify which tool to add or remove mid-conversation.
+      type: object
+      properties:
+        type_:
+          $ref: "#/components/schemas/ToolReferenceTypeString"
+          description: The type of tool reference.
+        name:
+          $ref: "#/components/schemas/ToolReferenceNameString"
+          description: The name of the tool. Must match the name of a tool declared in the top-level tool configuration.
+        serverName:
+          $ref: "#/components/schemas/ToolReferenceServerNameString"
+          description: The name of the MCP server that provides the tool. Required when referencing an MCP tool.
+    ToolReferenceTypeString:
+      type: string
+      minLength: 1
+      maxLength: 64
+    ToolReferenceNameString:
+      type: string
+      minLength: 1
+      maxLength: 128
+    ToolReferenceServerNameString:
+      type: string
+      minLength: 1
+      maxLength: 128
+    ToolRemovalBlock:
+      description: A content block for removing a tool from the available tool set mid-conversation. Each block references a single tool via its tool field. Use within a system role message to remove a tool without re-sending the full tool configuration.
+      type: object
+      properties:
+        tool:
+          $ref: "#/components/schemas/ToolReference"
+          description: A reference to the tool to remove from the available tool set.
+      required:
+        - tool
     SystemContentBlocks:
       type: array
       items:
@@ -2288,6 +2374,9 @@ components:
         textFormat:
           $ref: "#/components/schemas/OutputFormat"
           description: Structured output parameters to control the model's text response.
+        effort:
+          $ref: "#/components/schemas/OutputConfigEffortString"
+          description: The effort level for the model to use when generating a response. Higher effort levels allow the model to spend more time reasoning before responding. Supported values are low, medium, high, xhigh, and max. When extended thinking is disabled, the effort level is capped at high. Use effort high or below, or enable thinking to use higher effort levels.
     OutputFormat:
       description: Structured output parameters to control the model's response.
       type: object
@@ -2328,6 +2417,10 @@ components:
           description: A description of the JSON schema.
       required:
         - schema
+    OutputConfigEffortString:
+      type: string
+      minLength: 0
+      maxLength: 16
     ConverseResponse:
       type: object
       properties:
@@ -3005,6 +3098,372 @@ components:
       minLength: 1
       maxLength: 2048
       pattern: arn:aws(-[^:]+)?:kms:[a-zA-Z0-9-]*:[0-9]{12}:((key/[a-zA-Z0-9-]{36})|(alias/[a-zA-Z0-9-_/]+))
+    GuardrailChecksMessageList:
+      description: A list of messages to evaluate.
+      type: array
+      items:
+        $ref: "#/components/schemas/GuardrailChecksMessage"
+    GuardrailChecksMessage:
+      description: A message to evaluate against guardrail checks, containing a role and content blocks.
+      type: object
+      properties:
+        role:
+          $ref: "#/components/schemas/GuardrailChecksRole"
+          description: The role of the message sender.
+        content:
+          $ref: "#/components/schemas/GuardrailChecksContentBlockList"
+          description: The content blocks for the message.
+      required:
+        - role
+        - content
+    GuardrailChecksRole:
+      description: The role of the message sender in the conversation.
+      type: string
+      enum:
+        - user
+        - assistant
+        - system
+    GuardrailChecksContentBlockList:
+      description: A list of content blocks within a message.
+      type: array
+      items:
+        $ref: "#/components/schemas/GuardrailChecksContentBlock"
+    GuardrailChecksContentBlock:
+      description: A content block within a message to evaluate.
+      type: object
+      properties:
+        text:
+          $ref: "#/components/schemas/GuardrailChecksTextContent"
+          description: The text content to evaluate.
+    GuardrailChecksTextContent:
+      description: The text content of a message content block. Minimum length of 1 character.
+      type: string
+      minLength: 1
+    GuardrailChecksConfig:
+      description: The configuration for inline guardrail checks. Specify one or more check types to run against the messages.
+      type: object
+      properties:
+        contentFilter:
+          $ref: "#/components/schemas/GuardrailChecksContentFilterConfig"
+          description: The content filter check configuration.
+        promptAttack:
+          $ref: "#/components/schemas/GuardrailChecksPromptAttackConfig"
+          description: The prompt attack check configuration.
+        sensitiveInformation:
+          $ref: "#/components/schemas/GuardrailChecksSensitiveInformationConfig"
+          description: The sensitive information check configuration.
+    GuardrailChecksContentFilterConfig:
+      description: The configuration for the content filter check, specifying which categories to evaluate.
+      type: object
+      properties:
+        categories:
+          $ref: "#/components/schemas/GuardrailChecksContentFilterCategoryConfigList"
+          description: The content filter categories to evaluate.
+      required:
+        - categories
+    GuardrailChecksContentFilterCategoryConfigList:
+      description: A list of content filter category configurations.
+      type: array
+      items:
+        $ref: "#/components/schemas/GuardrailChecksContentFilterCategoryConfig"
+    GuardrailChecksContentFilterCategoryConfig:
+      description: The configuration for a single content filter category to evaluate.
+      type: object
+      properties:
+        category:
+          $ref: "#/components/schemas/GuardrailChecksContentFilterCategory"
+          description: The content filter category to evaluate.
+      required:
+        - category
+    GuardrailChecksContentFilterCategory:
+      description: The category for content filter evaluation.
+      type: string
+      enum:
+        - VIOLENCE
+        - HATE
+        - SEXUAL
+        - MISCONDUCT
+        - INSULTS
+    GuardrailChecksPromptAttackConfig:
+      description: The configuration for the prompt attack check, specifying which categories to evaluate.
+      type: object
+      properties:
+        categories:
+          $ref: "#/components/schemas/GuardrailChecksPromptAttackCategoryConfigList"
+          description: The prompt attack categories to evaluate.
+      required:
+        - categories
+    GuardrailChecksPromptAttackCategoryConfigList:
+      description: A list of prompt attack category configurations.
+      type: array
+      items:
+        $ref: "#/components/schemas/GuardrailChecksPromptAttackCategoryConfig"
+    GuardrailChecksPromptAttackCategoryConfig:
+      description: The configuration for a single prompt attack category to evaluate.
+      type: object
+      properties:
+        category:
+          $ref: "#/components/schemas/GuardrailChecksPromptAttackCategory"
+          description: The prompt attack category to evaluate.
+      required:
+        - category
+    GuardrailChecksPromptAttackCategory:
+      description: The category for prompt attack evaluation.
+      type: string
+      enum:
+        - JAILBREAK
+        - PROMPT_INJECTION
+        - PROMPT_LEAKAGE
+    GuardrailChecksSensitiveInformationConfig:
+      description: The configuration for the sensitive information check, specifying which entity types to detect.
+      type: object
+      properties:
+        entities:
+          $ref: "#/components/schemas/GuardrailChecksSensitiveInformationEntityConfigList"
+          description: The sensitive information entity types to detect.
+      required:
+        - entities
+    GuardrailChecksSensitiveInformationEntityConfigList:
+      description: A list of sensitive information entity configurations.
+      type: array
+      items:
+        $ref: "#/components/schemas/GuardrailChecksSensitiveInformationEntityConfig"
+    GuardrailChecksSensitiveInformationEntityConfig:
+      description: The configuration for a single sensitive information entity type to detect.
+      type: object
+      properties:
+        type_:
+          $ref: "#/components/schemas/GuardrailChecksSensitiveInformationEntityType"
+          description: The PII entity type to detect.
+      required:
+        - type_
+    GuardrailChecksSensitiveInformationEntityType:
+      description: The type of personally identifiable information (PII) entity to detect.
+      type: string
+      enum:
+        - ADDRESS
+        - AGE
+        - AWS_ACCESS_KEY
+        - AWS_SECRET_KEY
+        - CA_HEALTH_NUMBER
+        - CA_SOCIAL_INSURANCE_NUMBER
+        - CREDIT_DEBIT_CARD_CVV
+        - CREDIT_DEBIT_CARD_EXPIRY
+        - CREDIT_DEBIT_CARD_NUMBER
+        - DRIVER_ID
+        - EMAIL
+        - INTERNATIONAL_BANK_ACCOUNT_NUMBER
+        - IP_ADDRESS
+        - LICENSE_PLATE
+        - MAC_ADDRESS
+        - NAME
+        - PASSWORD
+        - PHONE
+        - PIN
+        - SWIFT_CODE
+        - UK_NATIONAL_HEALTH_SERVICE_NUMBER
+        - UK_NATIONAL_INSURANCE_NUMBER
+        - UK_UNIQUE_TAXPAYER_REFERENCE_NUMBER
+        - URL
+        - USERNAME
+        - US_BANK_ACCOUNT_NUMBER
+        - US_BANK_ROUTING_NUMBER
+        - US_INDIVIDUAL_TAX_IDENTIFICATION_NUMBER
+        - US_PASSPORT_NUMBER
+        - US_SOCIAL_SECURITY_NUMBER
+        - VEHICLE_IDENTIFICATION_NUMBER
+    InvokeGuardrailChecksResponse:
+      type: object
+      properties:
+        results:
+          $ref: "#/components/schemas/GuardrailChecksResults"
+          description: The per-check results containing findings from the guardrail evaluation.
+        usage:
+          $ref: "#/components/schemas/GuardrailChecksUsageResults"
+          description: The per-check text unit consumption for the guardrail evaluation.
+      required:
+        - results
+        - usage
+    GuardrailChecksResults:
+      description: The results from the guardrail checks evaluation, organized by check type.
+      type: object
+      properties:
+        contentFilter:
+          $ref: "#/components/schemas/GuardrailChecksContentFilterResult"
+          description: The content filter check results.
+        promptAttack:
+          $ref: "#/components/schemas/GuardrailChecksPromptAttackResult"
+          description: The prompt attack check results.
+        sensitiveInformation:
+          $ref: "#/components/schemas/GuardrailChecksSensitiveInformationResult"
+          description: The sensitive information check results.
+    GuardrailChecksContentFilterResult:
+      description: The content filter check results.
+      type: object
+      properties:
+        results:
+          $ref: "#/components/schemas/GuardrailChecksContentFilterResultList"
+          description: The per-category content filter results.
+      required:
+        - results
+    GuardrailChecksContentFilterResultList:
+      description: A list of content filter evaluation results.
+      type: array
+      items:
+        $ref: "#/components/schemas/GuardrailChecksContentFilterResultEntry"
+    GuardrailChecksContentFilterResultEntry:
+      description: The evaluation result for a single content filter category.
+      type: object
+      properties:
+        category:
+          $ref: "#/components/schemas/GuardrailChecksContentFilterCategory"
+          description: The content filter category that was evaluated.
+        severityScore:
+          $ref: "#/components/schemas/GuardrailChecksContentFilterResultEntrySeverityScoreDouble"
+          description: The severity score for the category, ranging from 0.0 to 1.0. Higher values indicate greater severity.
+      required:
+        - category
+        - severityScore
+    GuardrailChecksContentFilterResultEntrySeverityScoreDouble:
+      type: number
+      format: double
+      minimum: 0
+      maximum: 1
+    GuardrailChecksPromptAttackResult:
+      description: The prompt attack check results.
+      type: object
+      properties:
+        results:
+          $ref: "#/components/schemas/GuardrailChecksPromptAttackResultList"
+          description: The per-category prompt attack results.
+      required:
+        - results
+    GuardrailChecksPromptAttackResultList:
+      description: A list of prompt attack evaluation results.
+      type: array
+      items:
+        $ref: "#/components/schemas/GuardrailChecksPromptAttackResultEntry"
+    GuardrailChecksPromptAttackResultEntry:
+      description: The evaluation result for a single prompt attack category.
+      type: object
+      properties:
+        category:
+          $ref: "#/components/schemas/GuardrailChecksPromptAttackCategory"
+          description: The prompt attack category that was evaluated.
+        severityScore:
+          $ref: "#/components/schemas/GuardrailChecksPromptAttackResultEntrySeverityScoreDouble"
+          description: The severity score for the category, ranging from 0.0 to 1.0. Higher values indicate greater severity.
+      required:
+        - category
+        - severityScore
+    GuardrailChecksPromptAttackResultEntrySeverityScoreDouble:
+      type: number
+      format: double
+      minimum: 0
+      maximum: 1
+    GuardrailChecksSensitiveInformationResult:
+      description: The sensitive information check results.
+      type: object
+      properties:
+        results:
+          $ref: "#/components/schemas/GuardrailChecksSensitiveInformationResultList"
+          description: The detected sensitive information entities.
+        truncated:
+          $ref: "#/components/schemas/Boolean"
+          description: Specifies whether the results were truncated because the number of detected entities exceeded the maximum limit.
+      required:
+        - results
+    GuardrailChecksSensitiveInformationResultList:
+      description: A list of sensitive information detection results.
+      type: array
+      items:
+        $ref: "#/components/schemas/GuardrailChecksSensitiveInformationResultEntry"
+    GuardrailChecksSensitiveInformationResultEntry:
+      description: The detection result for a single sensitive information entity found in the evaluated messages.
+      type: object
+      properties:
+        type_:
+          $ref: "#/components/schemas/GuardrailChecksSensitiveInformationEntityType"
+          description: The PII entity type that was detected.
+        confidenceScore:
+          $ref: "#/components/schemas/GuardrailChecksSensitiveInformationResultEntryConfidenceScoreDouble"
+          description: The confidence score for the detection, ranging from 0.0 to 1.0. Higher values indicate greater confidence.
+        beginOffset:
+          $ref: "#/components/schemas/GuardrailChecksSensitiveInformationResultEntryBeginOffsetInteger"
+          description: The start character offset of the detected entity within the content block.
+        endOffset:
+          $ref: "#/components/schemas/GuardrailChecksSensitiveInformationResultEntryEndOffsetInteger"
+          description: The end character offset of the detected entity within the content block.
+        messageIndex:
+          $ref: "#/components/schemas/GuardrailChecksSensitiveInformationResultEntryMessageIndexInteger"
+          description: The zero-based index of the message in the input messages array where the entity was detected.
+        contentIndex:
+          $ref: "#/components/schemas/GuardrailChecksSensitiveInformationResultEntryContentIndexInteger"
+          description: The zero-based index of the content block within the message where the entity was detected.
+      required:
+        - type_
+        - confidenceScore
+        - beginOffset
+        - endOffset
+        - messageIndex
+        - contentIndex
+    GuardrailChecksSensitiveInformationResultEntryConfidenceScoreDouble:
+      type: number
+      format: double
+      minimum: 0
+      maximum: 1
+    GuardrailChecksSensitiveInformationResultEntryBeginOffsetInteger:
+      type: integer
+      minimum: 0
+    GuardrailChecksSensitiveInformationResultEntryEndOffsetInteger:
+      type: integer
+      minimum: 0
+    GuardrailChecksSensitiveInformationResultEntryMessageIndexInteger:
+      type: integer
+      minimum: 0
+    GuardrailChecksSensitiveInformationResultEntryContentIndexInteger:
+      type: integer
+      minimum: 0
+    GuardrailChecksUsageResults:
+      description: The text unit usage for the guardrail checks evaluation, organized by check type.
+      type: object
+      properties:
+        contentFilter:
+          $ref: "#/components/schemas/GuardrailChecksContentFilterUsage"
+          description: The text unit usage for the content filter check.
+        promptAttack:
+          $ref: "#/components/schemas/GuardrailChecksPromptAttackUsage"
+          description: The text unit usage for the prompt attack check.
+        sensitiveInformation:
+          $ref: "#/components/schemas/GuardrailChecksSensitiveInformationUsage"
+          description: The text unit usage for the sensitive information check.
+    GuardrailChecksContentFilterUsage:
+      description: The text unit usage for the content filter check.
+      type: object
+      properties:
+        textUnits:
+          $ref: "#/components/schemas/Integer"
+          description: The number of text units consumed by the content filter check.
+      required:
+        - textUnits
+    GuardrailChecksPromptAttackUsage:
+      description: The text unit usage for the prompt attack check.
+      type: object
+      properties:
+        textUnits:
+          $ref: "#/components/schemas/Integer"
+          description: The number of text units consumed by the prompt attack check.
+      required:
+        - textUnits
+    GuardrailChecksSensitiveInformationUsage:
+      description: The text unit usage for the sensitive information check.
+      type: object
+      properties:
+        textUnits:
+          $ref: "#/components/schemas/Integer"
+          description: The number of text units consumed by the sensitive information check.
+      required:
+        - textUnits
     MimeType:
       type: string
     InvokeModelIdentifier:
@@ -3018,6 +3477,10 @@ components:
         - ENABLED
         - DISABLED
         - ENABLED_FULL
+    RequestMetadataJson:
+      type: string
+      minLength: 0
+      maxLength: 8500
     InvokeModelResponse:
       type: object
       properties:
