@@ -451,6 +451,32 @@ paths:
           required: false
           schema:
             type: string
+        - name: issue_field_values
+          description: >-
+            A comma-separated list of issue field filters in `field_slug:value`
+            format.
+
+            Only issues matching all specified field values are returned.
+
+            Requires issue fields to be enabled for the repository. Issue fields
+            are
+
+            not available for user-owned repositories, and field availability
+            for
+
+            organization-owned public repositories depends on the organization's
+
+            visibility settings. For example, `priority:Urgent,severity:High`
+            filters
+
+            issues where the `priority` field is `Urgent` AND the `severity`
+            field is
+
+            `High`.
+          in: query
+          required: false
+          schema:
+            type: string
         - $ref: '#/components/parameters/labels'
         - name: sort
           description: What to sort results by.
@@ -597,6 +623,34 @@ paths:
                     are silently dropped otherwise._
                   items:
                     type: string
+                issue_field_values:
+                  type: array
+                  description: >-
+                    An array of issue field values to set on this issue. Each
+                    field value must include the field ID and the value to set.
+                    Issue fields are only available for organization-owned
+                    repositories with the feature enabled. Field values are
+                    silently dropped otherwise.
+                  items:
+                    type: object
+                    properties:
+                      field_id:
+                        type: integer
+                        description: The ID of the issue field to set
+                      value:
+                        oneOf:
+                          - type: string
+                          - type: number
+                          - type: array
+                            items:
+                              type: string
+                        description: >-
+                          The value to set for the field. For multi-select
+                          fields, provide an array of option names.
+                    required:
+                      - field_id
+                      - value
+                    additionalProperties: false
                 type:
                   type: string
                   description: >-
@@ -1228,6 +1282,13 @@ paths:
                     The reason for the state change. Ignored unless `state` is
                     changed.
                   example: not_planned
+                duplicate_issue_id:
+                  type: integer
+                  description: >-
+                    The ID of the issue to mark as the canonical duplicate when
+                    `state_reason` is `duplicate`. The issue must exist and be
+                    accessible to the authenticated user. Ignored when
+                    `state_reason` is not `duplicate`.
                 milestone:
                   nullable: true
                   type: string
@@ -1261,6 +1322,22 @@ paths:
                           color:
                             type: string
                             nullable: true
+                          rationale:
+                            type: string
+                            description: Optional reasoning for selecting this label.
+                          suggest:
+                            type: boolean
+                            description: >-
+                              If `true`, the change is stored as a pending
+                              suggestion for human review rather than applied
+                              directly.
+                          confidence:
+                            type: string
+                            description: The confidence level for this label choice.
+                            enum:
+                              - low
+                              - medium
+                              - high
                 assignees:
                   type: array
                   description: >-
@@ -1271,7 +1348,28 @@ paths:
                     issues. Without push access to the repository, assignee
                     changes are silently dropped.
                   items:
-                    type: string
+                    oneOf:
+                      - type: string
+                      - type: object
+                        properties:
+                          login:
+                            type: string
+                          rationale:
+                            type: string
+                            description: Optional reasoning for selecting this assignee.
+                          suggest:
+                            type: boolean
+                            description: >-
+                              If `true`, the change is stored as a pending
+                              suggestion for human review rather than applied
+                              directly.
+                          confidence:
+                            type: string
+                            description: The confidence level for this assignee choice.
+                            enum:
+                              - low
+                              - medium
+                              - high
                 issue_field_values:
                   type: array
                   description: >-
@@ -1288,20 +1386,63 @@ paths:
                         oneOf:
                           - type: string
                           - type: number
-                        description: The value to set for the field
+                          - type: array
+                            items:
+                              type: string
+                        description: >-
+                          The value to set for the field. For multi-select
+                          fields, provide an array of option names.
+                      rationale:
+                        type: string
+                        description: Optional reasoning for setting this field value.
+                      suggest:
+                        type: boolean
+                        description: >-
+                          If `true`, the change is stored as a pending
+                          suggestion for human review rather than applied
+                          directly.
+                      confidence:
+                        type: string
+                        description: The confidence level for this field value choice.
+                        enum:
+                          - low
+                          - medium
+                          - high
                     required:
                       - field_id
                       - value
                     additionalProperties: false
                 type:
-                  type: string
                   description: >-
-                    The name of the issue type to associate with this issue or
-                    use `null` to remove the current issue type. Only users with
+                    The issue type to associate with this issue. Only users with
                     push access can set the type for issues. Without push access
                     to the repository, type changes are silently dropped.
                   nullable: true
+                  type: string
                   example: Epic
+                  properties:
+                    value:
+                      type: string
+                      description: >-
+                        The name of the issue type to associate with this issue,
+                        or `null` to remove the current issue type.
+                      nullable: true
+                      example: Epic
+                    rationale:
+                      type: string
+                      description: Optional reasoning for selecting this type.
+                    suggest:
+                      type: boolean
+                      description: >-
+                        If `true`, the change is stored as a pending suggestion
+                        for human review rather than applied directly.
+                    confidence:
+                      type: string
+                      description: The confidence level for this type choice.
+                      enum:
+                        - low
+                        - medium
+                        - high
             examples:
               default:
                 value:
@@ -1319,7 +1460,402 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/issue'
+                title: Issue
+                description: >-
+                  Issues are a great way to keep track of tasks, enhancements,
+                  and bugs for your projects.
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    format: int64
+                  node_id:
+                    type: string
+                  url:
+                    description: URL for the issue
+                    example: https://api.github.com/repositories/42/issues/1
+                    type: string
+                    format: uri
+                  repository_url:
+                    type: string
+                    format: uri
+                  labels_url:
+                    type: string
+                  comments_url:
+                    type: string
+                    format: uri
+                  events_url:
+                    type: string
+                    format: uri
+                  html_url:
+                    type: string
+                    format: uri
+                  number:
+                    description: >-
+                      Number uniquely identifying the issue within its
+                      repository
+                    example: 42
+                    type: integer
+                  state:
+                    description: State of the issue; either 'open' or 'closed'
+                    example: open
+                    type: string
+                  state_reason:
+                    description: The reason for the current state
+                    example: not_planned
+                    type: string
+                    nullable: true
+                    enum:
+                      - completed
+                      - reopened
+                      - not_planned
+                      - duplicate
+                  title:
+                    description: Title of the issue
+                    example: Widget creation fails in Safari on OS X 10.8
+                    type: string
+                  body:
+                    description: Contents of the issue
+                    example: >-
+                      It looks like the new widget form is broken on Safari.
+                      When I try and create the widget, Safari crashes. This is
+                      reproducible on 10.8, but not 10.9. Maybe a browser bug?
+                    type: string
+                    nullable: true
+                  user:
+                    $ref: '#/components/schemas/nullable-simple-user'
+                  labels:
+                    description: >-
+                      Labels to associate with this issue; pass one or more
+                      label names to replace the set of labels on this issue;
+                      send an empty array to clear all labels from the issue;
+                      note that the labels are silently dropped for users
+                      without push access to the repository
+                    example:
+                      - bug
+                      - registration
+                    type: array
+                    items:
+                      oneOf:
+                        - type: string
+                        - type: object
+                          properties:
+                            id:
+                              type: integer
+                              format: int64
+                            node_id:
+                              type: string
+                            url:
+                              type: string
+                              format: uri
+                            name:
+                              type: string
+                            description:
+                              type: string
+                              nullable: true
+                            color:
+                              type: string
+                              nullable: true
+                            default:
+                              type: boolean
+                  assignee:
+                    $ref: '#/components/schemas/nullable-simple-user'
+                  assignees:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/simple-user'
+                  milestone:
+                    $ref: '#/components/schemas/nullable-milestone'
+                  locked:
+                    type: boolean
+                  active_lock_reason:
+                    type: string
+                    nullable: true
+                  comments:
+                    type: integer
+                  pull_request:
+                    type: object
+                    properties:
+                      merged_at:
+                        type: string
+                        format: date-time
+                        nullable: true
+                      diff_url:
+                        type: string
+                        format: uri
+                        nullable: true
+                      html_url:
+                        type: string
+                        format: uri
+                        nullable: true
+                      patch_url:
+                        type: string
+                        format: uri
+                        nullable: true
+                      url:
+                        type: string
+                        format: uri
+                        nullable: true
+                    required:
+                      - diff_url
+                      - html_url
+                      - patch_url
+                      - url
+                  closed_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
+                  draft:
+                    type: boolean
+                  closed_by:
+                    $ref: '#/components/schemas/nullable-simple-user'
+                  body_html:
+                    type: string
+                  body_text:
+                    type: string
+                  timeline_url:
+                    type: string
+                    format: uri
+                  type:
+                    $ref: '#/components/schemas/issue-type'
+                  repository:
+                    $ref: '#/components/schemas/repository'
+                  performed_via_github_app:
+                    $ref: '#/components/schemas/nullable-integration'
+                  author_association:
+                    $ref: '#/components/schemas/author-association'
+                  reactions:
+                    $ref: '#/components/schemas/reaction-rollup'
+                  sub_issues_summary:
+                    $ref: '#/components/schemas/sub-issues-summary'
+                  parent_issue_url:
+                    description: >-
+                      URL to get the parent issue of this issue, if it is a
+                      sub-issue
+                    type: string
+                    format: uri
+                    nullable: true
+                  pinned_comment:
+                    $ref: '#/components/schemas/nullable-issue-comment'
+                  issue_dependencies_summary:
+                    $ref: '#/components/schemas/issue-dependencies-summary'
+                  issue_field_values:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/issue-field-value'
+                  suggestions:
+                    type: object
+                    description: |
+                      Pending suggestions for each suggestible field (`type`,
+                      `issue_field_values`, `labels`, `assignees`, `state`) the
+                      request touched. Omitted for fields not in the request or
+                      with no pending or ignored suggestions. Items tagged
+                      `ignored` are echoes of the current request's inputs that
+                      were not persisted as pending suggestions.
+                    properties:
+                      type:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            value:
+                              type: string
+                            rationale:
+                              type: string
+                            suggest:
+                              type: boolean
+                            confidence:
+                              type: string
+                              enum:
+                                - low
+                                - medium
+                                - high
+                            ignored:
+                              type: boolean
+                            ignored_reason:
+                              type: string
+                              enum:
+                                - already_applied
+                                - issue_already_closed
+                      issue_field_values:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            field_id:
+                              type: integer
+                            value:
+                              oneOf:
+                                - type: string
+                                - type: number
+                                - type: array
+                                  items:
+                                    type: string
+                            rationale:
+                              type: string
+                            suggest:
+                              type: boolean
+                            confidence:
+                              type: string
+                              enum:
+                                - low
+                                - medium
+                                - high
+                            ignored:
+                              type: boolean
+                            ignored_reason:
+                              type: string
+                              enum:
+                                - already_applied
+                                - issue_already_closed
+                      labels:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                            rationale:
+                              type: string
+                            suggest:
+                              type: boolean
+                            confidence:
+                              type: string
+                              enum:
+                                - low
+                                - medium
+                                - high
+                            ignored:
+                              type: boolean
+                            ignored_reason:
+                              type: string
+                              enum:
+                                - already_applied
+                                - issue_already_closed
+                      assignees:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            login:
+                              type: string
+                            rationale:
+                              type: string
+                            suggest:
+                              type: boolean
+                            confidence:
+                              type: string
+                              enum:
+                                - low
+                                - medium
+                                - high
+                            ignored:
+                              type: boolean
+                            ignored_reason:
+                              type: string
+                              enum:
+                                - already_applied
+                                - issue_already_closed
+                      state:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            value:
+                              type: string
+                            state_reason:
+                              type: string
+                            duplicate_issue_id:
+                              type: integer
+                            rationale:
+                              type: string
+                            suggest:
+                              type: boolean
+                            confidence:
+                              type: string
+                              enum:
+                                - low
+                                - medium
+                                - high
+                            ignored:
+                              type: boolean
+                            ignored_reason:
+                              type: string
+                              enum:
+                                - already_applied
+                                - issue_already_closed
+                required:
+                  - assignee
+                  - closed_at
+                  - comments
+                  - comments_url
+                  - events_url
+                  - html_url
+                  - id
+                  - node_id
+                  - labels
+                  - labels_url
+                  - milestone
+                  - number
+                  - repository_url
+                  - state
+                  - locked
+                  - title
+                  - url
+                  - user
+                  - created_at
+                  - updated_at
+                x-github-breaking-changes:
+                  - changeset: deprecate_beta_media_type
+                    patch:
+                      properties:
+                        pull_request:
+                          type: object
+                          properties:
+                            merged_at:
+                              nullable: false
+                            diff_url:
+                              nullable: false
+                            html_url:
+                              nullable: false
+                            patch_url:
+                              nullable: false
+                            url:
+                              nullable: false
+                      type: object
+                    version: '2026-03-10'
+                  - changeset: remove_singular_assignee_from_issues_and_pull_requests
+                    patch:
+                      properties:
+                        assignee: null
+                      required:
+                        - closed_at
+                        - comments
+                        - comments_url
+                        - events_url
+                        - html_url
+                        - id
+                        - node_id
+                        - labels
+                        - labels_url
+                        - milestone
+                        - number
+                        - repository_url
+                        - state
+                        - locked
+                        - title
+                        - url
+                        - user
+                        - created_at
+                        - updated_at
+                      type: object
+                    version: '2026-03-10'
               examples:
                 default:
                   $ref: '#/components/examples/issue'
@@ -1383,7 +1919,31 @@ paths:
                     users with push access can add assignees to an issue.
                     Assignees are silently ignored otherwise._
                   items:
-                    type: string
+                    oneOf:
+                      - type: string
+                      - type: object
+                        properties:
+                          login:
+                            type: string
+                            description: The login of the user to assign.
+                          rationale:
+                            type: string
+                            description: Optional reasoning for adding this assignee.
+                          suggest:
+                            type: boolean
+                            description: >-
+                              If `true`, the assignee is stored as a pending
+                              suggestion for human review rather than applied
+                              directly.
+                          confidence:
+                            type: string
+                            description: The confidence level for this assignee choice.
+                            enum:
+                              - low
+                              - medium
+                              - high
+                        required:
+                          - login
             examples:
               default:
                 value:
@@ -2050,6 +2610,348 @@ paths:
         category: issues
         subcategory: issue-field-values
       x-stackQL-resource: issue_field_values
+    post:
+      summary: Add issue field values to an issue
+      description: >-
+        Add custom field values to an issue. You can set values for
+        organization-level issue fields that have been defined for the
+        repository's organization.
+
+        Adding an empty array will clear all existing field values for the
+        issue.
+
+
+        This endpoint supports the following field data types:
+
+        - **`text`**: String values for text fields
+
+        - **`single_select`**: Option names for single-select fields (must match
+        an existing option name)
+
+        - **`number`**: Numeric values for number fields
+
+        - **`date`**: ISO 8601 date strings for date fields
+
+
+        Only users with push access to the repository can add issue field
+        values. If you don't have the proper permissions, you'll receive a `403
+        Forbidden` response.
+
+
+        This endpoint triggers
+        [notifications](https://docs.github.com/github/managing-subscriptions-and-notifications-on-github/about-notifications).
+        Creating content too quickly using this endpoint may result in secondary
+        rate limiting. For more information, see "[Rate limits for the
+        API](https://docs.github.com/rest/using-the-rest-api/rate-limits-for-the-rest-api#about-secondary-rate-limits)"
+
+        and "[Best practices for using the REST
+        API](https://docs.github.com/rest/guides/best-practices-for-using-the-rest-api)."
+      tags:
+        - issues
+      operationId: issues/add-issue-field-values
+      externalDocs:
+        description: API method documentation
+        url: >-
+          https://docs.github.com/rest/issues/issue-field-values#add-issue-field-values-to-an-issue
+      parameters:
+        - $ref: '#/components/parameters/owner'
+        - $ref: '#/components/parameters/repo'
+        - $ref: '#/components/parameters/issue-number'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                issue_field_values:
+                  type: array
+                  description: >-
+                    An array of issue field values to add to this issue. Each
+                    field value must include the field ID and the value to set.
+                  items:
+                    type: object
+                    properties:
+                      field_id:
+                        type: integer
+                        description: The ID of the issue field to set
+                        example: 123
+                      value:
+                        oneOf:
+                          - type: string
+                            description: >-
+                              The value to set for text, single_select, or date
+                              fields
+                          - type: number
+                            description: The value to set for number fields
+                          - type: array
+                            items:
+                              type: string
+                            description: >-
+                              The value to set for multi_select fields (array of
+                              option names)
+                        description: >-
+                          The value to set for the field. The type depends on
+                          the field's data type:
+
+                          - For text fields: provide a string value
+
+                          - For single_select fields: provide the option name as
+                          a string (must match an existing option)
+
+                          - For number fields: provide a numeric value
+
+                          - For multi_select fields: provide an array of option
+                          names (must match existing options)
+
+                          - For date fields: provide an ISO 8601 date string
+                        example: Critical
+                    required:
+                      - field_id
+                      - value
+                    additionalProperties: false
+                  maxItems: 25
+            examples:
+              default:
+                summary: Add multiple field values
+                value:
+                  issue_field_values:
+                    - field_id: 123
+                      value: Critical
+                    - field_id: 456
+                      value: 5
+                    - field_id: 789
+                      value: '2024-12-31'
+              single-field:
+                summary: Add a single field value
+                value:
+                  issue_field_values:
+                    - field_id: 123
+                      value: High Priority
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/issue-field-value'
+              examples:
+                default:
+                  $ref: '#/components/examples/issue-field-value-items'
+        '400':
+          $ref: '#/components/responses/bad_request'
+        '403':
+          $ref: '#/components/responses/forbidden'
+        '404':
+          $ref: '#/components/responses/not_found'
+        '422':
+          $ref: '#/components/responses/validation_failed'
+        '503':
+          $ref: '#/components/responses/service_unavailable'
+      x-github:
+        triggersNotification: true
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: issues
+        subcategory: issue-field-values
+      x-stackQL-resource: issue_field_values
+    put:
+      summary: Set issue field values for an issue
+      description: >-
+        Set custom field values for an issue, replacing any existing values. You
+        can set values for organization-level issue fields that have been
+        defined for the repository's organization.
+
+
+        This endpoint supports the following field data types:
+
+        - **`text`**: String values for text fields
+
+        - **`single_select`**: Option names for single-select fields (must match
+        an existing option name)
+
+        - **`number`**: Numeric values for number fields
+
+        - **`date`**: ISO 8601 date strings for date fields
+
+
+        This operation will replace all existing field values with the provided
+        ones. If you want to add field values without replacing existing ones,
+        use the `POST` endpoint instead.
+
+
+        Only users with push access to the repository can set issue field
+        values. If you don't have the proper permissions, you'll receive a `403
+        Forbidden` response.
+
+
+        This endpoint triggers
+        [notifications](https://docs.github.com/github/managing-subscriptions-and-notifications-on-github/about-notifications).
+        Creating content too quickly using this endpoint may result in secondary
+        rate limiting. For more information, see "[Rate limits for the
+        API](https://docs.github.com/rest/using-the-rest-api/rate-limits-for-the-rest-api#about-secondary-rate-limits)"
+
+        and "[Best practices for using the REST
+        API](https://docs.github.com/rest/guides/best-practices-for-using-the-rest-api)."
+      tags:
+        - issues
+      operationId: issues/set-issue-field-values
+      externalDocs:
+        description: API method documentation
+        url: >-
+          https://docs.github.com/rest/issues/issue-field-values#set-issue-field-values-for-an-issue
+      parameters:
+        - $ref: '#/components/parameters/owner'
+        - $ref: '#/components/parameters/repo'
+        - $ref: '#/components/parameters/issue-number'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                issue_field_values:
+                  type: array
+                  description: >-
+                    An array of issue field values to set for this issue. Each
+                    field value must include the field ID and the value to set.
+                    All existing field values will be replaced.
+                  items:
+                    type: object
+                    properties:
+                      field_id:
+                        type: integer
+                        description: The ID of the issue field to set
+                        example: 123
+                      value:
+                        oneOf:
+                          - type: string
+                            description: >-
+                              The value to set for text, single_select, or date
+                              fields
+                          - type: number
+                            description: The value to set for number fields
+                        description: >-
+                          The value to set for the field. The type depends on
+                          the field's data type:
+
+                          - For text fields: provide a string value
+
+                          - For single_select fields: provide the option name as
+                          a string (must match an existing option)
+
+                          - For number fields: provide a numeric value
+
+                          - For date fields: provide an ISO 8601 date string
+                        example: Critical
+                    required:
+                      - field_id
+                      - value
+                    additionalProperties: false
+                  maxItems: 25
+            examples:
+              default:
+                summary: Set multiple field values
+                value:
+                  issue_field_values:
+                    - field_id: 123
+                      value: Critical
+                    - field_id: 456
+                      value: 5
+                    - field_id: 789
+                      value: '2024-12-31'
+              single-field:
+                summary: Set a single field value
+                value:
+                  issue_field_values:
+                    - field_id: 123
+                      value: High Priority
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/issue-field-value'
+              examples:
+                default:
+                  $ref: '#/components/examples/issue-field-value-items'
+        '400':
+          $ref: '#/components/responses/bad_request'
+        '403':
+          $ref: '#/components/responses/forbidden'
+        '404':
+          $ref: '#/components/responses/not_found'
+        '422':
+          $ref: '#/components/responses/validation_failed'
+        '503':
+          $ref: '#/components/responses/service_unavailable'
+      x-github:
+        triggersNotification: true
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: issues
+        subcategory: issue-field-values
+      x-stackQL-resource: issue_field_values
+  /repos/{owner}/{repo}/issues/{issue_number}/issue-field-values/{issue_field_id}:
+    delete:
+      summary: Delete an issue field value from an issue
+      description: >-
+        Remove a specific custom field value from an issue.
+
+
+        Only users with push access to the repository can delete issue field
+        values. If you don't have the proper permissions, you'll receive a `403
+        Forbidden` response.
+
+
+        If the specified field does not have a value set on the issue, this
+        operation will return a `404` error.
+
+
+        This endpoint triggers
+        [notifications](https://docs.github.com/github/managing-subscriptions-and-notifications-on-github/about-notifications).
+        Creating content too quickly using this endpoint may result in secondary
+        rate limiting. For more information, see "[Rate limits for the
+        API](https://docs.github.com/rest/using-the-rest-api/rate-limits-for-the-rest-api#about-secondary-rate-limits)"
+
+        and "[Best practices for using the REST
+        API](https://docs.github.com/rest/guides/best-practices-for-using-the-rest-api)."
+      tags:
+        - issues
+      operationId: issues/delete-issue-field-value
+      externalDocs:
+        description: API method documentation
+        url: >-
+          https://docs.github.com/rest/issues/issue-field-values#delete-an-issue-field-value-from-an-issue
+      parameters:
+        - $ref: '#/components/parameters/owner'
+        - $ref: '#/components/parameters/repo'
+        - $ref: '#/components/parameters/issue-number'
+        - $ref: '#/components/parameters/issue-field-id'
+      responses:
+        '204':
+          description: Issue field value deleted successfully
+        '403':
+          $ref: '#/components/responses/forbidden'
+        '404':
+          $ref: '#/components/responses/not_found'
+        '422':
+          $ref: '#/components/responses/validation_failed'
+        '503':
+          $ref: '#/components/responses/service_unavailable'
+      x-github:
+        triggersNotification: true
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: issues
+        subcategory: issue-field-values
+      x-stackQL-resource: issue_field_values
   /repos/{owner}/{repo}/issues/{issue_number}/labels:
     get:
       summary: List labels for an issue
@@ -2117,19 +3019,58 @@ paths:
                   type: array
                   minItems: 1
                   description: >-
-                    The names of the labels to add to the issue's existing
-                    labels. You can also pass an `array` of labels directly, but
-                    GitHub recommends passing an object with the `labels` key.
-                    To replace all of the labels for an issue, use "[Set labels
-                    for an
+                    The labels to add to the issue's existing labels. You can
+                    also pass an `array` of labels directly, but GitHub
+                    recommends passing an object with the `labels` key. To
+                    replace all of the labels for an issue, use "[Set labels for
+                    an
                     issue](https://docs.github.com/rest/issues/labels#set-labels-for-an-issue)."
                   items:
-                    type: string
+                    oneOf:
+                      - type: string
+                      - type: object
+                        properties:
+                          name:
+                            type: string
+                            description: The name of the label to add.
+                          rationale:
+                            type: string
+                            description: Optional reasoning for adding this label.
+                          suggest:
+                            type: boolean
+                            description: >-
+                              If `true`, the label is stored as a pending
+                              suggestion for human review rather than applied
+                              directly.
+                          confidence:
+                            type: string
+                            description: The confidence level for this label choice.
+                            enum:
+                              - low
+                              - medium
+                              - high
+                        required:
+                          - name
               items:
                 type: string
                 properties:
                   name:
                     type: string
+                  rationale:
+                    type: string
+                    description: Optional reasoning for adding this label.
+                  suggest:
+                    type: boolean
+                    description: >-
+                      If `true`, the label is stored as a pending suggestion for
+                      human review rather than applied directly.
+                  confidence:
+                    type: string
+                    description: The confidence level for this label choice.
+                    enum:
+                      - low
+                      - medium
+                      - high
                 required:
                   - name
             examples:
@@ -2539,6 +3480,8 @@ paths:
                 type: string
         '400':
           $ref: '#/components/responses/bad_request'
+        '403':
+          $ref: '#/components/responses/forbidden'
         '404':
           $ref: '#/components/responses/not_found'
       x-github:
@@ -2775,6 +3718,192 @@ paths:
         category: issues
         subcategory: sub-issues
       x-stackQL-resource: sub_issues
+  /repos/{owner}/{repo}/issues/{issue_number}/suggestions:
+    get:
+      summary: List issue suggestions
+      description: >-
+        Lists the suggestions on an issue. A suggestion is an agent-proposed
+        change to an issue's type, labels, fields, assignees, or closed state
+        that a maintainer can approve or dismiss.
+
+
+        By default only pending suggestions are returned. Use `state=all` to
+        return suggestions in every state, or `state=<state>` to filter to a
+        single state. Use `action=<action>` to return only suggestions for a
+        specific change.
+
+
+        This endpoint is only available while the issue suggestions feature is
+        enabled for the repository, and only supports issues, not pull requests.
+
+
+        Requires triage access to the repository.
+      tags:
+        - issues
+      operationId: issues/list-suggestions
+      externalDocs:
+        description: API method documentation
+        url: https://docs.github.com/rest/issues/issues#list-issue-suggestions
+      parameters:
+        - $ref: '#/components/parameters/owner'
+        - $ref: '#/components/parameters/repo'
+        - $ref: '#/components/parameters/issue-number'
+        - name: state
+          in: query
+          required: false
+          description: Filter suggestions by their state.
+          schema:
+            type: string
+            enum:
+              - pending
+              - applied
+              - approved
+              - dismissed
+              - replaced
+              - invalidated
+              - all
+            default: pending
+        - name: action
+          in: query
+          required: false
+          description: Filter suggestions by the change they propose.
+          schema:
+            type: string
+            enum:
+              - set_type
+              - add_label
+              - add_field
+              - add_assignee
+              - close_issue
+        - $ref: '#/components/parameters/per-page'
+        - $ref: '#/components/parameters/page'
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/issue-suggestion'
+              examples:
+                default:
+                  $ref: '#/components/examples/issue-suggestions'
+          headers:
+            Link:
+              $ref: '#/components/headers/link'
+        '404':
+          $ref: '#/components/responses/not_found'
+        '422':
+          $ref: '#/components/responses/validation_failed'
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: issues
+        subcategory: issues
+      x-stackQL-resource: issues
+  /repos/{owner}/{repo}/issues/{issue_number}/suggestions/{suggestion_id}/approve:
+    post:
+      summary: Approve an issue suggestion
+      description: >-
+        Approves a pending suggestion on an issue. Applies the proposed change
+        (creating the corresponding timeline event), transitions the suggestion
+        to `approved`, and dismisses any competing pending suggestions for the
+        same change.
+
+
+        Requires triage access to the repository. Approving a suggestion also
+        requires permission to perform the change it applies (for example,
+        setting the issue type, adding a label or assignee, or closing the
+        issue); this only affects fine-grained access tokens and GitHub Apps
+        whose permissions are narrower than the triage role. This endpoint only
+        supports issues, not pull requests.
+      tags:
+        - issues
+      operationId: issues/approve-suggestion
+      externalDocs:
+        description: API method documentation
+        url: https://docs.github.com/rest/issues/issues#approve-an-issue-suggestion
+      parameters:
+        - $ref: '#/components/parameters/owner'
+        - $ref: '#/components/parameters/repo'
+        - $ref: '#/components/parameters/issue-number'
+        - name: suggestion_id
+          in: path
+          required: true
+          description: The unique identifier of the suggestion.
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/issue-suggestion'
+              examples:
+                default:
+                  $ref: '#/components/examples/issue-suggestion'
+        '403':
+          $ref: '#/components/responses/forbidden'
+        '404':
+          $ref: '#/components/responses/not_found'
+        '422':
+          $ref: '#/components/responses/validation_failed'
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: issues
+        subcategory: issues
+      x-stackQL-resource: issues
+  /repos/{owner}/{repo}/issues/{issue_number}/suggestions/{suggestion_id}/dismiss:
+    post:
+      summary: Dismiss an issue suggestion
+      description: >-
+        Dismisses a pending suggestion on an issue. Transitions the suggestion
+        to `dismissed` without applying any change or creating a timeline event.
+
+
+        Requires triage access to the repository. This endpoint only supports
+        issues, not pull requests.
+      tags:
+        - issues
+      operationId: issues/dismiss-suggestion
+      externalDocs:
+        description: API method documentation
+        url: https://docs.github.com/rest/issues/issues#dismiss-an-issue-suggestion
+      parameters:
+        - $ref: '#/components/parameters/owner'
+        - $ref: '#/components/parameters/repo'
+        - $ref: '#/components/parameters/issue-number'
+        - name: suggestion_id
+          in: path
+          required: true
+          description: The unique identifier of the suggestion.
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/issue-suggestion'
+              examples:
+                default:
+                  $ref: '#/components/examples/issue-suggestion'
+        '403':
+          $ref: '#/components/responses/forbidden'
+        '404':
+          $ref: '#/components/responses/not_found'
+        '422':
+          $ref: '#/components/responses/validation_failed'
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: issues
+        subcategory: issues
+      x-stackQL-resource: issues
   /repos/{owner}/{repo}/issues/{issue_number}/timeline:
     get:
       summary: List timeline events for an issue
@@ -2792,6 +3921,7 @@ paths:
         - $ref: '#/components/parameters/issue-number'
         - $ref: '#/components/parameters/per-page'
         - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/issue-timeline-exclude'
       responses:
         '200':
           description: Response
@@ -2807,6 +3937,8 @@ paths:
           headers:
             Link:
               $ref: '#/components/headers/link'
+        '400':
+          $ref: '#/components/responses/bad_request'
         '404':
           $ref: '#/components/responses/not_found'
         '410':
@@ -3358,343 +4490,6 @@ paths:
         category: issues
         subcategory: labels
       x-stackQL-resource: labels
-  /repositories/{repository_id}/issues/{issue_number}/issue-field-values:
-    post:
-      summary: Add issue field values to an issue
-      description: >-
-        Add custom field values to an issue. You can set values for
-        organization-level issue fields that have been defined for the
-        repository's organization.
-
-        Adding an empty array will clear all existing field values for the
-        issue.
-
-
-        This endpoint supports the following field data types:
-
-        - **`text`**: String values for text fields
-
-        - **`single_select`**: Option names for single-select fields (must match
-        an existing option name)
-
-        - **`number`**: Numeric values for number fields
-
-        - **`date`**: ISO 8601 date strings for date fields
-
-
-        Only users with push access to the repository can add issue field
-        values. If you don't have the proper permissions, you'll receive a `403
-        Forbidden` response.
-
-
-        This endpoint triggers
-        [notifications](https://docs.github.com/github/managing-subscriptions-and-notifications-on-github/about-notifications).
-        Creating content too quickly using this endpoint may result in secondary
-        rate limiting. For more information, see "[Rate limits for the
-        API](https://docs.github.com/rest/using-the-rest-api/rate-limits-for-the-rest-api#about-secondary-rate-limits)"
-
-        and "[Best practices for using the REST
-        API](https://docs.github.com/rest/guides/best-practices-for-using-the-rest-api)."
-      tags:
-        - issues
-      operationId: issues/add-issue-field-values
-      externalDocs:
-        description: API method documentation
-        url: >-
-          https://docs.github.com/rest/issues/issue-field-values#add-issue-field-values-to-an-issue
-      parameters:
-        - $ref: '#/components/parameters/repository-id'
-        - $ref: '#/components/parameters/issue-number'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                issue_field_values:
-                  type: array
-                  description: >-
-                    An array of issue field values to add to this issue. Each
-                    field value must include the field ID and the value to set.
-                  items:
-                    type: object
-                    properties:
-                      field_id:
-                        type: integer
-                        description: The ID of the issue field to set
-                        example: 123
-                      value:
-                        oneOf:
-                          - type: string
-                            description: >-
-                              The value to set for text, single_select, or date
-                              fields
-                          - type: number
-                            description: The value to set for number fields
-                        description: >-
-                          The value to set for the field. The type depends on
-                          the field's data type:
-
-                          - For text fields: provide a string value
-
-                          - For single_select fields: provide the option name as
-                          a string (must match an existing option)
-
-                          - For number fields: provide a numeric value
-
-                          - For date fields: provide an ISO 8601 date string
-                        example: Critical
-                    required:
-                      - field_id
-                      - value
-                    additionalProperties: false
-                  maxItems: 25
-            examples:
-              default:
-                summary: Add multiple field values
-                value:
-                  issue_field_values:
-                    - field_id: 123
-                      value: Critical
-                    - field_id: 456
-                      value: 5
-                    - field_id: 789
-                      value: '2024-12-31'
-              single-field:
-                summary: Add a single field value
-                value:
-                  issue_field_values:
-                    - field_id: 123
-                      value: High Priority
-      responses:
-        '200':
-          description: Response
-          content:
-            application/json:
-              schema:
-                type: array
-                description: >-
-                  The current issue field values for this issue after adding the
-                  new values
-                items:
-                  $ref: '#/components/schemas/issue-field-value'
-              examples:
-                default:
-                  $ref: '#/components/examples/issue-field-value-items'
-        '400':
-          $ref: '#/components/responses/bad_request'
-        '403':
-          $ref: '#/components/responses/forbidden'
-        '404':
-          $ref: '#/components/responses/not_found'
-        '422':
-          $ref: '#/components/responses/validation_failed'
-        '503':
-          $ref: '#/components/responses/service_unavailable'
-      x-github:
-        triggersNotification: true
-        githubCloudOnly: false
-        enabledForGitHubApps: true
-        category: issues
-        subcategory: issue-field-values
-      x-stackQL-resource: issue_field_values
-    put:
-      summary: Set issue field values for an issue
-      description: >-
-        Set custom field values for an issue, replacing any existing values. You
-        can set values for organization-level issue fields that have been
-        defined for the repository's organization.
-
-
-        This endpoint supports the following field data types:
-
-        - **`text`**: String values for text fields
-
-        - **`single_select`**: Option names for single-select fields (must match
-        an existing option name)
-
-        - **`number`**: Numeric values for number fields
-
-        - **`date`**: ISO 8601 date strings for date fields
-
-
-        This operation will replace all existing field values with the provided
-        ones. If you want to add field values without replacing existing ones,
-        use the `POST` endpoint instead.
-
-
-        Only users with push access to the repository can set issue field
-        values. If you don't have the proper permissions, you'll receive a `403
-        Forbidden` response.
-
-
-        This endpoint triggers
-        [notifications](https://docs.github.com/github/managing-subscriptions-and-notifications-on-github/about-notifications).
-        Creating content too quickly using this endpoint may result in secondary
-        rate limiting. For more information, see "[Rate limits for the
-        API](https://docs.github.com/rest/using-the-rest-api/rate-limits-for-the-rest-api#about-secondary-rate-limits)"
-
-        and "[Best practices for using the REST
-        API](https://docs.github.com/rest/guides/best-practices-for-using-the-rest-api)."
-      tags:
-        - issues
-      operationId: issues/set-issue-field-values
-      externalDocs:
-        description: API method documentation
-        url: >-
-          https://docs.github.com/rest/issues/issue-field-values#set-issue-field-values-for-an-issue
-      parameters:
-        - $ref: '#/components/parameters/repository-id'
-        - $ref: '#/components/parameters/issue-number'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                issue_field_values:
-                  type: array
-                  description: >-
-                    An array of issue field values to set for this issue. Each
-                    field value must include the field ID and the value to set.
-                    All existing field values will be replaced.
-                  items:
-                    type: object
-                    properties:
-                      field_id:
-                        type: integer
-                        description: The ID of the issue field to set
-                        example: 123
-                      value:
-                        oneOf:
-                          - type: string
-                            description: >-
-                              The value to set for text, single_select, or date
-                              fields
-                          - type: number
-                            description: The value to set for number fields
-                        description: >-
-                          The value to set for the field. The type depends on
-                          the field's data type:
-
-                          - For text fields: provide a string value
-
-                          - For single_select fields: provide the option name as
-                          a string (must match an existing option)
-
-                          - For number fields: provide a numeric value
-
-                          - For date fields: provide an ISO 8601 date string
-                        example: Critical
-                    required:
-                      - field_id
-                      - value
-                    additionalProperties: false
-                  maxItems: 25
-            examples:
-              default:
-                summary: Set multiple field values
-                value:
-                  issue_field_values:
-                    - field_id: 123
-                      value: Critical
-                    - field_id: 456
-                      value: 5
-                    - field_id: 789
-                      value: '2024-12-31'
-              single-field:
-                summary: Set a single field value
-                value:
-                  issue_field_values:
-                    - field_id: 123
-                      value: High Priority
-      responses:
-        '200':
-          description: Response
-          content:
-            application/json:
-              schema:
-                type: array
-                description: >-
-                  The current issue field values for this issue after setting
-                  the new values
-                items:
-                  $ref: '#/components/schemas/issue-field-value'
-              examples:
-                default:
-                  $ref: '#/components/examples/issue-field-value-items'
-        '400':
-          $ref: '#/components/responses/bad_request'
-        '403':
-          $ref: '#/components/responses/forbidden'
-        '404':
-          $ref: '#/components/responses/not_found'
-        '422':
-          $ref: '#/components/responses/validation_failed'
-        '503':
-          $ref: '#/components/responses/service_unavailable'
-      x-github:
-        triggersNotification: true
-        githubCloudOnly: false
-        enabledForGitHubApps: true
-        category: issues
-        subcategory: issue-field-values
-      x-stackQL-resource: issue_field_values
-  /repositories/{repository_id}/issues/{issue_number}/issue-field-values/{issue_field_id}:
-    delete:
-      summary: Delete an issue field value from an issue
-      description: >-
-        Remove a specific custom field value from an issue.
-
-
-        Only users with push access to the repository can delete issue field
-        values. If you don't have the proper permissions, you'll receive a `403
-        Forbidden` response.
-
-
-        If the specified field does not have a value set on the issue, this
-        operation will return a `404` error.
-
-
-        This endpoint triggers
-        [notifications](https://docs.github.com/github/managing-subscriptions-and-notifications-on-github/about-notifications).
-        Creating content too quickly using this endpoint may result in secondary
-        rate limiting. For more information, see "[Rate limits for the
-        API](https://docs.github.com/rest/using-the-rest-api/rate-limits-for-the-rest-api#about-secondary-rate-limits)"
-
-        and "[Best practices for using the REST
-        API](https://docs.github.com/rest/guides/best-practices-for-using-the-rest-api)."
-      tags:
-        - issues
-      operationId: issues/delete-issue-field-value
-      externalDocs:
-        description: API method documentation
-        url: >-
-          https://docs.github.com/rest/issues/issue-field-values#delete-an-issue-field-value-from-an-issue
-      parameters:
-        - $ref: '#/components/parameters/repository-id'
-        - $ref: '#/components/parameters/issue-number'
-        - $ref: '#/components/parameters/issue-field-id'
-      responses:
-        '204':
-          description: Issue field value deleted successfully
-        '403':
-          $ref: '#/components/responses/forbidden'
-        '404':
-          $ref: '#/components/responses/not_found'
-        '422':
-          $ref: '#/components/responses/validation_failed'
-        '503':
-          $ref: '#/components/responses/service_unavailable'
-      x-github:
-        triggersNotification: true
-        githubCloudOnly: false
-        enabledForGitHubApps: true
-        category: issues
-        subcategory: issue-field-values
-      x-stackQL-resource: issue_field_values
   /user/issues:
     get:
       summary: List user account issues assigned to the authenticated user
@@ -4226,6 +5021,8 @@ components:
           $ref: '#/components/schemas/reaction-rollup'
         pin:
           $ref: '#/components/schemas/nullable-pinned-issue-comment'
+        minimized:
+          $ref: '#/components/schemas/nullable-issue-comment-minimized'
       required:
         - id
         - node_id
@@ -4291,6 +5088,20 @@ components:
           $ref: '#/components/schemas/issue-event-project-card'
         rename:
           $ref: '#/components/schemas/issue-event-rename'
+        issue_type:
+          $ref: '#/components/schemas/issue-type-webhook'
+        prev_issue_type:
+          $ref: '#/components/schemas/issue-type-webhook'
+        sub_issue:
+          $ref: '#/components/schemas/nullable-issue-reference'
+        parent_issue:
+          $ref: '#/components/schemas/nullable-issue-reference'
+        blocked_by:
+          $ref: '#/components/schemas/nullable-issue-reference'
+        blocking:
+          $ref: '#/components/schemas/nullable-issue-reference'
+        intent:
+          $ref: '#/components/schemas/nullable-issue-event-intent'
         author_association:
           $ref: '#/components/schemas/author-association'
         lock_reason:
@@ -4342,6 +5153,8 @@ components:
           required:
             - name
             - color
+        intent:
+          $ref: '#/components/schemas/nullable-issue-event-intent'
         assignee:
           $ref: '#/components/schemas/simple-user'
         assigner:
@@ -4412,6 +5225,18 @@ components:
             - project_id
             - project_url
             - column_name
+        issue_type:
+          $ref: '#/components/schemas/issue-type-webhook'
+        prev_issue_type:
+          $ref: '#/components/schemas/issue-type-webhook'
+        sub_issue:
+          $ref: '#/components/schemas/nullable-issue-reference'
+        parent_issue:
+          $ref: '#/components/schemas/nullable-issue-reference'
+        blocked_by:
+          $ref: '#/components/schemas/nullable-issue-reference'
+        blocking:
+          $ref: '#/components/schemas/nullable-issue-reference'
       required:
         - label
         - id
@@ -4430,6 +5255,12 @@ components:
         - review_requester
         - dismissed_review
         - lock_reason
+        - issue_type
+        - prev_issue_type
+        - sub_issue
+        - parent_issue
+        - blocked_by
+        - blocking
     issue-field-value:
       title: Issue Field Value
       description: A value assigned to an issue field
@@ -4440,6 +5271,10 @@ components:
           type: integer
           format: int64
           example: 1
+        issue_field_name:
+          description: The human-readable name of the issue field.
+          type: string
+          example: Priority
         node_id:
           type: string
           example: IFT_GDKND
@@ -4449,6 +5284,7 @@ components:
           enum:
             - text
             - single_select
+            - multi_select
             - number
             - date
           example: text
@@ -4480,6 +5316,30 @@ components:
             - id
             - name
             - color
+          nullable: true
+        multi_select_options:
+          description: Details about the selected options
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                description: Unique identifier for the option.
+                type: integer
+                format: int64
+                example: 1
+              name:
+                description: The name of the option
+                type: string
+                example: High
+              color:
+                description: The color of the option
+                type: string
+                example: red
+            required:
+              - id
+              - name
+              - color
           nullable: true
       required:
         - issue_field_id
@@ -4531,6 +5391,102 @@ components:
         - description
         - color
         - default
+    issue-suggestion:
+      title: Issue Suggestion
+      description: >-
+        An agent-proposed change to an issue that a maintainer can approve or
+        dismiss.
+      type: object
+      properties:
+        id:
+          type: integer
+          description: The unique identifier of the suggestion.
+        issue_id:
+          type: integer
+          description: The unique identifier of the issue the suggestion applies to.
+        action:
+          type: string
+          description: The kind of change proposed.
+          enum:
+            - set_type
+            - add_label
+            - add_field
+            - add_assignee
+            - close_issue
+        state:
+          type: string
+          description: The suggestion's lifecycle state.
+          enum:
+            - pending
+            - applied
+            - approved
+            - dismissed
+            - replaced
+            - invalidated
+        target_id:
+          type: integer
+          description: >-
+            The identifier of the target the change applies to (issue type,
+            label, field, assignee, or duplicate issue), when applicable.
+          nullable: true
+        target_value:
+          description: >-
+            The proposed value, when applicable. An array for multi-select field
+            suggestions.
+          nullable: true
+          type: string
+          items:
+            type: string
+        rationale:
+          type: string
+          description: The rationale the actor provided for the suggestion.
+          nullable: true
+        confidence:
+          type: string
+          description: The actor's confidence level in the suggestion.
+          enum:
+            - LOW
+            - MEDIUM
+            - HIGH
+          nullable: true
+        actor_id:
+          type: integer
+          description: The unique identifier of the actor that proposed the suggestion.
+          nullable: true
+        issue_event_id:
+          type: integer
+          description: >-
+            The identifier of the timeline event created when the suggestion was
+            approved, when applicable.
+          nullable: true
+        resolved_by:
+          type: integer
+          description: >-
+            The unique identifier of the user who approved or dismissed the
+            suggestion.
+          nullable: true
+        created_at:
+          type: string
+          description: The time the suggestion was created.
+          format: date-time
+        updated_at:
+          type: string
+          description: The time the suggestion was last updated.
+          format: date-time
+      required:
+        - id
+        - issue_id
+        - action
+        - state
+        - target_id
+        - target_value
+        - rationale
+        - confidence
+        - actor_id
+        - issue_event_id
+        - resolved_by
+        - created_at
+        - updated_at
     timeline-issue-events:
       title: Timeline Event
       description: Timeline Event
@@ -4566,6 +5522,8 @@ components:
           required:
             - name
             - color
+        intent:
+          $ref: '#/components/schemas/nullable-issue-event-intent'
         milestone:
           type: object
           properties:
@@ -4658,6 +5616,8 @@ components:
           $ref: '#/components/schemas/reaction-rollup'
         pin:
           $ref: '#/components/schemas/nullable-pinned-issue-comment'
+        minimized:
+          $ref: '#/components/schemas/nullable-issue-comment-minimized'
         source:
           type: object
           properties:
@@ -4808,6 +5768,18 @@ components:
         state_reason:
           type: string
           nullable: true
+        issue_type:
+          $ref: '#/components/schemas/issue-type-webhook'
+        prev_issue_type:
+          $ref: '#/components/schemas/issue-type-webhook'
+        sub_issue:
+          $ref: '#/components/schemas/nullable-issue-reference'
+        parent_issue:
+          $ref: '#/components/schemas/nullable-issue-reference'
+        blocked_by:
+          $ref: '#/components/schemas/nullable-issue-reference'
+        blocking:
+          $ref: '#/components/schemas/nullable-issue-reference'
       required:
         - label
         - id
@@ -4842,6 +5814,12 @@ components:
         - pull_request_url
         - _links
         - assignee
+        - issue_type
+        - prev_issue_type
+        - sub_issue
+        - parent_issue
+        - blocked_by
+        - blocking
     milestone:
       title: Milestone
       description: A collection of related issues and pull requests.
@@ -5117,7 +6095,9 @@ components:
       nullable: true
     issue-type:
       title: Issue Type
-      description: The type of issue.
+      description: >-
+        The type assigned to the issue. This is only present for issues in
+        repositories where issue types are supported.
       type: object
       nullable: true
       properties:
@@ -6100,6 +7080,8 @@ components:
           $ref: '#/components/schemas/reaction-rollup'
         pin:
           $ref: '#/components/schemas/nullable-pinned-issue-comment'
+        minimized:
+          $ref: '#/components/schemas/nullable-issue-comment-minimized'
       required:
         - id
         - node_id
@@ -6203,6 +7185,19 @@ components:
       required:
         - pinned_at
         - pinned_by
+      nullable: true
+    nullable-issue-comment-minimized:
+      title: Minimized Issue Comment
+      description: Details about why an issue comment was minimized.
+      type: object
+      properties:
+        reason:
+          description: The reason the comment was minimized.
+          type: string
+          nullable: true
+          example: low-quality
+      required:
+        - reason
       nullable: true
     nullable-issue:
       title: Issue
@@ -6531,6 +7526,20 @@ components:
           enum:
             - enterprise
             - organization
+        access_source:
+          description: >-
+            How the team's access to the repository was granted. This property
+            is only
+
+            present when the team is returned in a repository context, such as
+
+            `GET /repos/{owner}/{repo}/teams`.
+          type: string
+          enum:
+            - direct
+            - organization
+            - enterprise
+          example: direct
         organization_id:
           type: integer
           description: Unique identifier of the organization to which this team belongs
@@ -6618,6 +7627,109 @@ components:
       required:
         - from
         - to
+    issue-type-webhook:
+      title: Issue Type
+      description: The type of issue.
+      type: object
+      nullable: true
+      properties:
+        id:
+          type: integer
+          description: The unique identifier of the issue type.
+        name:
+          type: string
+          description: The name of the issue type.
+        color:
+          type: string
+          description: The color of the issue type.
+          enum:
+            - gray
+            - blue
+            - green
+            - yellow
+            - orange
+            - red
+            - pink
+            - purple
+          nullable: true
+      required:
+        - id
+        - name
+    nullable-issue-reference:
+      title: Issue Reference
+      description: >-
+        A minimal reference to an issue linked from a timeline event (e.g.
+        sub-issue, parent-issue, or dependency events).
+      type: object
+      nullable: true
+      properties:
+        number:
+          type: integer
+          description: The number of the referenced issue.
+        title:
+          type: string
+          description: The title of the referenced issue.
+        state:
+          type: string
+          description: The state of the referenced issue.
+        state_reason:
+          type: string
+          description: The reason for the referenced issue's state.
+          nullable: true
+        repository:
+          $ref: '#/components/schemas/simple-repository'
+        issue_type:
+          title: Issue Type
+          description: The type of the referenced issue.
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: integer
+              description: The unique identifier of the issue type.
+            node_id:
+              type: string
+              description: The node identifier of the issue type.
+            name:
+              type: string
+              description: The name of the issue type.
+            color:
+              type: string
+              description: The color of the issue type.
+              nullable: true
+          required:
+            - id
+            - node_id
+            - name
+      required:
+        - number
+        - title
+        - state
+        - repository
+        - issue_type
+    nullable-issue-event-intent:
+      title: Issue Event Intent
+      description: >-
+        The intent behind an agent's action on an issue, including the rationale
+        and confidence. Present (and `null` when the event carried no agent
+        intent) on supported event types while the issue suggestions feature is
+        enabled for the repository; the property is omitted entirely when the
+        feature is disabled or the event type does not support intent.
+      type: object
+      nullable: true
+      properties:
+        rationale:
+          type: string
+          description: The reasoning the agent provided for the change.
+          nullable: true
+        confidence:
+          type: string
+          description: The confidence level the agent had when performing this action.
+          enum:
+            - LOW
+            - MEDIUM
+            - HIGH
+          nullable: true
     labeled-issue-event:
       title: Labeled Issue Event
       description: Labeled Issue Event
@@ -6653,6 +7765,8 @@ components:
           required:
             - name
             - color
+        intent:
+          $ref: '#/components/schemas/nullable-issue-event-intent'
       required:
         - label
         - id
@@ -6699,6 +7813,8 @@ components:
           required:
             - name
             - color
+        intent:
+          $ref: '#/components/schemas/nullable-issue-event-intent'
       required:
         - label
         - id
@@ -6739,6 +7855,8 @@ components:
           $ref: '#/components/schemas/simple-user'
         assigner:
           $ref: '#/components/schemas/simple-user'
+        intent:
+          $ref: '#/components/schemas/nullable-issue-event-intent'
       required:
         - id
         - node_id
@@ -7332,6 +8450,433 @@ components:
         - commit_url
         - created_at
         - performed_via_github_app
+    issue-type-added-issue-event:
+      title: Issue Type Added Issue Event
+      description: Issue Type Added Issue Event
+      type: object
+      properties:
+        id:
+          type: integer
+        node_id:
+          type: string
+        url:
+          type: string
+        actor:
+          $ref: '#/components/schemas/simple-user'
+        event:
+          type: string
+        commit_id:
+          type: string
+          nullable: true
+        commit_url:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+        performed_via_github_app:
+          $ref: '#/components/schemas/nullable-integration'
+        issue_type:
+          $ref: '#/components/schemas/issue-type-webhook'
+        intent:
+          $ref: '#/components/schemas/nullable-issue-event-intent'
+      required:
+        - issue_type
+        - id
+        - node_id
+        - url
+        - actor
+        - event
+        - commit_id
+        - commit_url
+        - created_at
+        - performed_via_github_app
+    issue-type-removed-issue-event:
+      title: Issue Type Removed Issue Event
+      description: Issue Type Removed Issue Event
+      type: object
+      properties:
+        id:
+          type: integer
+        node_id:
+          type: string
+        url:
+          type: string
+        actor:
+          $ref: '#/components/schemas/simple-user'
+        event:
+          type: string
+        commit_id:
+          type: string
+          nullable: true
+        commit_url:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+        performed_via_github_app:
+          $ref: '#/components/schemas/nullable-integration'
+        prev_issue_type:
+          $ref: '#/components/schemas/issue-type-webhook'
+        intent:
+          $ref: '#/components/schemas/nullable-issue-event-intent'
+      required:
+        - prev_issue_type
+        - id
+        - node_id
+        - url
+        - actor
+        - event
+        - commit_id
+        - commit_url
+        - created_at
+        - performed_via_github_app
+    issue-type-changed-issue-event:
+      title: Issue Type Changed Issue Event
+      description: Issue Type Changed Issue Event
+      type: object
+      properties:
+        id:
+          type: integer
+        node_id:
+          type: string
+        url:
+          type: string
+        actor:
+          $ref: '#/components/schemas/simple-user'
+        event:
+          type: string
+        commit_id:
+          type: string
+          nullable: true
+        commit_url:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+        performed_via_github_app:
+          $ref: '#/components/schemas/nullable-integration'
+        issue_type:
+          $ref: '#/components/schemas/issue-type-webhook'
+        prev_issue_type:
+          $ref: '#/components/schemas/issue-type-webhook'
+        intent:
+          $ref: '#/components/schemas/nullable-issue-event-intent'
+      required:
+        - issue_type
+        - prev_issue_type
+        - id
+        - node_id
+        - url
+        - actor
+        - event
+        - commit_id
+        - commit_url
+        - created_at
+        - performed_via_github_app
+    sub-issue-added-issue-event:
+      title: Sub-issue Added Issue Event
+      description: Sub-issue Added Issue Event
+      type: object
+      properties:
+        id:
+          type: integer
+        node_id:
+          type: string
+        url:
+          type: string
+        actor:
+          $ref: '#/components/schemas/simple-user'
+        event:
+          type: string
+        commit_id:
+          type: string
+          nullable: true
+        commit_url:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+        performed_via_github_app:
+          $ref: '#/components/schemas/nullable-integration'
+        sub_issue:
+          $ref: '#/components/schemas/nullable-issue-reference'
+      required:
+        - sub_issue
+        - id
+        - node_id
+        - url
+        - actor
+        - event
+        - commit_id
+        - commit_url
+        - created_at
+        - performed_via_github_app
+    sub-issue-removed-issue-event:
+      title: Sub-issue Removed Issue Event
+      description: Sub-issue Removed Issue Event
+      type: object
+      properties:
+        id:
+          type: integer
+        node_id:
+          type: string
+        url:
+          type: string
+        actor:
+          $ref: '#/components/schemas/simple-user'
+        event:
+          type: string
+        commit_id:
+          type: string
+          nullable: true
+        commit_url:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+        performed_via_github_app:
+          $ref: '#/components/schemas/nullable-integration'
+        sub_issue:
+          $ref: '#/components/schemas/nullable-issue-reference'
+      required:
+        - sub_issue
+        - id
+        - node_id
+        - url
+        - actor
+        - event
+        - commit_id
+        - commit_url
+        - created_at
+        - performed_via_github_app
+    parent-issue-added-issue-event:
+      title: Parent-issue Added Issue Event
+      description: Parent-issue Added Issue Event
+      type: object
+      properties:
+        id:
+          type: integer
+        node_id:
+          type: string
+        url:
+          type: string
+        actor:
+          $ref: '#/components/schemas/simple-user'
+        event:
+          type: string
+        commit_id:
+          type: string
+          nullable: true
+        commit_url:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+        performed_via_github_app:
+          $ref: '#/components/schemas/nullable-integration'
+        parent_issue:
+          $ref: '#/components/schemas/nullable-issue-reference'
+      required:
+        - parent_issue
+        - id
+        - node_id
+        - url
+        - actor
+        - event
+        - commit_id
+        - commit_url
+        - created_at
+        - performed_via_github_app
+    parent-issue-removed-issue-event:
+      title: Parent-issue Removed Issue Event
+      description: Parent-issue Removed Issue Event
+      type: object
+      properties:
+        id:
+          type: integer
+        node_id:
+          type: string
+        url:
+          type: string
+        actor:
+          $ref: '#/components/schemas/simple-user'
+        event:
+          type: string
+        commit_id:
+          type: string
+          nullable: true
+        commit_url:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+        performed_via_github_app:
+          $ref: '#/components/schemas/nullable-integration'
+        parent_issue:
+          $ref: '#/components/schemas/nullable-issue-reference'
+      required:
+        - parent_issue
+        - id
+        - node_id
+        - url
+        - actor
+        - event
+        - commit_id
+        - commit_url
+        - created_at
+        - performed_via_github_app
+    blocked-by-added-issue-event:
+      title: Blocked-by Added Issue Event
+      description: Blocked-by Added Issue Event
+      type: object
+      properties:
+        id:
+          type: integer
+        node_id:
+          type: string
+        url:
+          type: string
+        actor:
+          $ref: '#/components/schemas/simple-user'
+        event:
+          type: string
+        commit_id:
+          type: string
+          nullable: true
+        commit_url:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+        performed_via_github_app:
+          $ref: '#/components/schemas/nullable-integration'
+        blocked_by:
+          $ref: '#/components/schemas/nullable-issue-reference'
+      required:
+        - blocked_by
+        - id
+        - node_id
+        - url
+        - actor
+        - event
+        - commit_id
+        - commit_url
+        - created_at
+        - performed_via_github_app
+    blocked-by-removed-issue-event:
+      title: Blocked-by Removed Issue Event
+      description: Blocked-by Removed Issue Event
+      type: object
+      properties:
+        id:
+          type: integer
+        node_id:
+          type: string
+        url:
+          type: string
+        actor:
+          $ref: '#/components/schemas/simple-user'
+        event:
+          type: string
+        commit_id:
+          type: string
+          nullable: true
+        commit_url:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+        performed_via_github_app:
+          $ref: '#/components/schemas/nullable-integration'
+        blocked_by:
+          $ref: '#/components/schemas/nullable-issue-reference'
+      required:
+        - blocked_by
+        - id
+        - node_id
+        - url
+        - actor
+        - event
+        - commit_id
+        - commit_url
+        - created_at
+        - performed_via_github_app
+    blocking-added-issue-event:
+      title: Blocking Added Issue Event
+      description: Blocking Added Issue Event
+      type: object
+      properties:
+        id:
+          type: integer
+        node_id:
+          type: string
+        url:
+          type: string
+        actor:
+          $ref: '#/components/schemas/simple-user'
+        event:
+          type: string
+        commit_id:
+          type: string
+          nullable: true
+        commit_url:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+        performed_via_github_app:
+          $ref: '#/components/schemas/nullable-integration'
+        blocking:
+          $ref: '#/components/schemas/nullable-issue-reference'
+      required:
+        - blocking
+        - id
+        - node_id
+        - url
+        - actor
+        - event
+        - commit_id
+        - commit_url
+        - created_at
+        - performed_via_github_app
+    blocking-removed-issue-event:
+      title: Blocking Removed Issue Event
+      description: Blocking Removed Issue Event
+      type: object
+      properties:
+        id:
+          type: integer
+        node_id:
+          type: string
+        url:
+          type: string
+        actor:
+          $ref: '#/components/schemas/simple-user'
+        event:
+          type: string
+        commit_id:
+          type: string
+          nullable: true
+        commit_url:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+        performed_via_github_app:
+          $ref: '#/components/schemas/nullable-integration'
+        blocking:
+          $ref: '#/components/schemas/nullable-issue-reference'
+      required:
+        - blocking
+        - id
+        - node_id
+        - url
+        - actor
+        - event
+        - commit_id
+        - commit_url
+        - created_at
+        - performed_via_github_app
     validation-error-simple:
       title: Validation Error Simple
       description: Validation Error Simple
@@ -7400,6 +8945,8 @@ components:
           $ref: '#/components/schemas/reaction-rollup'
         pin:
           $ref: '#/components/schemas/nullable-pinned-issue-comment'
+        minimized:
+          $ref: '#/components/schemas/nullable-issue-comment-minimized'
       required:
         - event
         - actor
@@ -7705,6 +9252,8 @@ components:
           $ref: '#/components/schemas/nullable-integration'
         assignee:
           $ref: '#/components/schemas/simple-user'
+        intent:
+          $ref: '#/components/schemas/nullable-issue-event-intent'
       required:
         - id
         - node_id
@@ -7782,6 +9331,8 @@ components:
         state_reason:
           type: string
           nullable: true
+        intent:
+          $ref: '#/components/schemas/nullable-issue-event-intent'
       required:
         - id
         - node_id
@@ -7965,6 +9516,307 @@ components:
         - slug
         - type
       nullable: true
+    simple-repository:
+      title: Simple Repository
+      description: A GitHub repository.
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 1296269
+          description: A unique identifier of the repository.
+        node_id:
+          type: string
+          example: MDEwOlJlcG9zaXRvcnkxMjk2MjY5
+          description: The GraphQL identifier of the repository.
+        name:
+          type: string
+          example: Hello-World
+          description: The name of the repository.
+        full_name:
+          type: string
+          example: octocat/Hello-World
+          description: The full, globally unique, name of the repository.
+        owner:
+          $ref: '#/components/schemas/simple-user'
+        private:
+          type: boolean
+          description: Whether the repository is private.
+        html_url:
+          type: string
+          format: uri
+          example: https://github.com/octocat/Hello-World
+          description: The URL to view the repository on GitHub.com.
+        description:
+          type: string
+          example: This your first repo!
+          nullable: true
+          description: The repository description.
+        fork:
+          type: boolean
+          description: Whether the repository is a fork.
+        url:
+          type: string
+          format: uri
+          example: https://api.github.com/repos/octocat/Hello-World
+          description: >-
+            The URL to get more information about the repository from the GitHub
+            API.
+        archive_url:
+          type: string
+          example: >-
+            https://api.github.com/repos/octocat/Hello-World/{archive_format}{/ref}
+          description: A template for the API URL to download the repository as an archive.
+        assignees_url:
+          type: string
+          example: https://api.github.com/repos/octocat/Hello-World/assignees{/user}
+          description: >-
+            A template for the API URL to list the available assignees for
+            issues in the repository.
+        blobs_url:
+          type: string
+          example: https://api.github.com/repos/octocat/Hello-World/git/blobs{/sha}
+          description: >-
+            A template for the API URL to create or retrieve a raw Git blob in
+            the repository.
+        branches_url:
+          type: string
+          example: https://api.github.com/repos/octocat/Hello-World/branches{/branch}
+          description: >-
+            A template for the API URL to get information about branches in the
+            repository.
+        collaborators_url:
+          type: string
+          example: >-
+            https://api.github.com/repos/octocat/Hello-World/collaborators{/collaborator}
+          description: >-
+            A template for the API URL to get information about collaborators of
+            the repository.
+        comments_url:
+          type: string
+          example: https://api.github.com/repos/octocat/Hello-World/comments{/number}
+          description: >-
+            A template for the API URL to get information about comments on the
+            repository.
+        commits_url:
+          type: string
+          example: https://api.github.com/repos/octocat/Hello-World/commits{/sha}
+          description: >-
+            A template for the API URL to get information about commits on the
+            repository.
+        compare_url:
+          type: string
+          example: >-
+            https://api.github.com/repos/octocat/Hello-World/compare/{base}...{head}
+          description: A template for the API URL to compare two commits or refs.
+        contents_url:
+          type: string
+          example: https://api.github.com/repos/octocat/Hello-World/contents/{+path}
+          description: A template for the API URL to get the contents of the repository.
+        contributors_url:
+          type: string
+          format: uri
+          example: https://api.github.com/repos/octocat/Hello-World/contributors
+          description: >-
+            A template for the API URL to list the contributors to the
+            repository.
+        deployments_url:
+          type: string
+          format: uri
+          example: https://api.github.com/repos/octocat/Hello-World/deployments
+          description: The API URL to list the deployments of the repository.
+        downloads_url:
+          type: string
+          format: uri
+          example: https://api.github.com/repos/octocat/Hello-World/downloads
+          description: The API URL to list the downloads on the repository.
+        events_url:
+          type: string
+          format: uri
+          example: https://api.github.com/repos/octocat/Hello-World/events
+          description: The API URL to list the events of the repository.
+        forks_url:
+          type: string
+          format: uri
+          example: https://api.github.com/repos/octocat/Hello-World/forks
+          description: The API URL to list the forks of the repository.
+        git_commits_url:
+          type: string
+          example: https://api.github.com/repos/octocat/Hello-World/git/commits{/sha}
+          description: >-
+            A template for the API URL to get information about Git commits of
+            the repository.
+        git_refs_url:
+          type: string
+          example: https://api.github.com/repos/octocat/Hello-World/git/refs{/sha}
+          description: >-
+            A template for the API URL to get information about Git refs of the
+            repository.
+        git_tags_url:
+          type: string
+          example: https://api.github.com/repos/octocat/Hello-World/git/tags{/sha}
+          description: >-
+            A template for the API URL to get information about Git tags of the
+            repository.
+        issue_comment_url:
+          type: string
+          example: >-
+            https://api.github.com/repos/octocat/Hello-World/issues/comments{/number}
+          description: >-
+            A template for the API URL to get information about issue comments
+            on the repository.
+        issue_events_url:
+          type: string
+          example: >-
+            https://api.github.com/repos/octocat/Hello-World/issues/events{/number}
+          description: >-
+            A template for the API URL to get information about issue events on
+            the repository.
+        issues_url:
+          type: string
+          example: https://api.github.com/repos/octocat/Hello-World/issues{/number}
+          description: >-
+            A template for the API URL to get information about issues on the
+            repository.
+        keys_url:
+          type: string
+          example: https://api.github.com/repos/octocat/Hello-World/keys{/key_id}
+          description: >-
+            A template for the API URL to get information about deploy keys on
+            the repository.
+        labels_url:
+          type: string
+          example: https://api.github.com/repos/octocat/Hello-World/labels{/name}
+          description: >-
+            A template for the API URL to get information about labels of the
+            repository.
+        languages_url:
+          type: string
+          format: uri
+          example: https://api.github.com/repos/octocat/Hello-World/languages
+          description: >-
+            The API URL to get information about the languages of the
+            repository.
+        merges_url:
+          type: string
+          format: uri
+          example: https://api.github.com/repos/octocat/Hello-World/merges
+          description: The API URL to merge branches in the repository.
+        milestones_url:
+          type: string
+          example: https://api.github.com/repos/octocat/Hello-World/milestones{/number}
+          description: >-
+            A template for the API URL to get information about milestones of
+            the repository.
+        notifications_url:
+          type: string
+          example: >-
+            https://api.github.com/repos/octocat/Hello-World/notifications{?since,all,participating}
+          description: >-
+            A template for the API URL to get information about notifications on
+            the repository.
+        pulls_url:
+          type: string
+          example: https://api.github.com/repos/octocat/Hello-World/pulls{/number}
+          description: >-
+            A template for the API URL to get information about pull requests on
+            the repository.
+        releases_url:
+          type: string
+          example: https://api.github.com/repos/octocat/Hello-World/releases{/id}
+          description: >-
+            A template for the API URL to get information about releases on the
+            repository.
+        stargazers_url:
+          type: string
+          format: uri
+          example: https://api.github.com/repos/octocat/Hello-World/stargazers
+          description: The API URL to list the stargazers on the repository.
+        statuses_url:
+          type: string
+          example: https://api.github.com/repos/octocat/Hello-World/statuses/{sha}
+          description: >-
+            A template for the API URL to get information about statuses of a
+            commit.
+        subscribers_url:
+          type: string
+          format: uri
+          example: https://api.github.com/repos/octocat/Hello-World/subscribers
+          description: The API URL to list the subscribers on the repository.
+        subscription_url:
+          type: string
+          format: uri
+          example: https://api.github.com/repos/octocat/Hello-World/subscription
+          description: The API URL to subscribe to notifications for this repository.
+        tags_url:
+          type: string
+          format: uri
+          example: https://api.github.com/repos/octocat/Hello-World/tags
+          description: The API URL to get information about tags on the repository.
+        teams_url:
+          type: string
+          format: uri
+          example: https://api.github.com/repos/octocat/Hello-World/teams
+          description: The API URL to list the teams on the repository.
+        trees_url:
+          type: string
+          example: https://api.github.com/repos/octocat/Hello-World/git/trees{/sha}
+          description: >-
+            A template for the API URL to create or retrieve a raw Git tree of
+            the repository.
+        hooks_url:
+          type: string
+          format: uri
+          example: https://api.github.com/repos/octocat/Hello-World/hooks
+          description: The API URL to list the hooks on the repository.
+      required:
+        - archive_url
+        - assignees_url
+        - blobs_url
+        - branches_url
+        - collaborators_url
+        - comments_url
+        - commits_url
+        - compare_url
+        - contents_url
+        - contributors_url
+        - deployments_url
+        - description
+        - downloads_url
+        - events_url
+        - fork
+        - forks_url
+        - full_name
+        - git_commits_url
+        - git_refs_url
+        - git_tags_url
+        - hooks_url
+        - html_url
+        - id
+        - node_id
+        - issue_comment_url
+        - issue_events_url
+        - issues_url
+        - keys_url
+        - labels_url
+        - languages_url
+        - merges_url
+        - milestones_url
+        - name
+        - notifications_url
+        - owner
+        - private
+        - pulls_url
+        - releases_url
+        - stargazers_url
+        - statuses_url
+        - subscribers_url
+        - subscription_url
+        - tags_url
+        - teams_url
+        - trees_url
+        - url
     integration:
       title: GitHub app
       description: >-
@@ -8600,23 +10452,24 @@ components:
       required: true
       schema:
         type: integer
-    milestone-number:
-      name: milestone_number
-      description: The number that identifies the milestone.
-      in: path
-      required: true
-      schema:
-        type: integer
-    repository-id:
-      name: repository_id
-      description: The unique identifier of the repository.
-      in: path
-      required: true
-      schema:
-        type: integer
     issue-field-id:
       name: issue_field_id
       description: The unique identifier of the issue field.
+      in: path
+      required: true
+      schema:
+        type: integer
+    issue-timeline-exclude:
+      name: exclude
+      in: query
+      description: >-
+        A comma-separated list of timeline event names to exclude from the
+        response.
+      schema:
+        type: string
+    milestone-number:
+      name: milestone_number
+      description: The number that identifies the milestone.
       in: path
       required: true
       schema:
@@ -9194,6 +11047,12 @@ components:
           site_admin: false
         author_association: COLLABORATOR
         state_reason: completed
+      x-github-breaking-changes:
+        - changeset: remove_singular_assignee_from_issues_and_pull_requests
+          patch:
+            - op: remove
+              path: /value/assignee
+          version: '2026-03-10'
     issue-comment-items:
       value:
         - id: 1
@@ -9224,6 +11083,7 @@ components:
           updated_at: '2011-04-14T16:00:49Z'
           issue_url: https://api.github.com/repos/octocat/Hello-World/issues/1347
           author_association: COLLABORATOR
+          minimized: null
     issue-comment:
       value:
         id: 1
@@ -9255,6 +11115,7 @@ components:
         issue_url: https://api.github.com/repos/octocat/Hello-World/issues/1347
         author_association: COLLABORATOR
         pin: null
+        minimized: null
     issue-comment-pinned:
       value:
         id: 1
@@ -9857,6 +11718,12 @@ components:
           site_admin: false
         author_association: COLLABORATOR
         state_reason: completed
+      x-github-breaking-changes:
+        - changeset: remove_singular_assignee_from_issues_and_pull_requests
+          patch:
+            - op: remove
+              path: /value/assignee
+          version: '2026-03-10'
     issue-event-for-issue-items:
       value:
         - id: 1
@@ -9893,10 +11760,12 @@ components:
     issue-field-value-items:
       value:
         - issue_field_id: 1
+          issue_field_name: DRI
           node_id: IFT_GDKND
           data_type: text
           value: DRI
         - issue_field_id: 2
+          issue_field_name: Priority
           node_id: IFSS_SADMS
           data_type: single_select
           value: 1
@@ -9905,13 +11774,27 @@ components:
             name: High
             color: red
         - issue_field_id: 3
+          issue_field_name: Points
           node_id: IFN_POINTS
           data_type: number
           value: 42
         - issue_field_id: 4
+          issue_field_name: Due Date
           node_id: IFD_DUEDATE
           data_type: date
           value: '2025-12-25'
+        - issue_field_id: 5
+          issue_field_name: Labels
+          node_id: IFMS_LABELS
+          data_type: multi_select
+          value: Frontend,Backend
+          multi_select_options:
+            - id: 1
+              name: Frontend
+              color: blue
+            - id: 2
+              name: Backend
+              color: green
     label-items:
       value:
         - id: 208045946
@@ -9937,6 +11820,53 @@ components:
           description: Something isn't working
           color: f29513
           default: true
+    issue-suggestions:
+      value:
+        - id: 12
+          issue_id: 4567
+          action: add_label
+          state: pending
+          target_id: 208045946
+          target_value: null
+          rationale: >-
+            This looks like a bug report based on the stack trace in the
+            description.
+          confidence: HIGH
+          actor_id: 41898282
+          issue_event_id: null
+          resolved_by: null
+          created_at: '2026-06-01T14:20:00Z'
+          updated_at: '2026-06-01T14:20:00Z'
+        - id: 13
+          issue_id: 4567
+          action: set_type
+          state: pending
+          target_id: 3
+          target_value: Bug
+          rationale: The report describes unexpected behaviour with reproduction steps.
+          confidence: MEDIUM
+          actor_id: 41898282
+          issue_event_id: null
+          resolved_by: null
+          created_at: '2026-06-01T14:21:00Z'
+          updated_at: '2026-06-01T14:21:00Z'
+    issue-suggestion:
+      value:
+        id: 12
+        issue_id: 4567
+        action: add_label
+        state: approved
+        target_id: 208045946
+        target_value: null
+        rationale: >-
+          This looks like a bug report based on the stack trace in the
+          description.
+        confidence: HIGH
+        actor_id: 41898282
+        issue_event_id: 6430295168
+        resolved_by: 583231
+        created_at: '2026-06-01T14:20:00Z'
+        updated_at: '2026-06-01T15:05:00Z'
     timeline-issue-events:
       value:
         - id: 6430295168
@@ -10534,7 +12464,7 @@ components:
               algorithm: naive
           operation:
             $ref: >-
-              #/paths/~1repositories~1{repository_id}~1issues~1{issue_number}~1issue-field-values/post
+              #/paths/~1repos~1{owner}~1{repo}~1issues~1{issue_number}~1issue-field-values/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -10544,14 +12474,14 @@ components:
               algorithm: naive
           operation:
             $ref: >-
-              #/paths/~1repositories~1{repository_id}~1issues~1{issue_number}~1issue-field-values/put
+              #/paths/~1repos~1{owner}~1{repo}~1issues~1{issue_number}~1issue-field-values/put
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         delete_issue_field_value:
           operation:
             $ref: >-
-              #/paths/~1repositories~1{repository_id}~1issues~1{issue_number}~1issue-field-values~1{issue_field_id}/delete
+              #/paths/~1repos~1{owner}~1{repo}~1issues~1{issue_number}~1issue-field-values~1{issue_field_id}/delete
           response:
             mediaType: application/json
             openAPIDocKey: '204'
@@ -10750,6 +12680,40 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/issue_sub_issues/methods/remove_sub_issue
         replace: []
+    issue_suggestions:
+      id: github.issues.issue_suggestions
+      name: issue_suggestions
+      title: Issue Suggestions
+      methods:
+        list_suggestions:
+          operation:
+            $ref: >-
+              #/paths/~1repos~1{owner}~1{repo}~1issues~1{issue_number}~1suggestions/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        approve_suggestion:
+          operation:
+            $ref: >-
+              #/paths/~1repos~1{owner}~1{repo}~1issues~1{issue_number}~1suggestions~1{suggestion_id}~1approve/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        dismiss_suggestion:
+          operation:
+            $ref: >-
+              #/paths/~1repos~1{owner}~1{repo}~1issues~1{issue_number}~1suggestions~1{suggestion_id}~1dismiss/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: >-
+              #/components/x-stackQL-resources/issue_suggestions/methods/list_suggestions
+        insert: []
+        update: []
+        delete: []
+        replace: []
     timeline:
       id: github.issues.timeline
       name: timeline
@@ -10850,3 +12814,11 @@ components:
         replace: []
 servers:
   - url: https://api.github.com
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: ''
+      location: request
+    responseToken:
+      key: Link
+      location: header

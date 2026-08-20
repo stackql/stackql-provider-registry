@@ -1,0 +1,493 @@
+openapi: 3.0.3
+info:
+  title: discussions API
+  description: GitHub Discussions for a repository - discussions, categories and comments. GitHub exposes Discussions through the GraphQL API only; these resources are backed by GraphQL queries.
+  version: v00.00.00000
+servers:
+  - url: https://api.github.com
+paths:
+  /graphql?resource=discussions:
+    post:
+      operationId: graphql/discussions/discussions/list
+      summary: Discussions
+      description: Discussions in a repository, newest first. Backed by the GitHub GraphQL API (`repository.discussions`); GitHub Discussions are not available through the REST API. Use `discussion_comments` for the comment thread of a single discussion.
+      x-stackQL-graphQL:
+        url: https://api.github.com/graphql
+        httpVerb: POST
+        responseSelection:
+          jsonPath: $.data.repository.discussions.nodes[*]
+        cursor:
+          strategy: page_info
+          jsonPath: $.data.repository.discussions.pageInfo.endCursor
+          terminateOnJsonPath: $.data.repository.discussions.pageInfo.hasNextPage
+        query: |
+          query {
+            repository(owner: "{{ .owner }}", name: "{{ .repo }}") {
+              discussions(first: 100, orderBy: {field: CREATED_AT, direction: DESC}{{ .cursor }}) {
+                pageInfo { endCursor hasNextPage }
+                nodes {
+                  id
+                  number
+                  title
+                  url
+                  body
+                  created_at: createdAt
+                  updated_at: updatedAt
+                  published_at: publishedAt
+                  last_edited_at: lastEditedAt
+                  locked
+                  closed
+                  closed_at: closedAt
+                  is_answered: isAnswered
+                  answer_chosen_at: answerChosenAt
+                  upvote_count: upvoteCount
+                  author { login }
+                  category { id name slug }
+                  comments { total_count: totalCount }
+                  reactions { total_count: totalCount }
+                  labels(first: 20) { nodes { name } }
+                  answer { id url author { login } }
+                }
+              }
+            }
+          }
+      x-stackql-protocol: graphql
+      externalDocs:
+        description: GitHub GraphQL API documentation
+        url: https://docs.github.com/graphql
+      parameters:
+        - name: owner
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The account owner of the repository.
+        - name: repo
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The name of the repository.
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      repository:
+                        type: object
+                        properties:
+                          discussions:
+                            type: object
+                            properties:
+                              nodes:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    id:
+                                      type: string
+                                      description: The GraphQL node ID of the discussion.
+                                    number:
+                                      type: integer
+                                      description: The discussion number, unique within the repository.
+                                    title:
+                                      type: string
+                                    url:
+                                      type: string
+                                      description: The HTML URL of the discussion.
+                                    body:
+                                      type: string
+                                      description: The discussion body as Markdown.
+                                    created_at:
+                                      type: string
+                                      format: date-time
+                                    updated_at:
+                                      type: string
+                                      format: date-time
+                                    published_at:
+                                      type: string
+                                      format: date-time
+                                    last_edited_at:
+                                      type: string
+                                      format: date-time
+                                    locked:
+                                      type: boolean
+                                    closed:
+                                      type: boolean
+                                    closed_at:
+                                      type: string
+                                      format: date-time
+                                    is_answered:
+                                      type: boolean
+                                      description: Whether an answer has been chosen (answerable categories only).
+                                    answer_chosen_at:
+                                      type: string
+                                      format: date-time
+                                    upvote_count:
+                                      type: integer
+                                    author:
+                                      type: object
+                                      description: The author of the discussion (`login`).
+                                      properties:
+                                        login:
+                                          type: string
+                                    category:
+                                      type: object
+                                      description: The discussion category (`id`, `name`, `slug`).
+                                      properties:
+                                        id:
+                                          type: string
+                                        name:
+                                          type: string
+                                        slug:
+                                          type: string
+                                    comments:
+                                      type: object
+                                      description: Comment counts (`total_count`).
+                                      properties:
+                                        total_count:
+                                          type: integer
+                                    reactions:
+                                      type: object
+                                      description: Reaction counts (`total_count`).
+                                      properties:
+                                        total_count:
+                                          type: integer
+                                    labels:
+                                      type: object
+                                      description: Up to 20 labels applied to the discussion (`nodes[].name`).
+                                      properties:
+                                        nodes:
+                                          type: array
+                                          items:
+                                            type: object
+                                            properties:
+                                              name:
+                                                type: string
+                                    answer:
+                                      type: object
+                                      description: The chosen answer comment, if any (`id`, `url`, `author.login`).
+                                      properties:
+                                        id:
+                                          type: string
+                                        url:
+                                          type: string
+                                        author:
+                                          type: object
+                                          properties:
+                                            login:
+                                              type: string
+                              pageInfo:
+                                type: object
+                                properties:
+                                  endCursor:
+                                    type: string
+                                  hasNextPage:
+                                    type: boolean
+  /graphql?resource=discussion_categories:
+    post:
+      operationId: graphql/discussions/discussion_categories/list
+      summary: Discussion Categories
+      description: Discussion categories configured for a repository (for example Announcements, Q&A, Ideas). Backed by the GitHub GraphQL API (`repository.discussionCategories`).
+      x-stackQL-graphQL:
+        url: https://api.github.com/graphql
+        httpVerb: POST
+        responseSelection:
+          jsonPath: $.data.repository.discussionCategories.nodes[*]
+        cursor:
+          strategy: page_info
+          jsonPath: $.data.repository.discussionCategories.pageInfo.endCursor
+          terminateOnJsonPath: $.data.repository.discussionCategories.pageInfo.hasNextPage
+        query: |
+          query {
+            repository(owner: "{{ .owner }}", name: "{{ .repo }}") {
+              discussionCategories(first: 100{{ .cursor }}) {
+                pageInfo { endCursor hasNextPage }
+                nodes {
+                  id
+                  name
+                  slug
+                  emoji
+                  description
+                  is_answerable: isAnswerable
+                  created_at: createdAt
+                  updated_at: updatedAt
+                }
+              }
+            }
+          }
+      x-stackql-protocol: graphql
+      externalDocs:
+        description: GitHub GraphQL API documentation
+        url: https://docs.github.com/graphql
+      parameters:
+        - name: owner
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The account owner of the repository.
+        - name: repo
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The name of the repository.
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      repository:
+                        type: object
+                        properties:
+                          discussionCategories:
+                            type: object
+                            properties:
+                              nodes:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    id:
+                                      type: string
+                                      description: The GraphQL node ID of the category.
+                                    name:
+                                      type: string
+                                    slug:
+                                      type: string
+                                    emoji:
+                                      type: string
+                                      description: The emoji shortcode for the category.
+                                    description:
+                                      type: string
+                                    is_answerable:
+                                      type: boolean
+                                      description: Whether discussions in this category can be marked as answered.
+                                    created_at:
+                                      type: string
+                                      format: date-time
+                                    updated_at:
+                                      type: string
+                                      format: date-time
+                              pageInfo:
+                                type: object
+                                properties:
+                                  endCursor:
+                                    type: string
+                                  hasNextPage:
+                                    type: boolean
+  /graphql?resource=discussion_comments:
+    post:
+      operationId: graphql/discussions/discussion_comments/list
+      summary: Discussion Comments
+      description: Top-level comments on a discussion, with reply counts. Backed by the GitHub GraphQL API (`repository.discussion.comments`).
+      x-stackQL-graphQL:
+        url: https://api.github.com/graphql
+        httpVerb: POST
+        responseSelection:
+          jsonPath: $.data.repository.discussion.comments.nodes[*]
+        cursor:
+          strategy: page_info
+          jsonPath: $.data.repository.discussion.comments.pageInfo.endCursor
+          terminateOnJsonPath: $.data.repository.discussion.comments.pageInfo.hasNextPage
+        query: |
+          query {
+            repository(owner: "{{ .owner }}", name: "{{ .repo }}") {
+              discussion(number: {{ .discussion_number }}) {
+                comments(first: 100{{ .cursor }}) {
+                  pageInfo { endCursor hasNextPage }
+                  nodes {
+                    id
+                    url
+                    body
+                    created_at: createdAt
+                    updated_at: updatedAt
+                    published_at: publishedAt
+                    is_answer: isAnswer
+                    is_minimized: isMinimized
+                    minimized_reason: minimizedReason
+                    upvote_count: upvoteCount
+                    author { login }
+                    replies { total_count: totalCount }
+                    reactions { total_count: totalCount }
+                  }
+                }
+              }
+            }
+          }
+      x-stackql-protocol: graphql
+      externalDocs:
+        description: GitHub GraphQL API documentation
+        url: https://docs.github.com/graphql
+      parameters:
+        - name: owner
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The account owner of the repository.
+        - name: repo
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The name of the repository.
+        - name: discussion_number
+          in: query
+          required: true
+          schema:
+            type: integer
+          description: The number that identifies the discussion.
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      repository:
+                        type: object
+                        properties:
+                          discussion:
+                            type: object
+                            properties:
+                              comments:
+                                type: object
+                                properties:
+                                  nodes:
+                                    type: array
+                                    items:
+                                      type: object
+                                      properties:
+                                        id:
+                                          type: string
+                                          description: The GraphQL node ID of the comment.
+                                        url:
+                                          type: string
+                                          description: The HTML URL of the comment.
+                                        body:
+                                          type: string
+                                          description: The comment body as Markdown.
+                                        created_at:
+                                          type: string
+                                          format: date-time
+                                        updated_at:
+                                          type: string
+                                          format: date-time
+                                        published_at:
+                                          type: string
+                                          format: date-time
+                                        is_answer:
+                                          type: boolean
+                                          description: Whether this comment is the chosen answer.
+                                        is_minimized:
+                                          type: boolean
+                                        minimized_reason:
+                                          type: string
+                                        upvote_count:
+                                          type: integer
+                                        author:
+                                          type: object
+                                          description: The comment author (`login`).
+                                          properties:
+                                            login:
+                                              type: string
+                                        replies:
+                                          type: object
+                                          description: Reply counts (`total_count`).
+                                          properties:
+                                            total_count:
+                                              type: integer
+                                        reactions:
+                                          type: object
+                                          description: Reaction counts (`total_count`).
+                                          properties:
+                                            total_count:
+                                              type: integer
+                                  pageInfo:
+                                    type: object
+                                    properties:
+                                      endCursor:
+                                        type: string
+                                      hasNextPage:
+                                        type: boolean
+components:
+  schemas: {}
+  x-stackQL-resources:
+    discussion_categories:
+      id: github.discussions.discussion_categories
+      name: discussion_categories
+      title: Discussion Categories
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1graphql?resource=discussion_categories/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data.repository.discussionCategories.nodes
+          x-stackql-protocol: graphql
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/discussion_categories/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace: []
+    discussion_comments:
+      id: github.discussions.discussion_comments
+      name: discussion_comments
+      title: Discussion Comments
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1graphql?resource=discussion_comments/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data.repository.discussion.comments.nodes
+          x-stackql-protocol: graphql
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/discussion_comments/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace: []
+    discussions:
+      id: github.discussions.discussions
+      name: discussions
+      title: Discussions
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1graphql?resource=discussions/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data.repository.discussions.nodes
+          x-stackql-protocol: graphql
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/discussions/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace: []
