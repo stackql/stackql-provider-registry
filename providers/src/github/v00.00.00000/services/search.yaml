@@ -54,16 +54,6 @@ paths:
         is.
 
 
-        > [!NOTE]
-
-        > `repository.description`, `repository.owner.type`, and
-        `repository.owner.node_id` are closing down on this endpoint and will
-        return `null` in a future API version. Use the [Get a
-        repository](https://docs.github.com/rest/repos/repos#get-a-repository)
-        endpoint (`GET /repos/{owner}/{repo}`) to retrieve full repository
-        metadata.
-
-
         This endpoint requires you to authenticate and limits you to 10 requests
         per minute.
       tags:
@@ -385,6 +375,7 @@ paths:
                         - no_accessible_repos
                         - server_error
                         - only_non_semantic_fields_requested
+                        - service_unavailable
               examples:
                 default:
                   $ref: '#/components/examples/issue-search-result-item-paginated'
@@ -2423,6 +2414,10 @@ components:
           type: integer
           format: int64
           example: 1
+        issue_field_name:
+          description: The human-readable name of the issue field.
+          type: string
+          example: Priority
         node_id:
           type: string
           example: IFT_GDKND
@@ -2432,6 +2427,7 @@ components:
           enum:
             - text
             - single_select
+            - multi_select
             - number
             - date
           example: text
@@ -2463,6 +2459,30 @@ components:
             - id
             - name
             - color
+          nullable: true
+        multi_select_options:
+          description: Details about the selected options
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                description: Unique identifier for the option.
+                type: integer
+                format: int64
+                example: 1
+              name:
+                description: The name of the option
+                type: string
+                example: High
+              color:
+                description: The color of the option
+                type: string
+                example: red
+            required:
+              - id
+              - name
+              - color
           nullable: true
       required:
         - issue_field_id
@@ -3173,7 +3193,9 @@ components:
           version: '2026-03-10'
     issue-type:
       title: Issue Type
-      description: The type of issue.
+      description: >-
+        The type assigned to the issue. This is only present for issues in
+        repositories where issue types are supported.
       type: object
       nullable: true
       properties:
@@ -3491,6 +3513,8 @@ components:
           $ref: '#/components/schemas/reaction-rollup'
         pin:
           $ref: '#/components/schemas/nullable-pinned-issue-comment'
+        minimized:
+          $ref: '#/components/schemas/nullable-issue-comment-minimized'
       required:
         - id
         - node_id
@@ -3881,6 +3905,19 @@ components:
         - pinned_at
         - pinned_by
       nullable: true
+    nullable-issue-comment-minimized:
+      title: Minimized Issue Comment
+      description: Details about why an issue comment was minimized.
+      type: object
+      properties:
+        reason:
+          description: The reason the comment was minimized.
+          type: string
+          nullable: true
+          example: low-quality
+      required:
+        - reason
+      nullable: true
   responses:
     not_modified:
       description: Not modified
@@ -4235,6 +4272,15 @@ components:
             node_id: MDU6SXNzdWUzNTgwMg==
             number: 132
             title: Line Number Indexes Beyond 20 Not Displayed
+            type:
+              id: 1
+              node_id: IT_kwDNJr9H
+              name: Bug
+              description: An unexpected problem or behavior
+              color: red
+              created_at: '2023-10-09T13:30:49Z'
+              updated_at: '2024-05-30T18:20:53Z'
+              is_enabled: true
             user:
               login: Nick3C
               id: 90254
@@ -4314,6 +4360,12 @@ components:
             locked: true
             author_association: COLLABORATOR
             state_reason: completed
+      x-github-breaking-changes:
+        - changeset: remove_singular_assignee_from_issues_and_pull_requests
+          patch:
+            - op: remove
+              path: /value/items/0/assignee
+          version: '2026-03-10'
     issue-search-result-item-paginated-lexical-fallback:
       summary: Hybrid search with lexical fallback
       description: >-
@@ -4709,3 +4761,11 @@ components:
         replace: []
 servers:
   - url: https://api.github.com
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: ''
+      location: request
+    responseToken:
+      key: Link
+      location: header

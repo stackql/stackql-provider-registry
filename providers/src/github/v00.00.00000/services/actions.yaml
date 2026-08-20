@@ -1111,6 +1111,16 @@ paths:
                     The machine size of the runner. To list available sizes, use
                     `GET actions/hosted-runners/machine-sizes`
                   type: string
+                image_source:
+                  description: >-
+                    The source type of the runner image to use. Must match the
+                    source of the image specified by `image_id`. Can be one of
+                    `github`, `partner`, or `custom`.
+                  type: string
+                  enum:
+                    - github
+                    - partner
+                    - custom
                 image_id:
                   description: >-
                     The unique identifier of the runner image. To list available
@@ -1125,6 +1135,12 @@ paths:
                     only for runners using custom images.
                   type: string
                   nullable: true
+                image_gen:
+                  description: >-
+                    Whether to enable image generation for this runner pool.
+                    When enabled, the runner pool is used to build and publish
+                    custom runner images.
+                  type: boolean
             examples:
               default:
                 value:
@@ -4876,6 +4892,144 @@ paths:
         category: actions
         subcategory: cache
       x-stackQL-resource: cache
+  /repos/{owner}/{repo}/actions/concurrency_groups:
+    get:
+      summary: List concurrency groups for a repository
+      description: >-
+        Lists the active concurrency groups for a repository.
+
+
+        OAuth app tokens and personal access tokens (classic) need the `repo`
+        scope to use this endpoint with a private repository.
+      tags:
+        - actions
+      operationId: actions/list-concurrency-groups-for-repository
+      externalDocs:
+        description: API method documentation
+        url: >-
+          https://docs.github.com/rest/actions/concurrency-groups#list-concurrency-groups-for-a-repository
+      parameters:
+        - $ref: '#/components/parameters/owner'
+        - $ref: '#/components/parameters/repo'
+        - $ref: '#/components/parameters/per-page'
+        - $ref: '#/components/parameters/pagination-after'
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/concurrency-group-list'
+              examples:
+                default:
+                  $ref: '#/components/examples/concurrency-group-list'
+          headers:
+            Link:
+              $ref: '#/components/headers/link'
+        '422':
+          $ref: '#/components/responses/validation_failed'
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: actions
+        subcategory: concurrency-groups
+      x-stackQL-resource: concurrency_groups
+  /repos/{owner}/{repo}/actions/concurrency_groups/{concurrency_group_name}:
+    get:
+      summary: Get a concurrency group for a repository
+      description: >-
+        Gets a specific concurrency group for a repository, including all
+        instances in the group's queue.
+
+        Returns 404 if the group is inactive or does not exist.
+
+
+        Optionally, pass `ahead_of_run` or `ahead_of_job` to filter the results
+        to only the items
+
+        ahead of the specified workflow run or job in the queue, plus the
+        specified item itself
+
+        (returned as the last element). This is useful for determining what is
+        blocking a particular
+
+        run or job. Returns 422 if the specified run or job is not in this
+        concurrency group.
+
+
+        When using `ahead_of_run`, this matches workflow-level concurrency and
+        any reusable-workflow
+
+        leases held on behalf of that run. Job-level leases within the run are
+        not considered to
+
+        block the run as a whole. Use `ahead_of_job` to match job-level
+        concurrency and reusable-workflow
+
+        leases on the job's ancestor paths.
+
+
+        OAuth app tokens and personal access tokens (classic) need the `repo`
+        scope to use this endpoint with a private repository.
+      tags:
+        - actions
+      operationId: actions/get-concurrency-group-for-repository
+      externalDocs:
+        description: API method documentation
+        url: >-
+          https://docs.github.com/rest/actions/concurrency-groups#get-a-concurrency-group-for-a-repository
+      parameters:
+        - $ref: '#/components/parameters/owner'
+        - $ref: '#/components/parameters/repo'
+        - $ref: '#/components/parameters/concurrency-group-name'
+        - name: ahead_of_run
+          description: >-
+            Filter to items ahead of this workflow run ID in the queue, plus the
+            run itself.
+
+            Matches workflow-level concurrency and reusable-workflow leases held
+            on behalf of
+
+            the run. Mutually exclusive with `ahead_of_job`.
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: ahead_of_job
+          description: >-
+            Filter to items ahead of this job ID in the queue, plus the job
+            itself.
+
+            Matches job-level concurrency and reusable-workflow leases on the
+            job's
+
+            ancestor paths. Mutually exclusive with `ahead_of_run`.
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/concurrency-group'
+              examples:
+                default:
+                  $ref: '#/components/examples/concurrency-group'
+        '404':
+          $ref: '#/components/responses/not_found'
+        '422':
+          $ref: '#/components/responses/validation_failed'
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: actions
+        subcategory: concurrency-groups
+      x-stackQL-resource: concurrency_groups
   /repos/{owner}/{repo}/actions/jobs/{job_id}:
     get:
       summary: Get a job for a workflow run
@@ -4988,6 +5142,10 @@ paths:
                   type: boolean
                   default: false
                   description: Whether to enable debug logging for the re-run.
+                enable_debugger:
+                  type: boolean
+                  default: false
+                  description: Whether to enable the debugger for the re-run of this job.
             examples:
               default:
                 value: null
@@ -5095,6 +5253,12 @@ paths:
                   type: array
                   items:
                     type: string
+                use_immutable_subject:
+                  description: >-
+                    Whether to opt in to the immutable OIDC subject claim format
+                    for this repository. When `true`, OIDC tokens will use a
+                    stable, repository-ID-based `sub` claim.
+                  type: boolean
             examples:
               default:
                 value:
@@ -6870,6 +7034,83 @@ paths:
         category: actions
         subcategory: workflow-runs
       x-stackQL-resource: workflow_runs
+  /repos/{owner}/{repo}/actions/runs/{run_id}/concurrency_groups:
+    get:
+      summary: List concurrency groups for a workflow run
+      description: >-
+        Lists all concurrency groups associated with a workflow run or its jobs.
+
+
+        The set of groups is derived from the run's configuration, so a group is
+
+        included even when the run no longer has any items currently holding or
+
+        waiting in it. In that case the `group_members` array will be empty.
+
+        `total_count` reflects the number of groups the run participates in by
+
+        configuration, not the number with active items.
+
+
+        This differs from `GET
+        /repos/{owner}/{repo}/actions/concurrency_groups/{group_name}`,
+
+        which returns 404 when a group has no active items. That endpoint
+        reports
+
+        the live state of a group repo-wide, while this endpoint reports the
+
+        groups associated with a specific run by configuration.
+
+
+        Results are sorted by group name and support cursor-based pagination via
+
+        `before` and `after`. The `after` cursor paginates forward only and does
+
+        not emit a `rel="prev"` Link; use `before` to page backward from a
+
+        forward page's `next` cursor.
+
+
+        OAuth app tokens and personal access tokens (classic) need the `repo`
+        scope to use this endpoint with a private repository.
+      tags:
+        - actions
+      operationId: actions/list-concurrency-groups-for-workflow-run
+      externalDocs:
+        description: API method documentation
+        url: >-
+          https://docs.github.com/rest/actions/concurrency-groups#list-concurrency-groups-for-a-workflow-run
+      parameters:
+        - $ref: '#/components/parameters/owner'
+        - $ref: '#/components/parameters/repo'
+        - $ref: '#/components/parameters/run-id'
+        - $ref: '#/components/parameters/per-page'
+        - $ref: '#/components/parameters/pagination-before'
+        - $ref: '#/components/parameters/pagination-after'
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/concurrency-group-run-list'
+              examples:
+                default:
+                  $ref: '#/components/examples/concurrency-group-run-list'
+          headers:
+            Link:
+              $ref: '#/components/headers/link'
+        '404':
+          $ref: '#/components/responses/not_found'
+        '422':
+          $ref: '#/components/responses/validation_failed'
+      x-github:
+        githubCloudOnly: false
+        enabledForGitHubApps: true
+        category: actions
+        subcategory: concurrency-groups
+      x-stackQL-resource: concurrency_groups
   /repos/{owner}/{repo}/actions/runs/{run_id}/deployment_protection_rule:
     post:
       summary: Review custom deployment protection rules for a workflow run
@@ -8110,6 +8351,9 @@ paths:
             - op: remove
               path: >-
                 /requestBody/content/application~1json/schema/properties/return_run_details
+            - op: replace
+              path: /responses/200/description
+              value: Response including the workflow run ID and URLs.
           version: '2026-03-10'
       x-stackQL-resource: workflows
   /repos/{owner}/{repo}/actions/workflows/{workflow_id}/enable:
@@ -10351,6 +10595,13 @@ components:
             $ref: '#/components/schemas/runner-label'
         ephemeral:
           type: boolean
+        version:
+          description: >-
+            The version of the GitHub Actions Runner software. This is only set
+            if the runner has connected to the service at least once.
+          nullable: true
+          type: string
+          example: 2.323.0
       required:
         - id
         - name
@@ -10672,6 +10923,111 @@ components:
       required:
         - total_count
         - actions_caches
+    concurrency-group-list:
+      title: Concurrency Group List
+      description: A list of active concurrency groups for a repository.
+      type: object
+      required:
+        - total_count
+        - concurrency_groups
+      properties:
+        total_count:
+          type: integer
+        concurrency_groups:
+          type: array
+          items:
+            type: object
+            required:
+              - group_name
+              - group_url
+              - last_acquired_at
+            properties:
+              group_name:
+                type: string
+                description: The name of the concurrency group.
+              group_url:
+                type: string
+                format: uri
+                description: API URL for this concurrency group.
+              last_acquired_at:
+                type: string
+                format: date-time
+                nullable: true
+    concurrency-group:
+      title: Concurrency Group
+      description: >-
+        A concurrency group with the workflow runs and jobs that are either
+        currently holding
+
+        or waiting for the concurrency group lease.
+      type: object
+      required:
+        - group_name
+        - group_url
+        - total_count
+        - group_members
+      properties:
+        group_name:
+          type: string
+          description: The name of the concurrency group.
+        group_url:
+          type: string
+          format: uri
+          description: API URL for this concurrency group.
+        total_count:
+          type: integer
+        group_members:
+          type: array
+          items:
+            type: object
+            required:
+              - run_id
+              - run_name
+              - run_url
+              - run_html_url
+              - status
+            properties:
+              run_id:
+                type: integer
+                description: The ID of the workflow run.
+              run_name:
+                type: string
+                description: The name of the workflow run.
+              run_url:
+                type: string
+                format: uri
+                description: API URL for the workflow run.
+                nullable: true
+              run_html_url:
+                type: string
+                format: uri
+                description: Web URL for the workflow run.
+                nullable: true
+              job_id:
+                type: integer
+                description: >-
+                  The ID of the job, when the item represents a job-level or
+                  reusable-workflow-level lease.
+              job_name:
+                type: string
+                description: >-
+                  The display name of the job, when the item represents a
+                  job-level or reusable-workflow-level lease.
+              job_url:
+                type: string
+                format: uri
+                description: API URL for the job.
+                nullable: true
+              job_html_url:
+                type: string
+                format: uri
+                description: Web URL for the job.
+                nullable: true
+              status:
+                type: string
+                enum:
+                  - in_progress
+                  - pending
     job:
       title: Job
       description: Information of a job execution in a workflow run
@@ -10681,10 +11037,12 @@ components:
           description: The id of the job.
           example: 21
           type: integer
+          format: int64
         run_id:
           description: The id of the associated workflow run.
           example: 5
           type: integer
+          format: int64
         run_url:
           type: string
           example: https://api.github.com/repos/github/hello-world/actions/runs/5
@@ -10886,6 +11244,16 @@ components:
           type: array
           items:
             type: string
+        use_immutable_subject:
+          description: >-
+            Whether the repository has opted in to the immutable OIDC subject
+            claim format. When `true`, OIDC tokens will use a stable,
+            repository-ID-based `sub` claim. If not set at the repository level,
+            falls back to the organization-level setting.
+          type: boolean
+        sub_claim_prefix:
+          description: The current `sub` claim prefix for this repository.
+          type: string
       required:
         - use_default
     actions-secret:
@@ -10983,6 +11351,7 @@ components:
       properties:
         id:
           type: integer
+          format: int64
           description: The ID of the workflow run.
           example: 5
         name:
@@ -10995,6 +11364,7 @@ components:
           example: MDEwOkNoZWNrU3VpdGU1
         check_suite_id:
           type: integer
+          format: int64
           description: The ID of the associated check suite.
           example: 42
         check_suite_node_id:
@@ -11219,6 +11589,131 @@ components:
         - state
         - user
         - comment
+    concurrency-group-run-list:
+      title: Concurrency Group Run List
+      description: A list of concurrency groups associated with a workflow run.
+      type: object
+      required:
+        - total_count
+        - concurrency_groups
+      properties:
+        total_count:
+          type: integer
+          description: >-
+            The total number of concurrency groups this workflow run
+            participates in,
+
+            derived from the run's configuration. This count is not filtered by
+
+            whether the run currently holds or is waiting in each group, so it
+            can
+
+            include groups whose `group_members` array is empty (for example,
+            when
+
+            the run has already released its lease in that group).
+        concurrency_groups:
+          type: array
+          items:
+            type: object
+            required:
+              - group_name
+              - group_url
+              - group_members
+            properties:
+              group_name:
+                type: string
+                description: The name of the concurrency group.
+              group_url:
+                type: string
+                format: uri
+                description: >-
+                  API URL for this concurrency group. May return 404 if the
+                  group
+
+                  has no active items at the time it is requested, since the
+
+                  get-by-name endpoint reports the live repo-wide state of a
+                  group
+
+                  while this endpoint lists groups associated with a run by
+
+                  configuration.
+              group_members:
+                type: array
+                description: >-
+                  Items belonging to this workflow run that are either currently
+                  holding or
+
+                  waiting for the concurrency group lease. May be empty if the
+                  run no
+
+                  longer has any active or queued items in this group.
+                items:
+                  type: object
+                  required:
+                    - run_id
+                    - run_name
+                    - run_url
+                    - run_html_url
+                    - status
+                    - position
+                    - position_url
+                  properties:
+                    run_id:
+                      type: integer
+                      description: The ID of the workflow run.
+                    run_name:
+                      type: string
+                      description: The name of the workflow run.
+                    run_url:
+                      type: string
+                      format: uri
+                      description: API URL for the workflow run.
+                      nullable: true
+                    run_html_url:
+                      type: string
+                      format: uri
+                      description: Web URL for the workflow run.
+                      nullable: true
+                    position:
+                      type: integer
+                      description: >-
+                        Queue position. 0 means the item holds the concurrency
+                        lease (in_progress), 1 or higher means queued (pending).
+                    position_url:
+                      type: string
+                      format: uri
+                      description: >-
+                        API URL to get items ahead of this item in the
+                        concurrency group.
+                    job_id:
+                      type: integer
+                      description: >-
+                        The ID of the job, when the item represents a job-level
+                        or reusable-workflow-level lease.
+                      nullable: true
+                    job_name:
+                      type: string
+                      description: >-
+                        The display name of the job, when the item represents a
+                        job-level or reusable-workflow-level lease.
+                      nullable: true
+                    job_url:
+                      type: string
+                      format: uri
+                      description: API URL for the job.
+                      nullable: true
+                    job_html_url:
+                      type: string
+                      format: uri
+                      description: Web URL for the job.
+                      nullable: true
+                    status:
+                      type: string
+                      enum:
+                        - in_progress
+                        - pending
     review-custom-gates-comment-required:
       type: object
       properties:
@@ -12342,6 +12837,20 @@ components:
           enum:
             - enterprise
             - organization
+        access_source:
+          description: >-
+            How the team's access to the repository was granted. This property
+            is only
+
+            present when the team is returned in a repository context, such as
+
+            `GET /repos/{owner}/{repo}/teams`.
+          type: string
+          enum:
+            - direct
+            - organization
+            - enterprise
+          example: direct
         organization_id:
           type: integer
           description: Unique identifier of the organization to which this team belongs
@@ -13148,6 +13657,25 @@ components:
       required: true
       schema:
         type: integer
+    pagination-after:
+      name: after
+      description: >-
+        A cursor, as given in the [Link
+        header](https://docs.github.com/rest/guides/using-pagination-in-the-rest-api#using-link-headers).
+        If specified, the query only searches for results after this cursor. For
+        more information, see "[Using pagination in the REST
+        API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+      in: query
+      required: false
+      schema:
+        type: string
+    concurrency-group-name:
+      name: concurrency_group_name
+      description: The name of the concurrency group.
+      in: path
+      required: true
+      schema:
+        type: string
     job-id:
       name: job_id
       description: The unique identifier of the job.
@@ -13155,6 +13683,7 @@ components:
       required: true
       schema:
         type: integer
+        format: int64
     actor:
       name: actor
       description: >-
@@ -13235,6 +13764,7 @@ components:
       in: query
       schema:
         type: integer
+        format: int64
     workflow-run-head-sha:
       name: head_sha
       description: >-
@@ -13258,6 +13788,18 @@ components:
       required: true
       schema:
         type: integer
+    pagination-before:
+      name: before
+      description: >-
+        A cursor, as given in the [Link
+        header](https://docs.github.com/rest/guides/using-pagination-in-the-rest-api#using-link-headers).
+        If specified, the query only searches for results before this cursor.
+        For more information, see "[Using pagination in the REST
+        API](https://docs.github.com/rest/using-the-rest-api/using-pagination-in-the-rest-api)."
+      in: query
+      required: false
+      schema:
+        type: string
     workflow-id:
       name: workflow_id
       in: path
@@ -13904,6 +14446,7 @@ components:
             status: online
             busy: true
             ephemeral: false
+            version: 2.323.0
             labels:
               - id: 5
                 name: self-hosted
@@ -13920,6 +14463,7 @@ components:
             status: offline
             busy: false
             ephemeral: false
+            version: 2.323.0
             labels:
               - id: 5
                 name: self-hosted
@@ -13976,6 +14520,7 @@ components:
         status: online
         busy: true
         ephemeral: false
+        version: 2.323.0
         labels:
           - id: 5
             name: self-hosted
@@ -14207,6 +14752,49 @@ components:
             last_accessed_at: '2019-01-24T22:45:36.000Z'
             created_at: '2019-01-24T22:45:36.000Z'
             size_in_bytes: 1024
+    concurrency-group-list:
+      value:
+        total_count: 2
+        concurrency_groups:
+          - group_name: deploy-prod
+            group_url: >-
+              https://api.github.com/repos/octocat/Hello-World/actions/concurrency_groups/deploy-prod
+            last_acquired_at: '2026-01-15T16:14:23Z'
+          - group_name: ci-build
+            group_url: >-
+              https://api.github.com/repos/octocat/Hello-World/actions/concurrency_groups/ci-build
+            last_acquired_at: '2026-01-15T16:13:55Z'
+    concurrency-group:
+      value:
+        group_name: deploy-prod
+        group_url: >-
+          https://api.github.com/repos/octocat/Hello-World/actions/concurrency_groups/deploy-prod
+        total_count: 3
+        group_members:
+          - run_id: 30433642
+            run_name: Deploy to production
+            run_url: >-
+              https://api.github.com/repos/octocat/Hello-World/actions/runs/30433642
+            run_html_url: https://github.com/octocat/Hello-World/actions/runs/30433642
+            status: in_progress
+          - run_id: 30433643
+            run_name: Deploy to production
+            run_url: >-
+              https://api.github.com/repos/octocat/Hello-World/actions/runs/30433643
+            run_html_url: https://github.com/octocat/Hello-World/actions/runs/30433643
+            status: pending
+          - run_id: 30433644
+            run_name: Deploy hotfix
+            run_url: >-
+              https://api.github.com/repos/octocat/Hello-World/actions/runs/30433644
+            run_html_url: https://github.com/octocat/Hello-World/actions/runs/30433644
+            job_id: 798245260
+            job_name: deploy
+            job_url: >-
+              https://api.github.com/repos/octocat/Hello-World/actions/jobs/798245260
+            job_html_url: >-
+              https://github.com/octocat/Hello-World/actions/runs/30433644/job/798245260
+            status: pending
     job:
       value:
         id: 399444496
@@ -14939,6 +15527,42 @@ components:
             runner_group_name: my runner group
             workflow_name: CI
             head_branch: main
+    concurrency-group-run-list:
+      value:
+        total_count: 2
+        concurrency_groups:
+          - group_name: deploy-prod
+            group_url: >-
+              https://api.github.com/repos/octocat/Hello-World/actions/concurrency_groups/deploy-prod
+            group_members:
+              - run_id: 30433642
+                run_name: Deploy to production
+                run_url: >-
+                  https://api.github.com/repos/octocat/Hello-World/actions/runs/30433642
+                run_html_url: https://github.com/octocat/Hello-World/actions/runs/30433642
+                status: in_progress
+                position: 0
+                position_url: >-
+                  https://api.github.com/repos/octocat/Hello-World/actions/concurrency_groups/deploy-prod?ahead_of_run=30433642
+          - group_name: ci-build
+            group_url: >-
+              https://api.github.com/repos/octocat/Hello-World/actions/concurrency_groups/ci-build
+            group_members:
+              - run_id: 30433642
+                run_name: Deploy to production
+                run_url: >-
+                  https://api.github.com/repos/octocat/Hello-World/actions/runs/30433642
+                run_html_url: https://github.com/octocat/Hello-World/actions/runs/30433642
+                status: pending
+                position: 2
+                position_url: >-
+                  https://api.github.com/repos/octocat/Hello-World/actions/concurrency_groups/ci-build?ahead_of_job=798245260
+                job_id: 798245260
+                job_name: build
+                job_url: >-
+                  https://api.github.com/repos/octocat/Hello-World/actions/jobs/798245260
+                job_html_url: >-
+                  https://github.com/octocat/Hello-World/actions/runs/30433642/job/798245260
     pending-deployment-items:
       value:
         - environment:
@@ -16989,6 +17613,35 @@ components:
           - $ref: >-
               #/components/x-stackQL-resources/cache/methods/delete_actions_cache_by_key
         replace: []
+    concurrency_groups:
+      id: github.actions.concurrency_groups
+      name: concurrency_groups
+      title: Concurrency Groups
+      methods:
+        list_concurrency_groups_for_repository:
+          operation:
+            $ref: '#/paths/~1repos~1{owner}~1{repo}~1actions~1concurrency_groups/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.concurrency_groups
+        get_concurrency_group_for_repository:
+          operation:
+            $ref: >-
+              #/paths/~1repos~1{owner}~1{repo}~1actions~1concurrency_groups~1{concurrency_group_name}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: >-
+              #/components/x-stackQL-resources/concurrency_groups/methods/get_concurrency_group_for_repository
+          - $ref: >-
+              #/components/x-stackQL-resources/concurrency_groups/methods/list_concurrency_groups_for_repository
+        insert: []
+        update: []
+        delete: []
+        replace: []
     workflow_jobs:
       id: github.actions.workflow_jobs
       name: workflow_jobs
@@ -17334,6 +17987,27 @@ components:
         update: []
         delete: []
         replace: []
+    workflow_run_concurrency_groups:
+      id: github.actions.workflow_run_concurrency_groups
+      name: workflow_run_concurrency_groups
+      title: Workflow Run Concurrency Groups
+      methods:
+        list_concurrency_groups_for_workflow_run:
+          operation:
+            $ref: >-
+              #/paths/~1repos~1{owner}~1{repo}~1actions~1runs~1{run_id}~1concurrency_groups/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.concurrency_groups
+      sqlVerbs:
+        select:
+          - $ref: >-
+              #/components/x-stackQL-resources/workflow_run_concurrency_groups/methods/list_concurrency_groups_for_workflow_run
+        insert: []
+        update: []
+        delete: []
+        replace: []
     workflow_run_logs:
       id: github.actions.workflow_run_logs
       name: workflow_run_logs
@@ -17481,3 +18155,11 @@ components:
         replace: []
 servers:
   - url: https://api.github.com
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: ''
+      location: request
+    responseToken:
+      key: Link
+      location: header
