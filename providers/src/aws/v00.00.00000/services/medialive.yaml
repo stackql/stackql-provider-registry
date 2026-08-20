@@ -4144,6 +4144,9 @@ components:
         Username:
           $ref: "#/components/schemas/__string"
           description: username for destination
+        VirtualSourceAddress:
+          $ref: "#/components/schemas/__string"
+          description: Specifies the source IP address for outbound multicast packets.
     __listOfSrtOutputDestinationSettings:
       description: Placeholder documentation for __listOfSrtOutputDestinationSettings
       type: array
@@ -4303,19 +4306,27 @@ components:
       properties:
         Algorithm:
           $ref: "#/components/schemas/AudioNormalizationAlgorithm"
-          description: Audio normalization algorithm to use. itu17701 conforms to the CALM Act specification, itu17702 conforms to the EBU R-128 specification.
+          description: "Choose one of the following audio normalization algorithms: ITU-R BS.1770-1: Ungated loudness. A measurement of ungated average loudness for an entire piece of content, suitable for measurement of short-form content under ATSC recommendation A/85. Supports up to 5.1 audio channels. ITU-R BS.1770-2: Gated loudness. A measurement of gated average loudness compliant with the requirements of EBU-R128. Supports up to 5.1 audio channels. ITU-R BS.1770-3: Modified peak. The same loudness measurement algorithm as 1770-2, with an updated true peak measurement. ITU-R BS.1770-4: Higher channel count. Allows for more audio channels than the other algorithms, including configurations such as 7.1."
         AlgorithmControl:
           $ref: "#/components/schemas/AudioNormalizationAlgorithmControl"
           description: When set to correctAudio the output audio is corrected using the chosen algorithm. If set to measureOnly, the audio will be measured but not adjusted.
         TargetLkfs:
           $ref: "#/components/schemas/__doubleMinNegative59Max0"
           description: Target LKFS(loudness) to adjust volume to. If no value is entered, a default value will be used according to the chosen algorithm. The CALM Act recommends a target of -24 LKFS. The EBU R-128 specification recommends a target of -23 LKFS.
+        PeakCalculation:
+          $ref: "#/components/schemas/AudioNormalizationPeakCalculation"
+          description: If set to TRUE_PEAK, calculate the TruePeak for each output's audio track loudness.
+        PeakLimiterThreshold:
+          $ref: "#/components/schemas/__doubleMinNegative8Max0"
+          description: Peak limiter threshold in decibels relative to true peak (dBTP) if TRUE_PEAK is enabled. If TRUE_PEAK is not enabled a full scale (dbFS) value is used. The peak inter-audio sample loudness in your output will be limited to the value that you specify, without affecting the overall target LKFS. Leave blank to use the default value 0.
     AudioNormalizationAlgorithm:
       description: Audio Normalization Algorithm
       type: string
       enum:
         - ITU_1770_1
         - ITU_1770_2
+        - ITU_1770_3
+        - ITU_1770_4
     AudioNormalizationAlgorithmControl:
       description: Audio Normalization Algorithm Control
       type: string
@@ -4323,6 +4334,16 @@ components:
         - CORRECT_AUDIO
     __doubleMinNegative59Max0:
       description: Placeholder documentation for __doubleMinNegative59Max0
+      type: number
+      format: double
+    AudioNormalizationPeakCalculation:
+      description: Audio Normalization Peak Calculation
+      type: string
+      enum:
+        - NONE
+        - TRUE_PEAK
+    __doubleMinNegative8Max0:
+      description: Placeholder documentation for __doubleMinNegative8Max0
       type: number
       format: double
     AudioType:
@@ -4359,6 +4380,9 @@ components:
         NielsenNaesIiNwSettings:
           $ref: "#/components/schemas/NielsenNaesIiNw"
           description: Complete these fields only if you want to insert watermarks of type Nielsen NAES II (N2) and Nielsen NAES VI (NW).
+        NielsenNwOnlySettings:
+          $ref: "#/components/schemas/NielsenNwOnly"
+          description: Complete these fields only if you want to insert watermarks of type Nielsen NAES VI (NW) only, without inserting NAES II (N2) watermarks.
     NielsenCBET:
       description: Nielsen CBET
       type: object
@@ -4428,6 +4452,22 @@ components:
         - US_PACIFIC
         - US_SAMOA
         - UTC
+    NielsenNwOnly:
+      description: Nielsen Nw Only
+      type: object
+      properties:
+        CheckDigitString:
+          $ref: "#/components/schemas/__stringMin2Max2"
+          description: Enter the check digit string for the watermark
+        Sid:
+          $ref: "#/components/schemas/__doubleMin1Max65535"
+          description: Enter the Nielsen Source ID (SID) to include in the watermark
+        Timezone:
+          $ref: "#/components/schemas/NielsenWatermarkTimezones"
+          description: Choose the timezone for the time stamps in the watermark. If not provided, the timestamps will be in Coordinated Universal Time (UTC)
+      required:
+        - CheckDigitString
+        - Sid
     AudioCodecSettings:
       description: Audio Codec Settings
       type: object
@@ -6344,7 +6384,7 @@ components:
           description: If set to passthrough, Nielsen inaudible tones for media tracking will be detected in the input audio and an equivalent ID3 tag will be inserted in the output.
         Scte35Type:
           $ref: "#/components/schemas/Scte35Type"
-          description: Type of scte35 track to add. none or scte35WithoutSegmentation
+          description: SCTE-35 insertion type. Option "none" indicates that a SCTE-35 marker will not be inserted, nor will an IDR be inserted at the SCTE-35 cue point, nor will the segment be segmented. Option "scte35WithoutIdr" indicates that a SCTE-35 marker will be inserted to indicate the cue point, but MediaLive will not insert an IDR on that frame nor will it introduce a new segment boundary there if it wasn't already going to be one (this option is required for use with downstream multiview bitstream stitching workflows). Option "scte35WithoutSegmentation" indicates that a SCTE-35 marker will be inserted to indicate the cue point, and an IDR will be inserted on that frame so that a downstream re-packager might split the segment there, but MediaLive itself will not introduce a new segment boundary there.
         SegmentLength:
           $ref: "#/components/schemas/__integerMin1"
           description: The nominal duration of segments. The units are specified in SegmentLengthUnits. The segments will end on the next keyframe after the specified duration, so the actual segment length might be longer, and it might be a fraction of the units.
@@ -6387,6 +6427,7 @@ components:
       enum:
         - NONE
         - SCTE_35_WITHOUT_SEGMENTATION
+        - SCTE_35_WITHOUT_IDR
     CmafIngestSegmentLengthUnits:
       description: Cmaf Ingest Segment Length Units
       type: string
@@ -6657,7 +6698,7 @@ components:
           description: If set to passthrough, Nielsen inaudible tones for media tracking will be detected in the input audio and an equivalent ID3 tag will be inserted in the output.
         Scte35Type:
           $ref: "#/components/schemas/Scte35Type"
-          description: Type of scte35 track to add. none or scte35WithoutSegmentation
+          description: SCTE-35 insertion type. Option "none" indicates that a SCTE-35 marker will not be inserted, nor will an IDR be inserted at the SCTE-35 cue point, nor will the segment be segmented. Option "scte35WithoutIdr" indicates that a SCTE-35 marker will be inserted to indicate the cue point, but MediaLive will not insert an IDR on that frame nor will it introduce a new segment boundary there if it wasn't already going to be one (this option is required for use with downstream multiview bitstream stitching workflows). Option "scte35WithoutSegmentation" indicates that a SCTE-35 marker will be inserted to indicate the cue point, and an IDR will be inserted on that frame so that a downstream re-packager might split the segment there, but MediaLive itself will not introduce a new segment boundary there.
         SegmentLength:
           $ref: "#/components/schemas/__integerMin1"
           description: The nominal duration of segments. The units are specified in SegmentLengthUnits. The segments will end on the next keyframe after the specified duration, so the actual segment length might be longer, and it might be a fraction of the units.
@@ -6952,7 +6993,7 @@ components:
           description: Packet Identifier (PID) for input source SCTE-27 data to this output. Multiple values are accepted, and can be entered in ranges and/or by comma separation. Can be entered as decimal or hexadecimal values. Each PID specified must be in the range of 32 (or 0x20)..8182 (or 0x1ff6).
         Scte35Control:
           $ref: "#/components/schemas/M2tsScte35Control"
-          description: Optionally pass SCTE-35 signals from the input source to this output.
+          description: SCTE-35 control. Option "none" indicates that a SCTE-35 marker will not be inserted, nor will an IDR be inserted at the SCTE-35 cue point, nor will the segment be segmented. Option "scte35WithoutIdr" indicates that a SCTE-35 marker will be inserted to indicate the cue point, but MediaLive will not insert an IDR on that frame nor will it introduce a new segment boundary there if it wasn't already going to be one (this option is required for use with downstream multiview bitstream stitching workflows). Option "passthrough" indicates that a SCTE-35 marker will be inserted to indicate the cue point, and an IDR will be inserted on that frame, and MediaLive itself will introduce a new segment boundary there.
         Scte35Pid:
           $ref: "#/components/schemas/__string"
           description: Packet Identifier (PID) of the SCTE-35 stream in the transport stream. Can be entered as a decimal or hexadecimal value. Valid values are 32 (or 0x20)..8182 (or 0x1ff6).
@@ -7151,6 +7192,7 @@ components:
       enum:
         - NONE
         - PASSTHROUGH
+        - SCTE_35_WITHOUT_IDR
     M2tsSegmentationMarkers:
       description: M2ts Segmentation Markers
       type: string
@@ -7499,7 +7541,7 @@ components:
           description: Maximum time in milliseconds between Program Clock Reference (PCRs) inserted into the transport stream.
         Scte35Control:
           $ref: "#/components/schemas/M2tsScte35Control"
-          description: Optionally pass SCTE-35 signals from the input source to this output.
+          description: SCTE-35 control. Option "none" indicates that a SCTE-35 marker will not be inserted, nor will an IDR be inserted at the SCTE-35 cue point, nor will the segment be segmented. Option "scte35WithoutIdr" indicates that a SCTE-35 marker will be inserted to indicate the cue point, but MediaLive will not insert an IDR on that frame nor will it introduce a new segment boundary there if it wasn't already going to be one (this option is required for use with downstream multiview bitstream stitching workflows). Option "passthrough" indicates that a SCTE-35 marker will be inserted to indicate the cue point, and an IDR will be inserted on that frame, and MediaLive itself will introduce a new segment boundary there.
         Scte35PrerollPullupMilliseconds:
           $ref: "#/components/schemas/__doubleMin0Max5000"
           description: Defines the amount SCTE-35 preroll will be increased (in milliseconds) on the output. Preroll is the amount of time between the presence of a SCTE-35 indication in a transport stream and the PTS of the video frame it references. Zero means don't add pullup (it doesn't mean set the preroll to zero). Negative pullup is not supported, which means that you can't make the preroll shorter. Be aware that latency in the output will increase by the pullup amount.
@@ -7696,6 +7738,12 @@ components:
         Width:
           $ref: "#/components/schemas/__integer"
           description: Output video width, in pixels. Must be an even number. For most codecs, you can leave this field and height blank in order to use the height and width (resolution) from the source. Note, however, that leaving blank is not recommended. For the Frame Capture codec, height and width are required.
+        CropRectangle:
+          $ref: "#/components/schemas/VideoPositionRectangle"
+          description: "Region of the input video to crop before scaling. If not specified, the entire input frame is used. Note: Unlike {@link outputPositionRectangle}, the bounds of cropRectangle are validated at ingest time by the encoder/scaler rather than at the API level, because the input resolution is not known until the source is probed. Field-level constraints on (x, y, width, height) defined on {@link VideoPositionRectangle} still apply."
+        OutputPositionRectangle:
+          $ref: "#/components/schemas/VideoPositionRectangle"
+          description: Position of the encoded video within the output frame. The area outside the rectangle is filled with black. If not specified, the video fills the entire output frame. When used, both {@link width} and {@link height} of the VideoDescription must be explicitly specified so that the rectangle can be validated against the output frame.
       required:
         - Name
     VideoCodecSettings:
@@ -8830,6 +8878,33 @@ components:
         - DEFAULT
         - STRETCH_TO_OUTPUT
         - SMART_CROP
+    VideoPositionRectangle:
+      description: A rectangle defined by position (x, y) and dimensions (width, height) in pixels. Used for output positioning and input cropping.
+      type: object
+      properties:
+        Height:
+          $ref: "#/components/schemas/__integerMin2Max8192"
+          description: Height in pixels. Must be an even number.
+        Width:
+          $ref: "#/components/schemas/__integerMin2Max8192"
+          description: Width in pixels. Must be an even number.
+        X:
+          $ref: "#/components/schemas/__integerMin0Max8190"
+          description: Left offset in pixels. Must be an even number.
+        "Y":
+          $ref: "#/components/schemas/__integerMin0Max8190"
+          description: Top offset in pixels. Must be an even number.
+      required:
+        - X
+        - "Y"
+        - Height
+        - Width
+    __integerMin2Max8192:
+      description: Placeholder documentation for __integerMin2Max8192
+      type: integer
+    __integerMin0Max8190:
+      description: Placeholder documentation for __integerMin0Max8190
+      type: integer
     ThumbnailConfiguration:
       description: Thumbnail Configuration
       type: object
@@ -9097,37 +9172,34 @@ components:
         Pid:
           $ref: "#/components/schemas/__integerMin0Max8191"
           description: Selects a specific PID from within a source.
+        Pids:
+          $ref: "#/components/schemas/__listOfAudioPid"
+          description: Selects one or more unique PIDs from within a source. When using 'pids', you can specify per-PID audio pre-mixer settings.
       required:
         - Pid
     __integerMin0Max8191:
       description: Placeholder documentation for __integerMin0Max8191
       type: integer
-    AudioTrackSelection:
-      description: Audio Track Selection
-      type: object
-      properties:
-        Tracks:
-          $ref: "#/components/schemas/__listOfAudioTrack"
-          description: Selects one or more unique audio tracks from within a source.
-        DolbyEDecode:
-          $ref: "#/components/schemas/AudioDolbyEDecode"
-          description: Configure decoding options for Dolby E streams - these should be Dolby E frames carried in PCM streams tagged with SMPTE-337
-      required:
-        - Tracks
-    __listOfAudioTrack:
-      description: Placeholder documentation for __listOfAudioTrack
+    __listOfAudioPid:
+      description: Placeholder documentation for __listOfAudioPid
       type: array
       items:
-        $ref: "#/components/schemas/AudioTrack"
-    AudioTrack:
-      description: Audio Track
+        $ref: "#/components/schemas/AudioPid"
+    AudioPid:
+      description: Represents a single PID value for audio selection with optional pre-mixer settings
       type: object
       properties:
-        Track:
-          $ref: "#/components/schemas/__integerMin1"
-          description: 1-based integer value that maps to a specific audio track
+        DolbyEDecode:
+          $ref: "#/components/schemas/AudioDolbyEDecode"
+          description: Configure decoding options for Dolby E streams - these should be Dolby E frames carried in PCM streams tagged with SMPTE-337. When using the 'pids' array, if this field is not specified and Dolby E content is present, the decoder will extract the specified program. To maintain legacy behavior (allPrograms), explicitly set programSelection to "allChannels".
+        Pid:
+          $ref: "#/components/schemas/__integerMin0Max8191"
+          description: PID value from within a source.
+        PremixSettings:
+          $ref: "#/components/schemas/AudioPreMixerSettings"
+          description: Optional audio pre-mixer settings for this PID. When specified, allows per-PID audio processing including channel remixing, gain adjustment, and loudness normalization before interleaving.
       required:
-        - Track
+        - Pid
     AudioDolbyEDecode:
       description: Audio Dolby EDecode
       type: object
@@ -9150,6 +9222,55 @@ components:
         - PROGRAM_6
         - PROGRAM_7
         - PROGRAM_8
+    AudioPreMixerSettings:
+      description: Audio pre-mixer settings for normalizing audio before interleaving. These settings can be applied to individual PIDs or tracks before they are combined.
+      type: object
+      properties:
+        AudioNormalizationSettings:
+          $ref: "#/components/schemas/AudioNormalizationSettings"
+          description: Audio normalization settings for loudness control. When specified, audio loudness will be normalized according to the chosen algorithm.
+        Channels:
+          $ref: "#/components/schemas/__integerMin1Max16"
+          description: Number of audio channels. If specified, the audio will be remixed to match this channel count. Ignored if remixSettings is specified.
+        GainDb:
+          $ref: "#/components/schemas/__doubleMinNegative60Max60"
+          description: "Gain adjustment in dB to apply. Range: -60 to +60 dB"
+        RemixSettings:
+          $ref: "#/components/schemas/RemixSettings"
+          description: Settings that control how input audio channels are remixed. When specified, allows fine-grained control over channel mapping and gain levels. Takes precedence over the 'channels' setting.
+    __doubleMinNegative60Max60:
+      description: Placeholder documentation for __doubleMinNegative60Max60
+      type: number
+      format: double
+    AudioTrackSelection:
+      description: Audio Track Selection
+      type: object
+      properties:
+        Tracks:
+          $ref: "#/components/schemas/__listOfAudioTrack"
+          description: Selects one or more unique audio tracks from within a source.
+        DolbyEDecode:
+          $ref: "#/components/schemas/AudioDolbyEDecode"
+          description: Configure decoding options for Dolby E streams - these should be Dolby E frames carried in PCM streams tagged with SMPTE-337
+      required:
+        - Tracks
+    __listOfAudioTrack:
+      description: Placeholder documentation for __listOfAudioTrack
+      type: array
+      items:
+        $ref: "#/components/schemas/AudioTrack"
+    AudioTrack:
+      description: Represents a single audio track for selection with optional pre-mixer settings
+      type: object
+      properties:
+        Track:
+          $ref: "#/components/schemas/__integerMin1"
+          description: 1-based integer value that maps to a specific audio track
+        PremixSettings:
+          $ref: "#/components/schemas/AudioPreMixerSettings"
+          description: Optional audio pre-mixer settings for this track. When specified, allows per-track audio processing including channel remixing, gain adjustment, and loudness normalization before interleaving.
+      required:
+        - Track
     __listOfCaptionSelector:
       description: Placeholder documentation for __listOfCaptionSelector
       type: array
@@ -9188,6 +9309,8 @@ components:
           $ref: "#/components/schemas/Scte27SourceSettings"
         TeletextSourceSettings:
           $ref: "#/components/schemas/TeletextSourceSettings"
+        SmartSubtitleSourceSettings:
+          $ref: "#/components/schemas/SmartSubtitleSourceSettings"
     AncillarySourceSettings:
       description: Ancillary Source Settings
       type: object
@@ -9320,6 +9443,22 @@ components:
       description: Placeholder documentation for __doubleMin0Max100
       type: number
       format: double
+    SmartSubtitleSourceSettings:
+      description: Smart Subtitle Source Settings
+      type: object
+      properties:
+        CaptionSynchronizationMode:
+          $ref: "#/components/schemas/CaptionSynchronizationMode"
+          description: Controls whether MediaLive delays video to synchronize captions with audio and video output.
+        InferenceFeedOutput:
+          $ref: "#/components/schemas/__string"
+          description: The name of the Elemental Inference feed output that supplies subtitle input into this caption selector.
+    CaptionSynchronizationMode:
+      description: Controls how MediaLive synchronizes Elemental Inference generated subtitles with video output. video_aligned_captions - MediaLive delays video to ensure captions are synchronized with audio and video. no_video_delay - MediaLive does not delay video for caption alignment. Captions output timing is adjusted to align with video as captions become available.
+      type: string
+      enum:
+        - NO_VIDEO_DELAY
+        - VIDEO_ALIGNED_CAPTIONS
     InputDeblockFilter:
       description: Input Deblock Filter
       type: string
@@ -9608,6 +9747,24 @@ components:
         FeedArn:
           $ref: "#/components/schemas/__string"
           description: The ARN of the feed resource that is associated with this channel. The feed is a resource in the Elemental Inference service.
+        AudioFeedInputs:
+          $ref: "#/components/schemas/__listOfAudioFeedInput"
+          description: A list of audio feed inputs that map audio selectors in the channel to feed inputs on the associated Elemental Inference feed.
+    __listOfAudioFeedInput:
+      description: Placeholder documentation for __listOfAudioFeedInput
+      type: array
+      items:
+        $ref: "#/components/schemas/AudioFeedInput"
+    AudioFeedInput:
+      description: Maps an audio selector in the channel to a feed input on the associated Elemental Inference feed.
+      type: object
+      properties:
+        AudioSelectorName:
+          $ref: "#/components/schemas/__string"
+          description: The name of the audio selector in the channel that will be sent to the Elemental Inference feed input.
+        FeedInput:
+          $ref: "#/components/schemas/__string"
+          description: The name of the feed input on the Elemental Inference feed that will receive the audio from the specified audio selector.
     CreateChannelResponse:
       description: Placeholder documentation for CreateChannelResponse
       type: object
@@ -9835,6 +9992,9 @@ components:
         FeedArn:
           $ref: "#/components/schemas/__string"
           description: The ARN of the feed resource that is associated with this channel. The feed is a resource in the Elemental Inference service.
+        AudioFeedInputs:
+          $ref: "#/components/schemas/__listOfAudioFeedInput"
+          description: A list of audio feed inputs that map audio selectors in the channel to feed inputs on the associated Elemental Inference feed.
     CreateChannelPlacementGroupResponse:
       description: Placeholder documentation for CreateChannelPlacementGroupResponse
       type: object

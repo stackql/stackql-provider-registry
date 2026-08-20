@@ -42,6 +42,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BatchGetRecordResponse"
+  /BatchWriteRecord:
+    post:
+      operationId: BatchWriteRecord
+      description: Writes a batch of Records to one or more FeatureGroups. Use this API for bulk ingestion of records into the OnlineStore and OfflineStore. You can set the ingested records to expire at a given time to live (TTL) duration after the record's event time by specifying the TtlDuration parameter. A request level TtlDuration applies to all entries that do not specify their own TtlDuration.
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                Entries:
+                  $ref: "#/components/schemas/BatchWriteRecordEntries"
+                TtlDuration:
+                  $ref: "#/components/schemas/TtlDuration"
+              required:
+                - Entries
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchWriteRecordResponse"
   /FeatureGroup/{feature_group_name}:
     delete:
       operationId: DeleteRecord
@@ -141,6 +166,37 @@ paths:
       responses:
         "200":
           description: Success
+  /FeatureGroup/{feature_group_name}/ListRecords:
+    post:
+      operationId: ListRecords
+      description: Lists the RecordIdentifier values of all records stored in a FeatureGroup's OnlineStore. This enables you to discover which records exist without retrieving the full record data.
+      parameters:
+        - name: feature_group_name
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/FeatureGroupNameOrArn"
+          description: The name or Amazon Resource Name (ARN) of the feature group to list records from.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                MaxResults:
+                  $ref: "#/components/schemas/ListRecordsMaxResults"
+                NextToken:
+                  $ref: "#/components/schemas/ListRecordsNextToken"
+                IncludeSoftDeletedRecords:
+                  $ref: "#/components/schemas/Boolean"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListRecordsOutputDisplay"
 components:
   parameters:
     X-Amz-Content-Sha256:
@@ -330,6 +386,29 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/BatchGetRecordIdentifier"
+    BatchWriteRecordEntries:
+      type: array
+      items:
+        $ref: "#/components/schemas/BatchWriteRecordEntry"
+    BatchWriteRecordEntry:
+      description: An entry to write as part of a BatchWriteRecord request.
+      type: object
+      properties:
+        FeatureGroupName:
+          $ref: "#/components/schemas/FeatureGroupNameOrArn"
+          description: The name or Amazon Resource Name (ARN) of the FeatureGroup to write the record to.
+        Record:
+          $ref: "#/components/schemas/Record"
+          description: List of FeatureValues to be inserted. This will be a full over-write.
+        TargetStores:
+          $ref: "#/components/schemas/TargetStores"
+          description: A list of stores to which you're adding the record. By default, Feature Store adds the record to all of the stores that you're using for the FeatureGroup.
+        TtlDuration:
+          $ref: "#/components/schemas/TtlDuration"
+          description: Time to live duration for this entry, where the record is hard deleted after the expiration time is reached; ExpiresAt = EventTime + TtlDuration. This overrides the request level TtlDuration.
+      required:
+        - FeatureGroupName
+        - Record
     TargetStores:
       type: array
       items:
@@ -339,20 +418,6 @@ components:
       enum:
         - OnlineStore
         - OfflineStore
-    DeletionMode:
-      type: string
-      enum:
-        - SoftDelete
-        - HardDelete
-    GetRecordResponse:
-      type: object
-      properties:
-        Record:
-          $ref: "#/components/schemas/Record"
-          description: The record you requested. A list of FeatureValues.
-        ExpiresAt:
-          $ref: "#/components/schemas/ExpiresAt"
-          description: The ExpiresAt ISO string of the requested record.
     TtlDuration:
       description: Time to live duration, where the record is hard deleted after the expiration time is reached; ExpiresAt = EventTime + TtlDuration. For information on HardDelete, see the DeleteRecord API in the Amazon SageMaker API Reference guide.
       type: object
@@ -377,6 +442,80 @@ components:
     TtlDurationValue:
       type: integer
       minimum: 1
+    BatchWriteRecordResponse:
+      type: object
+      properties:
+        Errors:
+          $ref: "#/components/schemas/BatchWriteRecordErrors"
+          description: A list of errors that occurred when writing records in the batch.
+        UnprocessedEntries:
+          $ref: "#/components/schemas/UnprocessedBatchWriteRecordEntries"
+          description: A list of entries that were not processed. These entries can be retried.
+      required:
+        - Errors
+        - UnprocessedEntries
+    BatchWriteRecordErrors:
+      type: array
+      items:
+        $ref: "#/components/schemas/BatchWriteRecordError"
+    BatchWriteRecordError:
+      description: The error that has occurred when attempting to write a record in a batch.
+      type: object
+      properties:
+        Entry:
+          $ref: "#/components/schemas/BatchWriteRecordEntry"
+          description: The entry that failed to be written.
+        ErrorCode:
+          $ref: "#/components/schemas/ValueAsString"
+          description: The error code for the failed record write.
+        ErrorMessage:
+          $ref: "#/components/schemas/Message"
+          description: The error message for the failed record write.
+      required:
+        - Entry
+        - ErrorCode
+        - ErrorMessage
+    UnprocessedBatchWriteRecordEntries:
+      type: array
+      items:
+        $ref: "#/components/schemas/BatchWriteRecordEntry"
+    DeletionMode:
+      type: string
+      enum:
+        - SoftDelete
+        - HardDelete
+    GetRecordResponse:
+      type: object
+      properties:
+        Record:
+          $ref: "#/components/schemas/Record"
+          description: The record you requested. A list of FeatureValues.
+        ExpiresAt:
+          $ref: "#/components/schemas/ExpiresAt"
+          description: The ExpiresAt ISO string of the requested record.
+    ListRecordsMaxResults:
+      type: integer
+      minimum: 1
+      maximum: 100
+    ListRecordsNextToken:
+      type: string
+      minLength: 1
+      maxLength: 8192
+    Boolean:
+      type: boolean
+    ListRecordsRowDisplay:
+      type: object
+      properties:
+        record_identifier:
+          type: string
+          description: A list of record identifier values for the records stored in the OnlineStore.
+    ListRecordsOutputDisplay:
+      type: object
+      properties:
+        line_items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ListRecordsRowDisplay"
   x-stackQL-resources:
     records:
       id: aws.sagemaker_featurestore_runtime.records
@@ -419,10 +558,36 @@ components:
           config:
             requestBodyTranslate:
               algorithm: naive
+        list_records:
+          operation:
+            $ref: "#/paths/~1FeatureGroup~1{feature_group_name}~1ListRecords/post"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+            overrideMediaType: application/json
+            schema_override:
+              $ref: "#/components/schemas/ListRecordsOutputDisplay"
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{{- $lst := index . "RecordIdentifiers" -}}{{- $tok := index . "NextToken" -}}{"line_items": [{{- if eq (kindOf $lst) "slice" -}}{{- range $i, $v := $lst -}}{{- if $i }},{{ end }}{"record_identifier": {{ toJson $v }}}{{- end -}}{{- end -}}]{{- if $tok }}, "NextToken": {{ toJson $tok }}{{- end }}}'
+            objectKey: $.line_items
+          request:
+            nativeCasing: pascal
+          config:
+            pagination:
+              requestToken:
+                key: NextToken
+                location: body
+              responseToken:
+                key: $.NextToken
+                location: body
+            requestBodyTranslate:
+              algorithm: naive
       sqlVerbs:
         select:
           - $ref: "#/components/x-stackQL-resources/records/methods/get_record"
           - $ref: "#/components/x-stackQL-resources/records/methods/batch_get_record"
+          - $ref: "#/components/x-stackQL-resources/records/methods/list_records"
         insert: []
         update: []
         replace:

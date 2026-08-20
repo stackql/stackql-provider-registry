@@ -458,7 +458,7 @@ paths:
   /scrapers:
     post:
       operationId: CreateScraper
-      description: The CreateScraper operation creates a scraper to collect metrics. A scraper pulls metrics from Prometheus-compatible sources and sends them to your Amazon Managed Service for Prometheus workspace. You can configure scrapers to collect metrics from Amazon EKS clusters, Amazon MSK clusters, or from VPC-based sources that support DNS-based service discovery. Scrapers are flexible, and can be configured to control what metrics are collected, the frequency of collection, what transformations are applied to the metrics, and more. An IAM role will be created for you that Amazon Managed Service for Prometheus uses to access the metrics in your source. You must configure this role with a policy that allows it to scrape metrics from your source. For Amazon EKS sources, see Configuring your Amazon EKS cluster in the Amazon Managed Service for Prometheus User Guide. The scrapeConfiguration parameter contains the base-64 encoded YAML configuration for the scraper. When creating a scraper, the service creates a Network Interface in each Availability Zone that are passed into CreateScraper through subnets. These network interfaces are used to connect to your source within the VPC for scraping metrics. For more information about collectors, including what metrics are collected, and how to configure the scraper, see Using an Amazon Web Services managed collector in the Amazon Managed Service for Prometheus User Guide.
+      description: Creates a scraper to collect metrics from Prometheus-compatible sources. The scraper sends the collected metrics to Amazon Managed Service for Prometheus workspaces or CloudWatch datasets. You can configure scrapers to collect metrics from Amazon EKS clusters, Amazon MSK clusters, or from VPC-based sources that support DNS-based service discovery. Scrapers are flexible. You can configure a scraper to control which metrics to collect, the frequency of collection, which transformations to apply to the metrics, and more. An IAM role will be created for you that Amazon Managed Service for Prometheus uses to access the metrics in your source. You must configure this role with a policy that allows it to scrape metrics from your source. For Amazon EKS sources, see Configuring your Amazon EKS cluster in the Amazon Managed Service for Prometheus User Guide. The scrapeConfiguration parameter contains the base-64 encoded YAML configuration for the scraper. When creating a scraper, the service creates a Network Interface in each Availability Zone that are passed into CreateScraper through subnets. These network interfaces are used to connect to your source within the VPC for scraping metrics. For more information about collectors, including what metrics are collected, and how to configure the scraper, see Using an Amazon Web Services managed collector in the Amazon Managed Service for Prometheus User Guide.
       parameters: []
       requestBody:
         required: true
@@ -481,6 +481,8 @@ paths:
                   $ref: "#/components/schemas/IdempotencyToken"
                 tags:
                   $ref: "#/components/schemas/TagMap"
+                exporters:
+                  $ref: "#/components/schemas/ExporterList"
               required:
                 - scrapeConfiguration
                 - source
@@ -896,6 +898,8 @@ paths:
                   $ref: "#/components/schemas/RoleConfiguration"
                 clientToken:
                   $ref: "#/components/schemas/IdempotencyToken"
+                exporters:
+                  $ref: "#/components/schemas/ExporterList"
       responses:
         "202":
           description: Success
@@ -1048,6 +1052,10 @@ paths:
                   $ref: "#/components/schemas/LimitsPerLabelSetList"
                 retentionPeriodInDays:
                   $ref: "#/components/schemas/UpdateWorkspaceConfigurationRequestRetentionPeriodInDaysInteger"
+                outOfOrderTimeWindowInSeconds:
+                  $ref: "#/components/schemas/UpdateWorkspaceConfigurationRequestOutOfOrderTimeWindowInSecondsInteger"
+                ruleQueryOffsetInSeconds:
+                  $ref: "#/components/schemas/UpdateWorkspaceConfigurationRequestRuleQueryOffsetInSecondsInteger"
       responses:
         "202":
           description: Success
@@ -1638,6 +1646,9 @@ components:
         ampConfiguration:
           $ref: "#/components/schemas/AmpConfiguration"
           description: The Amazon Managed Service for Prometheus workspace to send metrics to.
+        cloudWatchConfiguration:
+          $ref: "#/components/schemas/CloudWatchConfiguration"
+          description: The CloudWatch dataset to send metrics to.
     AmpConfiguration:
       description: The AmpConfiguration structure defines the Amazon Managed Service for Prometheus instance a scraper should send metrics to.
       type: object
@@ -1651,6 +1662,19 @@ components:
       description: An ARN identifying a Workspace.
       type: string
       pattern: arn:aws[-a-z]*:aps:[-a-z0-9]+:[0-9]{12}:workspace/.+
+    CloudWatchConfiguration:
+      description: The configuration identifies the CloudWatch dataset used as a scraper destination.
+      type: object
+      properties:
+        datasetArn:
+          $ref: "#/components/schemas/CloudWatchDatasetArn"
+          description: The Amazon Resource Name (ARN) of the CloudWatch dataset. To use the default dataset, specify arn:aws:cloudwatch:`<region>`:`<account-id>`:dataset/default.
+      required:
+        - datasetArn
+    CloudWatchDatasetArn:
+      description: An Amazon Resource Name (ARN) that identifies a dataset in CloudWatch.
+      type: string
+      pattern: arn:aws[-a-z]*:cloudwatch:[-a-z0-9]+:[0-9]{12}:dataset\/.+
     RoleConfiguration:
       description: Use this structure to enable cross-account access, so that you can use a target account to access Prometheus metrics from source accounts.
       type: object
@@ -1665,6 +1689,31 @@ components:
       description: An ARN identifying an IAM role used by the scraper.
       type: string
       pattern: arn:aws[-a-z]*:iam::[0-9]{12}:role/.+
+    ExporterList:
+      description: A list of exporter configurations for a scraper. You can configure at most one Amazon OpenSearch Service domain.
+      type: array
+      items:
+        $ref: "#/components/schemas/ExporterConfiguration"
+    ExporterConfiguration:
+      description: Contains the configuration for an exporter managed by the scraper.
+      type: object
+      properties:
+        openSearchConfiguration:
+          $ref: "#/components/schemas/OpenSearchExporterConfiguration"
+          description: The configuration that the scraper uses to export metrics to an Amazon OpenSearch Service domain.
+    OpenSearchExporterConfiguration:
+      description: The configuration for exporting metrics to an Amazon OpenSearch Service domain.
+      type: object
+      properties:
+        domainArn:
+          $ref: "#/components/schemas/OpenSearchDomainArn"
+          description: The Amazon Resource Name (ARN) of the Amazon OpenSearch Service domain.
+      required:
+        - domainArn
+    OpenSearchDomainArn:
+      description: An Amazon Resource Name (ARN) that identifies an Amazon OpenSearch Service domain.
+      type: string
+      pattern: arn:aws[-a-z]*:es:[-a-z0-9]+:[0-9]{12}:domain\/.+
     CreateScraperResponse:
       description: Represents the output of a CreateScraper operation.
       type: object
@@ -2049,10 +2098,13 @@ components:
           description: The Amazon EKS cluster from which the scraper collects metrics.
         destination:
           $ref: "#/components/schemas/Destination"
-          description: The Amazon Managed Service for Prometheus workspace the scraper sends metrics to.
+          description: The destination where the scraper sends metrics. Valid destinations are Amazon Managed Service for Prometheus workspaces and CloudWatch datasets.
         roleConfiguration:
           $ref: "#/components/schemas/RoleConfiguration"
           description: This structure displays information about the IAM roles used for cross-account scraping configuration.
+        exporters:
+          $ref: "#/components/schemas/ExporterList"
+          description: The exporter configurations for the scraper, if configured. The list contains at most one configuration for an Amazon OpenSearch Service domain.
       required:
         - scraperId
         - arn
@@ -2218,6 +2270,12 @@ components:
         retentionPeriodInDays:
           $ref: "#/components/schemas/WorkspaceConfigurationDescriptionRetentionPeriodInDaysInteger"
           description: This field displays how many days that metrics are retained in the workspace.
+        outOfOrderTimeWindowInSeconds:
+          $ref: "#/components/schemas/WorkspaceConfigurationDescriptionOutOfOrderTimeWindowInSecondsInteger"
+          description: This field displays the out of order time window in seconds for accepting out of order samples.
+        ruleQueryOffsetInSeconds:
+          $ref: "#/components/schemas/WorkspaceConfigurationDescriptionRuleQueryOffsetInSecondsInteger"
+          description: This field displays the duration in seconds that rule evaluation queries are offset into the past.
       required:
         - status
     WorkspaceConfigurationStatus:
@@ -2270,6 +2328,12 @@ components:
     WorkspaceConfigurationDescriptionRetentionPeriodInDaysInteger:
       type: integer
       minimum: 1
+    WorkspaceConfigurationDescriptionOutOfOrderTimeWindowInSecondsInteger:
+      type: integer
+      minimum: 0
+    WorkspaceConfigurationDescriptionRuleQueryOffsetInSecondsInteger:
+      type: integer
+      minimum: 0
     GetDefaultScraperConfigurationResponse:
       description: Represents the output of a GetDefaultScraperConfiguration operation.
       type: object
@@ -2448,10 +2512,13 @@ components:
           description: The Amazon EKS cluster from which the scraper collects metrics.
         destination:
           $ref: "#/components/schemas/Destination"
-          description: The Amazon Managed Service for Prometheus workspace the scraper sends metrics to.
+          description: The destination where the scraper sends metrics. Valid destinations are Amazon Managed Service for Prometheus workspaces and CloudWatch datasets.
         roleConfiguration:
           $ref: "#/components/schemas/RoleConfiguration"
           description: This structure displays information about the IAM roles used for cross-account scraping configuration.
+        exporters:
+          $ref: "#/components/schemas/ExporterList"
+          description: The exporter configurations for the scraper, if configured. The list contains at most one configuration for an Amazon OpenSearch Service domain.
       required:
         - scraperId
         - arn
@@ -2646,6 +2713,12 @@ components:
     UpdateWorkspaceConfigurationRequestRetentionPeriodInDaysInteger:
       type: integer
       minimum: 1
+    UpdateWorkspaceConfigurationRequestOutOfOrderTimeWindowInSecondsInteger:
+      type: integer
+      minimum: 0
+    UpdateWorkspaceConfigurationRequestRuleQueryOffsetInSecondsInteger:
+      type: integer
+      minimum: 0
     UpdateWorkspaceConfigurationResponse:
       type: object
       properties:

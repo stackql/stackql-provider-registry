@@ -1064,6 +1064,58 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GetBlobOutput"
+  /GetBlobDifferences:
+    post:
+      operationId: GetBlobDifferences
+      description: Returns a structured, line-level diff between two blob versions in a repository. The diff is returned as an ordered list of hunks, where each hunk represents a contiguous run of changed lines together with any surrounding unchanged context lines. Results are paginated. Use MaxResults and NextToken to retrieve additional pages. For the typical usage workflow, see GetDifferences.
+      parameters:
+        - name: X-Amz-Target
+          in: header
+          description: Action Header
+          required: false
+          schema:
+            type: string
+            enum:
+              - CodeCommit_20150413.GetBlobDifferences
+            default: CodeCommit_20150413.GetBlobDifferences
+      requestBody:
+        required: true
+        content:
+          application/x-amz-json-1.1:
+            schema:
+              type: object
+              properties:
+                repositoryName:
+                  $ref: "#/components/schemas/RepositoryName"
+                  description: The name of the repository that contains the blobs to compare.
+                afterBlobId:
+                  $ref: "#/components/schemas/ObjectId"
+                  description: The ID of the "after" (destination) blob in the diff. Typically the value of afterBlob.blobId from a Difference object returned by GetDifferences.
+                beforeBlobId:
+                  $ref: "#/components/schemas/ObjectId"
+                  description: The ID of the "before" (source) blob in the diff. Typically the value of beforeBlob.blobId from a Difference object returned by GetDifferences. If you do not specify a value, the operation returns a diff against an empty before-state. This is equivalent to treating the file as newly added.
+                contextLines:
+                  $ref: "#/components/schemas/DiffContext"
+                  description: The number of unchanged lines of context to include before and after each block of changes in a hunk. Valid values are 0 through 20. Defaults to 3.
+                ignoreWhitespace:
+                  $ref: "#/components/schemas/IgnoreWhiteSpaces"
+                  description: Specifies whether to ignore whitespace-only changes when computing the diff. When true, the operation treats lines that differ only in whitespace as unchanged. Defaults to false.
+                MaxResults:
+                  $ref: "#/components/schemas/Limit"
+                  description: The maximum number of DiffHunk entries to return in a single response page. Defaults to 100.
+                NextToken:
+                  $ref: "#/components/schemas/NextToken"
+                  description: An enumeration token that returns the next batch of results when present in a request.
+              required:
+                - repositoryName
+                - afterBlobId
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetBlobDifferencesOutput"
   /GetBranch:
     post:
       operationId: GetBranch
@@ -1307,7 +1359,7 @@ paths:
   /GetDifferences:
     post:
       operationId: GetDifferences
-      description: Returns information about the differences in a valid commit specifier (such as a branch, tag, HEAD, commit ID, or other fully qualified reference). Results can be limited to a specified path.
+      description: Returns information about the differences in a valid commit specifier (such as a branch, tag, HEAD, commit ID, or other fully qualified reference). Results can be limited to a specified path. For line-level diff details, pass the beforeBlob.blobId and afterBlob.blobId values from a Difference object to GetBlobDifferences.
       parameters:
         - name: X-Amz-Target
           in: header
@@ -4648,6 +4700,90 @@ components:
     blob:
       type: string
       format: byte
+    DiffContext:
+      type: integer
+    IgnoreWhiteSpaces:
+      type: boolean
+    Limit:
+      type: integer
+    GetBlobDifferencesOutput:
+      type: object
+      properties:
+        hunks:
+          $ref: "#/components/schemas/DiffHunkList"
+          description: An ordered list of diff hunks. Each hunk represents a contiguous run of changed and adjacent context lines. The list is empty when the blobs are identical or when the content is binary. The list is also empty when a paginated request has already returned all hunks in earlier pages, in which case NextToken is also null.
+        isBinary:
+          $ref: "#/components/schemas/CapitalBoolean"
+          description: Specifies whether the operation treated the diff content as binary. When true, the operation does not compute a line-level diff and hunks is empty.
+        beforeBlobSize:
+          $ref: "#/components/schemas/ObjectSize"
+          description: The size, in bytes, of the blob identified by beforeBlobId. Returns 0 when you do not specify beforeBlobId.
+        afterBlobSize:
+          $ref: "#/components/schemas/ObjectSize"
+          description: The size, in bytes, of the blob identified by afterBlobId.
+        NextToken:
+          $ref: "#/components/schemas/NextToken"
+          description: An enumeration token that can be used in a request to return the next batch of DiffHunk entries. null when the response contains the final page of the diff.
+      required:
+        - hunks
+        - isBinary
+        - afterBlobSize
+    DiffHunkList:
+      type: array
+      items:
+        $ref: "#/components/schemas/DiffHunk"
+    DiffHunk:
+      description: A contiguous run of changed lines from a blob diff, together with any surrounding unchanged context lines. Hunks are returned in order from the start of the file to the end. Adjacent or overlapping hunks are merged into a single hunk in the response.
+      type: object
+      properties:
+        beforeStartLine:
+          $ref: "#/components/schemas/LineNumber"
+          description: The 1-based line number in the before blob where this hunk begins. When the hunk consists entirely of additions, beforeLineCount is 0.
+        beforeLineCount:
+          $ref: "#/components/schemas/Count"
+          description: The number of lines from the before blob covered by this hunk, including any context lines.
+        afterStartLine:
+          $ref: "#/components/schemas/LineNumber"
+          description: The 1-based line number in the after blob where this hunk begins. When the hunk consists entirely of deletions, afterLineCount is 0.
+        afterLineCount:
+          $ref: "#/components/schemas/Count"
+          description: The number of lines from the after blob covered by this hunk, including any context lines.
+        changes:
+          $ref: "#/components/schemas/DiffChangeList"
+          description: An ordered list of line-level changes that make up this hunk. Each entry indicates whether the line is unchanged context, an addition, or a deletion.
+    Count:
+      type: integer
+    DiffChangeList:
+      type: array
+      items:
+        $ref: "#/components/schemas/DiffChange"
+    DiffChange:
+      description: "A single line-level entry in a diff hunk. Each DiffChange describes one line and its change type: unchanged context, an addition in the after blob, or a deletion from the before blob."
+      type: object
+      properties:
+        type_:
+          $ref: "#/components/schemas/DiffChangeType"
+          description: "The type of change for this line. Possible values: CONTEXT – Unchanged line included for surrounding context. ADD – Line added in the after blob. DELETE – Line removed from the before blob."
+        beforeLineNumber:
+          $ref: "#/components/schemas/LineNumber"
+          description: The 1-based line number in the before blob. This field is omitted for ADD lines.
+        afterLineNumber:
+          $ref: "#/components/schemas/LineNumber"
+          description: The 1-based line number in the after blob. This field is omitted for DELETE lines.
+        content:
+          $ref: "#/components/schemas/LineContent"
+          description: The text content of the line, without the trailing newline.
+    DiffChangeType:
+      type: string
+      enum:
+        - CONTEXT
+        - ADD
+        - DELETE
+    LineContent:
+      type: string
+    ObjectSize:
+      type: integer
+      format: int64
     GetBranchOutput:
       description: Represents the output of a get branch operation.
       type: object
@@ -4712,8 +4848,6 @@ components:
       type: array
       items:
         $ref: "#/components/schemas/Arn"
-    Count:
-      type: integer
     GetCommentsForComparedCommitOutput:
       type: object
       properties:
@@ -4827,8 +4961,6 @@ components:
           description: A commit data type object that contains information about the specified commit.
       required:
         - commit
-    Limit:
-      type: integer
     GetDifferencesOutput:
       type: object
       properties:
@@ -4898,9 +5030,6 @@ components:
         - fileMode
         - fileSize
         - fileContent
-    ObjectSize:
-      type: integer
-      format: int64
     GetFolderOutput:
       type: object
       properties:
@@ -6525,6 +6654,38 @@ components:
       sqlVerbs:
         select:
           - $ref: "#/components/x-stackQL-resources/blobs/methods/get_blob"
+        insert: []
+        update: []
+        delete: []
+    blob_differences:
+      id: aws.codecommit.blob_differences
+      name: blob_differences
+      title: blob_differences
+      methods:
+        get_blob_differences:
+          operation:
+            $ref: "#/paths/~1GetBlobDifferences/post"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+            objectKey: $.hunks
+          request:
+            nativeCasing: pascal
+            mediaType: application/x-amz-json-1.1
+            base: "{}"
+          config:
+            pagination:
+              requestToken:
+                key: NextToken
+                location: body
+              responseToken:
+                key: $.NextToken
+                location: body
+            requestBodyTranslate:
+              algorithm: naive
+      sqlVerbs:
+        select:
+          - $ref: "#/components/x-stackQL-resources/blob_differences/methods/get_blob_differences"
         insert: []
         update: []
         delete: []

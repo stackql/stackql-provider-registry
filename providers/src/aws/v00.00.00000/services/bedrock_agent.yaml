@@ -651,7 +651,7 @@ paths:
   /knowledgebases/:
     put:
       operationId: CreateKnowledgeBase
-      description: Creates a knowledge base. A knowledge base contains your data sources so that Large Language Models (LLMs) can use your data. To create a knowledge base, you must first set up your data sources and configure a supported vector store. For more information, see Set up a knowledge base. If you prefer to let Amazon Bedrock create and manage a vector store for you in Amazon OpenSearch Service, use the console. For more information, see Create a knowledge base. Provide the name and an optional description. Provide the Amazon Resource Name (ARN) with permissions to create a knowledge base in the roleArn field. Provide the embedding model to use in the embeddingModelArn field in the knowledgeBaseConfiguration object. Provide the configuration for your vector store in the storageConfiguration object. For an Amazon OpenSearch Service database, use the opensearchServerlessConfiguration object. For more information, see Create a vector store in Amazon OpenSearch Service. For an Amazon Aurora database, use the RdsConfiguration object. For more information, see Create a vector store in Amazon Aurora. For a Pinecone database, use the pineconeConfiguration object. For more information, see Create a vector store in Pinecone. For a Redis Enterprise Cloud database, use the redisEnterpriseCloudConfiguration object. For more information, see Create a vector store in Redis Enterprise Cloud.
+      description: Creates a knowledge base. A knowledge base contains your data sources so that Large Language Models (LLMs) can use your data. To create a knowledge base, you must first set up your data sources and configure a supported vector store. For more information, see Set up a knowledge base. To create a managed knowledge base, provide a managedKnowledgeBaseConfiguration during creation. For more information, see Build a managed knowledge base. Provide the name and an optional description. Provide the Amazon Resource Name (ARN) with permissions to create a knowledge base in the roleArn field. For managed knowledge bases, set embeddingModelType to MANAGED to use the service-managed embedding model, or CUSTOM with an embeddingModelArn to use your own. To use your own KMS key for encryption, provide the ARN in serverSideEncryptionConfiguration. No vector store configuration is required for managed knowledge bases. For self-managed knowledge bases, provide the embedding model to use in the embeddingModelArn field in the knowledgeBaseConfiguration object. For self-managed knowledge bases, provide the configuration for your vector store in the storageConfiguration object. For an Amazon OpenSearch Service database, use the opensearchServerlessConfiguration object. For more information, see Create a vector store in Amazon OpenSearch Service. For an Amazon Aurora database, use the RdsConfiguration object. For more information, see Create a vector store in Amazon Aurora. For a Pinecone database, use the pineconeConfiguration object. For more information, see Create a vector store in Pinecone. For a Redis Enterprise Cloud database, use the redisEnterpriseCloudConfiguration object. For more information, see Create a vector store in Redis Enterprise Cloud.
       parameters: []
       requestBody:
         required: true
@@ -1299,6 +1299,12 @@ paths:
           schema:
             $ref: "#/components/schemas/FlowIdentifier"
           description: The unique identifier of the flow.
+        - name: includedData
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/IncludedData"
+          description: Controls the scope of data returned. Set to METADATA_ONLY to return only resource metadata. Set to ALL_DATA or omit this field to return the full response.
       responses:
         "200":
           description: Success
@@ -1494,6 +1500,12 @@ paths:
           schema:
             $ref: "#/components/schemas/NumericalVersion"
           description: The version of the flow for which to get information.
+        - name: includedData
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/IncludedData"
+          description: Controls the scope of data returned. Set to METADATA_ONLY to return only resource metadata. Set to ALL_DATA or omit this field to return the full response.
       responses:
         "200":
           description: Success
@@ -1651,6 +1663,12 @@ paths:
           schema:
             $ref: "#/components/schemas/Version"
           description: The version of the prompt about which you want to retrieve information. Omit this field to return information about the working draft of the prompt.
+        - name: includedData
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/IncludedData"
+          description: Controls the scope of data returned. Set to METADATA_ONLY to return only resource metadata. Set to ALL_DATA or omit this field to return the full response.
       responses:
         "200":
           description: Success
@@ -1694,6 +1712,77 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UpdatePromptResponse"
+  /resourcepolicy/{resource_arn}:
+    delete:
+      operationId: DeleteResourcePolicy
+      description: Removes the resource policy associated with a knowledge base. After deletion, other AWS accounts can no longer access the knowledge base using cross-account permissions.
+      parameters:
+        - name: resource_arn
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/ResourceArn"
+          description: The Amazon Resource Name (ARN) of the knowledge base to remove the resource policy from.
+        - name: expectedRevisionId
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/RevisionId"
+          description: The expected revision identifier of the resource policy. Use this to prevent conflicts when multiple users update the same policy concurrently.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResourcePolicyResponse"
+    get:
+      operationId: GetResourcePolicy
+      description: Retrieves the resource policy associated with a knowledge base.
+      parameters:
+        - name: resource_arn
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/ResourceArn"
+          description: The Amazon Resource Name (ARN) of the knowledge base to retrieve the resource policy for.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetResourcePolicyResponse"
+    put:
+      operationId: PutResourcePolicy
+      description: Associates a resource policy with a knowledge base. A resource policy allows other AWS accounts to access the knowledge base. For more information, see Cross-account access for knowledge bases.
+      parameters:
+        - name: resource_arn
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/ResourceArn"
+          description: The Amazon Resource Name (ARN) of the knowledge base to attach the resource policy to.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                policy:
+                  $ref: "#/components/schemas/ResourcePolicy"
+                expectedRevisionId:
+                  $ref: "#/components/schemas/RevisionId"
+              required:
+                - policy
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PutResourcePolicyResponse"
   /agents/{agent_id}/agentversions/{agent_version}/agentcollaborators/{collaborator_id}/:
     delete:
       operationId: DisassociateAgentCollaborator
@@ -3083,21 +3172,24 @@ components:
         type_:
           $ref: "#/components/schemas/DataSourceType"
           description: The type of data source.
+        managedKnowledgeBaseConnectorConfiguration:
+          $ref: "#/components/schemas/ManagedKnowledgeBaseConnectorConfiguration"
+          description: Contains the configuration for a data source that connects a managed knowledge base to a supported data source connector. Specify this object when the data source type is MANAGED_KNOWLEDGE_BASE_CONNECTOR.
         s3Configuration:
           $ref: "#/components/schemas/S3DataSourceConfiguration"
-          description: The configuration information to connect to Amazon S3 as your data source.
+          description: The configuration information to connect to Amazon S3 as your data source for self-managed knowledge bases. To configure this data source for managed knowledge bases, use managedKnowledgeBaseConnectorConfiguration.
         webConfiguration:
           $ref: "#/components/schemas/WebDataSourceConfiguration"
-          description: The configuration of web URLs to crawl for your data source. You should be authorized to crawl the URLs. Crawling web URLs as your data source is in preview release and is subject to change.
+          description: The configuration of web URLs to crawl for your data source. You should be authorized to crawl the URLs. To configure this data source for managed knowledge bases, use managedKnowledgeBaseConnectorConfiguration. Web crawler data source connector for self-managed knowledge bases is in preview release and is subject to change.
         confluenceConfiguration:
           $ref: "#/components/schemas/ConfluenceDataSourceConfiguration"
-          description: The configuration information to connect to Confluence as your data source. Confluence data source connector is in preview release and is subject to change.
+          description: The configuration information to connect to Confluence as your data source for self-managed knowledge bases. To configure this data source for managed knowledge bases, use managedKnowledgeBaseConnectorConfiguration. Confluence data source connector for self-managed knowledge bases is in preview release and is subject to change.
         salesforceConfiguration:
           $ref: "#/components/schemas/SalesforceDataSourceConfiguration"
-          description: The configuration information to connect to Salesforce as your data source. Salesforce data source connector is in preview release and is subject to change.
+          description: The configuration information to connect to Salesforce as your data source. Salesforce data source connector for self-managed knowledge bases is in preview release and is subject to change.
         sharePointConfiguration:
           $ref: "#/components/schemas/SharePointDataSourceConfiguration"
-          description: The configuration information to connect to SharePoint as your data source. SharePoint data source connector is in preview release and is subject to change.
+          description: The configuration information to connect to SharePoint as your data source for self-managed knowledge bases. To configure this data source for managed knowledge bases, use managedKnowledgeBaseConnectorConfiguration. SharePoint data source connector for self-managed knowledge bases is in preview release and is subject to change.
       required:
         - type_
     DataSourceType:
@@ -3110,8 +3202,83 @@ components:
         - SHAREPOINT
         - CUSTOM
         - REDSHIFT_METADATA
+        - MANAGED_KNOWLEDGE_BASE_CONNECTOR
+    ManagedKnowledgeBaseConnectorConfiguration:
+      description: Configuration for managed knowledge base connector data sources.
+      type: object
+      properties:
+        deletionProtectionConfiguration:
+          $ref: "#/components/schemas/DeletionProtectionConfiguration"
+          description: A safeguard against accidental bulk deletion of indexed content.
+        mediaExtractionConfiguration:
+          $ref: "#/components/schemas/MediaExtractionConfiguration"
+          description: Configuration for extracting media (images, audio, video) from data source files.
+        connectorParameters:
+          $ref: "#/components/schemas/Document"
+          description: Connector-specific parameters. For more information, see Connect a data source.
+    DeletionProtectionConfiguration:
+      description: Configuration for deletion protection.
+      type: object
+      properties:
+        deletionProtectionStatus:
+          $ref: "#/components/schemas/EnabledOrDisabledState"
+          description: Enable or disable deletion protection for the connector.
+        deletionProtectionThreshold:
+          $ref: "#/components/schemas/DeletionProtectionConfigurationDeletionProtectionThresholdInteger"
+          description: The threshold is the maximum percentage of documents that a sync job can delete from your index. If a sync would delete more than this percentage, the sync skips its delete phase, leaving your indexed documents in place. Not supported for the Custom connector.
+      required:
+        - deletionProtectionStatus
+    EnabledOrDisabledState:
+      type: string
+      enum:
+        - ENABLED
+        - DISABLED
+    DeletionProtectionConfigurationDeletionProtectionThresholdInteger:
+      type: integer
+      minimum: 0
+      maximum: 100
+    MediaExtractionConfiguration:
+      description: Configuration for media extraction settings.
+      type: object
+      properties:
+        imageExtractionConfiguration:
+          $ref: "#/components/schemas/ImageExtractionConfiguration"
+          description: Configuration for image extraction.
+        audioExtractionConfiguration:
+          $ref: "#/components/schemas/AudioExtractionConfiguration"
+          description: Configuration for audio extraction.
+        videoExtractionConfiguration:
+          $ref: "#/components/schemas/VideoExtractionConfiguration"
+          description: Configuration for video extraction.
+    ImageExtractionConfiguration:
+      description: Configuration for image extraction.
+      type: object
+      properties:
+        imageExtractionStatus:
+          $ref: "#/components/schemas/EnabledOrDisabledState"
+          description: Whether image extraction is enabled or disabled.
+      required:
+        - imageExtractionStatus
+    AudioExtractionConfiguration:
+      description: Configuration for audio extraction.
+      type: object
+      properties:
+        audioExtractionStatus:
+          $ref: "#/components/schemas/EnabledOrDisabledState"
+          description: Whether audio extraction is enabled or disabled.
+      required:
+        - audioExtractionStatus
+    VideoExtractionConfiguration:
+      description: Configuration for video extraction.
+      type: object
+      properties:
+        videoExtractionStatus:
+          $ref: "#/components/schemas/EnabledOrDisabledState"
+          description: Whether video extraction is enabled or disabled.
+      required:
+        - videoExtractionStatus
     S3DataSourceConfiguration:
-      description: The configuration information to connect to Amazon S3 as your data source.
+      description: The configuration information to connect to Amazon S3 as your data source for self-managed knowledge bases. To configure this data source for managed knowledge bases, use managedKnowledgeBaseConnectorConfiguration.
       type: object
       properties:
         bucketArn:
@@ -3246,7 +3413,7 @@ components:
       minLength: 61
       maxLength: 86
     ConfluenceDataSourceConfiguration:
-      description: The configuration information to connect to Confluence as your data source.
+      description: The configuration information to connect to Confluence as your data source for self-managed knowledge bases.
       type: object
       properties:
         sourceConfiguration:
@@ -3389,7 +3556,7 @@ components:
           $ref: "#/components/schemas/CrawlFilterConfiguration"
           description: The configuration of filtering the Salesforce content. For example, configuring regular expression patterns to include or exclude certain content.
     SharePointDataSourceConfiguration:
-      description: The configuration information to connect to SharePoint as your data source.
+      description: The configuration information to connect to SharePoint as your data source for self-managed knowledge bases.
       type: object
       properties:
         sourceConfiguration:
@@ -3463,7 +3630,7 @@ components:
         - RETAIN
         - DELETE
     ServerSideEncryptionConfiguration:
-      description: Contains the configuration for server-side encryption.
+      description: Contains the configuration for server-side encryption for your managed knowledge base.
       type: object
       properties:
         kmsKeyArn:
@@ -3526,6 +3693,7 @@ components:
     FixedSizeChunkingConfigurationMaxTokensInteger:
       type: integer
       minimum: 1
+      maximum: 8192
     FixedSizeChunkingConfigurationOverlapPercentageInteger:
       type: integer
       minimum: 1
@@ -3583,6 +3751,7 @@ components:
     SemanticChunkingConfigurationMaxTokensInteger:
       type: integer
       minimum: 1
+      maximum: 8192
     SemanticChunkingConfigurationBufferSizeInteger:
       type: integer
       minimum: 0
@@ -3672,7 +3841,7 @@ components:
       properties:
         parsingStrategy:
           $ref: "#/components/schemas/ParsingStrategy"
-          description: The parsing strategy for the data source.
+          description: The parsing strategy for the data source. Only SMART_PARSING can be selected for managed knowledge bases. For more information, see Customize ingestion for managed knowledge bases.
         bedrockFoundationModelConfiguration:
           $ref: "#/components/schemas/BedrockFoundationModelConfiguration"
           description: If you specify BEDROCK_FOUNDATION_MODEL as the parsing strategy for ingesting your data source, use this object to modify configurations for using a foundation model to parse documents.
@@ -3686,6 +3855,7 @@ components:
       enum:
         - BEDROCK_FOUNDATION_MODEL
         - BEDROCK_DATA_AUTOMATION
+        - SMART_PARSING
     BedrockFoundationModelConfiguration:
       description: Settings for a foundation model used to parse documents for a data source.
       type: object
@@ -3834,6 +4004,9 @@ components:
         - AVAILABLE
         - DELETING
         - DELETE_UNSUCCESSFUL
+        - CREATING
+        - UPDATING
+        - FAILED
     FlowName:
       type: string
       pattern: ([0-9a-zA-Z][_-]?){1,100}
@@ -4963,10 +5136,12 @@ components:
       properties:
         type_:
           $ref: "#/components/schemas/KnowledgeBaseType"
-          description: The type of data that the data source is converted into for the knowledge base.
+          description: The type of data that the data source is converted into for the knowledge base. Choose MANAGED to create a managed knowledge base.
         vectorKnowledgeBaseConfiguration:
           $ref: "#/components/schemas/VectorKnowledgeBaseConfiguration"
           description: Contains details about the model that's used to convert the data source into vector embeddings.
+        managedKnowledgeBaseConfiguration:
+          $ref: "#/components/schemas/ManagedKnowledgeBaseConfiguration"
         kendraKnowledgeBaseConfiguration:
           $ref: "#/components/schemas/KendraKnowledgeBaseConfiguration"
           description: Settings for an Amazon Kendra knowledge base.
@@ -4976,11 +5151,13 @@ components:
       required:
         - type_
     KnowledgeBaseType:
+      description: The type of a knowledge base.
       type: string
       enum:
         - VECTOR
         - KENDRA
         - SQL
+        - MANAGED
     VectorKnowledgeBaseConfiguration:
       description: Contains details about the model used to create vector embeddings for the knowledge base.
       type: object
@@ -5087,12 +5264,12 @@ components:
       minimum: 1
       maximum: 30
     SupplementalDataStorageConfiguration:
-      description: Specifies configurations for the storage location of the images extracted from multimodal documents in your data source. These images can be retrieved and returned to the end user.
+      description: Specifies configurations for the storage location of multimedia content (images, audio, and video) extracted from multimodal documents in your data source. This content can be retrieved and returned to the end user with timestamp references for audio and video segments.
       type: object
       properties:
         storageLocations:
           $ref: "#/components/schemas/SupplementalDataStorageLocations"
-          description: A list of objects specifying storage locations for images extracted from multimodal documents in your data source.
+          description: A list of objects specifying storage locations for multimedia content (images, audio, and video) extracted from multimodal documents in your data source.
       required:
         - storageLocations
     SupplementalDataStorageLocations:
@@ -5100,7 +5277,7 @@ components:
       items:
         $ref: "#/components/schemas/SupplementalDataStorageLocation"
     SupplementalDataStorageLocation:
-      description: Contains information about a storage location for images extracted from multimodal documents in your data source.
+      description: Contains information about a storage location for multimedia content (images, audio, and video) extracted from multimodal documents in your data source.
       type: object
       properties:
         type_:
@@ -5108,13 +5285,32 @@ components:
           description: Specifies the storage service used for this location.
         s3Location:
           $ref: "#/components/schemas/S3Location"
-          description: Contains information about the Amazon S3 location for the extracted images.
+          description: Contains information about the Amazon S3 location for the extracted multimedia content.
       required:
         - type_
     SupplementalDataStorageLocationType:
       type: string
       enum:
         - S3
+    ManagedKnowledgeBaseConfiguration:
+      description: Configurations for a managed knowledge base.
+      type: object
+      properties:
+        embeddingModelType:
+          $ref: "#/components/schemas/EmbeddingModelType"
+        embeddingModelArn:
+          $ref: "#/components/schemas/BedrockEmbeddingModelArn"
+          description: The ARN for the embeddings model.
+        embeddingModelConfiguration:
+          $ref: "#/components/schemas/EmbeddingModelConfiguration"
+        serverSideEncryptionConfiguration:
+          $ref: "#/components/schemas/ServerSideEncryptionConfiguration"
+    EmbeddingModelType:
+      description: Choose CUSTOM to provide your own Bedrock embedding model ARN. Choose MANAGED to use a service-managed embedding model. For more information, see Embedding model options.
+      type: string
+      enum:
+        - CUSTOM
+        - MANAGED
     KendraKnowledgeBaseConfiguration:
       description: Settings for an Amazon Kendra knowledge base.
       type: object
@@ -5443,6 +5639,7 @@ components:
       required:
         - type_
     KnowledgeBaseStorageType:
+      description: The storage type of a knowledge base.
       type: string
       enum:
         - OPENSEARCH_SERVERLESS
@@ -5911,6 +6108,7 @@ components:
         - UPDATING
         - FAILED
         - DELETE_UNSUCCESSFUL
+        - UPDATE_UNSUCCESSFUL
     PromptName:
       type: string
       pattern: ([0-9a-zA-Z][_-]?){1,100}
@@ -6303,6 +6501,26 @@ components:
           description: The version of the prompt that was deleted.
       required:
         - id
+    ResourceArn:
+      type: string
+      minLength: 20
+      maxLength: 1011
+      pattern: arn:aws(-[^:]+)?:bedrock:[a-z0-9-]{1,20}:[0-9]{12}:knowledge-base/[0-9a-zA-Z]+
+    RevisionId:
+      type: string
+      minLength: 1
+      maxLength: 255
+    DeleteResourcePolicyResponse:
+      type: object
+      properties:
+        resourceArn:
+          $ref: "#/components/schemas/ResourceArn"
+          description: The ARN of the knowledge base that the resource policy was removed from.
+        revisionId:
+          $ref: "#/components/schemas/RevisionId"
+          description: The revision identifier after the resource policy was deleted.
+      required:
+        - resourceArn
     DisassociateAgentCollaboratorResponse:
       type: object
     DisassociateAgentKnowledgeBaseResponse:
@@ -6434,6 +6652,11 @@ components:
           description: Contains details about the data source.
       required:
         - dataSource
+    IncludedData:
+      type: string
+      enum:
+        - ALL_DATA
+        - METADATA_ONLY
     GetFlowResponse:
       type: object
       properties:
@@ -7181,6 +7404,9 @@ components:
         numberOfDocumentsFailed:
           $ref: "#/components/schemas/PrimitiveLong"
           description: The number of source documents that failed to be ingested.
+        numberOfDocumentsSkipped:
+          $ref: "#/components/schemas/PrimitiveLong"
+          description: The number of source documents that were skipped during ingestion.
     PrimitiveLong:
       type: integer
       format: int64
@@ -7238,6 +7464,27 @@ components:
         - version
         - createdAt
         - updatedAt
+    GetResourcePolicyResponse:
+      type: object
+      properties:
+        resourceArn:
+          $ref: "#/components/schemas/ResourceArn"
+          description: The ARN of the knowledge base that the resource policy is associated with.
+        policy:
+          $ref: "#/components/schemas/ResourcePolicy"
+          description: The JSON-formatted resource policy associated with the knowledge base.
+        revisionId:
+          $ref: "#/components/schemas/RevisionId"
+          description: The revision identifier of the resource policy.
+      required:
+        - resourceArn
+        - policy
+        - revisionId
+    ResourcePolicy:
+      type: string
+      minLength: 1
+      maxLength: 20480
+      pattern: "[\\u0009\\u000A\\u000D\\u0020-\\u00FF]+"
     KnowledgeBaseDocuments:
       type: array
       items:
@@ -7267,6 +7514,9 @@ components:
         s3Location:
           $ref: "#/components/schemas/CustomS3Location"
           description: The Amazon S3 location of the file containing metadata to associate with the content to ingest.
+        accessControlList:
+          $ref: "#/components/schemas/DocumentAccessControlList"
+          description: Access control list for the document. Used when metadata type is IN_LINE_ATTRIBUTE.
       required:
         - type_
     MetadataSourceType:
@@ -7351,6 +7601,43 @@ components:
       minLength: 1
       maxLength: 1024
       pattern: s3://[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]/.{1,1024}
+    DocumentAccessControlList:
+      description: List of access control entries for a document.
+      type: array
+      items:
+        $ref: "#/components/schemas/DocumentAccessControlEntry"
+    DocumentAccessControlEntry:
+      description: An access control entry specifying a principal and their access level.
+      type: object
+      properties:
+        name:
+          $ref: "#/components/schemas/DocumentAccessControlEntryNameString"
+          description: The user identifier.
+        type_:
+          $ref: "#/components/schemas/AccessControlPrincipalType"
+          description: The type of principal.
+        access:
+          $ref: "#/components/schemas/AccessControlAccess"
+          description: Whether to allow or deny access.
+      required:
+        - name
+        - type_
+        - access
+    DocumentAccessControlEntryNameString:
+      type: string
+      minLength: 1
+      maxLength: 256
+    AccessControlPrincipalType:
+      description: The type of principal in an access control entry.
+      type: string
+      enum:
+        - USER
+    AccessControlAccess:
+      description: The access level for an access control entry.
+      type: string
+      enum:
+        - ALLOW
+        - DENY
     DocumentContent:
       description: Contains information about the content of a document. Choose a dataSourceType and include the field that corresponds to it.
       type: object
@@ -8178,6 +8465,18 @@ components:
       required:
         - id
         - status
+    PutResourcePolicyResponse:
+      type: object
+      properties:
+        resourceArn:
+          $ref: "#/components/schemas/ResourceArn"
+          description: The ARN of the knowledge base that the resource policy was attached to.
+        revisionId:
+          $ref: "#/components/schemas/RevisionId"
+          description: The revision identifier of the resource policy. Use this value in the expectedRevisionId field of a subsequent PutResourcePolicy or DeleteResourcePolicy request.
+      required:
+        - resourceArn
+        - revisionId
     StartIngestionJobResponse:
       type: object
       properties:
@@ -8875,6 +9174,8 @@ components:
           response:
             openAPIDocKey: "200"
             mediaType: application/json
+          request:
+            nativeCasing: pascal
         prepare_flow:
           operation:
             $ref: "#/paths/~1flows~1{flow_identifier}~1/post"
@@ -9036,6 +9337,8 @@ components:
           response:
             openAPIDocKey: "200"
             mediaType: application/json
+          request:
+            nativeCasing: pascal
       sqlVerbs:
         select:
           - $ref: "#/components/x-stackQL-resources/flow_versions/methods/get_flow_version"
@@ -9325,6 +9628,45 @@ components:
         update: []
         delete:
           - $ref: "#/components/x-stackQL-resources/knowledge_base_documents/methods/delete_knowledge_base_documents"
+    resource_policies:
+      id: aws.bedrock_agent.resource_policies
+      name: resource_policies
+      title: resource_policies
+      methods:
+        delete_resource_policy:
+          operation:
+            $ref: "#/paths/~1resourcepolicy~1{resource_arn}/delete"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+          request:
+            nativeCasing: pascal
+        get_resource_policy:
+          operation:
+            $ref: "#/paths/~1resourcepolicy~1{resource_arn}/get"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+        put_resource_policy:
+          operation:
+            $ref: "#/paths/~1resourcepolicy~1{resource_arn}/put"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/json
+          request:
+            nativeCasing: pascal
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+      sqlVerbs:
+        select:
+          - $ref: "#/components/x-stackQL-resources/resource_policies/methods/get_resource_policy"
+        insert: []
+        update: []
+        replace:
+          - $ref: "#/components/x-stackQL-resources/resource_policies/methods/put_resource_policy"
+        delete:
+          - $ref: "#/components/x-stackQL-resources/resource_policies/methods/delete_resource_policy"
     ingestion_jobs:
       id: aws.bedrock_agent.ingestion_jobs
       name: ingestion_jobs
