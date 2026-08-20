@@ -343,6 +343,8 @@ paths:
                   $ref: "#/components/schemas/InternetProtocol"
                 storeSnapshotOnLocalZone:
                   $ref: "#/components/schemas/Boolean"
+                storageConfiguration:
+                  $ref: "#/components/schemas/StorageConfiguration"
               required:
                 - stagingAreaSubnetId
                 - associateDefaultSecurityGroup
@@ -2643,6 +2645,8 @@ paths:
                   $ref: "#/components/schemas/InternetProtocol"
                 storeSnapshotOnLocalZone:
                   $ref: "#/components/schemas/Boolean"
+                storageConfiguration:
+                  $ref: "#/components/schemas/StorageConfiguration"
               required:
                 - sourceServerID
       responses:
@@ -2698,6 +2702,8 @@ paths:
                   $ref: "#/components/schemas/InternetProtocol"
                 storeSnapshotOnLocalZone:
                   $ref: "#/components/schemas/Boolean"
+                storageConfiguration:
+                  $ref: "#/components/schemas/StorageConfiguration"
               required:
                 - replicationConfigurationTemplateID
       responses:
@@ -2725,6 +2731,12 @@ paths:
                   $ref: "#/components/schemas/SourceServerID"
                 connectorAction:
                   $ref: "#/components/schemas/SourceServerConnectorAction"
+                userProvidedID:
+                  $ref: "#/components/schemas/UserProvidedId"
+                fqdnForActionFramework:
+                  $ref: "#/components/schemas/FqdnForActionFramework"
+                platform:
+                  $ref: "#/components/schemas/OperatingSystemString"
               required:
                 - sourceServerID
       responses:
@@ -3101,6 +3113,12 @@ components:
         firstBoot:
           $ref: "#/components/schemas/FirstBoot"
           description: Launched instance first boot.
+        lastKnownChecks:
+          $ref: "#/components/schemas/LastKnownChecksList"
+          description: Launched instance last known checks.
+        lastKnownFsxChecksStatus:
+          $ref: "#/components/schemas/LastKnownCheckStatus"
+          description: Launched instance last known FSx checks status.
     EC2InstanceID:
       type: string
       minLength: 0
@@ -3118,6 +3136,48 @@ components:
         - SUCCEEDED
         - UNKNOWN
         - STOPPED
+    LastKnownChecksList:
+      description: List of last known checks.
+      type: array
+      items:
+        $ref: "#/components/schemas/LastKnownCheck"
+    LastKnownCheck:
+      description: Last known check performed on a launched instance.
+      type: object
+      properties:
+        type_:
+          $ref: "#/components/schemas/LastKnownCheckType"
+          description: Last known check type.
+        name:
+          $ref: "#/components/schemas/BoundedString"
+          description: Last known check name.
+        status:
+          $ref: "#/components/schemas/LastKnownCheckStatus"
+          description: Last known check status.
+        error:
+          $ref: "#/components/schemas/BoundedString"
+          description: Last known check error.
+        checkedAt:
+          $ref: "#/components/schemas/Timestamp"
+          description: Last known check timestamp.
+    LastKnownCheckType:
+      type: string
+      enum:
+        - EC2
+        - FSx
+    BoundedString:
+      type: string
+      minLength: 0
+      maxLength: 256
+    LastKnownCheckStatus:
+      type: string
+      enum:
+        - PASSED
+        - FAILED
+        - PENDING
+    Timestamp:
+      type: string
+      format: date-time
     DataReplicationInfo:
       description: Request data replication info.
       type: object
@@ -3173,10 +3233,6 @@ components:
         backloggedStorageBytes:
           $ref: "#/components/schemas/PositiveInteger"
           description: Request to query data replication backlog size in bytes.
-    BoundedString:
-      type: string
-      minLength: 0
-      maxLength: 256
     DataReplicationState:
       type: string
       enum:
@@ -3233,6 +3289,7 @@ components:
         - PAIR_REPLICATION_SERVER_WITH_AGENT
         - CONNECT_AGENT_TO_REPLICATION_SERVER
         - START_DATA_TRANSFER
+        - SETUP_FSX_PROXY
     DataReplicationInitiationStepStatus:
       type: string
       enum:
@@ -3270,6 +3327,8 @@ components:
         - FAILED_TO_START_DATA_TRANSFER
         - UNSUPPORTED_VM_CONFIGURATION
         - LAST_SNAPSHOT_JOB_FAILED
+        - FAILED_TO_SETUP_FSX_PROXY
+        - FAILED_TO_CREATE_FSX_SNAPSHOT
     LargeBoundedString:
       type: string
       minLength: 0
@@ -3525,7 +3584,7 @@ components:
     SecretArn:
       type: string
       minLength: 20
-      maxLength: 100
+      maxLength: 256
       pattern: arn:[\w-]+:secretsmanager:([a-z]{2}-(gov-)?[a-z]+-\d{1})?:(\d{12})?:secret:(.+)
     ConnectorArn:
       type: string
@@ -3841,6 +3900,7 @@ components:
         - CISCO_ACI
         - LOGICAL_MODEL
         - MODELIZE_IT
+        - AWS_DISCOVERY_COLLECTOR
     SourceS3Configuration:
       description: S3 configuration for source network data.
       type: object
@@ -3956,9 +4016,6 @@ components:
       minLength: 21
       maxLength: 21
       pattern: nmd-[0-9a-zA-Z]{17}
-    Timestamp:
-      type: string
-      format: date-time
     SubnetID:
       type: string
       minLength: 0
@@ -3999,6 +4056,41 @@ components:
       enum:
         - IPV4
         - IPV6
+    StorageConfiguration:
+      description: Storage configuration for replication.
+      type: object
+      properties:
+        storageType:
+          $ref: "#/components/schemas/StorageType"
+          description: Storage configuration storage type.
+        fsxOntapConfiguration:
+          $ref: "#/components/schemas/FsxOntapConfiguration"
+          description: Storage configuration FSx ONTAP configuration.
+      required:
+        - storageType
+    StorageType:
+      type: string
+      enum:
+        - EBS
+        - FSX_ONTAP
+    FsxOntapConfiguration:
+      description: FSx for ONTAP storage configuration.
+      type: object
+      properties:
+        storageVirtualMachineId:
+          $ref: "#/components/schemas/StorageVirtualMachineId"
+          description: FSx ONTAP configuration storage virtual machine ID.
+        credentialsSecretArn:
+          $ref: "#/components/schemas/SecretArn"
+          description: FSx ONTAP configuration credentials secret ARN.
+      required:
+        - storageVirtualMachineId
+        - credentialsSecretArn
+    StorageVirtualMachineId:
+      type: string
+      minLength: 21
+      maxLength: 21
+      pattern: (svm-[0-9a-f]{17,})
     ReplicationConfigurationTemplate:
       type: object
       properties:
@@ -4058,6 +4150,9 @@ components:
         storeSnapshotOnLocalZone:
           $ref: "#/components/schemas/Boolean"
           description: Replication Configuration template store snapshot on local zone.
+        storageConfiguration:
+          $ref: "#/components/schemas/StorageConfiguration"
+          description: Replication Configuration template storage configuration.
       required:
         - replicationConfigurationTemplateID
     ReplicationConfigurationTemplateID:
@@ -4616,6 +4711,9 @@ components:
         storeSnapshotOnLocalZone:
           $ref: "#/components/schemas/Boolean"
           description: Replication Configuration store snapshot on local zone.
+        storageConfiguration:
+          $ref: "#/components/schemas/StorageConfiguration"
+          description: Replication Configuration storage configuration.
     ReplicationConfigurationReplicatedDisks:
       type: array
       items:
@@ -4650,6 +4748,7 @@ components:
         - STANDARD
         - GP3
         - IO2
+        - FSX_ONTAP
     InitializeServiceResponse:
       type: object
     ListApplicationsRequestFilters:
@@ -6427,6 +6526,11 @@ components:
         inspectionCidr:
           $ref: "#/components/schemas/Cidr"
           description: The updated CIDR block for inspection traffic.
+    FqdnForActionFramework:
+      type: string
+      minLength: 1
+      maxLength: 256
+      pattern: "[a-zA-Z0-9_](([a-zA-Z0-9_\\-]{0,61}[a-zA-Z0-9_])?\\.)+[a-zA-Z]{2,63}$|^((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}$|^(?:[A-Fa-f0-9]{1,4}:){7}[A-Fa-f0-9]{1,4}"
   x-stackQL-resources:
     applications:
       id: aws.mgn.applications

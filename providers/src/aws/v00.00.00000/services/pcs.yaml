@@ -124,6 +124,9 @@ paths:
                 slurmConfiguration:
                   $ref: "#/components/schemas/ComputeNodeGroupSlurmConfigurationRequest"
                   description: Additional options related to the Slurm scheduler.
+                nodeLifecycleActions:
+                  $ref: "#/components/schemas/NodeLifecycleActionsRequest"
+                  description: The lifecycle actions to run on compute nodes in the compute node group. Use lifecycle actions to run custom scripts at defined stages of a compute node's lifecycle, such as when a compute node finishes bootstrapping or becomes ready to accept jobs.
                 clientToken:
                   $ref: "#/components/schemas/SBClientToken"
                   description: A unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Idempotency ensures that an API request completes only once. With an idempotent request, if the original request completes successfully, the subsequent retries with the same client token return the result from the original successful request and they have no additional effect. If you don't specify a client token, the CLI and SDK automatically generate 1 for you.
@@ -676,7 +679,7 @@ paths:
   /UpdateCluster:
     post:
       operationId: UpdateCluster
-      description: Updates a cluster configuration. You can modify Slurm scheduler settings, accounting configuration, and security groups for an existing cluster. You can only update clusters that are in ACTIVE, UPDATE_FAILED, or SUSPENDED state. All associated resources (queues and compute node groups) must be in ACTIVE state before you can update the cluster.
+      description: Updates a cluster configuration. You can update the scheduler version, modify scheduler settings, and update accounting configuration for an existing cluster. For more information about updating the scheduler version, see Updating the scheduler version on a cluster in the PCS User Guide. You can only update clusters that are in ACTIVE, UPDATE_FAILED, or SUSPENDED state. All associated resources (queues and compute node groups) must be in ACTIVE state before you can update the cluster.
       parameters:
         - name: X-Amz-Target
           in: header
@@ -703,6 +706,9 @@ paths:
                 slurmConfiguration:
                   $ref: "#/components/schemas/UpdateClusterSlurmConfigurationRequest"
                   description: Additional options related to the Slurm scheduler.
+                scheduler:
+                  $ref: "#/components/schemas/UpdateSchedulerRequest"
+                  description: The scheduler configuration to update for the cluster. Use this to update the scheduler version. For more information, see Updating the scheduler version on a cluster in the PCS User Guide.
               required:
                 - clusterIdentifier
       responses:
@@ -761,6 +767,9 @@ paths:
                 slurmConfiguration:
                   $ref: "#/components/schemas/UpdateComputeNodeGroupSlurmConfigurationRequest"
                   description: Additional options related to the Slurm scheduler.
+                nodeLifecycleActions:
+                  $ref: "#/components/schemas/UpdateNodeLifecycleActionsRequest"
+                  description: The lifecycle actions to run on compute nodes in the compute node group. Use lifecycle actions to run custom scripts at defined stages of a compute node's lifecycle, such as when a compute node finishes bootstrapping or becomes ready to accept jobs.
                 clientToken:
                   $ref: "#/components/schemas/SBClientToken"
                   description: A unique, case-sensitive identifier that you provide to ensure the idempotency of the request. Idempotency ensures that an API request completes only once. With an idempotent request, if the original request completes successfully, the subsequent retries with the same client token return the result from the original successful request and they have no additional effect. If you don't specify a client token, the CLI and SDK automatically generate 1 for you.
@@ -1125,7 +1134,7 @@ components:
           description: The software PCS uses to manage cluster scaling and job scheduling.
         version:
           $ref: "#/components/schemas/String"
-          description: "The version of the specified scheduling software that PCS uses to manage cluster scaling and job scheduling. For more information, see Slurm versions in PCS in the PCS User Guide. Valid Values: 23.11 | 24.05 | 24.11 | 25.05 | 25.11"
+          description: "The version of the specified scheduling software that PCS uses to manage cluster scaling and job scheduling. You can update this version using the UpdateCluster API action. For more information, see Updating the scheduler version on a cluster and Slurm versions in PCS in the PCS User Guide. Valid Values: 23.11 | 24.05 | 24.11 | 25.05 | 25.11"
       required:
         - type_
         - version
@@ -1364,9 +1373,125 @@ components:
       description: Additional options related to the Slurm scheduler.
       type: object
       properties:
+        scaleDownIdleTimeInSeconds:
+          $ref: "#/components/schemas/ComputeNodeGroupSlurmConfigurationRequestScaleDownIdleTimeInSecondsInteger"
+          description: The time (in seconds) before an idle node is scaled down. If not specified, the cluster-level setting applies. This overrides the cluster-level scaleDownIdleTimeInSeconds setting. A value of -1 removes the override and applies the cluster-level setting to this compute node group. Requires Slurm version 25.11 or later.
         slurmCustomSettings:
           $ref: "#/components/schemas/SlurmCustomSettings"
           description: Additional Slurm-specific configuration that directly maps to Slurm settings.
+    ComputeNodeGroupSlurmConfigurationRequestScaleDownIdleTimeInSecondsInteger:
+      type: integer
+      minimum: -1
+      maximum: 10000000
+    NodeLifecycleActionsRequest:
+      description: The lifecycle actions to configure on a compute node group when you create it. Lifecycle actions define scripts that PCS runs on compute nodes at specific stages of their lifecycle.
+      type: object
+      properties:
+        stages:
+          $ref: "#/components/schemas/NodeLifecycleStages"
+          description: The lifecycle stages where you configure scripts to run.
+        scriptCachingPolicy:
+          $ref: "#/components/schemas/ScriptCachingPolicy"
+          description: "The caching policy for node lifecycle scripts. The default value is CACHE_ONCE. Valid values: CACHE_ONCE – Downloads each script once and reuses it on subsequent boots. REFRESH_ON_REBOOT – Downloads each script on every boot."
+      required:
+        - stages
+    NodeLifecycleStages:
+      description: The stages of a compute node's lifecycle where you can configure scripts to run.
+      type: object
+      properties:
+        nodeBootstrapped:
+          $ref: "#/components/schemas/NodeLifecycleScriptList"
+          description: The scripts to run after PCS finishes setting up the compute node and before the Slurm daemon (slurmd) starts. Use this stage for tasks that must complete before the node accepts jobs, such as mounting shared storage, configuring networking, or installing software packages.
+        nodeReady:
+          $ref: "#/components/schemas/NodeLifecycleScriptList"
+          description: The scripts to run after the Slurm daemon (slurmd) starts and the compute node registers with the Slurm controller. Use this stage for tasks that require Slurm to be running, such as running Slurm commands.
+    NodeLifecycleScriptList:
+      type: array
+      items:
+        $ref: "#/components/schemas/NodeLifecycleScript"
+    NodeLifecycleScript:
+      description: A script to run during a compute node lifecycle stage.
+      type: object
+      properties:
+        name:
+          $ref: "#/components/schemas/NodeLifecycleScriptNameString"
+          description: A unique name for the script. The name can be up to 64 characters long. Valid characters are letters, numbers, spaces, underscores (_), and hyphens (-). The first character must be a letter or a number.
+        scriptSource:
+          $ref: "#/components/schemas/ScriptSource"
+          description: The source location and integrity information for the script.
+        arguments:
+          $ref: "#/components/schemas/NodeLifecycleScriptArguments"
+          description: The command-line arguments to pass to the script. You can specify up to 20 arguments, and each argument can be up to 256 characters long.
+        onError:
+          $ref: "#/components/schemas/OnError"
+          description: "The behavior when the script fails. The default value is TERMINATE. Valid values: TERMINATE – Terminates the compute node. STOP_SEQUENCE – Stops running subsequent scripts in the sequence but doesn't terminate the compute node. CONTINUE – Ignores the error and continues running the next script."
+        executionPolicy:
+          $ref: "#/components/schemas/ExecutionPolicy"
+          description: "The policy that determines when the script runs. The default value is FIRST_BOOT_ONLY. Valid values: FIRST_BOOT_ONLY – Runs the script only the first time the compute node boots. EVERY_BOOT – Runs the script every time the compute node boots, including reboots."
+      required:
+        - name
+        - scriptSource
+    NodeLifecycleScriptNameString:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: "[A-Za-z0-9][A-Za-z0-9 _-]*"
+    ScriptSource:
+      description: The source location and integrity information for a node lifecycle script.
+      type: object
+      properties:
+        scriptLocation:
+          $ref: "#/components/schemas/ScriptSourceScriptLocationString"
+          description: The location of the script. Specify either an Amazon S3 URI in the format s3://bucket-name/key or an HTTPS URL.
+        s3VersionId:
+          $ref: "#/components/schemas/ScriptSourceS3VersionIdString"
+          description: The Amazon S3 version ID of the script. Use this value to pin the script to a specific version in a versioned Amazon S3 bucket. This value is only valid when scriptLocation is an Amazon S3 URI.
+        checksum:
+          $ref: "#/components/schemas/ScriptSourceChecksumString"
+          description: The SHA-256 checksum of the script content, as a 64-character hexadecimal string. This value is optional. When specified, PCS uses this value to verify the integrity of the downloaded script.
+      required:
+        - scriptLocation
+    ScriptSourceScriptLocationString:
+      type: string
+      minLength: 1
+      maxLength: 1024
+      pattern: (s3://[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]/.+|https://([a-zA-Z0-9](?:[a-zA-Z0-9_-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}(?::[0-9]{1,5})?(?:[/?#][^\s]*)?)
+    ScriptSourceS3VersionIdString:
+      type: string
+      minLength: 0
+      maxLength: 1024
+    ScriptSourceChecksumString:
+      type: string
+      minLength: 64
+      maxLength: 64
+      pattern: "[a-fA-F0-9]{64}"
+    NodeLifecycleScriptArguments:
+      type: array
+      items:
+        $ref: "#/components/schemas/NodeLifecycleScriptArgument"
+    NodeLifecycleScriptArgument:
+      type: string
+      minLength: 0
+      maxLength: 256
+    OnError:
+      description: "The behavior when a node lifecycle script fails. Valid values: TERMINATE – Terminates the compute node. STOP_SEQUENCE – Stops running subsequent scripts in the sequence but doesn't terminate the compute node. CONTINUE – Ignores the error and continues running the next script."
+      type: string
+      enum:
+        - TERMINATE
+        - STOP_SEQUENCE
+        - CONTINUE
+    ExecutionPolicy:
+      description: "The policy that determines when a node lifecycle script runs. Valid values: FIRST_BOOT_ONLY – Runs the script only the first time the compute node boots. EVERY_BOOT – Runs the script every time the compute node boots, including reboots."
+      type: string
+      enum:
+        - FIRST_BOOT_ONLY
+        - EVERY_BOOT
+    ScriptCachingPolicy:
+      description: "The caching policy for a node lifecycle script. Valid values: CACHE_ONCE – Downloads the script once and reuses it on subsequent boots. REFRESH_ON_REBOOT – Downloads the script on every boot."
+      type: string
+      enum:
+        - CACHE_ONCE
+        - REFRESH_ON_REBOOT
     CreateComputeNodeGroupResponse:
       type: object
       properties:
@@ -1420,6 +1545,9 @@ components:
           $ref: "#/components/schemas/SpotOptions"
         slurmConfiguration:
           $ref: "#/components/schemas/ComputeNodeGroupSlurmConfiguration"
+        nodeLifecycleActions:
+          $ref: "#/components/schemas/NodeLifecycleActions"
+          description: The lifecycle actions to run on compute nodes in the compute node group. Use lifecycle actions to run custom scripts at defined stages of a compute node's lifecycle, such as when a compute node finishes bootstrapping or becomes ready to accept jobs.
         errorInfo:
           $ref: "#/components/schemas/ErrorInfoList"
           description: The list of errors that occurred during compute node group provisioning.
@@ -1473,9 +1601,28 @@ components:
       description: Additional options related to the Slurm scheduler.
       type: object
       properties:
+        scaleDownIdleTimeInSeconds:
+          $ref: "#/components/schemas/ComputeNodeGroupSlurmConfigurationScaleDownIdleTimeInSecondsInteger"
+          description: The time (in seconds) before an idle node is scaled down. If not specified, the cluster-level setting applies. This overrides the cluster-level scaleDownIdleTimeInSeconds setting. A value of -1 removes the override and applies the cluster-level setting to this compute node group. Requires Slurm version 25.11 or later.
         slurmCustomSettings:
           $ref: "#/components/schemas/SlurmCustomSettings"
           description: Additional Slurm-specific configuration that directly maps to Slurm settings.
+    ComputeNodeGroupSlurmConfigurationScaleDownIdleTimeInSecondsInteger:
+      type: integer
+      minimum: -1
+      maximum: 10000000
+    NodeLifecycleActions:
+      description: The lifecycle actions configured on a compute node group. Lifecycle actions define scripts that PCS runs on compute nodes at specific stages of their lifecycle.
+      type: object
+      properties:
+        stages:
+          $ref: "#/components/schemas/NodeLifecycleStages"
+          description: The lifecycle stages where you configure scripts to run.
+        scriptCachingPolicy:
+          $ref: "#/components/schemas/ScriptCachingPolicy"
+          description: "The caching policy for node lifecycle scripts. The default value is CACHE_ONCE. Valid values: CACHE_ONCE – Downloads each script once and reuses it on subsequent boots. REFRESH_ON_REBOOT – Downloads each script on every boot."
+      required:
+        - stages
     QueueName:
       type: string
       minLength: 3
@@ -1768,6 +1915,18 @@ components:
         endpoints:
           $ref: "#/components/schemas/Endpoints"
           description: The list of endpoints available for interaction with the scheduler.
+        clusterName:
+          $ref: "#/components/schemas/String"
+          description: The name of the cluster that the compute node registered into.
+        computeNodeGroupId:
+          $ref: "#/components/schemas/String"
+          description: The ID of the compute node group that the compute node registered into.
+        computeNodeGroupName:
+          $ref: "#/components/schemas/String"
+          description: The name of the compute node group that the compute node registered into.
+        nodeLifecycleActions:
+          $ref: "#/components/schemas/NodeLifecycleActions"
+          description: The node lifecycle actions configured for the node group, including scripts to run when a compute node finishes bootstrapping or becomes ready to accept jobs.
       required:
         - nodeID
         - sharedSecret
@@ -1833,6 +1992,15 @@ components:
         mode:
           $ref: "#/components/schemas/SlurmRestMode"
           description: The default value for mode is NONE. A value of STANDARD means the Slurm REST API is enabled.
+    UpdateSchedulerRequest:
+      description: The scheduler configuration for updating a cluster. Use this to specify the scheduler version to update to.
+      type: object
+      properties:
+        version:
+          $ref: "#/components/schemas/String"
+          description: "The scheduler version to update the cluster to. You can only update to a newer version. For more information about supported versions and update paths, see Updating the scheduler version on a cluster in the PCS User Guide. Valid Values: 24.05 | 24.11 | 25.05 | 25.11"
+      required:
+        - version
     UpdateClusterResponse:
       type: object
       properties:
@@ -1842,9 +2010,28 @@ components:
       description: Additional options related to the Slurm scheduler.
       type: object
       properties:
+        scaleDownIdleTimeInSeconds:
+          $ref: "#/components/schemas/UpdateComputeNodeGroupSlurmConfigurationRequestScaleDownIdleTimeInSecondsInteger"
+          description: The time (in seconds) before an idle node is scaled down. If not specified, the cluster-level setting applies. This overrides the cluster-level scaleDownIdleTimeInSeconds setting. A value of -1 removes the override and applies the cluster-level setting to this compute node group. Requires Slurm version 25.11 or later.
         slurmCustomSettings:
           $ref: "#/components/schemas/SlurmCustomSettings"
           description: Additional Slurm-specific configuration that directly maps to Slurm settings.
+    UpdateComputeNodeGroupSlurmConfigurationRequestScaleDownIdleTimeInSecondsInteger:
+      type: integer
+      minimum: -1
+      maximum: 10000000
+    UpdateNodeLifecycleActionsRequest:
+      description: The lifecycle actions to configure on a compute node group when you update it. Lifecycle actions define scripts that PCS runs on compute nodes at specific stages of their lifecycle.
+      type: object
+      properties:
+        stages:
+          $ref: "#/components/schemas/NodeLifecycleStages"
+          description: The lifecycle stages where you configure scripts to run.
+        scriptCachingPolicy:
+          $ref: "#/components/schemas/ScriptCachingPolicy"
+          description: "The caching policy for node lifecycle scripts. The default value is CACHE_ONCE. Valid values: CACHE_ONCE – Downloads each script once and reuses it on subsequent boots. REFRESH_ON_REBOOT – Downloads each script on every boot."
+      required:
+        - stages
     UpdateComputeNodeGroupResponse:
       type: object
       properties:

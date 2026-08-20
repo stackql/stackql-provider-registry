@@ -9,12 +9,12 @@ info:
   x-apiVersion: "2006-03-01"
   x-endpointPrefix: s3
 servers:
-  - url: https://s3.amazonaws.com
+  - url: https://s3.{region}.amazonaws.com
     variables:
       region:
         default: us-east-1
         description: AWS region
-    description: Global endpoint for s3
+    description: Regional endpoint for s3
 paths:
   /{bucket}/{key}:
     delete:
@@ -362,6 +362,12 @@ paths:
           schema:
             $ref: "#/components/schemas/TaggingDirective"
           description: "Specifies whether the object tag-set is copied from the source object or replaced with the tag-set that's provided in the request. The default value is COPY. Directory buckets - For directory buckets in a CopyObject operation, only the empty tag-set is supported. Any requests that attempt to write non-empty tags into directory buckets will receive a 501 Not Implemented status code. When the destination bucket is a directory bucket, you will receive a 501 Not Implemented response in any of the following situations: When you attempt to COPY the tag-set from an S3 source object that has non-empty tags. When you attempt to REPLACE the tag-set of a source object and set a non-empty value to x-amz-tagging. When you don't set the x-amz-tagging-directive header and the source object has non-empty tags. This is because the default value of x-amz-tagging-directive is COPY. Because only the empty tag-set is supported for directory buckets in a CopyObject operation, the following situations are allowed: When you attempt to COPY the tag-set from a directory bucket source object that has no tags to a general purpose bucket. It copies an empty tag-set to the destination object. When you attempt to REPLACE the tag-set of a directory bucket source object and set the x-amz-tagging value of the directory bucket destination object to empty. When you attempt to REPLACE the tag-set of a general purpose bucket source object that has non-empty tags and set the x-amz-tagging value of the directory bucket destination object to empty. When you attempt to REPLACE the tag-set of a directory bucket source object and don't set the x-amz-tagging value of the directory bucket destination object. This is because the default value of x-amz-tagging is the empty value."
+        - name: x-amz-object-annotation-directive
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/AnnotationDirective"
+          description: "Specifies whether you want to copy annotations from the source object or exclude them. If this header isn't specified, COPY is the default behavior. Valid Values: COPY | EXCLUDE You can specify this directive as either an HTTP header (x-amz-object-annotation-directive) or as a query string parameter. Use the query string form when generating presigned URLs that need to control annotation copy behavior. When set to COPY, you must have s3:GetObjectAnnotation permission on the source object and s3:PutObjectAnnotation permission on the destination. Each annotation copied is billed as a separate PUT request. If annotations on the source are modified during the copy, Amazon S3 returns a retryable error. For directory buckets, annotations are not supported. Use EXCLUDE to copy objects to directory buckets without errors. If you specify COPY for a directory bucket, the request returns HTTP 501 (Not Implemented). When you copy objects using multipart upload (for example, when the Amazon Web Services CLI or Amazon Web Services SDKs use Transfer Manager for objects larger than approximately 8 MB), annotations are not copied by default. To include annotations, specify --copy-props default in the Amazon Web Services CLI or the equivalent SDK configuration. With this opt-in, the SDK reads source annotations, completes the multipart upload, and then writes each annotation to the destination. Between the upload completion and the last annotation write, the destination object exists without all its annotations."
         - name: x-amz-server-side-encryption
           in: header
           required: false
@@ -615,9 +621,13 @@ paths:
         "200":
           description: Success
           content:
-            application/json:
+            application/octet-stream:
               schema:
-                $ref: "#/components/schemas/GetObjectOutputDisplay"
+                type: object
+                properties:
+                  contents:
+                    type: string
+                    description: The raw object content. Text objects only - binary content is not supported and may be mangled in transit.
     head:
       operationId: HeadObject
       description: "The HEAD operation retrieves metadata from an object without returning the object itself. This operation is useful if you're interested only in an object's metadata. A HEAD request has the same options as a GET operation on an object. The response is identical to the GET response except that there is no response body. Because of this, if the HEAD request generates an error, it returns a generic code, such as 400 Bad Request, 403 Forbidden, 404 Not Found, 405 Method Not Allowed, 412 Precondition Failed, or 304 Not Modified. It's not possible to retrieve the exact exception of these error codes. Request headers are limited to 8 KB in size. For more information, see Common Request Headers. Permissions General purpose bucket permissions - To use HEAD, you must have the s3:GetObject permission. You need the relevant read object (or version) permission for this operation. For more information, see Actions, resources, and condition keys for Amazon S3 in the Amazon S3 User Guide. For more information about the permissions to S3 API operations by S3 resource types, see Required permissions for Amazon S3 API operations in the Amazon S3 User Guide. If the object you request doesn't exist, the error that Amazon S3 returns depends on whether you also have the s3:ListBucket permission. If you have the s3:ListBucket permission on the bucket, Amazon S3 returns an HTTP status code 404 Not Found error. If you don’t have the s3:ListBucket permission, Amazon S3 returns an HTTP status code 403 Forbidden error. Directory bucket permissions - To grant access to this API operation on a directory bucket, we recommend that you use the CreateSession API operation for session-based authorization. Specifically, you grant the s3express:CreateSession permission to the directory bucket in a bucket policy or an IAM identity-based policy. Then, you make the CreateSession API call on the bucket to obtain a session token. With the session token in your request header, you can make API requests to this operation. After the session token expires, you make another CreateSession API call to generate a new session token for use. Amazon Web Services CLI or SDKs create session and refresh the session token automatically to avoid service interruptions when a session expires. For more information about authorization, see CreateSession . If you enable x-amz-checksum-mode in the request and the object is encrypted with Amazon Web Services Key Management Service (Amazon Web Services KMS), you must also have the kms:GenerateDataKey and kms:Decrypt permissions in IAM identity-based policies and KMS key policies for the KMS key to retrieve the checksum of the object. Encryption Encryption request headers, like x-amz-server-side-encryption, should not be sent for HEAD requests if your object uses server-side encryption with Key Management Service (KMS) keys (SSE-KMS), dual-layer server-side encryption with Amazon Web Services KMS keys (DSSE-KMS), or server-side encryption with Amazon S3 managed encryption keys (SSE-S3). The x-amz-server-side-encryption header is used when you PUT an object to S3 and want to specify the encryption method. If you include this header in a HEAD request for an object that uses these types of keys, you’ll get an HTTP 400 Bad Request error. It's because the encryption method can't be changed when you retrieve the object. If you encrypt an object by using server-side encryption with customer-provided encryption keys (SSE-C) when you store the object in Amazon S3, then when you retrieve the metadata from the object, you must use the following headers to provide the encryption key for the server to be able to retrieve the object's metadata. The headers are: x-amz-server-side-encryption-customer-algorithm x-amz-server-side-encryption-customer-key x-amz-server-side-encryption-customer-key-MD5 For more information about SSE-C, see Server-Side Encryption (Using Customer-Provided Encryption Keys) in the Amazon S3 User Guide. Directory bucket - For directory buckets, there are only two supported options for server-side encryption: SSE-S3 and SSE-KMS. SSE-C isn't supported. For more information, see Protecting data with server-side encryption in the Amazon S3 User Guide. Versioning If the current version of the object is a delete marker, Amazon S3 behaves as if the object was deleted and includes x-amz-delete-marker: true in the response. If the specified version is a delete marker, the response returns a 405 Method Not Allowed error and the Last-Modified: timestamp response header. Directory buckets - Delete marker is not supported for directory buckets. Directory buckets - S3 Versioning isn't enabled and supported for directory buckets. For this API operation, only the null value of the version ID is supported by directory buckets. You can only specify null to the versionId query parameter in the request. HTTP Host header syntax Directory buckets - The HTTP Host header syntax is Bucket-name.s3express-zone-id.region-code.amazonaws.com. For directory buckets, you must make requests for this API operation to the Zonal endpoint. These endpoints support virtual-hosted-style requests in the format https://amzn-s3-demo-bucket.s3express-zone-id.region-code.amazonaws.com/key-name . Path-style requests are not supported. For more information about endpoints in Availability Zones, see Regional and Zonal endpoints for directory buckets in Availability Zones in the Amazon S3 User Guide. For more information about endpoints in Local Zones, see Concepts for directory buckets in Local Zones in the Amazon S3 User Guide. The following actions are related to HeadObject: GetObject GetObjectAttributes You must URL encode any signed header values that contain spaces. For example, if your header value is my file.txt, containing two spaces after my, you must URL encode this value to my%20%20file.txt."
@@ -943,7 +953,7 @@ paths:
   /{bucket}?metadataConfiguration:
     post:
       operationId: CreateBucketMetadataConfiguration
-      description: "Creates an S3 Metadata V2 metadata configuration for a general purpose bucket. For more information, see Accelerating data discovery with S3 Metadata in the Amazon S3 User Guide. Permissions To use this operation, you must have the following permissions. For more information, see Setting up permissions for configuring metadata tables in the Amazon S3 User Guide. If you want to encrypt your metadata tables with server-side encryption with Key Management Service (KMS) keys (SSE-KMS), you need additional permissions in your KMS key policy. For more information, see Setting up permissions for configuring metadata tables in the Amazon S3 User Guide. If you also want to integrate your table bucket with Amazon Web Services analytics services so that you can query your metadata table, you need additional permissions. For more information, see Integrating Amazon S3 Tables with Amazon Web Services analytics services in the Amazon S3 User Guide. To query your metadata tables, you need additional permissions. For more information, see Permissions for querying metadata tables in the Amazon S3 User Guide. s3:CreateBucketMetadataTableConfiguration The IAM policy action name is the same for the V1 and V2 API operations. s3tables:CreateTableBucket s3tables:CreateNamespace s3tables:GetTable s3tables:CreateTable s3tables:PutTablePolicy s3tables:PutTableEncryption kms:DescribeKey The following operations are related to CreateBucketMetadataConfiguration: DeleteBucketMetadataConfiguration GetBucketMetadataConfiguration UpdateBucketMetadataInventoryTableConfiguration UpdateBucketMetadataJournalTableConfiguration You must URL encode any signed header values that contain spaces. For example, if your header value is my file.txt, containing two spaces after my, you must URL encode this value to my%20%20file.txt."
+      description: "Creates an S3 Metadata V2 metadata configuration for a general purpose bucket. For more information, see Accelerating data discovery with S3 Metadata in the Amazon S3 User Guide. Permissions To use this operation, you must have the following permissions. For more information, see Setting up permissions for configuring metadata tables in the Amazon S3 User Guide. If you want to encrypt your metadata tables with server-side encryption with Key Management Service (KMS) keys (SSE-KMS), you need additional permissions in your KMS key policy. For more information, see Setting up permissions for configuring metadata tables in the Amazon S3 User Guide. If you also want to integrate your table bucket with Amazon Web Services analytics services so that you can query your metadata table, you need additional permissions. For more information, see Integrating Amazon S3 Tables with Amazon Web Services analytics services in the Amazon S3 User Guide. To query your metadata tables, you need additional permissions. For more information, see Permissions for querying metadata tables in the Amazon S3 User Guide. s3:CreateBucketMetadataTableConfiguration The IAM policy action name is the same for the V1 and V2 API operations. s3tables:CreateTableBucket s3tables:CreateNamespace s3tables:GetTable s3tables:CreateTable s3tables:PutTablePolicy s3tables:PutTableBucketPolicy s3tables:PutTableEncryption kms:DescribeKey iam:PassRole - required if you include an AnnotationTableConfiguration with an IAM role. The following operations are related to CreateBucketMetadataConfiguration: DeleteBucketMetadataConfiguration GetBucketMetadataConfiguration UpdateBucketMetadataInventoryTableConfiguration UpdateBucketMetadataJournalTableConfiguration UpdateBucketMetadataAnnotationTableConfiguration If you include an AnnotationTableConfiguration with an IAM role, the role must have a trust policy that allows the Amazon S3 metadata service to assume it, and a permissions policy that grants the actions needed to read annotations from your bucket. The following examples show a trust policy and a permissions policy that you can adapt for your bucket and account. You must URL encode any signed header values that contain spaces. For example, if your header value is my file.txt, containing two spaces after my, you must URL encode this value to my%20%20file.txt."
       parameters:
         - name: bucket
           in: path
@@ -2479,6 +2489,246 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DeleteObjectOutputDisplay"
+  /{bucket}/{key}?annotation:
+    delete:
+      operationId: DeleteObjectAnnotation
+      description: "Deletes a specific annotation from an Amazon S3 object. Use the x-amz-object-if-match header to perform a conditional delete that only succeeds if the object's ETag matches the provided value, preventing race conditions during concurrent updates. Deleting an annotation is permanent. Annotations are not independently versioned, so there is no delete marker or way to recover a deleted annotation. To use this operation, you must have the s3:DeleteObjectAnnotation permission. If the object is protected by Object Lock in governance mode, you must also include the x-amz-bypass-governance-retention header. Annotations are not supported by the following features: S3 Inventory Reports, API Gateway, S3 Storage Lens, Amazon S3 File Gateway, Amazon FSx, S3 on Outposts, and S3 Express One Zone (directory buckets). The following operations are related to DeleteObjectAnnotation: PutObjectAnnotation GetObjectAnnotation ListObjectAnnotations"
+      parameters:
+        - name: bucket
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/BucketName"
+          description: The name of the bucket that contains the object.
+        - name: key
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/ObjectKey"
+          description: The object key.
+        - name: annotationName
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/AnnotationName"
+          description: "The name of the annotation to delete. Annotation names are UTF-8 encoded and cannot start with aws or s3 (case-insensitive). Length Constraints: Minimum length of 1. Maximum length of 512 bytes."
+        - name: versionId
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ObjectVersionId"
+          description: The version ID of the object.
+        - name: x-amz-request-payer
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/RequestPayer"
+        - name: x-amz-expected-bucket-owner
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/AccountId"
+          description: The account ID of the expected bucket owner.
+        - name: x-amz-object-if-match
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/ObjectIfMatch"
+          description: If specified, the operation only succeeds if the object's ETag matches the provided value.
+      responses:
+        "204":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteObjectAnnotationOutputDisplay"
+    get:
+      operationId: GetObjectAnnotation
+      description: "Retrieves an annotation from an Amazon S3 object. To use this operation, you must have the s3:GetObjectAnnotation permission. If checksum mode is enabled via the x-amz-checksum-mode header, Amazon S3 returns the stored checksum in the response headers for client-side validation. Annotations are not supported by the following features: S3 Inventory Reports, API Gateway, S3 Storage Lens, Amazon S3 File Gateway, Amazon FSx, S3 on Outposts, and S3 Express One Zone (directory buckets). The following operations are related to GetObjectAnnotation: PutObjectAnnotation ListObjectAnnotations DeleteObjectAnnotation"
+      parameters:
+        - name: bucket
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/BucketName"
+          description: The name of the bucket that contains the object.
+        - name: key
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/ObjectKey"
+          description: The object key.
+        - name: annotationName
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/AnnotationName"
+          description: "The name of the annotation to retrieve. Length Constraints: Minimum length of 1. Maximum length of 512 bytes."
+        - name: versionId
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ObjectVersionId"
+          description: The version ID of the object.
+        - name: x-amz-request-payer
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/RequestPayer"
+        - name: x-amz-expected-bucket-owner
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/AccountId"
+          description: The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with an HTTP 403 (Access Denied) error.
+        - name: x-amz-checksum-mode
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/ChecksumMode"
+          description: Set to ENABLED to validate the checksum of the annotation payload on retrieval.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetObjectAnnotationOutputDisplay"
+    put:
+      operationId: PutObjectAnnotation
+      description: "Attaches an annotation to an Amazon S3 object. An annotation is a named payload of 1 byte to 1 MiB that you can associate with a specific object or object version. Each object can have up to 1,000 annotations. For annotation naming rules and restrictions, see Annotation naming guidelines in the Amazon S3 User Guide. Annotations inherit the encryption of their parent object. For objects without server-side encryption, annotations are encrypted with SSE-S3 (the default for new objects). Objects encrypted with SSE-C cannot have annotations. To use this operation, you must have the s3:PutObjectAnnotation permission. If the bucket has Requester Pays enabled, you must include the x-amz-request-payer header. Annotations are not supported by the following features: S3 Inventory Reports, API Gateway, S3 Storage Lens, Amazon S3 File Gateway, Amazon FSx, S3 on Outposts, and S3 Express One Zone (directory buckets). The following operations are related to PutObjectAnnotation: GetObjectAnnotation ListObjectAnnotations DeleteObjectAnnotation"
+      parameters:
+        - name: bucket
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/BucketName"
+          description: The name of the bucket that contains the object.
+        - name: key
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/ObjectKey"
+          description: The object key.
+        - name: versionId
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ObjectVersionId"
+          description: The version ID of the object to attach the annotation to.
+        - name: annotationName
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/AnnotationName"
+          description: "The name of the annotation. Length Constraints: Minimum length of 1. Maximum length of 512 bytes."
+        - name: x-amz-object-if-match
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/ObjectIfMatch"
+          description: If specified, the operation only succeeds if the object's ETag matches the provided value.
+        - name: x-amz-sdk-checksum-algorithm
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/ChecksumAlgorithm"
+          description: "The checksum algorithm to use. Supported values: CRC32, CRC32C, CRC64NVME, SHA1, SHA256, SHA512, MD5, XXHASH64, XXHASH3, XXHASH128."
+        - name: x-amz-checksum-crc32
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/ChecksumCRC32"
+          description: Base64-encoded CRC32 checksum of the annotation payload.
+        - name: x-amz-checksum-crc32c
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/ChecksumCRC32C"
+          description: Base64-encoded CRC32C checksum of the annotation payload.
+        - name: x-amz-checksum-crc64nvme
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/ChecksumCRC64NVME"
+          description: Base64-encoded CRC64NVME checksum of the annotation payload.
+        - name: x-amz-checksum-sha1
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/ChecksumSHA1"
+          description: Base64-encoded SHA1 checksum of the annotation payload.
+        - name: x-amz-checksum-sha256
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/ChecksumSHA256"
+          description: Base64-encoded SHA256 checksum of the annotation payload.
+        - name: x-amz-checksum-sha512
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/ChecksumSHA512"
+          description: Base64-encoded SHA512 checksum of the annotation payload.
+        - name: x-amz-checksum-md5
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/ChecksumMD5"
+          description: Base64-encoded MD5 checksum of the annotation payload.
+        - name: x-amz-checksum-xxhash64
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/ChecksumXXHASH64"
+          description: Base64-encoded XXHASH64 checksum of the annotation payload.
+        - name: x-amz-checksum-xxhash3
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/ChecksumXXHASH3"
+          description: Base64-encoded XXHASH3 checksum of the annotation payload.
+        - name: x-amz-checksum-xxhash128
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/ChecksumXXHASH128"
+          description: Base64-encoded XXHASH128 checksum of the annotation payload.
+        - name: Content-MD5
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/ContentMD5"
+          description: Base64-encoded MD5 digest of the message.
+        - name: x-amz-request-payer
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/RequestPayer"
+        - name: x-amz-expected-bucket-owner
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/AccountId"
+          description: The account ID of the expected bucket owner. If the bucket is owned by a different account, the request fails with an HTTP 403 (Access Denied) error.
+      requestBody:
+        required: true
+        content:
+          application/xml:
+            schema:
+              type: object
+              properties:
+                AnnotationPayload:
+                  $ref: "#/components/schemas/AnnotationPayload"
+              required:
+                - AnnotationPayload
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PutObjectAnnotationOutputDisplay"
   /{bucket}/{key}?tagging:
     delete:
       operationId: DeleteObjectTagging
@@ -4142,6 +4392,65 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ListMultipartUploadsOutputDisplay"
+  /{bucket}/{key}?annotation&x-id=ListObjectAnnotations:
+    get:
+      operationId: ListObjectAnnotations
+      description: "Lists the annotations attached to an Amazon S3 object. Results are paginated, with a maximum of 1,000 annotations per object. Use the AnnotationPrefix parameter to filter the results by name prefix. To use this operation, you must have the s3:ListObjectAnnotations permission. Annotations are not supported by the following features: S3 Inventory Reports, API Gateway, S3 Storage Lens, Amazon S3 File Gateway, Amazon FSx, S3 on Outposts, and S3 Express One Zone (directory buckets). The following operations are related to ListObjectAnnotations: PutObjectAnnotation GetObjectAnnotation DeleteObjectAnnotation"
+      parameters:
+        - name: bucket
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/BucketName"
+          description: The name of the bucket that contains the object.
+        - name: key
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/ObjectKey"
+          description: The object key.
+        - name: versionId
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ObjectVersionId"
+          description: The version ID of the object.
+        - name: max-annotation-results
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/MaxAnnotationResults"
+          description: The maximum number of annotations to return in the response. Maximum is 1,000.
+        - name: annotation-prefix
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/AnnotationPrefix"
+          description: Filter results to annotations whose name begins with the specified prefix.
+        - name: continuation-token
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/Token"
+          description: Continuation token returned by a previous request to retrieve the next page.
+        - name: x-amz-request-payer
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/RequestPayer"
+        - name: x-amz-expected-bucket-owner
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/AccountId"
+          description: The account ID of the expected bucket owner.
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListObjectAnnotationsOutputDisplay"
   /{bucket}?versions:
     get:
       operationId: ListObjectVersions
@@ -4718,14 +5027,18 @@ paths:
             $ref: "#/components/schemas/AccountId"
           description: The account ID of the expected bucket owner. If the account ID that you provide does not match the actual owner of the bucket, the request fails with the HTTP status code 403 Forbidden (access denied).
       requestBody:
-        required: false
+        required: true
         content:
-          application/xml:
+          application/octet-stream:
             schema:
               type: object
+              required:
+                - contents
               properties:
-                Body:
-                  $ref: "#/components/schemas/Body"
+                contents:
+                  type: string
+                  x-stackQL-stringOnly: true
+                  description: The raw object content to write. Text objects only - binary content is not supported and may be mangled in transit.
       responses:
         "200":
           description: Success
@@ -4945,6 +5258,49 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SelectObjectContentOutputDisplay"
+  /{bucket}?metadataAnnotationTable:
+    put:
+      operationId: UpdateBucketMetadataAnnotationTableConfiguration
+      description: "Updates the annotation table configuration for an Amazon S3 bucket's metadata configuration. Use this operation to enable or disable the annotation table, or to update its associated IAM role. An annotation table is a queryable Iceberg table that contains records of all annotations attached to objects in the bucket. To use this operation, the bucket must have an existing Amazon S3 Metadata configuration. To use this operation, you must have the s3:UpdateBucketMetadataAnnotationTableConfiguration permission. If you are specifying or changing the IAM role, you must also have iam:PassRole permission for the role. The IAM role must have a trust policy that allows the Amazon S3 metadata service to assume it, and a permissions policy that grants the actions needed to read annotations from your bucket. The following examples show a trust policy and a permissions policy that you can adapt for your bucket and account. The following operations are related to UpdateBucketMetadataAnnotationTableConfiguration: CreateBucketMetadataConfiguration GetBucketMetadataConfiguration"
+      parameters:
+        - name: bucket
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/BucketName"
+          description: The name of the bucket whose annotation table configuration to update.
+        - name: Content-MD5
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/ContentMD5"
+          description: Base64-encoded MD5 digest of the message body.
+        - name: x-amz-sdk-checksum-algorithm
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/ChecksumAlgorithm"
+          description: Checksum algorithm for the request payload.
+        - name: x-amz-expected-bucket-owner
+          in: header
+          required: false
+          schema:
+            $ref: "#/components/schemas/AccountId"
+          description: The account ID of the expected bucket owner.
+      requestBody:
+        required: true
+        content:
+          application/xml:
+            schema:
+              type: object
+              properties:
+                AnnotationTableConfiguration:
+                  $ref: "#/components/schemas/AnnotationTableConfigurationUpdates"
+              required:
+                - AnnotationTableConfiguration
+      responses:
+        "200":
+          description: Success
   /{bucket}?metadataInventoryTable:
     put:
       operationId: UpdateBucketMetadataInventoryTableConfiguration
@@ -5034,7 +5390,7 @@ paths:
   /{bucket}/{key}?encryption:
     put:
       operationId: UpdateObjectEncryption
-      description: "This operation is not supported for directory buckets or Amazon S3 on Outposts buckets. Updates the server-side encryption type of an existing encrypted object in a general purpose bucket. You can use the UpdateObjectEncryption operation to change encrypted objects from server-side encryption with Amazon S3 managed keys (SSE-S3) to server-side encryption with Key Management Service (KMS) keys (SSE-KMS), or to apply S3 Bucket Keys. You can also use the UpdateObjectEncryption operation to change the customer-managed KMS key used to encrypt your data so that you can comply with custom key-rotation standards. Using the UpdateObjectEncryption operation, you can atomically update the server-side encryption type of an existing object in a general purpose bucket without any data movement. The UpdateObjectEncryption operation uses envelope encryption to re-encrypt the data key used to encrypt and decrypt your object with your newly specified server-side encryption type. In other words, when you use the UpdateObjectEncryption operation, your data isn't copied, archived objects in the S3 Glacier Flexible Retrieval and S3 Glacier Deep Archive storage classes aren't restored, and objects in the S3 Intelligent-Tiering storage class aren't moved between tiers. Additionally, the UpdateObjectEncryption operation preserves all object metadata properties, including the storage class, creation date, last modified date, ETag, and checksum properties. For more information, see Updating server-side encryption for existing objects in the Amazon S3 User Guide. By default, all UpdateObjectEncryption requests that specify a customer-managed KMS key are restricted to KMS keys that are owned by the bucket owner's Amazon Web Services account. If you're using Organizations, you can request the ability to use KMS keys owned by other member accounts within your organization by contacting Amazon Web Services Support. Source objects that are unencrypted, or encrypted with either dual-layer server-side encryption with KMS keys (DSSE-KMS) or server-side encryption with customer-provided keys (SSE-C) aren't supported by this operation. Additionally, you cannot specify SSE-S3 encryption as the requested new encryption type UpdateObjectEncryption request. Permissions To use the UpdateObjectEncryption operation, you must have the following permissions: s3:PutObject s3:UpdateObjectEncryption kms:Encrypt kms:Decrypt kms:GenerateDataKey kms:ReEncrypt* If you're using Organizations, to use this operation with customer-managed KMS keys from other Amazon Web Services accounts within your organization, you must have the organizations:DescribeAccount permission. Errors You might receive an InvalidRequest error for several reasons. Depending on the reason for the error, you might receive one of the following messages: The UpdateObjectEncryption operation doesn't supported unencrypted source objects. Only source objects encrypted with SSE-S3 or SSE-KMS are supported. The UpdateObjectEncryption operation doesn't support source objects with the encryption type DSSE-KMS or SSE-C. Only source objects encrypted with SSE-S3 or SSE-KMS are supported. The UpdateObjectEncryption operation doesn't support updating the encryption type to DSSE-KMS or SSE-C. Modify the request to specify SSE-KMS for the updated encryption type, and then try again. Requests that modify an object encryption configuration require Amazon Web Services Signature Version 4. Modify the request to use Amazon Web Services Signature Version 4, and then try again. Requests that modify an object encryption configuration require a valid new encryption type. Valid values are SSEKMS. Modify the request to specify SSE-KMS for the updated encryption type, and then try again. Requests that modify an object's encryption type to SSE-KMS require an Amazon Web Services KMS key Amazon Resource Name (ARN). Modify the request to specify a KMS key ARN, and then try again. Requests that modify an object's encryption type to SSE-KMS require a valid Amazon Web Services KMS key Amazon Resource Name (ARN). Confirm that you have a correctly formatted KMS key ARN in your request, and then try again. The BucketKeyEnabled value isn't valid. Valid values are true or false. Modify the request to specify a valid value, and then try again. You might receive an AccessDenied error for several reasons. Depending on the reason for the error, you might receive one of the following messages: The Amazon Web Services KMS key in the request must be owned by the same account as the bucket. Modify the request to specify a KMS key from the same account, and then try again. The bucket owner's account was approved to make UpdateObjectEncryption requests that use any Amazon Web Services KMS key in their organization, but the bucket owner's account isn't part of an organization in Organizations. Make sure that the bucket owner's account and the specified KMS key belong to the same organization, and then try again. The specified Amazon Web Services KMS key must be from the same organization in Organizations as the bucket. Specify a KMS key that belongs to the same organization as the bucket, and then try again. The encryption type for the specified object can’t be updated because that object is protected by S3 Object Lock. If the object has a governance-mode retention period or a legal hold, you must first remove the Object Lock status on the object before you issue your UpdateObjectEncryption request. You can't use the UpdateObjectEncryption operation with objects that have an Object Lock compliance mode retention period applied to them."
+      description: "This operation is not supported for directory buckets or Amazon S3 on Outposts buckets. Updates the server-side encryption type of an existing encrypted object in a general purpose bucket. You can use the UpdateObjectEncryption operation to change encrypted objects from server-side encryption with Amazon S3 managed keys (SSE-S3) to server-side encryption with Key Management Service (KMS) keys (SSE-KMS), or to apply S3 Bucket Keys. You can also use the UpdateObjectEncryption operation to change the customer-managed KMS key used to encrypt your data so that you can comply with custom key-rotation standards. Using the UpdateObjectEncryption operation, you can atomically update the server-side encryption type of an existing object in a general purpose bucket without any data movement. The UpdateObjectEncryption operation uses envelope encryption to re-encrypt the data key used to encrypt and decrypt your object with your newly specified server-side encryption type. In other words, when you use the UpdateObjectEncryption operation, your data isn't copied, archived objects in the S3 Glacier Flexible Retrieval and S3 Glacier Deep Archive storage classes aren't restored, and objects in the S3 Intelligent-Tiering storage class aren't moved between tiers. Additionally, the UpdateObjectEncryption operation preserves all object metadata properties, including the storage class, creation date, last modified date, ETag, and checksum properties. For more information, see Updating server-side encryption for existing objects in the Amazon S3 User Guide. By default, all UpdateObjectEncryption requests that specify a customer-managed KMS key are restricted to KMS keys that are owned by the bucket owner's Amazon Web Services account. If you're using Organizations, you can request the ability to use KMS keys owned by other member accounts within your organization by contacting Amazon Web Services Support. Source objects that are unencrypted, or encrypted with either dual-layer server-side encryption with KMS keys (DSSE-KMS) or server-side encryption with customer-provided keys (SSE-C) aren't supported by this operation. Additionally, you cannot specify SSE-S3 encryption as the requested new encryption type UpdateObjectEncryption request. Permissions To use the UpdateObjectEncryption operation, you must have the following permissions: s3:UpdateObjectEncryption kms:Encrypt kms:Decrypt kms:GenerateDataKey kms:ReEncrypt* If you're using Organizations, to use this operation with customer-managed KMS keys from other Amazon Web Services accounts within your organization, you must have the organizations:DescribeAccount permission. Errors You might receive an InvalidRequest error for several reasons. Depending on the reason for the error, you might receive one of the following messages: The UpdateObjectEncryption operation doesn't supported unencrypted source objects. Only source objects encrypted with SSE-S3 or SSE-KMS are supported. The UpdateObjectEncryption operation doesn't support source objects with the encryption type DSSE-KMS or SSE-C. Only source objects encrypted with SSE-S3 or SSE-KMS are supported. The UpdateObjectEncryption operation doesn't support updating the encryption type to DSSE-KMS or SSE-C. Modify the request to specify SSE-KMS for the updated encryption type, and then try again. Requests that modify an object encryption configuration require Amazon Web Services Signature Version 4. Modify the request to use Amazon Web Services Signature Version 4, and then try again. Requests that modify an object encryption configuration require a valid new encryption type. Valid values are SSEKMS. Modify the request to specify SSE-KMS for the updated encryption type, and then try again. Requests that modify an object's encryption type to SSE-KMS require an Amazon Web Services KMS key Amazon Resource Name (ARN). Modify the request to specify a KMS key ARN, and then try again. Requests that modify an object's encryption type to SSE-KMS require a valid Amazon Web Services KMS key Amazon Resource Name (ARN). Confirm that you have a correctly formatted KMS key ARN in your request, and then try again. The BucketKeyEnabled value isn't valid. Valid values are true or false. Modify the request to specify a valid value, and then try again. You might receive an AccessDenied error for several reasons. Depending on the reason for the error, you might receive one of the following messages: The Amazon Web Services KMS key in the request must be owned by the same account as the bucket. Modify the request to specify a KMS key from the same account, and then try again. The bucket owner's account was approved to make UpdateObjectEncryption requests that use any Amazon Web Services KMS key in their organization, but the bucket owner's account isn't part of an organization in Organizations. Make sure that the bucket owner's account and the specified KMS key belong to the same organization, and then try again. The specified Amazon Web Services KMS key must be from the same organization in Organizations as the bucket. Specify a KMS key that belongs to the same organization as the bucket, and then try again. The encryption type for the specified object can’t be updated because that object is protected by S3 Object Lock. If the object has a governance-mode retention period or a legal hold, you must first remove the Object Lock status on the object before you issue your UpdateObjectEncryption request. You can't use the UpdateObjectEncryption operation with objects that have an Object Lock compliance mode retention period applied to them."
       parameters:
         - name: bucket
           in: path
@@ -5875,6 +6231,7 @@ components:
       format: date-time
     Expires:
       type: string
+      format: date-time
     GrantFullControl:
       type: string
     GrantRead:
@@ -5896,11 +6253,17 @@ components:
       enum:
         - COPY
         - REPLACE
+    AnnotationDirective:
+      type: string
+      enum:
+        - COPY
+        - EXCLUDE
     ServerSideEncryption:
       type: string
       enum:
         - AES256
         - aws:fsx
+        - aws:backup
         - aws:kms
         - aws:kms:dsse
     StorageClass:
@@ -5919,6 +6282,8 @@ components:
         - EXPRESS_ONEZONE
         - FSX_OPENZFS
         - FSX_ONTAP
+        - AWS_BACKUP_WARM
+        - AWS_BACKUP_LOW_COST_WARM
     WebsiteRedirectLocation:
       type: string
     SSEKMSKeyId:
@@ -6109,6 +6474,9 @@ components:
         InventoryTableConfiguration:
           $ref: "#/components/schemas/InventoryTableConfiguration"
           description: The inventory table configuration for a metadata configuration.
+        AnnotationTableConfiguration:
+          $ref: "#/components/schemas/AnnotationTableConfiguration"
+          description: Optional annotation table configuration to include with the metadata configuration.
       required:
         - JournalTableConfiguration
     JournalTableConfiguration:
@@ -6178,6 +6546,27 @@ components:
       enum:
         - ENABLED
         - DISABLED
+    AnnotationTableConfiguration:
+      description: Specifies the configuration for the annotation table associated with a bucket's Amazon S3 Metadata configuration. The annotation table is an Iceberg table that records annotation events for objects in the bucket.
+      type: object
+      properties:
+        ConfigurationState:
+          $ref: "#/components/schemas/AnnotationConfigurationState"
+          description: The state of the annotation table. Valid values are ENABLED and DISABLED.
+        EncryptionConfiguration:
+          $ref: "#/components/schemas/MetadataTableEncryptionConfiguration"
+        Role:
+          $ref: "#/components/schemas/Role"
+          description: The ARN of the IAM role used to manage the annotation table.
+      required:
+        - ConfigurationState
+    AnnotationConfigurationState:
+      type: string
+      enum:
+        - ENABLED
+        - DISABLED
+    Role:
+      type: string
     MetadataTableConfiguration:
       description: The V1 S3 Metadata configuration for a general purpose bucket. If you created your S3 Metadata configuration before July 15, 2025, we recommend that you delete and re-create your configuration by using CreateBucketMetadataConfiguration so that you can expire journal table records and create a live inventory table.
       type: object
@@ -6250,6 +6639,17 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DeleteObjectOutputDisplay"
+    AnnotationName:
+      type: string
+    ObjectIfMatch:
+      type: string
+    DeleteObjectAnnotationOutputDisplay:
+      type: object
+      properties:
+        line_items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeleteObjectAnnotationOutputDisplay"
     DeleteObjectTaggingOutputDisplay:
       type: object
       properties:
@@ -6676,13 +7076,6 @@ components:
       type: string
       enum:
         - ENABLED
-    GetObjectOutputDisplay:
-      type: object
-      properties:
-        line_items:
-          type: array
-          items:
-            $ref: "#/components/schemas/GetObjectOutputDisplay"
     GetObjectAclOutputDisplay:
       type: object
       properties:
@@ -6690,6 +7083,13 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/GetObjectAclOutputDisplay"
+    GetObjectAnnotationOutputDisplay:
+      type: object
+      properties:
+        line_items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GetObjectAnnotationOutputDisplay"
     MaxParts:
       type: integer
     PartNumberMarker:
@@ -6930,6 +7330,40 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MultipartUploadDisplay"
+    MaxAnnotationResults:
+      type: integer
+      minimum: 1
+      maximum: 1000
+    AnnotationPrefix:
+      type: string
+    AnnotationEntryDisplay:
+      type: object
+      properties:
+        AnnotationName:
+          type: string
+          description: The name of the annotation.
+        LastModified:
+          type: string
+          description: The date and time the annotation was last modified.
+        ETag:
+          type: string
+          description: The entity tag of the annotation.
+        ChecksumAlgorithm:
+          type: string
+          description: The checksum algorithm used for the annotation.
+        Size:
+          type: integer
+          description: The size of the annotation payload, in bytes.
+        ReplicationStatus:
+          type: string
+          description: The replication status of the annotation.
+    ListObjectAnnotationsOutputDisplay:
+      type: object
+      properties:
+        line_items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnnotationEntryDisplay"
     MaxKeys:
       type: integer
     VersionIdMarker:
@@ -7687,7 +8121,7 @@ components:
           description: Indicates when objects are transitioned to the specified storage class. The date value must be in ISO 8601 format. The time is always midnight UTC.
         Days:
           $ref: "#/components/schemas/Days"
-          description: Indicates the number of days after creation when objects are transitioned to the specified storage class. If the specified storage class is INTELLIGENT_TIERING, GLACIER_IR, GLACIER, or DEEP_ARCHIVE, valid values are 0 or positive integers. If the specified storage class is STANDARD_IA or ONEZONE_IA, valid values are positive integers greater than 30. Be aware that some storage classes have a minimum storage duration and that you're charged for transitioning objects before their minimum storage duration. For more information, see Constraints and considerations for transitions in the Amazon S3 User Guide.
+          description: Indicates the number of days after creation when objects are transitioned to the specified storage class. The value can be 0 or any positive integer. Be aware that some storage classes have a minimum storage duration and that you're charged for transitioning objects before their minimum storage duration. For more information, see Constraints and considerations for transitions in the Amazon S3 User Guide.
         StorageClass:
           $ref: "#/components/schemas/TransitionStorageClass"
           description: The storage class to which you want the object to transition.
@@ -8020,6 +8454,9 @@ components:
         - s3:ObjectTagging:*
         - s3:ObjectTagging:Put
         - s3:ObjectTagging:Delete
+        - s3:ObjectAnnotation:*
+        - s3:ObjectAnnotation:Put
+        - s3:ObjectAnnotation:Delete
     TopicArn:
       type: string
     QueueConfigurationDeprecated:
@@ -8219,8 +8656,6 @@ components:
       required:
         - Role
         - Rules
-    Role:
-      type: string
     ReplicationRules:
       type: array
       items:
@@ -8603,9 +9038,6 @@ components:
     WriteOffsetBytes:
       type: integer
       format: int64
-    Body:
-      type: string
-      format: byte
     PutObjectOutputDisplay:
       type: object
       properties:
@@ -8620,6 +9052,16 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PutObjectAclOutputDisplay"
+    AnnotationPayload:
+      type: string
+      format: byte
+    PutObjectAnnotationOutputDisplay:
+      type: object
+      properties:
+        line_items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PutObjectAnnotationOutputDisplay"
     ObjectLockLegalHold:
       description: A legal hold configuration for an object.
       type: object
@@ -9071,6 +9513,20 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SelectObjectContentEventStreamDisplay"
+    AnnotationTableConfigurationUpdates:
+      description: Specifies updates to apply to the annotation table configuration. Used as the request body for UpdateBucketMetadataAnnotationTableConfiguration.
+      type: object
+      properties:
+        ConfigurationState:
+          $ref: "#/components/schemas/AnnotationConfigurationState"
+          description: The new configuration state to apply.
+        EncryptionConfiguration:
+          $ref: "#/components/schemas/MetadataTableEncryptionConfiguration"
+        Role:
+          $ref: "#/components/schemas/Role"
+          description: The new IAM role ARN to apply.
+      required:
+        - ConfigurationState
     InventoryTableConfigurationUpdates:
       description: The specified updates to the S3 Metadata inventory table configuration.
       type: object
@@ -9131,6 +9587,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/UpdateObjectEncryptionResponseDisplay"
+    Body:
+      type: string
+      format: byte
     UploadPartOutputDisplay:
       type: object
       properties:
@@ -9200,13 +9659,11 @@ components:
             $ref: "#/paths/~1{bucket}~1{key}/get"
           response:
             openAPIDocKey: "200"
-            mediaType: application/xml
+            mediaType: application/octet-stream
             overrideMediaType: application/json
-            schema_override:
-              $ref: "#/components/schemas/GetObjectOutputDisplay"
             transform:
-              type: schema_driven_xml_v0.1.0
-            objectKey: $.line_items
+              type: golang_template_text_v0.3.0
+              body: '[{"contents": {{ toJson . }}}]'
           request:
             nativeCasing: pascal
         list_objects:
@@ -9269,7 +9726,10 @@ components:
             objectKey: $.line_items
           request:
             nativeCasing: pascal
-            mediaType: application/xml
+            mediaType: application/octet-stream
+            transform:
+              type: golang_template_json_v0.1.0
+              body: "{{ .contents }}"
           config:
             requestBodyTranslate:
               algorithm: naive
@@ -9295,7 +9755,8 @@ components:
         select:
           - $ref: "#/components/x-stackQL-resources/objects/methods/get_object"
           - $ref: "#/components/x-stackQL-resources/objects/methods/list_objects"
-        insert: []
+        insert:
+          - $ref: "#/components/x-stackQL-resources/objects/methods/put_object"
         update:
           - $ref: "#/components/x-stackQL-resources/objects/methods/update_object_encryption"
         replace:
@@ -9345,6 +9806,17 @@ components:
             objectKey: $.line_items
           request:
             nativeCasing: pascal
+        update_bucket_metadata_annotation_table_configuration:
+          operation:
+            $ref: "#/paths/~1{bucket}?metadataAnnotationTable/put"
+          response:
+            openAPIDocKey: "200"
+          request:
+            nativeCasing: pascal
+            mediaType: application/xml
+          config:
+            requestBodyTranslate:
+              algorithm: naive
         update_bucket_metadata_inventory_table_configuration:
           operation:
             $ref: "#/paths/~1{bucket}?metadataInventoryTable/put"
@@ -9373,6 +9845,7 @@ components:
         insert:
           - $ref: "#/components/x-stackQL-resources/buckets/methods/create_bucket"
         update:
+          - $ref: "#/components/x-stackQL-resources/buckets/methods/update_bucket_metadata_annotation_table_configuration"
           - $ref: "#/components/x-stackQL-resources/buckets/methods/update_bucket_metadata_inventory_table_configuration"
           - $ref: "#/components/x-stackQL-resources/buckets/methods/update_bucket_metadata_journal_table_configuration"
         delete:
@@ -10100,6 +10573,81 @@ components:
           - $ref: "#/components/x-stackQL-resources/bucket_websites/methods/put_bucket_website"
         delete:
           - $ref: "#/components/x-stackQL-resources/bucket_websites/methods/delete_bucket_website"
+    object_annotations:
+      id: aws.s3.object_annotations
+      name: object_annotations
+      title: object_annotations
+      methods:
+        delete_object_annotation:
+          operation:
+            $ref: "#/paths/~1{bucket}~1{key}?annotation/delete"
+          response:
+            openAPIDocKey: "204"
+            mediaType: application/xml
+            overrideMediaType: application/json
+            schema_override:
+              $ref: "#/components/schemas/DeleteObjectAnnotationOutputDisplay"
+            transform:
+              type: schema_driven_xml_v0.1.0
+            objectKey: $.line_items
+          request:
+            nativeCasing: pascal
+        get_object_annotation:
+          operation:
+            $ref: "#/paths/~1{bucket}~1{key}?annotation/get"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/xml
+            overrideMediaType: application/json
+            schema_override:
+              $ref: "#/components/schemas/GetObjectAnnotationOutputDisplay"
+            transform:
+              type: schema_driven_xml_v0.1.0
+            objectKey: $.line_items
+          request:
+            nativeCasing: pascal
+        put_object_annotation:
+          operation:
+            $ref: "#/paths/~1{bucket}~1{key}?annotation/put"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/xml
+            overrideMediaType: application/json
+            schema_override:
+              $ref: "#/components/schemas/PutObjectAnnotationOutputDisplay"
+            transform:
+              type: schema_driven_xml_v0.1.0
+            objectKey: $.line_items
+          request:
+            nativeCasing: pascal
+            mediaType: application/xml
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+        list_object_annotations:
+          operation:
+            $ref: "#/paths/~1{bucket}~1{key}?annotation&x-id=ListObjectAnnotations/get"
+          response:
+            openAPIDocKey: "200"
+            mediaType: application/xml
+            overrideMediaType: application/json
+            schema_override:
+              $ref: "#/components/schemas/ListObjectAnnotationsOutputDisplay"
+            transform:
+              type: schema_driven_xml_v0.1.0
+            objectKey: $.line_items
+          request:
+            nativeCasing: pascal
+      sqlVerbs:
+        select:
+          - $ref: "#/components/x-stackQL-resources/object_annotations/methods/get_object_annotation"
+          - $ref: "#/components/x-stackQL-resources/object_annotations/methods/list_object_annotations"
+        insert: []
+        update: []
+        replace:
+          - $ref: "#/components/x-stackQL-resources/object_annotations/methods/put_object_annotation"
+        delete:
+          - $ref: "#/components/x-stackQL-resources/object_annotations/methods/delete_object_annotation"
     object_taggings:
       id: aws.s3.object_taggings
       name: object_taggings
