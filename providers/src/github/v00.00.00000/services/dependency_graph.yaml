@@ -38,17 +38,99 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/dependency-graph-diff'
+                type: array
+                items:
+                  type: object
+                  properties:
+                    change_type:
+                      type: string
+                      enum:
+                        - added
+                        - removed
+                    manifest:
+                      type: string
+                      example: path/to/package-lock.json
+                    ecosystem:
+                      type: string
+                      example: npm
+                    name:
+                      type: string
+                      example: '@actions/core'
+                    version:
+                      type: string
+                      example: 1.0.0
+                    package_url:
+                      type: string
+                      nullable: true
+                      example: pkg:/npm/%40actions/core@1.1.0
+                    license:
+                      type: string
+                      nullable: true
+                      example: MIT
+                    source_repository_url:
+                      type: string
+                      nullable: true
+                      example: https://github.com/github/actions
+                    vulnerabilities:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          severity:
+                            type: string
+                            example: critical
+                          advisory_ghsa_id:
+                            type: string
+                            example: GHSA-rf4j-j272-fj86
+                          advisory_summary:
+                            type: string
+                            example: A summary of the advisory.
+                          advisory_url:
+                            type: string
+                            example: https://github.com/advisories/GHSA-rf4j-j272-fj86
+                        required:
+                          - severity
+                          - advisory_ghsa_id
+                          - advisory_summary
+                          - advisory_url
+                    scope:
+                      description: >-
+                        Where the dependency is utilized. `development` means
+                        that the dependency is only utilized in the development
+                        environment. `runtime` means that the dependency is
+                        utilized at runtime and in the development environment.
+                      type: string
+                      enum:
+                        - unknown
+                        - runtime
+                        - development
+                  required:
+                    - change_type
+                    - manifest
+                    - ecosystem
+                    - name
+                    - version
+                    - package_url
+                    - license
+                    - source_repository_url
+                    - vulnerabilities
+                    - scope
               examples:
                 default:
                   $ref: '#/components/examples/diff-range-response'
           headers:
             Link:
               $ref: '#/components/headers/link'
+        '400':
+          $ref: '#/components/responses/bad_request'
         '403':
           $ref: '#/components/responses/dependency_review_forbidden'
         '404':
           $ref: '#/components/responses/not_found'
+        '500':
+          $ref: '#/components/responses/internal_error'
+        '503':
+          $ref: '#/components/responses/service_unavailable'
       x-github:
         githubCloudOnly: false
         category: dependency-graph
@@ -83,6 +165,96 @@ paths:
           headers:
             Link:
               $ref: '#/components/headers/link'
+        '403':
+          $ref: '#/components/responses/forbidden'
+        '404':
+          $ref: '#/components/responses/not_found'
+      x-github:
+        githubCloudOnly: false
+        category: dependency-graph
+        subcategory: sboms
+      x-stackQL-resource: sboms
+  /repos/{owner}/{repo}/dependency-graph/sbom/fetch-report/{sbom_uuid}:
+    get:
+      summary: Fetch a software bill of materials (SBOM) for a repository.
+      description: >-
+        Fetches a previously generated software bill of materials (SBOM) for a
+        repository.
+
+        When the SBOM is ready, the response is a 302 redirect to a temporary
+        download URL for the SBOM in SPDX JSON format.
+
+        The generated SBOM report may be retained for up to one week from the
+        original request.
+
+        The temporary download URL returned by this endpoint expires separately,
+        and its expiry is set when the fetch request is made.
+      tags:
+        - dependency-graph
+      operationId: dependency-graph/fetch-sbom-report
+      externalDocs:
+        description: API method documentation
+        url: >-
+          https://docs.github.com/rest/dependency-graph/sboms#fetch-a-software-bill-of-materials-sbom-for-a-repository
+      parameters:
+        - $ref: '#/components/parameters/owner'
+        - $ref: '#/components/parameters/repo'
+        - name: sbom_uuid
+          in: path
+          required: true
+          description: The unique identifier of the SBOM export.
+          schema:
+            type: string
+      responses:
+        '202':
+          description: SBOM is still being processed, no content is returned.
+        '302':
+          description: Redirects to a temporary download URL for the completed SBOM.
+          headers:
+            Location:
+              $ref: '#/components/headers/location'
+        '403':
+          $ref: '#/components/responses/forbidden'
+        '404':
+          $ref: '#/components/responses/not_found'
+      x-github:
+        githubCloudOnly: false
+        category: dependency-graph
+        subcategory: sboms
+      x-stackQL-resource: sboms
+  /repos/{owner}/{repo}/dependency-graph/sbom/generate-report:
+    get:
+      summary: >-
+        Request generation of a software bill of materials (SBOM) for a
+        repository.
+      description: >-
+        Triggers a job to generate a software bill of materials (SBOM) for a
+        repository in SPDX JSON format.
+      tags:
+        - dependency-graph
+      operationId: dependency-graph/generate-sbom-report
+      externalDocs:
+        description: API method documentation
+        url: >-
+          https://docs.github.com/rest/dependency-graph/sboms#request-generation-of-a-software-bill-of-materials-sbom-for-a-repository
+      parameters:
+        - $ref: '#/components/parameters/owner'
+        - $ref: '#/components/parameters/repo'
+      responses:
+        '201':
+          description: Response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sbom_url:
+                    type: string
+                    description: URL to poll for the SBOM export result.
+              examples:
+                default:
+                  $ref: >-
+                    #/components/examples/dependency-graph-generate-sbom-report-response
         '403':
           $ref: '#/components/responses/forbidden'
         '404':
@@ -535,6 +707,29 @@ components:
           type: string
         status:
           type: string
+    scim-error:
+      title: Scim Error
+      description: Scim Error
+      type: object
+      properties:
+        message:
+          type: string
+          nullable: true
+        documentation_url:
+          type: string
+          nullable: true
+        detail:
+          type: string
+          nullable: true
+        status:
+          type: integer
+        scimType:
+          type: string
+          nullable: true
+        schemas:
+          type: array
+          items:
+            type: string
     metadata:
       title: metadata
       description: >-
@@ -614,6 +809,15 @@ components:
             type: string
       additionalProperties: false
   responses:
+    bad_request:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/basic-error'
+        application/scim+json:
+          schema:
+            $ref: '#/components/schemas/scim-error'
     dependency_review_forbidden:
       description: >-
         Response for a private repository when GitHub Advanced Security is not
@@ -628,6 +832,25 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/basic-error'
+    internal_error:
+      description: Internal Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/basic-error'
+    service_unavailable:
+      description: Service unavailable
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              code:
+                type: string
+              message:
+                type: string
+              documentation_url:
+                type: string
     forbidden:
       description: Forbidden
       content:
@@ -736,6 +959,10 @@ components:
             - relationshipType: DESCRIBES
               spdxElementId: SPDXRef-DOCUMENT
               relatedSpdxElement: SPDXRef-Repository
+    dependency-graph-generate-sbom-report-response:
+      value:
+        sbom_url: >-
+          https://api.github.com/repos/github/example/dependency-graph/sbom/fetch-report/4bab1a7e-da63-4828-9488-44e0e01a7c1b
     dependency-graph-create-snapshot-request:
       value:
         version: 0
@@ -778,6 +1005,11 @@ components:
         <https://api.github.com/resource?page=5>; rel="last"
       schema:
         type: string
+    location:
+      example: >-
+        https://pipelines.actions.githubusercontent.com/OhgS4QRKqmgx7bKC27GKU83jnQjyeqG8oIMTge8eqtheppcmw8/_apis/pipelines/1/runs/176/signedlogcontent?urlExpires=2020-01-24T18%3A10%3A31.5729946Z&urlSigningMethod=HMACV1&urlSignature=agG73JakPYkHrh06seAkvmH7rBR4Ji4c2%2B6a2ejYh3E%3D
+      schema:
+        type: string
   x-stackQL-resources:
     dependency_review:
       id: github.dependency_graph.dependency_review
@@ -818,6 +1050,31 @@ components:
         update: []
         delete: []
         replace: []
+    sbom_reports:
+      id: github.dependency_graph.sbom_reports
+      name: sbom_reports
+      title: Sbom Reports
+      methods:
+        fetch_sbom_report:
+          operation:
+            $ref: >-
+              #/paths/~1repos~1{owner}~1{repo}~1dependency-graph~1sbom~1fetch-report~1{sbom_uuid}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '202'
+        generate_sbom_report:
+          operation:
+            $ref: >-
+              #/paths/~1repos~1{owner}~1{repo}~1dependency-graph~1sbom~1generate-report/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '201'
+      sqlVerbs:
+        select: []
+        insert: []
+        update: []
+        delete: []
+        replace: []
     dependency_submission:
       id: github.dependency_graph.dependency_submission
       name: dependency_submission
@@ -842,3 +1099,11 @@ components:
         replace: []
 servers:
   - url: https://api.github.com
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: ''
+      location: request
+    responseToken:
+      key: Link
+      location: header
