@@ -126,11 +126,14 @@ jobs:
 
       #
       # run the following steps only on pushes to protected branches (merge commits)
+      # AND only when provider artefacts under providers/src/ changed (NUM_PROVIDERS > 0).
+      # A push that touches nothing under providers/src/ must never publish to S3,
+      # sync R2 or redeploy the worker.
       #
 
       - name: "[PUBLISH] configure aws credentials" 
         uses: aws-actions/configure-aws-credentials@v6
-        if: env.REG_EVENT == 'push'
+        if: env.NUM_PROVIDERS > 0 && env.REG_EVENT == 'push'
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -142,7 +145,7 @@ jobs:
             python scripts/publish/publish-provider-docs-to-artifact-repo.py
 
       - name: "[DEPLOY] pull additional docs from artifact repo"
-        if: env.REG_EVENT == 'push'
+        if: env.NUM_PROVIDERS > 0 && env.REG_EVENT == 'push'
         run: |
           python scripts/deploy/pull-additional-docs-from-artifact-repo.py
 
@@ -156,12 +159,12 @@ jobs:
       #
 
       - name: "[DEPLOY-CF] install worker deps"
-        if: env.REG_EVENT == 'push'
+        if: env.NUM_PROVIDERS > 0 && env.REG_EVENT == 'push'
         run: |
           cd origin && npm install
 
       - name: "[DEPLOY-CF] sync docs to R2 (dev)"
-        if: env.REG_TARGET_BRANCH == 'dev' && env.REG_EVENT == 'push'
+        if: env.NUM_PROVIDERS > 0 && env.REG_TARGET_BRANCH == 'dev' && env.REG_EVENT == 'push'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -180,7 +183,7 @@ jobs:
             --region auto --no-progress
 
       - name: "[DEPLOY-CF] sync docs to R2 (prod)"
-        if: env.REG_TARGET_BRANCH == 'main' && env.REG_EVENT == 'push'
+        if: env.NUM_PROVIDERS > 0 && env.REG_TARGET_BRANCH == 'main' && env.REG_EVENT == 'push'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -197,7 +200,7 @@ jobs:
             --no-progress
 
       - name: "[DEPLOY-CF] deploy worker (dev)"
-        if: env.REG_TARGET_BRANCH == 'dev' && env.REG_EVENT == 'push'
+        if: env.NUM_PROVIDERS > 0 && env.REG_TARGET_BRANCH == 'dev' && env.REG_EVENT == 'push'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -205,7 +208,7 @@ jobs:
           cd origin && npx wrangler deploy --env dev
 
       - name: "[DEPLOY-CF] deploy worker (prod)"
-        if: env.REG_TARGET_BRANCH == 'main' && env.REG_EVENT == 'push'
+        if: env.NUM_PROVIDERS > 0 && env.REG_TARGET_BRANCH == 'main' && env.REG_EVENT == 'push'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
