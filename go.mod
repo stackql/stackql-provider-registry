@@ -3,7 +3,7 @@ module github.com/stackql/stackql-provider-registry
 go 1.17
 
 require (
-	github.com/sirupsen/logrus v1.8.1
+	github.com/sirupsen/logrus v1.8.3
 	github.com/spf13/cobra v1.4.0
 	github.com/spf13/viper v1.10.1
 	gotest.tools v2.2.0+incompatible
