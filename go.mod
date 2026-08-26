@@ -3,7 +3,7 @@ module github.com/stackql/stackql-provider-registry
 go 1.17
 
 require (
-	github.com/sirupsen/logrus v1.8.1
+	github.com/sirupsen/logrus v1.8.3
 	github.com/spf13/cobra v1.4.0
 	github.com/spf13/viper v1.10.1
 	gotest.tools v2.2.0+incompatible
@@ -29,5 +29,5 @@ require (
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/ini.v1 v1.66.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
