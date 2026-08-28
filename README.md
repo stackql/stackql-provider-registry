@@ -55,6 +55,8 @@ Once you have an OpenAPI specification, you can use the [openapisaurus](https://
 
 The provider registry is built and deployed using GitHub Actions.  Provider documents are validated and tested in workflow steps and then packaged and stored in the artifact repository.  The most recent packaged versions are published to the registry API (a [Deno Deploy](https://deno.com/deploy) application), where they are available from the `stackql` application using `REGISTRY LIST` or `REGISTRY PULL`.  See [docs/build-and-deployment.md](docs/build-and-deployment.md) for more information.  
 
+A separate workflow guards against providers being deleted from `providers/src` on any push; intentional removals require an explicit override in the commit message. See [provider delete guard](docs/build-and-deployment.md#provider-delete-guard) for details.  
+
 ## Testing a Provider using the `dev` Registry
 
 Use the following steps to test a provider using the `dev` registry:  

@@ -1,0 +1,107 @@
+name: Provider Delete Guard
+
+#
+# Blocks any push that removes a provider from providers/src. Runs on pushes to
+# every branch (feature and protected) and on pull requests to the protected
+# branches so it can be used as a required status check.
+#
+# A provider is considered deleted if providers/src/<provider>/<version>/provider.yaml
+# existed in the comparison base and no version of it exists in the pushed commit.
+# Deleting or changing files within a provider is not affected.
+#
+# To intentionally delete a provider, add an explicit override naming it to a
+# commit message in the push, e.g.
+#
+#   [allow-provider-delete: netlify]
+#   [allow-provider-delete: netlify, deno]
+#
+# See docs/build-and-deployment.md and scripts/cicd/shell/provider-delete-guard.sh
+#
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "base ref to compare against (default: fork point with the default branch)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  provider-delete-guard:
+    name: provider-delete-guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        name: "[SETUP] checkout repo"
+        with:
+          fetch-depth: 0
+
+      - name: "[GUARD] resolve comparison base(s)"
+        id: bases
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          DISPATCH_BASE: ${{ github.event.inputs.base }}
+        run: |
+          set -euo pipefail
+          bases=()
+          null_sha="0000000000000000000000000000000000000000"
+
+          case "$EVENT_NAME" in
+            pull_request)
+              # HEAD is the PR merge commit; compare against the tip of the target branch
+              bases+=("$PR_BASE_SHA")
+              ;;
+            push)
+              # 1. the previous tip of this branch (unavailable for new branches and
+              #    for force pushes whose old tip is no longer reachable)
+              if [ "$BEFORE_SHA" != "$null_sha" ] && git rev-parse --verify --quiet "${BEFORE_SHA}^{commit}" >/dev/null; then
+                bases+=("$BEFORE_SHA")
+              else
+                echo "previous branch tip not available (new branch or force push)"
+              fi
+              # 2. the fork point with the default branch, so a new branch is checked
+              #    against where it branched from (no-op when pushing to the default branch)
+              if merge_base="$(git merge-base HEAD "origin/${DEFAULT_BRANCH}" 2>/dev/null)"; then
+                bases+=("$merge_base")
+              fi
+              ;;
+            workflow_dispatch)
+              if [ -n "$DISPATCH_BASE" ]; then
+                bases+=("$DISPATCH_BASE")
+              elif merge_base="$(git merge-base HEAD "origin/${DEFAULT_BRANCH}" 2>/dev/null)"; then
+                bases+=("$merge_base")
+              fi
+              ;;
+          esac
+
+          # last resort: the first parent of the pushed commit
+          if [ "${#bases[@]}" -eq 0 ] && git rev-parse --verify --quiet 'HEAD~1^{commit}' >/dev/null; then
+            bases+=("HEAD~1")
+          fi
+
+          if [ "${#bases[@]}" -eq 0 ]; then
+            echo "::error::unable to resolve a base commit to compare against"
+            exit 1
+          fi
+
+          bases_str="$(printf '%s\n' "${bases[@]}" | sort -u | tr '\n' ' ')"
+          echo "comparison base(s): ${bases_str}"
+          echo "bases=${bases_str}" >> "$GITHUB_OUTPUT"
+
+      - name: "[GUARD] check for deleted providers"
+        run: |
+          bash scripts/cicd/shell/provider-delete-guard.sh HEAD ${{ steps.bases.outputs.bases }}
