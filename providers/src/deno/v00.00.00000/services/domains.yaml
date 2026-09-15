@@ -1,0 +1,528 @@
+openapi: 3.1.1
+info:
+  title: domains API
+  description: >-
+    A domain is a hostname (apex or wildcard) owned by an organization. Once
+    registered, a domain must be verified via a DNS-published
+    `_acme-challenge.<domain>` token, then receives a TLS certificate (uploaded
+    manually or provisioned via ACME).
+
+
+    **Lifecycle:**
+
+
+    1. `POST /domains` — register the domain and receive the DNS records to
+    publish.
+
+    2. `POST /domains/{domainId}/verify` — re-runs DNS verification once records
+    propagate.
+
+    3. Either `POST /domains/{domainId}/certificates` (manual) or `POST
+    /domains/{domainId}/certificates/provision` (automatic ACME).
+
+    4. Attach to revisions via deploy or per-revision endpoints.
+  version: 2.0.0
+paths:
+  /v2/domains:
+    get:
+      operationId: domains.list
+      summary: List domains
+      description: List domains registered to the authenticated organization.
+      tags:
+        - domains
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+          allowEmptyValue: true
+          allowReserved: true
+          description: The search query for filtering
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          allowEmptyValue: true
+          allowReserved: true
+          description: The pagination cursor
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 30
+          allowEmptyValue: true
+          allowReserved: true
+          description: The maximum number of items to return
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Domain'
+    post:
+      operationId: domains.create
+      summary: Register a domain
+      description: >-
+        Register a hostname to the authenticated organization. Provide the bare
+        hostname (e.g. `acme.com`) — never a `*.` wildcard literal — and use
+        `kind` to control whether the apex, its wildcard subdomains, or both are
+        served. Returns the verification token and the DNS records the user must
+        publish.
+      tags:
+        - domains
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DomainInit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Domain'
+  /v2/domains/{domain}:
+    get:
+      operationId: domains.get
+      summary: Get domain
+      description: Fetch a single domain by its id or name (e.g. `example.com`).
+      tags:
+        - domains
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The domain ID or name (e.g. `example.com`). Domain IDs are UUIDs.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Domain'
+    delete:
+      operationId: domains.delete
+      summary: Delete a domain
+      description: >-
+        Permanently remove a domain and all associated bindings. Accepts the
+        domain id or name.
+      tags:
+        - domains
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The domain ID or name (e.g. `example.com`). Domain IDs are UUIDs.
+      responses:
+        '204':
+          description: OK
+  /v2/domains/{domain}/verify:
+    post:
+      operationId: domains.verify
+      summary: Verify domain ownership
+      description: >-
+        Re-run DNS-based ownership verification against the records the user
+        published. Returns the refreshed domain. Accepts the domain id or name.
+      tags:
+        - domains
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The domain ID or name (e.g. `example.com`). Domain IDs are UUIDs.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Domain'
+  /v2/domains/{domain}/certificates:
+    post:
+      operationId: domains.uploadCertificate
+      summary: Upload a TLS certificate
+      description: >-
+        Upload a PEM-encoded certificate and private key. The server validates
+        that the certificate covers the domain and that the key algorithm is
+        RSA-2048 or EC P-256. Accepts the domain id or name.
+      tags:
+        - domains
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The domain ID or name (e.g. `example.com`). Domain IDs are UUIDs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                certificate:
+                  type: string
+                  minLength: 1
+                  description: PEM-encoded certificate (full chain)
+                private_key:
+                  type: string
+                  minLength: 1
+                  description: PEM-encoded private key matching the certificate
+              required:
+                - certificate
+                - private_key
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Domain'
+    get:
+      operationId: domains.listCertificates
+      summary: List certificates
+      description: >-
+        Returns the current certificate set plus the latest provisioning
+        attempt's status. Clients poll this endpoint to observe progress of an
+        in-flight provisioning request. Accepts the domain id or name.
+      tags:
+        - domains
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The domain ID or name (e.g. `example.com`). Domain IDs are UUIDs.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  certificates:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DomainCertificate'
+                  provisioning_status:
+                    $ref: '#/components/schemas/ProvisioningStatus'
+                required:
+                  - certificates
+                  - provisioning_status
+  /v2/domains/{domain}/certificates/provision:
+    post:
+      operationId: domains.provisionCertificate
+      summary: Request automatic TLS provisioning
+      description: >-
+        Schedules an ACME-based certificate to be provisioned for the domain.
+        Returns immediately with `202 Accepted`; poll `GET
+        /domains/{domain}/certificates` for status. Accepts the domain id or
+        name.
+      tags:
+        - domains
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The domain ID or name (e.g. `example.com`). Domain IDs are UUIDs.
+      responses:
+        '202':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    enum:
+                      - true
+                    type: boolean
+                required:
+                  - accepted
+components:
+  schemas:
+    Domain:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique domain identifier (UUID)
+        organization_id:
+          type: string
+          description: Organization that owns the domain
+        domain:
+          type: string
+          description: >-
+            The bare hostname (e.g. `shop.acme.com`). Wildcard coverage is
+            reported via `kind`, never as a `*.` literal in this field.
+        kind:
+          enum:
+            - base_only
+            - wildcard_only
+            - base_and_wildcard
+          description: Whether the domain covers the apex, a wildcard, or both
+          type: string
+        verification_token:
+          type: string
+          description: >-
+            Token to publish under `_acme-challenge.<domain>` for ownership
+            verification
+        is_validated:
+          type: boolean
+          description: True once DNS-based ownership has been confirmed
+        dns_records:
+          type: array
+          items:
+            type: array
+            items:
+              $ref: '#/components/schemas/DnsRecord'
+          description: >-
+            Alternative sets of DNS records to publish for verification and
+            routing. Each inner array is one complete, self-sufficient option —
+            publish every record from a single option (e.g. the `CNAME` option
+            *or* the `A`/`AAAA` option), not a mix across options. The
+            `_acme-challenge` verification record is required regardless of the
+            option chosen, so it is included in every option.
+        provisioning_status:
+          $ref: '#/components/schemas/ProvisioningStatus'
+        certificates:
+          type: array
+          items:
+            $ref: '#/components/schemas/DomainCertificate'
+          description: Currently stored certificates for this domain
+        created_at:
+          type: string
+          description: ISO 8601 timestamp of creation
+        updated_at:
+          type: string
+          description: ISO 8601 timestamp of last modification
+      required:
+        - id
+        - organization_id
+        - domain
+        - kind
+        - verification_token
+        - is_validated
+        - dns_records
+        - provisioning_status
+        - certificates
+        - created_at
+        - updated_at
+    DomainInit:
+      type: object
+      properties:
+        domain:
+          type: string
+          description: >-
+            Bare hostname to register, e.g. `shop.acme.com` — without a `*.`
+            prefix. Wildcard coverage is selected via `kind`, not by putting a
+            `*` label in the hostname.
+        kind:
+          $ref: '#/components/schemas/DomainKind'
+          description: >-
+            Whether the domain covers the apex, a wildcard, or both. Defaults to
+            `base_only`. To serve `*.preview.acme.com`, register
+            `preview.acme.com` with `wildcard_only` (wildcard subdomains only)
+            or `base_and_wildcard` (apex plus wildcard).
+      required:
+        - domain
+    DomainCertificate:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Certificate identifier
+        kind:
+          enum:
+            - automatic
+            - manual
+          description: >-
+            `automatic` for ACME-provisioned certificates, `manual` for
+            user-uploaded ones
+          type: string
+        subject_alt_names:
+          type: array
+          items:
+            type: string
+          description: All hostnames covered by this certificate
+        private_key_algorithm:
+          enum:
+            - ec-p256
+            - ec-p384
+            - ec-p521
+            - rsa-2048
+            - rsa-3072
+            - rsa-4096
+          description: Private key algorithm
+          type: string
+        not_valid_before:
+          type: string
+          description: ISO 8601 start of validity window
+        not_valid_after:
+          type: string
+          description: ISO 8601 end of validity window
+        created_at:
+          type: string
+          description: ISO 8601 timestamp of when the certificate was stored
+      required:
+        - id
+        - kind
+        - subject_alt_names
+        - private_key_algorithm
+        - not_valid_before
+        - not_valid_after
+        - created_at
+    ProvisioningStatus:
+      type: object
+      properties:
+        code:
+          enum:
+            - success
+            - failed
+            - pending
+            - manual
+          description: Aggregate state of the most recent TLS provisioning attempt.
+          type: string
+        message:
+          type: string
+          description: Non-internal error detail when `code` is `failed`
+      required:
+        - code
+    DnsRecord:
+      type: object
+      properties:
+        name:
+          type: string
+          description: DNS record name (e.g. `@` for apex, or a subdomain label)
+        base:
+          type: string
+          description: Apex zone the record belongs to
+        type:
+          type: string
+          description: DNS record type (e.g. `CNAME`, `A`)
+        value:
+          type: string
+          description: Target value (hostname, IP, etc.)
+      required:
+        - name
+        - base
+        - type
+        - value
+    DomainKind:
+      enum:
+        - base_only
+        - wildcard_only
+        - base_and_wildcard
+      type: string
+  x-stackQL-resources:
+    domains:
+      id: deno.domains.domains
+      name: domains
+      title: Domains
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1v2~1domains/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        create:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v2~1domains/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        get:
+          operation:
+            $ref: '#/paths/~1v2~1domains~1{domain}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete:
+          operation:
+            $ref: '#/paths/~1v2~1domains~1{domain}/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '204'
+        verify:
+          operation:
+            $ref: '#/paths/~1v2~1domains~1{domain}~1verify/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/domains/methods/get'
+          - $ref: '#/components/x-stackQL-resources/domains/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/domains/methods/create'
+        update: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/domains/methods/delete'
+        replace: []
+    certificates:
+      id: deno.domains.certificates
+      name: certificates
+      title: Certificates
+      methods:
+        upload:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v2~1domains~1{domain}~1certificates/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        list:
+          operation:
+            $ref: '#/paths/~1v2~1domains~1{domain}~1certificates/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.certificates
+        provision:
+          operation:
+            $ref: '#/paths/~1v2~1domains~1{domain}~1certificates~1provision/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '202'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/certificates/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/certificates/methods/upload'
+        update: []
+        delete: []
+        replace: []
+servers:
+  - url: https://api.deno.com
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: ''
+      location: request
+    responseToken:
+      key: Link
+      location: header

@@ -1,0 +1,911 @@
+openapi: 3.1.1
+info:
+  title: apps API
+  description: |-
+    An app is the top-level container for a deployable application.
+    Apps have configuration (build settings, environment variables), can reference layers for shared config, and contain revisions (deployments).
+
+    **Key characteristics:**
+
+    - Identified by UUID or human-readable slug. App slugs must be 3–32 characters long, may contain only lowercase letters, numbers, and hyphens, cannot contain underscores, must not start or end with a hyphen, must not have consecutive hyphens in positions 3 and 4, and cannot be a reserved slug. App IDs are UUIDs.
+    - Support up to 5 labels for filtering and grouping
+    - Reference layers via `layers` array for inherited configuration
+    - Have app-specific `env_vars` that override layer values
+    - Have a `config` that provides defaults for revisions
+  version: 2.0.0
+paths:
+  /v2/apps/{app}:
+    get:
+      operationId: apps.get
+      summary: Get app details
+      description: Get detailed information about an app, including labels, layers, environment variables, and config.
+      tags:
+        - apps
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The app ID or slug. App slugs must be 3–32 characters long, may contain only lowercase letters, numbers, and hyphens, cannot contain underscores, must not start or end with a hyphen, must not have consecutive hyphens in positions 3 and 4, and cannot be a reserved slug. App IDs are UUIDs.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/App'
+    patch:
+      operationId: apps.update
+      summary: Update app
+      description: |-
+        All fields are optional. `labels` and `layers` replace the entire value. `env_vars` performs a deep merge with existing variables. `config` replaces the entire deploy config (no deep merge).
+
+        Updating `layers` or `env_vars` will restart running isolates.
+      tags:
+        - apps
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The app ID or slug. App slugs must be 3–32 characters long, may contain only lowercase letters, numbers, and hyphens, cannot contain underscores, must not start or end with a hyphen, must not have consecutive hyphens in positions 3 and 4, and cannot be a reserved slug. App IDs are UUIDs.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                slug:
+                  type: string
+                  description: New app slug. App slugs must be 3–32 characters long, may contain only lowercase letters, numbers, and hyphens, cannot contain underscores, must not start or end with a hyphen, must not have consecutive hyphens in positions 3 and 4, and cannot be a reserved slug.
+                labels:
+                  $ref: '#/components/schemas/Labels'
+                  description: Replace all labels
+                layers:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/LayerRefInput'
+                  description: Replace all layer references
+                env_vars:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/EnvVarUpdate'
+                  description: Deep merge with existing environment variables
+                config:
+                  $ref: '#/components/schemas/Config'
+                  description: Replace the entire deploy config
+              required: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/App'
+    delete:
+      operationId: apps.delete
+      summary: Delete app
+      description: Delete an app and all its revisions.
+      tags:
+        - apps
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The app ID or slug. App slugs must be 3–32 characters long, may contain only lowercase letters, numbers, and hyphens, cannot contain underscores, must not start or end with a hyphen, must not have consecutive hyphens in positions 3 and 4, and cannot be a reserved slug. App IDs are UUIDs.
+      responses:
+        '204':
+          description: OK
+  /v2/apps:
+    get:
+      operationId: apps.list
+      summary: List apps
+      description: |-
+        List apps with optional filtering by labels or layer.
+
+        Use `labels[key]=value` query parameters to filter by label values. Use `layer` to filter apps that reference a specific layer.
+      tags:
+        - apps
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          allowEmptyValue: true
+          allowReserved: true
+          description: The pagination cursor
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 30
+          allowEmptyValue: true
+          allowReserved: true
+          description: The maximum number of items to return
+        - name: layer
+          in: query
+          schema:
+            type: string
+          style: deepObject
+          explode: true
+          allowEmptyValue: true
+          allowReserved: true
+          description: Layer ID or slug. Slugs cannot contain underscores; IDs always do.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AppListItem'
+    post:
+      operationId: apps.create
+      summary: Create app
+      description: Apps can reference layers for shared configuration, have app-specific environment variables, and a config that provides defaults for revisions.
+      tags:
+        - apps
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                slug:
+                  type: string
+                  description: App slug. If omitted, a random slug is generated. App slugs must be 3–32 characters long, may contain only lowercase letters, numbers, and hyphens, cannot contain underscores, must not start or end with a hyphen, must not have consecutive hyphens in positions 3 and 4, and cannot be a reserved slug.
+                labels:
+                  $ref: '#/components/schemas/Labels'
+                  description: Key-value labels for filtering and grouping (max 5)
+                layers:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/LayerRefInput'
+                  description: Layers to reference for inherited configuration
+                env_vars:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/EnvVarInput'
+                  description: App-specific environment variables
+                config:
+                  $ref: '#/components/schemas/Config'
+                  description: Default build and runtime configuration
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/App'
+  /v2/apps/{app}/analytics:
+    get:
+      operationId: apps.analytics
+      summary: Get app analytics
+      description: |-
+        Get fixed app-scoped usage analytics in a Deploy Classic-style table envelope.
+
+        The response contains only `fields` and `values`. The current Phase 1 response returns these fields: `time`, `request_count`, `cpu_seconds`, `runtime_seconds`, `memory_time_byte_seconds`, `network_ingress_bytes`, `network_egress_bytes`, `kv_read_units`, and `kv_write_units`. Clients should map row values by `fields[].name` instead of column position; future responses may include additional fields. Buckets are fixed 15-minute UTC buckets, and only buckets fully contained in the effective `[since, until)` range are returned. Recent buckets may be delayed or updated as telemetry is ingested, and missing rollup rows inside the returned range are zero-filled. Data is available from the analytics rollup rollout time onward and is not invoice-authoritative billing data.
+      tags:
+        - apps
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The app ID or slug. App slugs must be 3–32 characters long, may contain only lowercase letters, numbers, and hyphens, cannot contain underscores, must not start or end with a hyphen, must not have consecutive hyphens in positions 3 and 4, and cannot be a reserved slug. App IDs are UUIDs.
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+            minLength: 1
+          allowReserved: true
+          description: Inclusive lower bound as a non-empty RFC 3339 timestamp
+        - name: until
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+            minLength: 1
+          allowReserved: true
+          description: Exclusive upper bound as a non-empty RFC 3339 timestamp
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResponse'
+  /v2/apps/{app}/logs:
+    get:
+      operationId: apps.logs
+      summary: Get or stream logs
+      description: |-
+        Query historical runtime logs, or stream them using Server-Sent Events or JSONL.
+
+        When `end` is specified, returns paginated JSON.
+        When `end` is omitted, streams logs in real-time using SSE or JSONL.
+
+        Requesting `Accept: application/json` without `end` will return an error.
+      tags:
+        - apps
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The app ID or slug. App slugs must be 3–32 characters long, may contain only lowercase letters, numbers, and hyphens, cannot contain underscores, must not start or end with a hyphen, must not have consecutive hyphens in positions 3 and 4, and cannot be a reserved slug. App IDs are UUIDs.
+        - name: start
+          in: query
+          schema:
+            type: string
+            format: date-time
+            description: Start of the time range (ISO 8601)
+          allowEmptyValue: true
+          allowReserved: true
+          description: Start of the time range (ISO 8601) Required by the API on every request.
+        - name: end
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+            description: End of the time range (ISO 8601). If omitted, logs are streamed in real-time
+          allowEmptyValue: true
+          allowReserved: true
+          description: End of the time range (ISO 8601). If omitted, logs are streamed in real-time
+        - name: revision_id
+          in: query
+          required: false
+          schema:
+            type: string
+            description: Filter logs by revision ID
+          allowEmptyValue: true
+          allowReserved: true
+          description: Filter logs by revision ID
+        - name: level
+          in: query
+          required: false
+          schema:
+            enum:
+              - debug
+              - info
+              - warn
+              - error
+            description: Minimum log severity level
+            type: string
+          style: deepObject
+          explode: true
+          allowEmptyValue: true
+          allowReserved: true
+          description: Minimum log severity level
+        - name: query
+          in: query
+          required: false
+          schema:
+            type: string
+            description: Full-text search query
+          allowEmptyValue: true
+          allowReserved: true
+          description: Full-text search query
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          allowEmptyValue: true
+          allowReserved: true
+          description: The pagination cursor
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+          allowEmptyValue: true
+          allowReserved: true
+          description: The maximum number of items to return
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeLogsResponse'
+components:
+  schemas:
+    App:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique app identifier (UUID)
+        slug:
+          type: string
+          description: Human-readable app slug. App slugs must be 3–32 characters long, may contain only lowercase letters, numbers, and hyphens, cannot contain underscores, must not start or end with a hyphen, must not have consecutive hyphens in positions 3 and 4, and cannot be a reserved slug.
+        labels:
+          $ref: '#/components/schemas/Labels'
+          description: User-defined key-value labels for filtering and grouping
+        layers:
+          type: array
+          items:
+            $ref: '#/components/schemas/LayerRef'
+          description: Layers referenced by this app, in priority order (later overrides earlier)
+        env_vars:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnvVar'
+          description: App-specific environment variables
+        config:
+          $ref: '#/components/schemas/ConfigOutput'
+          description: Default build and runtime configuration for new revisions
+        updated_at:
+          type: string
+          description: ISO 8601 timestamp of last modification
+        created_at:
+          type: string
+          description: ISO 8601 timestamp of creation
+      required:
+        - id
+        - slug
+        - layers
+        - updated_at
+        - created_at
+      example:
+        id: 00000000-0000-0000-0000-000000000000
+        slug: my-customer-app
+        labels:
+          custom.customer_id: cust_123
+          custom.environment: production
+        layers:
+          - id: lyr_abc123
+            slug: shared-secrets
+        env_vars:
+          - id: 00000000-0000-0000-0000-000000000000
+            key: APP_NAME
+            value: My Customer App
+            secret: false
+            contexts: all
+        config:
+          framework: nextjs
+          install: npm install
+          build: npm run build
+        created_at: '2024-01-15T10:30:00Z'
+        updated_at: '2024-01-15T10:30:00Z'
+    Labels:
+      type: object
+      additionalProperties:
+        type: string
+        description: '(JSON value: string or array)'
+      example:
+        custom.customer_id: cust_123
+        custom.environment: production
+        custom.regions:
+          - us-east
+          - eu-west
+    LayerRefInput:
+      type: string
+      description: Layer ID to reference / Layer slug to reference
+    EnvVarUpdate:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID of the existing variable to update or delete
+        key:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Variable name. Used for matching when `id` is not provided
+        value:
+          type: string
+          maxLength: 65536
+          description: New value for the variable
+        secret:
+          type: boolean
+          description: Whether to mask the value in API responses
+        contexts:
+          description: 'Deployment contexts this variable applies to (JSON value: string or array)'
+          type: string
+        delete:
+          type: boolean
+          description: Set to true to remove this variable
+      example:
+        id: 00000000-0000-0000-0000-000000000000
+        value: postgres://prod-host/db
+    Config:
+      type: object
+      properties:
+        framework:
+          enum:
+            - ''
+            - nextjs
+            - astro
+            - nuxt
+            - remix
+            - solidstart
+            - tanstackstart
+            - sveltekit
+            - fresh
+            - lume
+          description: Framework preset. Mutually exclusive with `runtime`
+          type: string
+        install:
+          description: Custom install command. Omit to skip the install step
+          nullable: true
+          type: string
+        build:
+          description: Custom build command. Omit to skip the build step
+          nullable: true
+          type: string
+        predeploy:
+          description: Command to run before each deployment (e.g. database migrations). Omit to skip
+          nullable: true
+          type: string
+        runtime:
+          $ref: '#/components/schemas/Runtime'
+          description: Runtime configuration. Mutually exclusive with `framework`
+        crons:
+          type: boolean
+          description: Whether cron jobs are enabled for revisions of the app. When false, revisions that register cron jobs using Deno.cron fail to build. Defaults to true
+      example:
+        framework: nextjs
+        install: npm install
+        build: npm run build
+    AppListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique app identifier (UUID)
+        slug:
+          type: string
+          description: Human-readable app slug. App slugs must be 3–32 characters long, may contain only lowercase letters, numbers, and hyphens, cannot contain underscores, must not start or end with a hyphen, must not have consecutive hyphens in positions 3 and 4, and cannot be a reserved slug.
+        labels:
+          $ref: '#/components/schemas/Labels'
+          description: User-defined key-value labels
+        layers:
+          type: array
+          items:
+            $ref: '#/components/schemas/LayerRef'
+          description: Layers referenced by this app, in priority order (later overrides earlier)
+        updated_at:
+          type: string
+          description: ISO 8601 timestamp of last modification
+        created_at:
+          type: string
+          description: ISO 8601 timestamp of creation
+      required:
+        - id
+        - slug
+        - layers
+        - updated_at
+        - created_at
+    EnvVarInput:
+      type: object
+      properties:
+        key:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: The environment variable name
+        value:
+          type: string
+          maxLength: 65536
+          description: The environment variable value
+        secret:
+          type: boolean
+          description: Whether to mask the value in API responses. Defaults to false
+        contexts:
+          description: 'Deployment contexts this variable applies to. Defaults to `"all"`. (JSON value: string or array)'
+          type: string
+      required:
+        - key
+        - value
+      example:
+        key: DATABASE_URL
+        value: postgres://localhost/dev
+    AnalyticsResponse:
+      type: object
+      properties:
+        fields:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                description: 'Field name. The current Phase 1 response returns: time, request_count, cpu_seconds, runtime_seconds, memory_time_byte_seconds, network_ingress_bytes, network_egress_bytes, kv_read_units, and kv_write_units. Future responses may include additional fields.'
+              type:
+                enum:
+                  - time
+                  - number
+                description: Field value type.
+                type: string
+            required:
+              - name
+              - type
+          description: 'Analytics table fields. The current Phase 1 response returns these fields: time, request_count, cpu_seconds, runtime_seconds, memory_time_byte_seconds, network_ingress_bytes, network_egress_bytes, kv_read_units, and kv_write_units. Clients should map row values by field name instead of column position; future responses may include additional fields.'
+        values:
+          type: array
+          items:
+            type: array
+            items:
+              type: string
+              description: '(JSON value: string or number)'
+          description: Per-bucket analytics rows. The first column is the bucket start time.
+      required:
+        - fields
+        - values
+      example:
+        fields:
+          - name: time
+            type: time
+          - name: request_count
+            type: number
+          - name: cpu_seconds
+            type: number
+          - name: runtime_seconds
+            type: number
+          - name: memory_time_byte_seconds
+            type: number
+          - name: network_ingress_bytes
+            type: number
+          - name: network_egress_bytes
+            type: number
+          - name: kv_read_units
+            type: number
+          - name: kv_write_units
+            type: number
+        values:
+          - - '2026-06-01T00:00:00Z'
+            - 1200
+            - 43.12
+            - 900
+            - 966367641600
+            - 10485760
+            - 20971520
+            - 900
+            - 126
+    RuntimeLogsResponse:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuntimeLog'
+          description: Array of log entries
+        next_cursor:
+          description: Cursor for fetching the next page, or null if no more results
+          nullable: true
+          type: string
+      required:
+        - logs
+        - next_cursor
+      example:
+        logs:
+          - timestamp: '2024-01-15T10:30:00.123Z'
+            level: info
+            message: Handling request
+            revision_id: r2ysnrrhr352
+            region: us-east-1
+          - timestamp: '2024-01-15T10:30:00.456Z'
+            level: error
+            message: Database connection failed
+            revision_id: r2ysnrrhr352
+            region: us-east-1
+        next_cursor: eyJsYXN0X3RpbWVzdGFtcCI6...
+    LayerRef:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique layer identifier
+        slug:
+          type: string
+          description: Human-readable layer slug
+      required:
+        - id
+        - slug
+      example:
+        id: lyr_abc123
+        slug: shared-secrets
+    EnvVar:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the environment variable
+        key:
+          type: string
+          description: The environment variable name
+        value:
+          type: string
+          description: The value. Omitted when `secret` is true
+        secret:
+          type: boolean
+          description: Whether the value is masked in API responses
+        contexts:
+          description: 'Deployment contexts this variable applies to. `"all"` means every context. (JSON value: string or array)'
+          type: string
+      required:
+        - id
+        - key
+        - secret
+        - contexts
+      example:
+        id: 00000000-0000-0000-0000-000000000000
+        key: DATABASE_URL
+        value: postgres://localhost/dev
+        secret: false
+        contexts: all
+    ConfigOutput:
+      type: object
+      properties:
+        framework:
+          enum:
+            - ''
+            - nextjs
+            - astro
+            - nuxt
+            - remix
+            - solidstart
+            - tanstackstart
+            - sveltekit
+            - fresh
+            - lume
+          description: Framework preset used for this build
+          type: string
+        install:
+          description: Install command. Null if skipped
+          nullable: true
+          type: string
+        build:
+          description: Build command. Null if skipped
+          nullable: true
+          type: string
+        predeploy:
+          description: Pre-deploy command. Null if skipped
+          nullable: true
+          type: string
+        runtime:
+          $ref: '#/components/schemas/Runtime'
+          description: Runtime configuration
+        crons:
+          type: boolean
+          description: Whether cron jobs are enabled for revisions of the app. When false, revisions that register cron jobs using Deno.cron fail to build. Defaults to true
+    Runtime:
+      type: object
+      properties:
+        type:
+          enum:
+            - dynamic
+            - static
+          description: '`dynamic` runs a Deno process; `static` serves pre-built files'
+          type: string
+        entrypoint:
+          type: string
+          description: Main module path. Required when `type` is `dynamic`
+        args:
+          type: array
+          items:
+            type: string
+          description: Additional CLI arguments passed to the entrypoint
+        cwd:
+          type: string
+          description: Working directory or static file root. Required when `type` is `static`
+        spa:
+          type: boolean
+          description: Enable single-page application mode (fallback to index.html). Only for `static` type
+      required:
+        - type
+    RuntimeLog:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          description: ISO 8601 timestamp of the log entry
+        level:
+          enum:
+            - debug
+            - info
+            - warn
+            - error
+          description: Log severity level
+          type: string
+        message:
+          type: string
+          description: Log message content
+        revision_id:
+          type: string
+          description: Revision that produced this log entry
+        region:
+          type: string
+          description: Region where the isolate was running
+        trace_id:
+          type: string
+          description: OpenTelemetry trace ID for request correlation
+        span_id:
+          type: string
+          description: OpenTelemetry span ID
+      required:
+        - timestamp
+        - level
+        - message
+      example:
+        timestamp: '2024-01-15T10:30:00.123Z'
+        level: info
+        message: Handling request
+        revision_id: r2ysnrrhr352
+        region: us-east-1
+        trace_id: abc123def456
+        span_id: span789
+    stackqlAnalyticsRows:
+      type: object
+      properties:
+        rows:
+          type: array
+          description: One row per 15-minute bucket; columns are the analytics fields reported by the API
+          items:
+            type: object
+            properties:
+              time:
+                type: string
+                format: date-time
+                description: Start of the fixed 15-minute UTC bucket
+              request_count:
+                type: number
+                description: Requests served in the bucket
+              cpu_seconds:
+                type: number
+                description: CPU time consumed, in seconds
+              runtime_seconds:
+                type: number
+                description: Wall-clock runtime, in seconds
+              memory_time_byte_seconds:
+                type: number
+                description: Memory usage integrated over time, in byte-seconds
+              network_ingress_bytes:
+                type: number
+                description: Bytes received
+              network_egress_bytes:
+                type: number
+                description: Bytes sent
+              kv_read_units:
+                type: number
+                description: Deno KV read units
+              kv_write_units:
+                type: number
+                description: Deno KV write units
+  x-stackQL-resources:
+    apps:
+      id: deno.apps.apps
+      name: apps
+      title: Apps
+      methods:
+        get:
+          operation:
+            $ref: '#/paths/~1v2~1apps~1{app}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v2~1apps~1{app}/patch'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete:
+          operation:
+            $ref: '#/paths/~1v2~1apps~1{app}/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '204'
+        list:
+          operation:
+            $ref: '#/paths/~1v2~1apps/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        create:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v2~1apps/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/apps/methods/get'
+          - $ref: '#/components/x-stackQL-resources/apps/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/apps/methods/create'
+        update:
+          - $ref: '#/components/x-stackQL-resources/apps/methods/update'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/apps/methods/delete'
+        replace: []
+    analytics:
+      id: deno.apps.analytics
+      name: analytics
+      title: Analytics
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1v2~1apps~1{app}~1analytics/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.rows
+            overrideMediaType: application/json
+            schema_override:
+              $ref: '#/components/schemas/stackqlAnalyticsRows'
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{"rows":[{{ range $ri, $row := .values }}{{ if $ri }},{{ end }}{{ "{" }}{{ range $ci, $v := $row }}{{ if $ci }},{{ end }}{{ toJson (index $.fields $ci).name }}:{{ toJson $v }}{{ end }}{{ "}" }}{{ end }}]}'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/analytics/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace: []
+    runtime_logs:
+      id: deno.apps.runtime_logs
+      name: runtime_logs
+      title: Runtime Logs
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1v2~1apps~1{app}~1logs/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.logs
+          config:
+            pagination:
+              requestToken:
+                key: cursor
+                location: query
+              responseToken:
+                key: $.next_cursor
+                location: body
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/runtime_logs/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace: []
+servers:
+  - url: https://api.deno.com
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: ''
+      location: request
+    responseToken:
+      key: Link
+      location: header

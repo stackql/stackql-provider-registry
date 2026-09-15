@@ -1,0 +1,1727 @@
+openapi: 3.1.1
+info:
+  title: revisions API
+  description: |-
+    A revision represents a specific build and deployment of an app. Revisions are immutable once created — to make changes, you create a new revision. The only mutable property is `retention` (enterprise opt-in), a garbage-collection policy of `auto` or `indefinite`.
+
+    Status lifecycle: `queued` → `building` → `succeeded` (success), `queued` → `failed` (build error, cancelled, or timeout), or `queued` → `skipped`.
+  version: 2.0.0
+paths:
+  /v2/apps/{app}/deploy:
+    post:
+      operationId: apps.deploy
+      summary: Create revision
+      description: |-
+        Create a new revision (deployment).
+
+        Upload source files as assets and optionally specify `config`, `layers`, `env_vars`, and `labels`. Asset keys are relative paths resolved against `/app/src`.
+
+        If `config` is omitted, it is inherited from the app's config. If specified, it fully replaces the app's config (no deep merge).
+
+        Revision `env_vars` are immutable once created and have highest priority in the resolution order. Context filtering is not supported for revision env vars.
+
+        Use `production` and `preview` to control which timelines the revision is deployed to. By default, revisions are deployed to the production timeline only.
+      tags:
+        - apps
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The app ID or slug. App slugs must be 3–32 characters long, may contain only lowercase letters, numbers, and hyphens, cannot contain underscores, must not start or end with a hyphen, must not have consecutive hyphens in positions 3 and 4, and cannot be a reserved slug. App IDs are UUIDs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                assets:
+                  type: object
+                  additionalProperties:
+                    $ref: '#/components/schemas/Asset'
+                  description: Source files to deploy. Keys are paths relative to `/app/src`
+                  example:
+                    main.ts:
+                      kind: file
+                      encoding: utf-8
+                      content: Deno.serve(() => new Response("Hello"));
+                    deno.json:
+                      kind: file
+                      encoding: utf-8
+                      content: '{"imports": {}}'
+                config:
+                  $ref: '#/components/schemas/Config'
+                  description: Build and runtime config. If omitted, inherited from the app
+                layers:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/LayerRefInput'
+                  description: Layers to reference for this revision
+                env_vars:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/EnvVarInputForDeploy'
+                  description: Revision-specific environment variables (immutable once created)
+                labels:
+                  $ref: '#/components/schemas/Labels'
+                  description: Metadata labels (e.g. git branch, commit SHA)
+                production:
+                  $ref: '#/components/schemas/ProductionTarget'
+                  default: true
+                  description: 'Whether and how to deploy to the production timeline. `true` (the default) or `{}` joins production with default wiring — the default `<app>.<org>` alias floats to this revision. `false` keeps it out of production. `{ "domains": [...] }` enters explicit mode: only the listed hostnames are bound (each pinned to this revision), and the default alias is attached only if you list it explicitly as `{deno.app.slug}.<org>.<base>`. `{ "domains": [] }` attaches nothing. `{ "databases": [{ "instance": "...", "name": "..." }] }` binds the listed databases under the Production partition_config (materialised on first use). `domains` and `databases` may be combined.'
+                preview:
+                  $ref: '#/components/schemas/PreviewTarget'
+                  default: false
+                  description: 'Whether and how to deploy to the preview timeline. `true` or `{}` joins preview with the default per-revision preview URL. `false` (the default) keeps it out. `{ "domains": [...] }` binds only the listed hostnames (each pinned to this revision). `{ "databases": [{ "instance": "...", "name": "..." }] }` binds the listed databases under the Preview partition_config.'
+                retention:
+                  enum:
+                    - auto
+                    - indefinite
+                  default: auto
+                  description: Garbage-collection policy for the new revision. `auto` (the default) follows the normal inactivity-based cleanup; `indefinite` exempts it from automatic deletion. `indefinite` is only available to enterprise organizations that have opted in to revision retention — contact Deno support to enable it. For organizations without the feature, a deploy that sets `indefinite` fails with `403 REVISION_RETENTION_NOT_AVAILABLE`.
+                  type: string
+              required:
+                - assets
+      responses:
+        '202':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Revision'
+  /v2/revisions/{revision}:
+    get:
+      operationId: revisions.get
+      summary: Get revision details
+      description: |-
+        Get revision details.
+
+        Revision IDs are globally unique. The response includes `layers`, `env_vars`, and `config` when available.
+
+        Status lifecycle (one of):
+        - queued -> building -> succeeded (success)
+        - queued -> failed (build error, cancelled, or timeout)
+        - queued -> skipped (e.g., commit message contains [skip-ci])
+
+        The `timelines` field is an eventually consistent view of routing: after a deploy or a domain change it may briefly reflect the previous state (typically for a few seconds at most).
+      tags:
+        - revisions
+      parameters:
+        - name: revision
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Revision ID (globally unique)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Revision'
+    patch:
+      operationId: revisions.update
+      summary: Update revision
+      description: |-
+        Update mutable revision properties. The only mutable property is `retention`, the revision's garbage-collection policy: `auto` follows the normal inactivity-based cleanup, while `indefinite` exempts the revision from automatic deletion so it keeps serving on its preview and pinned-production domains. Explicitly deleting the revision, or deleting its app, is always permitted regardless of `retention`.
+
+        `indefinite` is only available to enterprise organizations that have opted in — contact Deno support to enable it. For organizations without the feature, requests that set `indefinite` fail with `403 REVISION_RETENTION_NOT_AVAILABLE`.
+      tags:
+        - revisions
+      parameters:
+        - name: revision
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Revision ID (globally unique)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                retention:
+                  enum:
+                    - auto
+                    - indefinite
+                  description: The revision's garbage-collection policy (`auto` or `indefinite`)
+                  type: string
+              required: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Revision'
+    delete:
+      operationId: revisions.delete
+      summary: Delete revision
+      description: Delete a revision. Cannot delete revisions that are currently building or actively routed.
+      tags:
+        - revisions
+      parameters:
+        - name: revision
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Revision ID (globally unique)
+      responses:
+        '204':
+          description: OK
+  /v2/revisions/{revision}/cancel:
+    post:
+      operationId: revisions.cancel
+      summary: Cancel revision build
+      description: 'Request cancellation of a build in progress. Cancellation is asynchronous — this endpoint returns immediately with the current revision state. The `cancellation_requested_at` field will be set, but the revision may still be in `building` status. Poll the revision or use the [/progress](#tag/revisions/GET/api/v2/revisions/{revision}/progress) endpoint to wait for the build to reach the `failed` state with `failure_reason: "cancelled"`.'
+      tags:
+        - revisions
+      parameters:
+        - name: revision
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Revision ID (globally unique)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Revision'
+  /v2/apps/{app}/revisions:
+    get:
+      operationId: revisions.list
+      summary: List revisions for app
+      description: List revisions for an app. Optionally filter by status.
+      tags:
+        - revisions
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The app ID or slug. App slugs must be 3–32 characters long, may contain only lowercase letters, numbers, and hyphens, cannot contain underscores, must not start or end with a hyphen, must not have consecutive hyphens in positions 3 and 4, and cannot be a reserved slug. App IDs are UUIDs.
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          allowEmptyValue: true
+          allowReserved: true
+          description: The pagination cursor
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 30
+          allowEmptyValue: true
+          allowReserved: true
+          description: The maximum number of items to return
+        - name: status
+          in: query
+          required: false
+          schema:
+            enum:
+              - skipped
+              - queued
+              - building
+              - succeeded
+              - failed
+            description: Filter revisions by status
+            type: string
+          style: deepObject
+          explode: true
+          allowEmptyValue: true
+          allowReserved: true
+          description: Filter by revision status
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RevisionListItem'
+  /v2/revisions/{revision}/progress:
+    get:
+      operationId: revisions.progress
+      summary: Stream revision progress
+      description: |-
+        Stream revision build progress. The stream ends when the revision
+        reaches a terminal state (`succeeded`, `failed`, or `skipped`).
+
+        Supports both JSONL (`Accept: application/x-ndjson`) and SSE (`Accept: text/event-stream`)
+        formats via the `Accept` header.
+      tags:
+        - revisions
+      parameters:
+        - name: revision
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Revision ID (globally unique)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/x-ndjson:
+              schema:
+                $ref: '#/components/schemas/RevisionProgress'
+  /v2/revisions/{revision}/build_logs:
+    get:
+      operationId: revisions.build_logs
+      summary: Stream build logs
+      description: |-
+        Stream build logs for a revision.
+
+        Supports both Server-Sent Events (SSE) (`Accept: text/event-stream`) and JSON Lines (`Accept: application/x-ndjson`) formats. Use the `Accept` header to specify the desired format.
+
+        The stream remains open during active builds and closes when the build completes.
+      tags:
+        - revisions
+      parameters:
+        - name: revision
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Revision ID (globally unique)
+        - name: step
+          in: query
+          required: false
+          schema:
+            enum:
+              - preparing
+              - installing
+              - building
+              - deploying
+            description: Filter logs by build step
+            type: string
+          style: deepObject
+          explode: true
+          allowEmptyValue: true
+          allowReserved: true
+          description: Filter logs by build step
+        - name: timeline
+          in: query
+          required: false
+          schema:
+            type: string
+            description: Filter logs by timeline slug
+          allowEmptyValue: true
+          allowReserved: true
+          description: Filter logs by timeline slug
+      responses:
+        '200':
+          description: OK
+          content:
+            application/x-ndjson:
+              schema:
+                $ref: '#/components/schemas/BuildLogEntry'
+  /v2/revisions/{revision}/timelines:
+    get:
+      operationId: revisions.timelines
+      summary: Get revision timelines
+      description: Get the timelines (deployment targets) where this revision is active.
+      tags:
+        - revisions
+      parameters:
+        - name: revision
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Revision ID (globally unique)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Timeline'
+  /v2/revisions/{revision}/domains:
+    put:
+      operationId: revisions.attachDomain
+      summary: Attach domains to a revision
+      description: |-
+        Bind domains to this revision. Bindings are scoped to this revision only — other revisions keep their existing routing.
+
+        Each hostname must fall under a domain your organization has already verified, following the same rule and `{variable}` template syntax as the `domains` field on `POST /apps/{app}/deploy` (see its `production`/`preview` documentation).
+
+        You can also (re-)attach this revision to the app's **default** managed domains post-deployment by listing the default-alias template — the same value `POST /apps/{app}/deploy` accepts (e.g. `{deno.app.slug}.<org>.<managed-domain>` under `production`, or the per-revision `{deno.app.slug}-{deno.revision.id}.…` under `preview`). Listing it sets the timeline label on the revision rather than pinning a custom hostname: the default production host floats to the **latest** revision attached this way, while each revision keeps its own default preview host.
+
+        Binding the same hostname to this revision again is a no-op. Use `DELETE /revisions/{revision}/domains/{hostname}` to remove a binding.
+
+        A hostname always resolves to **exactly one** revision. Binding is additive: attaching a hostname to a revision never detaches it from any revision it is already bound to. When a hostname is bound to several revisions, the **most recently created revision wins**.
+
+        Because the newest bound revision always wins, moving a hostname *forward* to a newer revision is just an attach: bind it to the newer revision and that revision immediately takes over routing — you do not detach the old one. Moving a hostname *back* to an older revision is different: re-attaching the older revision has no effect while a newer revision is still bound, so you must explicitly `DELETE` the binding on every newer revision. Detaching the currently-winning revision falls back to the next most recently created revision that is still bound; the hostname only stops routing once its last binding is removed.
+
+        Returns `204 No Content` on success.
+      tags:
+        - revisions
+        - domains
+      parameters:
+        - name: revision
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Revision ID (globally unique)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                production:
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                  description: 'Hostnames to bind to this revision under the production timeline. Every entry must fall under a domain your organization has already verified — either the verified domain itself (an apex hostname such as `my-domain.com` bound against the verified `my-domain.com`) or a subdomain of a verified wildcard domain (such as `my-app.my-org.deno.net` bound against the verified `*.my-org.deno.net`). A hostname that does not fall under any verified domain is rejected. The leading label of a subdomain may contain `{variable}` template expressions so the hostname resolves to a distinct value per revision. Template variables may appear only in the first label, may be combined with static text and with each other (e.g. `pr-{deno.revision.id}` or `{deno.app.slug}--{deno.revision.id}`), and must not contain a dot. The available variables are `{deno.revision.id}`, `{deno.app.slug}` (or its opaque equivalent `{deno.app.id}`), and `{deno.organization.id}`. A hostname always resolves to exactly one revision: binding is additive, but when a hostname is bound to multiple revisions the most recently created revision wins. To roll a hostname back to an older revision you must explicitly detach the newer revision(s) via `DELETE /revisions/{revision}/domains/{hostname}`.'
+                preview:
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                  description: 'Hostnames to bind to this revision under the preview timeline. Every entry must fall under a domain your organization has already verified — either the verified domain itself (an apex hostname such as `my-domain.com` bound against the verified `my-domain.com`) or a subdomain of a verified wildcard domain (such as `my-app.my-org.deno.net` bound against the verified `*.my-org.deno.net`). A hostname that does not fall under any verified domain is rejected. The leading label of a subdomain may contain `{variable}` template expressions so the hostname resolves to a distinct value per revision. Template variables may appear only in the first label, may be combined with static text and with each other (e.g. `pr-{deno.revision.id}` or `{deno.app.slug}--{deno.revision.id}`), and must not contain a dot. The available variables are `{deno.revision.id}`, `{deno.app.slug}` (or its opaque equivalent `{deno.app.id}`), and `{deno.organization.id}`. A hostname always resolves to exactly one revision: binding is additive, but when a hostname is bound to multiple revisions the most recently created revision wins. To roll a hostname back to an older revision you must explicitly detach the newer revision(s) via `DELETE /revisions/{revision}/domains/{hostname}`.'
+              required: []
+      responses:
+        '204':
+          description: OK
+  /v2/revisions/{revision}/domains/{hostname}:
+    delete:
+      operationId: revisions.detachDomain
+      summary: Detach a domain from a revision
+      description: |-
+        Remove this revision's binding for the given hostname. Hostnames are unique, so the binding is identified by hostname alone — the timeline/context is inferred. Pass the same hostname (including any `{variable}` template syntax) that was used to attach it.
+
+        Passing a **default**-alias template detaches the revision from the app's default managed domain instead of removing a custom binding: the default production host rolls back to the next most recently attached revision, and the default preview host for this revision goes offline.
+
+        Detaching one hostname leaves the revision's other hostnames untouched, even when they share a parent domain. Other revisions and app-level custom-domain assignments are not affected. Returns `404` if no binding exists.
+      tags:
+        - revisions
+        - domains
+      parameters:
+        - name: revision
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Revision ID (globally unique)
+        - name: hostname
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '204':
+          description: OK
+  /v2/revisions/{revision}/promote:
+    post:
+      operationId: revisions.promote
+      summary: Promote a revision to production
+      description: |-
+        Make this already-built revision the live production revision without rebuilding. Pins the app's default production timeline to this revision (joining the timeline first if needed), so the default managed production host — and any custom domains assigned to the app's production timeline — route to it, and it runs with the production context's environment variables and databases.
+
+        This differs from attaching the default production alias via `PUT /revisions/{revision}/domains`: that only marks the revision as a production *member* and lets the **newest** member serve, whereas this **pins this specific** revision, so it serves even when it is older than another production revision. To undo, promote a different revision (re-pins) or remove the production override.
+
+        The revision must be built (status `routed`). Returns `204 No Content`.
+      tags:
+        - revisions
+      parameters:
+        - name: revision
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Revision ID (globally unique)
+      responses:
+        '204':
+          description: OK
+components:
+  schemas:
+    Asset:
+      example:
+        kind: file
+        encoding: utf-8
+        content: Deno.serve(() => new Response("Hello"));
+      type: object
+      properties:
+        kind:
+          default: file
+          description: Asset type discriminator
+          enum:
+            - file
+          type: string
+        encoding:
+          enum:
+            - utf-8
+            - base64
+          default: utf-8
+          description: Content encoding
+          type: string
+        content:
+          type: string
+          description: File content, encoded according to `encoding`
+        target:
+          type: string
+          description: Relative path to the symlink target
+      required:
+        - content
+        - kind
+        - target
+    Config:
+      type: object
+      properties:
+        framework:
+          enum:
+            - ''
+            - nextjs
+            - astro
+            - nuxt
+            - remix
+            - solidstart
+            - tanstackstart
+            - sveltekit
+            - fresh
+            - lume
+          description: Framework preset. Mutually exclusive with `runtime`
+          type: string
+        install:
+          description: Custom install command. Omit to skip the install step
+          nullable: true
+          type: string
+        build:
+          description: Custom build command. Omit to skip the build step
+          nullable: true
+          type: string
+        predeploy:
+          description: Command to run before each deployment (e.g. database migrations). Omit to skip
+          nullable: true
+          type: string
+        runtime:
+          $ref: '#/components/schemas/Runtime'
+          description: Runtime configuration. Mutually exclusive with `framework`
+        crons:
+          type: boolean
+          description: Whether cron jobs are enabled for revisions of the app. When false, revisions that register cron jobs using Deno.cron fail to build. Defaults to true
+      example:
+        framework: nextjs
+        install: npm install
+        build: npm run build
+    LayerRefInput:
+      type: string
+      description: Layer ID to reference / Layer slug to reference
+    EnvVarInputForDeploy:
+      type: object
+      properties:
+        key:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: The environment variable name
+        value:
+          type: string
+          maxLength: 65536
+          description: The environment variable value
+      required:
+        - key
+        - value
+      example:
+        key: DATABASE_URL
+        value: postgres://localhost/dev
+    Labels:
+      type: object
+      additionalProperties:
+        type: string
+        description: '(JSON value: string or array)'
+      example:
+        custom.customer_id: cust_123
+        custom.environment: production
+        custom.regions:
+          - us-east
+          - eu-west
+    ProductionTarget:
+      type: string
+      description: '(JSON value: boolean or object)'
+    PreviewTarget:
+      type: string
+      description: '(JSON value: boolean or object)'
+    Revision:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique revision identifier
+        status:
+          enum:
+            - skipped
+            - queued
+            - building
+            - succeeded
+            - failed
+          description: Current revision lifecycle status
+          type: string
+        failure_reason:
+          description: Reason for failure, or null if not failed
+          nullable: true
+          enum:
+            - error
+            - cancelled
+            - timed_out
+            - skipped
+          type: string
+        failure_detail:
+          description: Structured detail for a deployment that failed after a successful build (e.g. the application failed to start during warmup), or null. Build failures and cancellations do not carry this detail.
+          nullable: true
+          type: object
+          properties:
+            stage:
+              type: string
+              description: Deployment stage that failed. Currently always "warmup" — the post-build boot check of the deployed application. New stages may be added; clients must tolerate unknown values.
+            code:
+              type: string
+              description: Machine-readable failure code. Currently "boot_failed" (the deployed application failed to start — check the application logs for the startup error) or "internal" (a platform-side failure). New codes may be added; clients must tolerate unknown values.
+            message:
+              type: string
+              description: Human-readable description of the failure
+          required:
+            - stage
+            - code
+            - message
+        labels:
+          $ref: '#/components/schemas/Labels'
+          description: Metadata labels attached to this revision (e.g. git info)
+        layers:
+          type: array
+          items:
+            $ref: '#/components/schemas/LayerRef'
+          description: Layers referenced by this revision, in priority order (later overrides earlier)
+        env_vars:
+          type: array
+          items:
+            $ref: '#/components/schemas/RevisionEnvVar'
+          description: Revision-specific environment variables (immutable once created)
+        config:
+          $ref: '#/components/schemas/ConfigOutput'
+          description: Build and runtime configuration used for this revision
+        created_at:
+          type: string
+          description: ISO 8601 timestamp of creation
+        cancellation_requested_at:
+          description: ISO 8601 timestamp when cancellation was requested, or null
+          nullable: true
+          type: string
+        build_finished_at:
+          description: ISO 8601 timestamp when the build completed, or null if still building
+          nullable: true
+          type: string
+        deleted_at:
+          description: ISO 8601 timestamp of deletion, or null if active
+          nullable: true
+          type: string
+        retention:
+          enum:
+            - auto
+            - indefinite
+          description: 'Garbage-collection policy for this revision. `auto` follows the normal inactivity-based cleanup; `indefinite` exempts the revision from automatic deletion. Only available to enterprise organizations that have opted in to revision retention — contact Deno support to enable it. Absent for organizations without the feature, which cannot set it. Retention only guards against automatic deletion: explicitly deleting the revision, or deleting its app, always succeeds regardless.'
+          type: string
+        timelines:
+          type: array
+          items:
+            $ref: '#/components/schemas/RevisionTimeline'
+          description: Timelines this revision is part of, each with the hostnames that currently route to this revision on that timeline
+      required:
+        - id
+        - status
+        - failure_reason
+        - failure_detail
+        - layers
+        - env_vars
+        - created_at
+        - cancellation_requested_at
+        - build_finished_at
+        - deleted_at
+        - timelines
+      example:
+        id: r2ysnrrhr352
+        status: succeeded
+        failure_reason: null
+        failure_detail: null
+        labels:
+          custom.branch: main
+          custom.sha: abc123def456
+        layers:
+          - id: lyr_abc123
+            slug: deployment-secrets
+        env_vars:
+          - key: BUILD_ID
+            value: abc123
+        config:
+          framework: fresh
+          install: deno cache main.ts
+        created_at: '2024-01-15T10:30:00Z'
+        cancellation_requested_at: null
+        build_finished_at: '2024-01-15T10:31:50Z'
+        deleted_at: null
+        timelines:
+          - name: Production
+            context: Production
+            hostnames:
+              - my-app.my-org.deno.net
+    RevisionListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique revision identifier
+        status:
+          enum:
+            - skipped
+            - queued
+            - building
+            - succeeded
+            - failed
+          description: Current revision lifecycle status
+          type: string
+        failure_reason:
+          description: Reason for failure, or null if not failed
+          nullable: true
+          enum:
+            - error
+            - cancelled
+            - timed_out
+            - skipped
+          type: string
+        labels:
+          $ref: '#/components/schemas/Labels'
+          description: Metadata labels attached to this revision
+        created_at:
+          type: string
+          description: ISO 8601 timestamp of creation
+        cancellation_requested_at:
+          description: ISO 8601 timestamp when cancellation was requested, or null
+          nullable: true
+          type: string
+        build_finished_at:
+          description: ISO 8601 timestamp when the build completed, or null if still building
+          nullable: true
+          type: string
+        deleted_at:
+          description: ISO 8601 timestamp of deletion, or null if active
+          nullable: true
+          type: string
+        retention:
+          enum:
+            - auto
+            - indefinite
+          description: Garbage-collection policy (`auto` or `indefinite`). Only present for enterprise organizations opted in to revision retention.
+          type: string
+      required:
+        - id
+        - status
+        - failure_reason
+        - created_at
+        - cancellation_requested_at
+        - build_finished_at
+        - deleted_at
+    RevisionProgress:
+      type: object
+      properties:
+        queued:
+          description: Queue stage — waiting for a build slot
+          type: object
+          properties:
+            status:
+              description: Stage has not started yet
+              enum:
+                - pending
+              type: string
+            start:
+              type: string
+              description: ISO 8601 timestamp when the stage started
+            end:
+              type: string
+              description: ISO 8601 timestamp when the stage ended
+          required:
+            - status
+            - start
+            - end
+        preparing:
+          description: Prepare stage — cloning source code and restoring caches
+          type: object
+          properties:
+            status:
+              description: Stage has not started yet
+              enum:
+                - pending
+              type: string
+            start:
+              type: string
+              description: ISO 8601 timestamp when the stage started
+            end:
+              type: string
+              description: ISO 8601 timestamp when the stage ended
+          required:
+            - status
+            - start
+            - end
+        installing:
+          description: Install stage — installing dependencies
+          oneOf:
+            - type: object
+              properties:
+                status:
+                  description: Stage has not started yet
+                  enum:
+                    - pending
+                  type: string
+              required:
+                - status
+            - type: object
+              properties:
+                status:
+                  description: Stage was skipped
+                  enum:
+                    - skipped
+                  type: string
+              required:
+                - status
+            - type: object
+              properties:
+                status:
+                  description: Stage is currently running
+                  enum:
+                    - running
+                  type: string
+                start:
+                  type: string
+                  description: ISO 8601 timestamp when the stage started
+              required:
+                - status
+                - start
+            - type: object
+              properties:
+                status:
+                  enum:
+                    - succeeded
+                    - timed_out
+                    - cancelled
+                    - errored
+                  description: Terminal stage status
+                  type: string
+                start:
+                  type: string
+                  description: ISO 8601 timestamp when the stage started
+                end:
+                  type: string
+                  description: ISO 8601 timestamp when the stage ended
+              required:
+                - status
+                - start
+                - end
+          type: object
+          properties:
+            command:
+              description: The command being executed, or null if not applicable
+              nullable: true
+              type: string
+          required:
+            - command
+        building:
+          description: Build stage — running the build command
+          oneOf:
+            - type: object
+              properties:
+                status:
+                  description: Stage has not started yet
+                  enum:
+                    - pending
+                  type: string
+              required:
+                - status
+            - type: object
+              properties:
+                status:
+                  description: Stage was skipped
+                  enum:
+                    - skipped
+                  type: string
+              required:
+                - status
+            - type: object
+              properties:
+                status:
+                  description: Stage is currently running
+                  enum:
+                    - running
+                  type: string
+                start:
+                  type: string
+                  description: ISO 8601 timestamp when the stage started
+              required:
+                - status
+                - start
+            - type: object
+              properties:
+                status:
+                  enum:
+                    - succeeded
+                    - timed_out
+                    - cancelled
+                    - errored
+                  description: Terminal stage status
+                  type: string
+                start:
+                  type: string
+                  description: ISO 8601 timestamp when the stage started
+                end:
+                  type: string
+                  description: ISO 8601 timestamp when the stage ended
+              required:
+                - status
+                - start
+                - end
+          type: object
+          properties:
+            command:
+              description: The command being executed, or null if not applicable
+              nullable: true
+              type: string
+          required:
+            - command
+        deploying:
+          description: Deploy stage — uploading artifacts and routing traffic
+          oneOf:
+            - type: object
+              properties:
+                status:
+                  description: Stage has not started yet
+                  enum:
+                    - pending
+                  type: string
+              required:
+                - status
+            - type: object
+              properties:
+                status:
+                  description: Stage was skipped
+                  enum:
+                    - skipped
+                  type: string
+              required:
+                - status
+            - type: object
+              properties:
+                status:
+                  description: Stage is currently running
+                  enum:
+                    - running
+                  type: string
+                start:
+                  type: string
+                  description: ISO 8601 timestamp when the stage started
+              required:
+                - status
+                - start
+            - type: object
+              properties:
+                status:
+                  enum:
+                    - succeeded
+                    - timed_out
+                    - cancelled
+                    - errored
+                  description: Terminal stage status
+                  type: string
+                start:
+                  type: string
+                  description: ISO 8601 timestamp when the stage started
+                end:
+                  type: string
+                  description: ISO 8601 timestamp when the stage ended
+              required:
+                - status
+                - start
+                - end
+          type: object
+          properties:
+            timelines:
+              type: array
+              items:
+                oneOf:
+                  - type: object
+                    properties:
+                      status:
+                        description: Stage has not started yet
+                        enum:
+                          - pending
+                        type: string
+                    required:
+                      - status
+                  - type: object
+                    properties:
+                      status:
+                        description: Stage was skipped
+                        enum:
+                          - skipped
+                        type: string
+                    required:
+                      - status
+                  - type: object
+                    properties:
+                      status:
+                        description: Stage is currently running
+                        enum:
+                          - running
+                        type: string
+                      start:
+                        type: string
+                        description: ISO 8601 timestamp when the stage started
+                    required:
+                      - status
+                      - start
+                  - type: object
+                    properties:
+                      status:
+                        enum:
+                          - succeeded
+                          - timed_out
+                          - cancelled
+                          - errored
+                        description: Terminal stage status
+                        type: string
+                      start:
+                        type: string
+                        description: ISO 8601 timestamp when the stage started
+                      end:
+                        type: string
+                        description: ISO 8601 timestamp when the stage ended
+                    required:
+                      - status
+                      - start
+                      - end
+                type: object
+                properties:
+                  slug:
+                    type: string
+                    description: Timeline slug
+                  partition:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: Partition key-value pairs identifying this timeline
+                    example:
+                      git.branch: main
+                  databases:
+                    type: array
+                    items:
+                      oneOf:
+                        - type: object
+                          properties:
+                            status:
+                              description: Stage has not started yet
+                              enum:
+                                - pending
+                              type: string
+                          required:
+                            - status
+                        - type: object
+                          properties:
+                            status:
+                              description: Stage was skipped
+                              enum:
+                                - skipped
+                              type: string
+                          required:
+                            - status
+                        - type: object
+                          properties:
+                            status:
+                              description: Stage is currently running
+                              enum:
+                                - running
+                              type: string
+                            start:
+                              type: string
+                              description: ISO 8601 timestamp when the stage started
+                          required:
+                            - status
+                            - start
+                        - type: object
+                          properties:
+                            status:
+                              enum:
+                                - succeeded
+                                - timed_out
+                                - cancelled
+                                - errored
+                              description: Terminal stage status
+                              type: string
+                            start:
+                              type: string
+                              description: ISO 8601 timestamp when the stage started
+                            end:
+                              type: string
+                              description: ISO 8601 timestamp when the stage ended
+                          required:
+                            - status
+                            - start
+                            - end
+                      type: object
+                      properties:
+                        engine:
+                          type: string
+                          description: Database engine type (e.g. postgresql, denokv)
+                      required:
+                        - engine
+                    description: Per-database provisioning progress
+                  predeploy:
+                    description: Pre-deploy command stage progress
+                    oneOf:
+                      - type: object
+                        properties:
+                          status:
+                            description: Stage has not started yet
+                            enum:
+                              - pending
+                            type: string
+                        required:
+                          - status
+                      - type: object
+                        properties:
+                          status:
+                            description: Stage was skipped
+                            enum:
+                              - skipped
+                            type: string
+                        required:
+                          - status
+                      - type: object
+                        properties:
+                          status:
+                            description: Stage is currently running
+                            enum:
+                              - running
+                            type: string
+                          start:
+                            type: string
+                            description: ISO 8601 timestamp when the stage started
+                        required:
+                          - status
+                          - start
+                      - type: object
+                        properties:
+                          status:
+                            enum:
+                              - succeeded
+                              - timed_out
+                              - cancelled
+                              - errored
+                            description: Terminal stage status
+                            type: string
+                          start:
+                            type: string
+                            description: ISO 8601 timestamp when the stage started
+                          end:
+                            type: string
+                            description: ISO 8601 timestamp when the stage ended
+                        required:
+                          - status
+                          - start
+                          - end
+                    type: object
+                    properties:
+                      command:
+                        description: The command being executed, or null if not applicable
+                        nullable: true
+                        type: string
+                    required:
+                      - command
+                  warmup:
+                    description: Isolate warmup stage progress
+                    oneOf:
+                      - type: object
+                        properties:
+                          status:
+                            description: Stage has not started yet
+                            enum:
+                              - pending
+                            type: string
+                        required:
+                          - status
+                      - type: object
+                        properties:
+                          status:
+                            description: Stage was skipped
+                            enum:
+                              - skipped
+                            type: string
+                        required:
+                          - status
+                      - type: object
+                        properties:
+                          status:
+                            description: Stage is currently running
+                            enum:
+                              - running
+                            type: string
+                          start:
+                            type: string
+                            description: ISO 8601 timestamp when the stage started
+                        required:
+                          - status
+                          - start
+                      - type: object
+                        properties:
+                          status:
+                            enum:
+                              - succeeded
+                              - timed_out
+                              - cancelled
+                              - errored
+                            description: Terminal stage status
+                            type: string
+                          start:
+                            type: string
+                            description: ISO 8601 timestamp when the stage started
+                          end:
+                            type: string
+                            description: ISO 8601 timestamp when the stage ended
+                        required:
+                          - status
+                          - start
+                          - end
+                  routing:
+                    description: Domain routing stage progress
+                    oneOf:
+                      - oneOf:
+                          - type: object
+                            properties:
+                              status:
+                                description: Stage has not started yet
+                                enum:
+                                  - pending
+                                type: string
+                            required:
+                              - status
+                          - type: object
+                            properties:
+                              status:
+                                description: Stage was skipped
+                                enum:
+                                  - skipped
+                                type: string
+                            required:
+                              - status
+                          - type: object
+                            properties:
+                              status:
+                                description: Stage is currently running
+                                enum:
+                                  - running
+                                type: string
+                              start:
+                                type: string
+                                description: ISO 8601 timestamp when the stage started
+                            required:
+                              - status
+                              - start
+                          - type: object
+                            properties:
+                              status:
+                                enum:
+                                  - succeeded
+                                  - timed_out
+                                  - cancelled
+                                  - errored
+                                description: Terminal stage status
+                                type: string
+                              start:
+                                type: string
+                                description: ISO 8601 timestamp when the stage started
+                              end:
+                                type: string
+                                description: ISO 8601 timestamp when the stage ended
+                            required:
+                              - status
+                              - start
+                              - end
+                      - type: object
+                        properties:
+                          status:
+                            description: Routing is blocked waiting for other timelines
+                            enum:
+                              - timeline_blocked
+                            type: string
+                          timelines:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                slug:
+                                  type: string
+                                  description: Timeline slug
+                                partition:
+                                  type: object
+                                  additionalProperties: {}
+                                  description: Partition key-value pairs identifying this timeline
+                                  example:
+                                    git.branch: main
+                              required:
+                                - slug
+                                - partition
+                            description: Timelines that are blocking this stage
+                          stage:
+                            description: The stage that is blocked
+                            enum:
+                              - warmup
+                            type: string
+                        required:
+                          - status
+                          - timelines
+                          - stage
+                required:
+                  - slug
+                  - partition
+                  - databases
+                  - predeploy
+                  - routing
+              description: Per-timeline deployment progress
+          required:
+            - timelines
+      required:
+        - queued
+        - preparing
+        - installing
+        - building
+        - deploying
+      example:
+        queued:
+          status: succeeded
+          start: '2025-01-01T00:00:00Z'
+          end: '2025-01-01T00:00:01Z'
+        preparing:
+          status: succeeded
+          start: '2025-01-01T00:00:01Z'
+          end: '2025-01-01T00:00:05Z'
+        installing:
+          status: succeeded
+          start: '2025-01-01T00:00:05Z'
+          end: '2025-01-01T00:00:10Z'
+          command: null
+        building:
+          status: succeeded
+          start: '2025-01-01T00:00:10Z'
+          end: '2025-01-01T00:00:20Z'
+          command: deno task build
+        deploying:
+          status: succeeded
+          start: '2025-01-01T00:00:20Z'
+          end: '2025-01-01T00:00:25Z'
+          timelines:
+            - status: succeeded
+              start: '2025-01-01T00:00:20Z'
+              end: '2025-01-01T00:00:25Z'
+              slug: production
+              partition: {}
+              databases:
+                - status: succeeded
+                  start: '2025-01-01T00:00:20Z'
+                  end: '2025-01-01T00:00:22Z'
+                  engine: postgresql
+                - status: succeeded
+                  start: '2025-01-01T00:00:20Z'
+                  end: '2025-01-01T00:00:21Z'
+                  engine: denokv
+              predeploy:
+                status: succeeded
+                start: '2025-01-01T00:00:22Z'
+                end: '2025-01-01T00:00:23Z'
+                command: deno task db:migrate
+              routing:
+                status: succeeded
+                start: '2025-01-01T00:00:23Z'
+                end: '2025-01-01T00:00:25Z'
+    BuildLogEntry:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          description: ISO 8601 timestamp of the log entry
+        level:
+          enum:
+            - debug
+            - info
+            - warn
+            - error
+          description: Log severity level
+          type: string
+        message:
+          type: string
+          description: Log message content
+        step:
+          $ref: '#/components/schemas/BuildStep'
+          description: Build step that produced this log (e.g. `preparing`, `installing`, `building`)
+        timeline:
+          type: string
+          description: Timeline slug, if the log is associated with a specific timeline
+      required:
+        - timestamp
+        - level
+        - message
+      example:
+        timestamp: '2024-01-15T10:30:05Z'
+        level: info
+        message: Starting build...
+        step: preparing
+    Timeline:
+      type: object
+      properties:
+        slug:
+          type: string
+          description: Timeline slug derived from the partition config name
+        partition:
+          type: object
+          additionalProperties:
+            type: string
+          description: Partition key-value pairs identifying this timeline
+          example:
+            git.branch: main
+        domains:
+          type: array
+          items:
+            type: object
+            properties:
+              domain:
+                type: string
+                description: Domain name assigned to this timeline
+            required:
+              - domain
+          description: Domains routed to this timeline
+      required:
+        - slug
+        - partition
+        - domains
+    Runtime:
+      type: object
+      properties:
+        type:
+          enum:
+            - dynamic
+            - static
+          description: '`dynamic` runs a Deno process; `static` serves pre-built files'
+          type: string
+        entrypoint:
+          type: string
+          description: Main module path. Required when `type` is `dynamic`
+        args:
+          type: array
+          items:
+            type: string
+          description: Additional CLI arguments passed to the entrypoint
+        cwd:
+          type: string
+          description: Working directory or static file root. Required when `type` is `static`
+        spa:
+          type: boolean
+          description: Enable single-page application mode (fallback to index.html). Only for `static` type
+      required:
+        - type
+    RevisionFailureDetail:
+      type: object
+      properties:
+        stage:
+          type: string
+          description: Deployment stage that failed. Currently always "warmup" — the post-build boot check of the deployed application. New stages may be added; clients must tolerate unknown values.
+        code:
+          type: string
+          description: Machine-readable failure code. Currently "boot_failed" (the deployed application failed to start — check the application logs for the startup error) or "internal" (a platform-side failure). New codes may be added; clients must tolerate unknown values.
+        message:
+          type: string
+          description: Human-readable description of the failure
+      required:
+        - stage
+        - code
+        - message
+    LayerRef:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique layer identifier
+        slug:
+          type: string
+          description: Human-readable layer slug
+      required:
+        - id
+        - slug
+      example:
+        id: lyr_abc123
+        slug: shared-secrets
+    RevisionEnvVar:
+      type: object
+      properties:
+        key:
+          type: string
+          description: The environment variable name
+        value:
+          type: string
+          description: The environment variable value
+      required:
+        - key
+        - value
+      example:
+        key: DATABASE_URL
+        value: postgres://localhost/dev
+    ConfigOutput:
+      type: object
+      properties:
+        framework:
+          enum:
+            - ''
+            - nextjs
+            - astro
+            - nuxt
+            - remix
+            - solidstart
+            - tanstackstart
+            - sveltekit
+            - fresh
+            - lume
+          description: Framework preset used for this build
+          type: string
+        install:
+          description: Install command. Null if skipped
+          nullable: true
+          type: string
+        build:
+          description: Build command. Null if skipped
+          nullable: true
+          type: string
+        predeploy:
+          description: Pre-deploy command. Null if skipped
+          nullable: true
+          type: string
+        runtime:
+          $ref: '#/components/schemas/Runtime'
+          description: Runtime configuration
+        crons:
+          type: boolean
+          description: Whether cron jobs are enabled for revisions of the app. When false, revisions that register cron jobs using Deno.cron fail to build. Defaults to true
+    RevisionTimeline:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Timeline name — the partition config the revision is deployed under (e.g. "Production", "Preview", "Production (pinned)")
+        context:
+          type: string
+          description: Name of the context (environment variable group) this timeline runs in
+        hostnames:
+          type: array
+          items:
+            type: string
+          description: 'Hostnames on this timeline that currently route to this revision. A hostname only appears while this revision is the one actually serving it: hostnames shadowed by a newer revision under latest-revision-wins routing — including the default production hostname once a newer revision takes over the production timeline — are omitted.'
+      required:
+        - name
+        - context
+        - hostnames
+    BuildStep:
+      enum:
+        - preparing
+        - installing
+        - building
+        - deploying
+      type: string
+    stackqlBuildLogEntries:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/BuildLogEntry'
+    stackqlBuildProgressEntries:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/RevisionProgress'
+  x-stackQL-resources:
+    revisions:
+      id: deno.revisions.revisions
+      name: revisions
+      title: Revisions
+      methods:
+        deploy:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v2~1apps~1{app}~1deploy/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '202'
+        get:
+          operation:
+            $ref: '#/paths/~1v2~1revisions~1{revision}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v2~1revisions~1{revision}/patch'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        delete:
+          operation:
+            $ref: '#/paths/~1v2~1revisions~1{revision}/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '204'
+        cancel:
+          operation:
+            $ref: '#/paths/~1v2~1revisions~1{revision}~1cancel/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        list:
+          operation:
+            $ref: '#/paths/~1v2~1apps~1{app}~1revisions/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        attach_domains:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v2~1revisions~1{revision}~1domains/put'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '204'
+        detach_domain:
+          operation:
+            $ref: '#/paths/~1v2~1revisions~1{revision}~1domains~1{hostname}/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '204'
+        promote:
+          operation:
+            $ref: '#/paths/~1v2~1revisions~1{revision}~1promote/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '204'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/revisions/methods/get'
+          - $ref: '#/components/x-stackQL-resources/revisions/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/revisions/methods/deploy'
+        update:
+          - $ref: '#/components/x-stackQL-resources/revisions/methods/update'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/revisions/methods/delete'
+        replace: []
+    build_progress:
+      id: deno.revisions.build_progress
+      name: build_progress
+      title: Build Progress
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1v2~1revisions~1{revision}~1progress/get'
+          response:
+            mediaType: application/x-ndjson
+            openAPIDocKey: '200'
+            objectKey: $.entries
+            overrideMediaType: application/json
+            schema_override:
+              $ref: '#/components/schemas/stackqlBuildProgressEntries'
+            transform:
+              type: golang_template_text_v0.3.0
+              body: '{{- $rest := . -}}{{- $sep := "" -}}{"entries":[{{- range $i, $_ := getRegexpAllMatches "" "()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()" -}}{{- if $rest -}}{{- $line := getRegexpFirstMatch $rest "^([^\n]*)" -}}{{- if gt (len $rest) (len $line) }}{{ $rest = slice $rest (plus1 (len $line)) }}{{ else }}{{ $rest = "" }}{{ end -}}{{- if $line }}{{ $sep }}{{ $line }}{{ $sep = "," }}{{ end -}}{{- end -}}{{- end -}}]}'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/build_progress/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace: []
+    build_logs:
+      id: deno.revisions.build_logs
+      name: build_logs
+      title: Build Logs
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1v2~1revisions~1{revision}~1build_logs/get'
+          response:
+            mediaType: application/x-ndjson
+            openAPIDocKey: '200'
+            objectKey: $.entries
+            overrideMediaType: application/json
+            schema_override:
+              $ref: '#/components/schemas/stackqlBuildLogEntries'
+            transform:
+              type: golang_template_text_v0.3.0
+              body: '{{- $rest := . -}}{{- $sep := "" -}}{"entries":[{{- range $i, $_ := getRegexpAllMatches "" "()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()" -}}{{- if $rest -}}{{- $line := getRegexpFirstMatch $rest "^([^\n]*)" -}}{{- if gt (len $rest) (len $line) }}{{ $rest = slice $rest (plus1 (len $line)) }}{{ else }}{{ $rest = "" }}{{ end -}}{{- if $line }}{{ $sep }}{{ $line }}{{ $sep = "," }}{{ end -}}{{- end -}}{{- end -}}]}'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/build_logs/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace: []
+    timelines:
+      id: deno.revisions.timelines
+      name: timelines
+      title: Timelines
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1v2~1revisions~1{revision}~1timelines/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/timelines/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace: []
+servers:
+  - url: https://api.deno.com
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: ''
+      location: request
+    responseToken:
+      key: Link
+      location: header
