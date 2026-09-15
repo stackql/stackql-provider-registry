@@ -1,0 +1,212 @@
+openapi: 3.0.0
+info:
+  title: Sumo Logic Organizations API
+  description: Usage of child organizations (multi-account management).
+  version: 1.0.0
+paths:
+  /v1/organizations/usages:
+    post:
+      tags:
+        - orgsManagement
+      summary: Get usages for child orgs.
+      description: Get the credits usage details of the child orgs for a parent.
+      operationId: getChildUsages
+      requestBody:
+        description: Details for the usages to be fetched.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChildUsageDetailsRequest'
+      responses:
+        '200':
+          description: Usage details for the child orgs.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChildUsageDetailsResponse'
+        default:
+          description: Operation failed with an error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    ChildUsageDetailsRequest:
+      type: object
+      properties:
+        startDate:
+          type: string
+          description: Start date, without the time, of the usage data to fetch.
+          example: '2019-07-20T00:00:00.000Z'
+        endDate:
+          type: string
+          description: End date, without the time, of usage data to fetch.
+          example: '2019-10-20T00:00:00.000Z'
+      description: The child usage details request for the parent account
+    ChildUsageDetailsResponse:
+      required:
+        - data
+      type: object
+      properties:
+        data:
+          type: array
+          description: Usage details of the child orgs.
+          items:
+            $ref: '#/components/schemas/ChildUsageDetail'
+    ErrorResponse:
+      required:
+        - errors
+        - id
+      type: object
+      properties:
+        id:
+          type: string
+          description: An identifier for the error; this is unique to the specific API request.
+          example: IUUQI-DGH5I-TJ045
+        errors:
+          type: array
+          description: A list of one or more causes of the error.
+          example:
+            - code: auth:password_too_short
+              message: Your password was too short.
+            - code: auth:password_character_classes
+              message: Your password did not contain any non-alphanumeric characters
+          items:
+            $ref: '#/components/schemas/ErrorDescription'
+    ChildUsageDetail:
+      required:
+        - orgId
+        - status
+        - usages
+      type: object
+      properties:
+        status:
+          pattern: ^(Active|Delinked|Deactivated)$
+          type: string
+          description: Status of the child org.
+          example: Active
+          x-pattern-message: Valid values are `Active`, `Delinked`, and `Deactivated`
+        orgName:
+          type: string
+          description: Name of the child org.
+          example: DSW Corp - Prod/Main
+        orgId:
+          maxLength: 23
+          minLength: 19
+          type: string
+          description: The unique identifier of an organization. It consists of the deployment ID and the hexadecimal account ID separated by a dash `-` character.
+          example: us2-00000000FF42A0C3
+        allocatedCredits:
+          type: number
+          description: Denotes the total number of credits provisioned for the child organization to use.
+          format: double
+          example: 10000
+        usages:
+          $ref: '#/components/schemas/ChildUsage'
+    ErrorDescription:
+      required:
+        - code
+        - message
+      type: object
+      properties:
+        code:
+          type: string
+          description: An error code describing the type of error.
+          example: auth:password_too_short
+        message:
+          type: string
+          description: A short English-language description of the error.
+          example: Your password was too short.
+        detail:
+          type: string
+          description: An optional fuller English-language description of the error.
+          example: Your password was 5 characters long, the minimum length is 12 characters. See http://example.com/password for more information.
+        meta:
+          type: string
+          description: An optional list of metadata about the error. (opaque JSON object)
+          example:
+            minLength: 12
+            actualLength: 5
+    ChildUsage:
+      required:
+        - totalCreditsUsed
+      type: object
+      properties:
+        totalCreditsUsed:
+          type: number
+          description: Total Credits used by the child org.
+          format: double
+          example: 10000
+        usagePercentage:
+          type: number
+          description: Percentage of used credits from the allocated credits.
+          format: double
+          example: 10000
+        forecastPercentage:
+          type: number
+          description: Forecasted percentage of credits will be used in the given time period.
+          format: double
+          example: 10000
+        usagePercentChangeWoW:
+          type: number
+          description: Week over week usage percentage for the subscription period.
+          format: double
+          example: 10000
+        usagePercentChange:
+          type: number
+          description: Percentage of usage change over the given time period.
+          format: double
+          example: 10000
+  x-stackQL-resources:
+    child_usages:
+      id: sumologic.organizations.child_usages
+      name: child_usages
+      title: Child Usages
+      methods:
+        get_usages:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1organizations~1usages/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+          request:
+            mediaType: application/json
+            nativeCasing: camel
+      sqlVerbs:
+        select: []
+        insert: []
+        update: []
+        delete: []
+        replace: []
+servers:
+  - url: https://api.{region}.sumologic.com/api
+    description: Sumo Logic deployment API endpoint
+    variables:
+      region:
+        description: Sumo Logic deployment (au, ca, ch, de, eu, fed, in, jp, kr, us1, us2). Resolved from the SUMOLOGIC_ENVIRONMENT environment variable when it is set (x-stackQL-envVar, the same variable the Terraform provider reads); otherwise defaults to us2. A WHERE region = '...' value always takes precedence.
+        enum:
+          - au
+          - ca
+          - ch
+          - de
+          - eu
+          - fed
+          - in
+          - jp
+          - kr
+          - us1
+          - us2
+        default: us2
+        x-stackQL-envVar: SUMOLOGIC_ENVIRONMENT
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: token
+      location: query
+    responseToken:
+      key: next
+      location: body

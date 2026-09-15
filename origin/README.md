@@ -1,9 +1,7 @@
 # StackQL Provider Registry origin (Cloudflare Worker)
 
 Origin server for the public StackQL provider registry, served from Cloudflare
-Workers + R2 (docs) + D1 (download analytics). This is the "green" origin in the
-blue-green migration away from Deno Deploy. It preserves the existing URL
-contract exactly:
+Workers + R2 (docs) + D1 (download analytics). The URL contract is:
 
 | Request                                    | Response                                              |
 | ------------------------------------------ | ----------------------------------------------------- |
@@ -16,7 +14,7 @@ contract exactly:
 | any non-GET method                         | 405                                                   |
 
 Docs are read from the R2 binding `REGISTRY_BUCKET` using the request path with
-the leading slash stripped (the same layout the Deno origin read from disk).
+the leading slash stripped as the object key (`providers/dist/...`).
 Analytics are written one row per `.tgz` pull to the D1 binding `ANALYTICS_DB`
 inside `ctx.waitUntil`, so logging never adds latency to a pull.
 
@@ -26,7 +24,7 @@ inside `ctx.waitUntil`, so logging never adds latency to a pull.
 origin/
   wrangler.toml     two envs: dev (dev branch) and production (main branch)
   schema.sql        D1 downloads table + index
-  src/index.ts      the Worker (port of deno-deploy-registry/website/index.ts)
+  src/index.ts      the Worker
   package.json      wrangler + types
 ```
 
@@ -66,10 +64,12 @@ npm install
 npx wrangler d1 execute stackql-registry-analytics-dev --local --file=./schema.sql
 
 # seed a known object pair into the dev bucket so the endpoint checks pass
+# (<docs-tree> is a local copy of the reconstructed registry docs tree, e.g. a
+# `providers/dist` directory pulled from the artifact repository)
 npx wrangler r2 object put stackql-provider-registry-dev/providers/dist/providers.yaml \
-  --file=../tmp/deno-deploy-registry/website/providers/dist/providers.yaml
+  --file=<docs-tree>/providers/dist/providers.yaml
 npx wrangler r2 object put stackql-provider-registry-dev/providers/dist/aws/v0.1.3.tgz \
-  --file=../tmp/deno-deploy-registry/website/providers/dist/aws/v0.1.3.tgz
+  --file=<docs-tree>/providers/dist/aws/v0.1.3.tgz
 
 npm run dev
 ```
@@ -88,8 +88,8 @@ curl -i http://localhost:8787/analytics/last24hours              # 200 applicati
 curl -i -X POST http://localhost:8787/ping                        # 405
 ```
 
-Note: `localhost` Host headers are intentionally not logged to D1 (matches the
-Deno origin). Test analytics writes against a deployed hostname.
+Note: `localhost` Host headers are intentionally not logged to D1. Test
+analytics writes against a deployed hostname.
 
 ## Deploy
 
