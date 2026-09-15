@@ -4,33 +4,11 @@ info:
   description: anthropic files API
   version: 1.0.0
 paths:
-  /v1/files?beta=true:
+  /v1/files:
     post:
       summary: Upload File
-      operationId: beta_upload_file_v1_files_post
+      operationId: upload_file_v1_files_post
       parameters:
-        - name: anthropic-beta
-          in: header
-          required: false
-          schema:
-            type: string
-            description: |-
-              Optional header to specify the beta version(s) you want to use.
-
-              To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
-            title: Anthropic-Beta
-            x-stainless-override-schema:
-              x-stainless-param: betas
-              x-stainless-extend-default: true
-              type: array
-              description: Optional header to specify the beta version(s) you want to use.
-              items:
-                $ref: "#/components/schemas/AnthropicBeta"
-            default: files-api-2025-04-14
-          description: |-
-            Optional header to specify the beta version(s) you want to use.
-
-            To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
         - name: anthropic-version
           in: header
           required: false
@@ -46,22 +24,120 @@ paths:
             The version of the Claude API you want to use.
 
             Read more about versioning and our version history [here](https://platform.claude.com/docs/en/api/versioning).
+        - name: anthropic-workspace-id
+          in: header
+          required: false
+          schema:
+            type: string
+            x-stainless-param: workspace_id
+          description: |-
+            Optional header to select the Workspace for this request. The value is a Workspace ID (for example, `wrkspc_011CZkZaBF1tNoB5wlCeusgy`).
+
+            Only needed for credentials that can act on more than one Workspace. A credential that belongs to a specific Workspace may omit it; if sent, it must match that Workspace.
+          example: wrkspc_011CZkZaBF1tNoB5wlCeusgy
       responses:
         "200":
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BetaFileMetadataSchema"
-        4XX:
-          description: |-
-            Error response.
-
-            See our [errors documentation](https://platform.claude.com/docs/en/api/errors) for more details.
+                $ref: "#/components/schemas/FileMetadataSchema"
+        "400":
+          description: Invalid argument - The client specified an invalid argument
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BetaErrorResponse"
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthenticated - The request does not have valid authentication credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Permission denied - The caller does not have permission to execute the specified operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found - Some requested entity was not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "408":
+          description: Deadline exceeded - The deadline expired before the operation could complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Aborted - The operation was aborted due to concurrency issue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "412":
+          description: Failed precondition - Operation was rejected because the system is not in required state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Out of range - Operation was attempted past the valid range
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Resource exhausted - Some resource has been exhausted (rate limiting)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "431":
+          description: Request header fields too large - Request metadata was too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "499":
+          description: Cancelled - The operation was cancelled by the client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal - Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "501":
+          description: Unimplemented - The operation is not implemented or supported
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Unavailable - The service is currently unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "504":
+          description: Deadline exceeded - Upstream service did not respond in time
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "529":
+          description: Overloaded - The service is temporarily overloaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
       requestBody:
         content:
           multipart/form-data:
@@ -71,30 +147,35 @@ paths:
                 file:
                   type: string
                   format: binary
-                  description: The file to upload
+                  description: The file to upload. Only the final path component of the part's `filename` is kept; an absent or empty `filename` is replaced with `unnamed` plus the extension for the file's stored `mime_type`, when known.
+                expires_in_seconds:
+                  type: integer
+                  minimum: 3600
+                  maximum: 7776000
+                  description: Seconds from upload until the file expires and its bytes become permanently unavailable. Must be between 3600 (one hour) and 7776000 (ninety days).
               required:
                 - file
         required: true
     get:
       summary: List Files
-      operationId: beta_list_files_v1_files_get
+      operationId: list_files_v1_files_get
       parameters:
-        - name: before_id
+        - name: page
           in: query
           required: false
           schema:
             type: string
-            description: ID of the object to use as a cursor for pagination. When provided, returns the page of results immediately before this object.
-            title: Before Id
-          description: ID of the object to use as a cursor for pagination. When provided, returns the page of results immediately before this object.
-        - name: after_id
+            description: Opaque page cursor returned in a prior list response's `next_page`. Prefixed `page_`.
+            nullable: true
+          description: Opaque page cursor returned in a prior list response's `next_page`. Prefixed `page_`.
+        - name: ids[]
           in: query
           required: false
           schema:
             type: string
-            description: ID of the object to use as a cursor for pagination. When provided, returns the page of results immediately after this object.
-            title: After Id
-          description: ID of the object to use as a cursor for pagination. When provided, returns the page of results immediately after this object.
+            description: Restrict the result set to Files whose `id` is in this list. At most 100 entries (after de-duplication). Mutually exclusive with `page` and `limit`. When supplied, the response is always a single page (`next_page` is null). IDs that do not resolve to a visible File — including deleted Files — are silently omitted.
+            nullable: true
+          description: Restrict the result set to Files whose `id` is in this list. At most 100 entries (after de-duplication). Mutually exclusive with `page` and `limit`. When supplied, the response is always a single page (`next_page` is null). IDs that do not resolve to a visible File — including deleted Files — are silently omitted.
         - name: limit
           in: query
           required: false
@@ -112,36 +193,6 @@ paths:
             Number of items to return per page.
 
             Defaults to `20`. Ranges from `1` to `1000`.
-        - name: scope_id
-          in: query
-          required: false
-          schema:
-            type: string
-            description: Filter by scope ID. Only returns files associated with the specified scope (e.g., a session ID).
-            title: Scope Id
-          description: Filter by scope ID. Only returns files associated with the specified scope (e.g., a session ID).
-        - name: anthropic-beta
-          in: header
-          required: false
-          schema:
-            type: string
-            description: |-
-              Optional header to specify the beta version(s) you want to use.
-
-              To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
-            title: Anthropic-Beta
-            x-stainless-override-schema:
-              x-stainless-param: betas
-              x-stainless-extend-default: true
-              type: array
-              description: Optional header to specify the beta version(s) you want to use.
-              items:
-                $ref: "#/components/schemas/AnthropicBeta"
-            default: files-api-2025-04-14
-          description: |-
-            Optional header to specify the beta version(s) you want to use.
-
-            To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
         - name: anthropic-version
           in: header
           required: false
@@ -171,26 +222,124 @@ paths:
             Your unique API key for authentication.
 
             This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
+        - name: anthropic-workspace-id
+          in: header
+          required: false
+          schema:
+            type: string
+            x-stainless-param: workspace_id
+          description: |-
+            Optional header to select the Workspace for this request. The value is a Workspace ID (for example, `wrkspc_011CZkZaBF1tNoB5wlCeusgy`).
+
+            Only needed for credentials that can act on more than one Workspace. A credential that belongs to a specific Workspace may omit it; if sent, it must match that Workspace.
+          example: wrkspc_011CZkZaBF1tNoB5wlCeusgy
       responses:
         "200":
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BetaFileListResponse"
-        4XX:
-          description: |-
-            Error response.
-
-            See our [errors documentation](https://platform.claude.com/docs/en/api/errors) for more details.
+                $ref: "#/components/schemas/FileListResponse"
+        "400":
+          description: Invalid argument - The client specified an invalid argument
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BetaErrorResponse"
-  /v1/files/{file_id}?beta=true:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthenticated - The request does not have valid authentication credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Permission denied - The caller does not have permission to execute the specified operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found - Some requested entity was not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "408":
+          description: Deadline exceeded - The deadline expired before the operation could complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Aborted - The operation was aborted due to concurrency issue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "412":
+          description: Failed precondition - Operation was rejected because the system is not in required state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Out of range - Operation was attempted past the valid range
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Resource exhausted - Some resource has been exhausted (rate limiting)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "431":
+          description: Request header fields too large - Request metadata was too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "499":
+          description: Cancelled - The operation was cancelled by the client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal - Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "501":
+          description: Unimplemented - The operation is not implemented or supported
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Unavailable - The service is currently unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "504":
+          description: Deadline exceeded - Upstream service did not respond in time
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "529":
+          description: Overloaded - The service is temporarily overloaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/files/{file_id}:
     get:
       summary: Get File Metadata
-      operationId: beta_get_file_metadata_v1_files__file_id__get
+      operationId: get_file_metadata_v1_files__file_id__get
       parameters:
         - name: file_id
           in: path
@@ -200,28 +349,6 @@ paths:
             description: ID of the File.
             title: File Id
           description: ID of the File.
-        - name: anthropic-beta
-          in: header
-          required: false
-          schema:
-            type: string
-            description: |-
-              Optional header to specify the beta version(s) you want to use.
-
-              To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
-            title: Anthropic-Beta
-            x-stainless-override-schema:
-              x-stainless-param: betas
-              x-stainless-extend-default: true
-              type: array
-              description: Optional header to specify the beta version(s) you want to use.
-              items:
-                $ref: "#/components/schemas/AnthropicBeta"
-            default: files-api-2025-04-14
-          description: |-
-            Optional header to specify the beta version(s) you want to use.
-
-            To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
         - name: anthropic-version
           in: header
           required: false
@@ -251,25 +378,123 @@ paths:
             Your unique API key for authentication.
 
             This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
+        - name: anthropic-workspace-id
+          in: header
+          required: false
+          schema:
+            type: string
+            x-stainless-param: workspace_id
+          description: |-
+            Optional header to select the Workspace for this request. The value is a Workspace ID (for example, `wrkspc_011CZkZaBF1tNoB5wlCeusgy`).
+
+            Only needed for credentials that can act on more than one Workspace. A credential that belongs to a specific Workspace may omit it; if sent, it must match that Workspace.
+          example: wrkspc_011CZkZaBF1tNoB5wlCeusgy
       responses:
         "200":
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BetaFileMetadataSchema"
-        4XX:
-          description: |-
-            Error response.
-
-            See our [errors documentation](https://platform.claude.com/docs/en/api/errors) for more details.
+                $ref: "#/components/schemas/FileMetadataSchema"
+        "400":
+          description: Invalid argument - The client specified an invalid argument
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BetaErrorResponse"
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthenticated - The request does not have valid authentication credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Permission denied - The caller does not have permission to execute the specified operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found - Some requested entity was not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "408":
+          description: Deadline exceeded - The deadline expired before the operation could complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Aborted - The operation was aborted due to concurrency issue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "412":
+          description: Failed precondition - Operation was rejected because the system is not in required state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Out of range - Operation was attempted past the valid range
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Resource exhausted - Some resource has been exhausted (rate limiting)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "431":
+          description: Request header fields too large - Request metadata was too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "499":
+          description: Cancelled - The operation was cancelled by the client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal - Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "501":
+          description: Unimplemented - The operation is not implemented or supported
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Unavailable - The service is currently unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "504":
+          description: Deadline exceeded - Upstream service did not respond in time
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "529":
+          description: Overloaded - The service is temporarily overloaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       summary: Delete File
-      operationId: beta_delete_file_v1_files__file_id__delete
+      operationId: delete_file_v1_files__file_id__delete
       parameters:
         - name: file_id
           in: path
@@ -279,28 +504,6 @@ paths:
             description: ID of the File.
             title: File Id
           description: ID of the File.
-        - name: anthropic-beta
-          in: header
-          required: false
-          schema:
-            type: string
-            description: |-
-              Optional header to specify the beta version(s) you want to use.
-
-              To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
-            title: Anthropic-Beta
-            x-stainless-override-schema:
-              x-stainless-param: betas
-              x-stainless-extend-default: true
-              type: array
-              description: Optional header to specify the beta version(s) you want to use.
-              items:
-                $ref: "#/components/schemas/AnthropicBeta"
-            default: files-api-2025-04-14
-          description: |-
-            Optional header to specify the beta version(s) you want to use.
-
-            To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
         - name: anthropic-version
           in: header
           required: false
@@ -330,26 +533,124 @@ paths:
             Your unique API key for authentication.
 
             This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
+        - name: anthropic-workspace-id
+          in: header
+          required: false
+          schema:
+            type: string
+            x-stainless-param: workspace_id
+          description: |-
+            Optional header to select the Workspace for this request. The value is a Workspace ID (for example, `wrkspc_011CZkZaBF1tNoB5wlCeusgy`).
+
+            Only needed for credentials that can act on more than one Workspace. A credential that belongs to a specific Workspace may omit it; if sent, it must match that Workspace.
+          example: wrkspc_011CZkZaBF1tNoB5wlCeusgy
       responses:
         "200":
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BetaFileDeleteResponse"
-        4XX:
-          description: |-
-            Error response.
-
-            See our [errors documentation](https://platform.claude.com/docs/en/api/errors) for more details.
+                $ref: "#/components/schemas/FileDeleteResponse"
+        "400":
+          description: Invalid argument - The client specified an invalid argument
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BetaErrorResponse"
-  /v1/files/{file_id}/content?beta=true:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthenticated - The request does not have valid authentication credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Permission denied - The caller does not have permission to execute the specified operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found - Some requested entity was not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "408":
+          description: Deadline exceeded - The deadline expired before the operation could complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Aborted - The operation was aborted due to concurrency issue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "412":
+          description: Failed precondition - Operation was rejected because the system is not in required state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Out of range - Operation was attempted past the valid range
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Resource exhausted - Some resource has been exhausted (rate limiting)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "431":
+          description: Request header fields too large - Request metadata was too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "499":
+          description: Cancelled - The operation was cancelled by the client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal - Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "501":
+          description: Unimplemented - The operation is not implemented or supported
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Unavailable - The service is currently unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "504":
+          description: Deadline exceeded - Upstream service did not respond in time
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "529":
+          description: Overloaded - The service is temporarily overloaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/files/{file_id}/content:
     get:
       summary: Download File
-      operationId: beta_download_file_v1_files__file_id__content_get
+      operationId: download_file_v1_files__file_id__content_get
       parameters:
         - name: file_id
           in: path
@@ -359,28 +660,6 @@ paths:
             description: ID of the File.
             title: File Id
           description: ID of the File.
-        - name: anthropic-beta
-          in: header
-          required: false
-          schema:
-            type: string
-            description: |-
-              Optional header to specify the beta version(s) you want to use.
-
-              To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
-            title: Anthropic-Beta
-            x-stainless-override-schema:
-              x-stainless-param: betas
-              x-stainless-extend-default: true
-              type: array
-              description: Optional header to specify the beta version(s) you want to use.
-              items:
-                $ref: "#/components/schemas/AnthropicBeta"
-            default: files-api-2025-04-14
-          description: |-
-            Optional header to specify the beta version(s) you want to use.
-
-            To use multiple betas, use a comma separated list like `beta1,beta2` or specify the header multiple times for each beta.
         - name: anthropic-version
           in: header
           required: false
@@ -410,6 +689,17 @@ paths:
             Your unique API key for authentication.
 
             This key is required in the header of all API requests, to authenticate your account and access Anthropic's services. Get your API key through the [Console](https://console.anthropic.com/settings/keys). Each key is scoped to a Workspace.
+        - name: anthropic-workspace-id
+          in: header
+          required: false
+          schema:
+            type: string
+            x-stainless-param: workspace_id
+          description: |-
+            Optional header to select the Workspace for this request. The value is a Workspace ID (for example, `wrkspc_011CZkZaBF1tNoB5wlCeusgy`).
+
+            Only needed for credentials that can act on more than one Workspace. A credential that belongs to a specific Workspace may omit it; if sent, it must match that Workspace.
+          example: wrkspc_011CZkZaBF1tNoB5wlCeusgy
       responses:
         "200":
           description: Successful Response
@@ -417,127 +707,170 @@ paths:
             application/octet-stream:
               schema:
                 type: string
-        4XX:
-          description: |-
-            Error response.
-
-            See our [errors documentation](https://platform.claude.com/docs/en/api/errors) for more details.
+        "400":
+          description: Invalid argument - The client specified an invalid argument
           content:
             application/octet-stream:
               schema:
-                $ref: "#/components/schemas/BetaErrorResponse"
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthenticated - The request does not have valid authentication credentials
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Permission denied - The caller does not have permission to execute the specified operation
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found - Some requested entity was not found
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "408":
+          description: Deadline exceeded - The deadline expired before the operation could complete
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Aborted - The operation was aborted due to concurrency issue
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "412":
+          description: Failed precondition - Operation was rejected because the system is not in required state
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Out of range - Operation was attempted past the valid range
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Resource exhausted - Some resource has been exhausted (rate limiting)
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "431":
+          description: Request header fields too large - Request metadata was too large
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "499":
+          description: Cancelled - The operation was cancelled by the client
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal - Internal server error
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "501":
+          description: Unimplemented - The operation is not implemented or supported
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Unavailable - The service is currently unavailable
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "504":
+          description: Deadline exceeded - Upstream service did not respond in time
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "529":
+          description: Overloaded - The service is temporarily overloaded
+          content:
+            application/octet-stream:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
-    AnthropicBeta:
-      type: string
-      enum:
-        - message-batches-2024-09-24
-        - prompt-caching-2024-07-31
-        - computer-use-2024-10-22
-        - computer-use-2025-01-24
-        - pdfs-2024-09-25
-        - token-counting-2024-11-01
-        - token-efficient-tools-2025-02-19
-        - output-128k-2025-02-19
-        - files-api-2025-04-14
-        - mcp-client-2025-04-04
-        - mcp-client-2025-11-20
-        - dev-full-thinking-2025-05-14
-        - interleaved-thinking-2025-05-14
-        - code-execution-2025-05-22
-        - extended-cache-ttl-2025-04-11
-        - context-1m-2025-08-07
-        - context-management-2025-06-27
-        - model-context-window-exceeded-2025-08-26
-        - skills-2025-10-02
-        - fast-mode-2026-02-01
-        - output-300k-2026-03-24
-        - user-profiles-2026-03-24
-        - advisor-tool-2026-03-01
-        - managed-agents-2026-04-01
-        - cache-diagnosis-2026-04-07
-        - thinking-token-count-2026-05-13
-        - server-side-fallback-2026-06-01
-        - fallback-credit-2026-06-01
-        - agent-memory-2026-07-22
-      x-stainless-nominal: false
-    BetaFileMetadataSchema:
+    FileMetadataSchema:
       properties:
         created_at:
-          type: string
-          format: date-time
-          title: Created At
           description: RFC 3339 datetime string representing when the file was created.
           examples:
             - "2025-04-15T18:37:24.100435Z"
+          format: date-time
+          title: Created At
+          type: string
         downloadable:
-          type: boolean
-          title: Downloadable
-          description: Whether the file can be downloaded.
           default: false
+          description: Whether the file can be downloaded.
           examples:
             - false
-        filename:
+          title: Downloadable
+          type: boolean
+        expires_at:
+          default: null
+          description: RFC 3339 datetime string representing when the file will expire and become unavailable for download. Null if the file does not expire. For files uploaded with `expires_in_seconds`, this is the upload time plus that value.
+          examples:
+            - "2025-05-15T18:37:24.100435Z"
+          title: Expires At
+          nullable: true
+          format: date-time
           type: string
-          maxLength: 500
-          minLength: 1
-          title: Filename
+        filename:
           description: Original filename of the uploaded file.
           examples:
             - document.pdf
-        id:
+          maxLength: 500
+          minLength: 1
+          title: Filename
           type: string
-          title: Id
+        id:
           description: |-
             Unique object identifier.
 
             The format and length of IDs may change over time.
           examples:
             - file_011CNha8iCJcU1wXNR6q4V8w
-        mime_type:
+          title: Id
           type: string
-          maxLength: 255
-          minLength: 1
-          title: Mime Type
+        mime_type:
           description: MIME type of the file.
           examples:
             - application/pdf
-        scope:
-          description: The scope of this file, indicating the context in which it was created (e.g., a session).
-          nullable: true
-          properties:
-            id:
-              type: string
-              title: Id
-              description: The ID of the scoping resource (e.g., the session ID).
-            type:
-              type: string
-              title: Type
-              description: The type of scope (e.g., `"session"`).
-              enum:
-                - session
-          type: object
-          required:
-            - id
-            - type
-          title: FileScope
+          maxLength: 255
+          minLength: 1
+          title: Mime Type
+          type: string
         size_bytes:
-          type: integer
-          minimum: 0
-          title: Size Bytes
           description: Size of the file in bytes.
           examples:
             - 102400
+          minimum: 0
+          title: Size Bytes
+          type: integer
         type:
-          type: string
-          title: Type
           description: |-
             Object type.
 
             For files, this is always `"file"`.
+          title: Type
+          type: string
           enum:
             - file
-      type: object
       required:
         - created_at
         - filename
@@ -546,20 +879,21 @@ components:
         - size_bytes
         - type
       title: FileMetadataSchema
-    BetaErrorResponse:
+      type: object
+    ErrorResponse:
       properties:
         error:
           discriminator:
             mapping:
-              api_error: "#/components/schemas/BetaAPIError"
-              authentication_error: "#/components/schemas/BetaAuthenticationError"
-              billing_error: "#/components/schemas/BetaBillingError"
-              invalid_request_error: "#/components/schemas/BetaInvalidRequestError"
-              not_found_error: "#/components/schemas/BetaNotFoundError"
-              overloaded_error: "#/components/schemas/BetaOverloadedError"
-              permission_error: "#/components/schemas/BetaPermissionError"
-              rate_limit_error: "#/components/schemas/BetaRateLimitError"
-              timeout_error: "#/components/schemas/BetaGatewayTimeoutError"
+              api_error: "#/components/schemas/APIError"
+              authentication_error: "#/components/schemas/AuthenticationError"
+              billing_error: "#/components/schemas/BillingError"
+              invalid_request_error: "#/components/schemas/InvalidRequestError"
+              not_found_error: "#/components/schemas/NotFoundError"
+              overloaded_error: "#/components/schemas/OverloadedError"
+              permission_error: "#/components/schemas/PermissionError"
+              rate_limit_error: "#/components/schemas/RateLimitError"
+              timeout_error: "#/components/schemas/GatewayTimeoutError"
             propertyName: type
           title: Error
           properties:
@@ -594,38 +928,24 @@ components:
         - type
       title: ErrorResponse
       type: object
-    BetaFileListResponse:
+    FileListResponse:
       properties:
         data:
           items:
-            $ref: "#/components/schemas/BetaFileMetadataSchema"
+            $ref: "#/components/schemas/FileMetadataSchema"
           type: array
           title: Data
           description: List of file metadata objects.
-        first_id:
-          title: First Id
-          description: ID of the first file in this page of results.
-          examples:
-            - file_011CNha8iCJcU1wXNR6q4V8w
-          nullable: true
-          type: string
-        has_more:
-          type: boolean
-          title: Has More
-          description: Whether there are more results available.
-          default: false
-        last_id:
-          title: Last Id
-          description: ID of the last file in this page of results.
-          examples:
-            - file_013Zva2CMHLNnXjNJJKqJ2EF
+        next_page:
+          title: Next Page
+          description: Opaque cursor for the next page. Supply as `?page=` to fetch the next page; null when there are no more results.
           nullable: true
           type: string
       type: object
       required:
         - data
       title: FileListResponse
-    BetaFileDeleteResponse:
+    FileDeleteResponse:
       properties:
         id:
           type: string
@@ -647,24 +967,7 @@ components:
       required:
         - id
       title: FileDeleteResponse
-    BetaFileScope:
-      properties:
-        id:
-          type: string
-          title: Id
-          description: The ID of the scoping resource (e.g., the session ID).
-        type:
-          type: string
-          title: Type
-          description: The type of scope (e.g., `"session"`).
-          enum:
-            - session
-      type: object
-      required:
-        - id
-        - type
-      title: FileScope
-    BetaInvalidRequestError:
+    InvalidRequestError:
       properties:
         message:
           default: Invalid request
@@ -681,7 +984,7 @@ components:
         - type
       title: InvalidRequestError
       type: object
-    BetaAuthenticationError:
+    AuthenticationError:
       properties:
         message:
           default: Authentication error
@@ -698,7 +1001,7 @@ components:
         - type
       title: AuthenticationError
       type: object
-    BetaBillingError:
+    BillingError:
       properties:
         message:
           default: Billing error
@@ -715,7 +1018,7 @@ components:
         - type
       title: BillingError
       type: object
-    BetaPermissionError:
+    PermissionError:
       properties:
         message:
           default: Permission denied
@@ -732,7 +1035,7 @@ components:
         - type
       title: PermissionError
       type: object
-    BetaNotFoundError:
+    NotFoundError:
       properties:
         message:
           default: Not found
@@ -749,7 +1052,7 @@ components:
         - type
       title: NotFoundError
       type: object
-    BetaRateLimitError:
+    RateLimitError:
       properties:
         message:
           default: Rate limited
@@ -766,7 +1069,7 @@ components:
         - type
       title: RateLimitError
       type: object
-    BetaGatewayTimeoutError:
+    GatewayTimeoutError:
       properties:
         message:
           default: Request timeout
@@ -783,7 +1086,7 @@ components:
         - type
       title: GatewayTimeoutError
       type: object
-    BetaAPIError:
+    APIError:
       properties:
         message:
           default: Internal server error
@@ -800,7 +1103,7 @@ components:
         - type
       title: APIError
       type: object
-    BetaOverloadedError:
+    OverloadedError:
       properties:
         message:
           default: Overloaded
@@ -839,7 +1142,7 @@ components:
             requestBodyTranslate:
               algorithm: naive
           operation:
-            $ref: "#/paths/~1v1~1files?beta=true/post"
+            $ref: "#/paths/~1v1~1files/post"
           response:
             mediaType: application/json
             openAPIDocKey: "200"
@@ -849,31 +1152,38 @@ components:
             mediaType: multipart/form-data
         list:
           operation:
-            $ref: "#/paths/~1v1~1files?beta=true/get"
+            $ref: "#/paths/~1v1~1files/get"
           response:
             mediaType: application/json
             openAPIDocKey: "200"
             objectKey: $.data
           config:
+            pagination:
+              requestToken:
+                key: page
+                location: query
+              responseToken:
+                key: $.next_page
+                location: body
             queryParamPushdown:
               top:
                 paramName: limit
                 maxValue: 1000
         get:
           operation:
-            $ref: "#/paths/~1v1~1files~1{file_id}?beta=true/get"
+            $ref: "#/paths/~1v1~1files~1{file_id}/get"
           response:
             mediaType: application/json
             openAPIDocKey: "200"
         delete:
           operation:
-            $ref: "#/paths/~1v1~1files~1{file_id}?beta=true/delete"
+            $ref: "#/paths/~1v1~1files~1{file_id}/delete"
           response:
             mediaType: application/json
             openAPIDocKey: "200"
         download:
           operation:
-            $ref: "#/paths/~1v1~1files~1{file_id}~1content?beta=true/get"
+            $ref: "#/paths/~1v1~1files~1{file_id}~1content/get"
           response:
             mediaType: application/octet-stream
             openAPIDocKey: "200"
