@@ -11,7 +11,7 @@ A repository of `provider` interface documents supporting [stackql](https://stac
 
 StackQL provider interface documents inform the stackql application on how to interact with a given provider (like `aws`, `azure`, `google`, etc), including what methods are available in the provider and how to invoke these using SQL semantics.  Provider interface documents are `yaml` formatted, OpenAPI specifications with extensions.  
 
-The documents are versioned per provider in this repository, and built as signed and compressed as packaged artifacts.  The packaged artifacts are registered and published to the StackQL Provider Registry Artifact Repository in AWS S3.  The provider registry API is a [Deno Deploy](https://deno.com/deploy) application that serves the provider interface documents to the stackql application using the `REGISTRY LIST` and `REGISTRY PULL` commands.  
+The documents are versioned per provider in this repository, and built as signed and compressed packaged artifacts.  The packaged artifacts are registered and published to the StackQL Provider Registry Artifact Repository in AWS S3 (the master/archive store).  The full docs tree is then mirrored to Cloudflare R2 and served at the edge by a Cloudflare Worker (source in [origin/](origin/)), which provides the provider interface documents to the stackql application using the `REGISTRY LIST` and `REGISTRY PULL` commands.  
 
 The following diagram shows the context of the provider registry:  
 
@@ -20,26 +20,24 @@ C4Context
     System_Ext(github_repo, "stackql-provider-registry", "GitHub Repository")
     System_Ext(github_actions, "Build and Deploy", "GitHub Actions")
     SystemDb(artifact_repo, "Artifact Repository", "AWS S3")
-    System(deno_registry, "Provider Registry API", "Deno Deploy")
+    SystemDb(r2_bucket, "Docs Mirror", "Cloudflare R2")
+    System(cf_worker, "Provider Registry Origin", "Cloudflare Worker")
     System(stackql, "StackQL Application", "stackql")
 
     Rel(github_repo, github_actions, "triggers...")
     Rel(github_actions, artifact_repo, "registers and pushes to...", "signed tgz package")
-    Rel(github_actions, deno_registry, "pushes to...", "signed tgz package")
-    Rel(stackql, deno_registry, "list and pulls registry docs from...", "REGISTRY LIST | REGISTRY PULL")
+    Rel(github_actions, r2_bucket, "syncs docs tree to...")
+    Rel(cf_worker, r2_bucket, "reads provider docs from...")
+    Rel(stackql, cf_worker, "list and pulls registry docs from...", "REGISTRY LIST | REGISTRY PULL")
     UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="0")
-    UpdateRelStyle(github_repo, github_actions, $offsetY="10", $offsetX="-20")
-    UpdateRelStyle(github_actions, artifact_repo, $offsetY="44", $offsetX="-55")
-    UpdateRelStyle(github_actions, deno_registry, $offsetY="-18", $offsetX="-130")
-    UpdateRelStyle(stackql, deno_registry, $offsetY="40", $offsetX="-40")
 ```
 
-The public StackQL Provider Registry is distributed via [Deno Deploy](https://deno.com/deploy), using the following endpoints:  
+The public StackQL Provider Registry is served from Cloudflare, using the following endpoints:  
 
 | Endpoint | Description |
 | --- | --- |
 | [registry.stackql.app](https://registry.stackql.app/ping) | Production registry (built from `main`) |
-| [registry-dev.stackql.app](https://registry.stackql.app/ping) | Development registry (built from `develop`) |
+| [registry-dev.stackql.app](https://registry-dev.stackql.app/ping) | Development registry (built from `dev`) |
 
 ## Contributing
 
@@ -53,7 +51,7 @@ Once you have an OpenAPI specification, you can use the [openapisaurus](https://
 
 ## Build and Deployment Workflow
 
-The provider registry is built and deployed using GitHub Actions.  Provider documents are validated and tested in workflow steps and then packaged and stored in the artifact repository.  The most recent packaged versions are published to the registry API (a [Deno Deploy](https://deno.com/deploy) application), where they are available from the `stackql` application using `REGISTRY LIST` or `REGISTRY PULL`.  See [docs/build-and-deployment.md](docs/build-and-deployment.md) for more information.  
+The provider registry is built and deployed using GitHub Actions.  Provider documents are validated and tested in workflow steps and then packaged and stored in the artifact repository.  The reconstructed docs tree is mirrored to Cloudflare R2 and served by the Cloudflare Worker origin, where the provider documents are available from the `stackql` application using `REGISTRY LIST` or `REGISTRY PULL`.  See [docs/build-and-deployment.md](docs/build-and-deployment.md) for more information.  
 
 A separate workflow guards against providers being deleted from `providers/src` on any push; intentional removals require an explicit override in the commit message. See [provider delete guard](docs/build-and-deployment.md#provider-delete-guard) for details.  
 

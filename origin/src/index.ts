@@ -1,8 +1,7 @@
 /**
- * StackQL Provider Registry origin - Cloudflare Worker (green).
+ * StackQL Provider Registry origin - Cloudflare Worker.
  *
- * Port of the Deno Deploy origin (deno-deploy-registry/website/index.ts).
- * The URL contract is preserved exactly:
+ * The URL contract:
  *
  *   GET (anything).tgz           -> 200 application/gzip, log one download event
  *   GET (anything)providers.yaml -> 200 text/plain, not logged
@@ -31,7 +30,7 @@ interface RequestMetadata {
 
 function extractRequestMetadata(request: Request): RequestMetadata {
   return {
-    // Deno used conn.remoteAddr.hostname; on Cloudflare the real client IP is here.
+    // On Cloudflare the real client IP is in the CF-Connecting-IP header.
     ipAddr: request.headers.get('CF-Connecting-IP') || '',
     ts: new Date().toISOString(),
     userAgent: request.headers.get('user-agent') || '',
@@ -362,7 +361,7 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
     });
   }
 
-  // R2 key mirrors the Deno on-disk layout: `.${pathname}` -> strip the leading slash
+  // R2 key is the request path with the leading slash stripped (`providers/dist/...`)
   const key = pathname.replace(/^\//, '');
 
   const obj = await env.REGISTRY_BUCKET.get(key);

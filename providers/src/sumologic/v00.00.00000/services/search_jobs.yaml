@@ -1,0 +1,741 @@
+openapi: 3.0.0
+info:
+  title: Sumo Logic Search Jobs API
+  description: Search jobs (v2) - create a log search job, poll its status and page through its messages and records.
+  version: 1.0.0
+paths:
+  /v2/search/jobs:
+    post:
+      tags:
+        - searchJobManagement
+      summary: Create a search job.
+      description: Create a new search job.
+      operationId: createSearchJob
+      parameters: []
+      requestBody:
+        description: Information about the new search job to be created.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJobRequest'
+        required: true
+      responses:
+        '202':
+          description: The search job has been created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateJobResponse'
+        default:
+          description: Operation failed with an error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v2/search/jobs/{jobId}:
+    get:
+      tags:
+        - searchJobManagement
+      summary: Get a search job's status.
+      description: Use the search job identifier to obtain the current status of a search job.
+      operationId: getSearchJobStatus
+      parameters:
+        - name: jobId
+          in: path
+          description: The identifier of the search job.
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The search job's status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchJobStatusResponse'
+        default:
+          description: Operation failed with an error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+        - searchJobManagement
+      summary: Delete a search job.
+      description: Use the search job identifier to delete the search job.
+      operationId: deleteSearchJob
+      parameters:
+        - name: jobId
+          in: path
+          description: The identifier of the search job to be deleted.
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The search job was deleted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchJobDeleteResponse'
+        default:
+          description: Operation failed with an error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v2/search/jobs/{jobId}/messages:
+    get:
+      tags:
+        - searchJobManagement
+      summary: Get paginated messages from an offset.
+      description: Use the search job identifier to obtain the paginated messages from an offset.
+      operationId: getSearchJobPaginatedMessages
+      parameters:
+        - name: jobId
+          in: path
+          description: The identifier of the search job.
+          required: true
+          schema:
+            type: string
+        - name: offset
+          in: query
+          description: Return messages starting at this offset.
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          description: |
+            Limit the number of messages returned in the response. The number of messages returned may be less than the `limit`.
+          required: true
+          schema:
+            maximum: 10000
+            type: integer
+      responses:
+        '200':
+          description: A paginated list of messages.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchQueryPaginatedMessages'
+        default:
+          description: Operation failed with an error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v2/search/jobs/{jobId}/records:
+    get:
+      tags:
+        - searchJobManagement
+      summary: Get aggregated records.
+      description: Use the search job identifier to obtain the aggregated records from an offset.
+      operationId: getSearchJobPaginatedRecords
+      parameters:
+        - name: jobId
+          in: path
+          description: The identifier of the search job.
+          required: true
+          schema:
+            type: string
+        - name: offset
+          in: query
+          description: Return aggregated records starting at this offset.
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          description: |
+            Limit the number of records returned in the response.
+          required: true
+          schema:
+            maximum: 10000
+            type: integer
+      responses:
+        '200':
+          description: A paginated list of records.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchQueryPaginatedRecords'
+        default:
+          description: Operation failed with an error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    CreateJobRequest:
+      required:
+        - from
+        - query
+        - timezone
+        - to
+      type: object
+      properties:
+        query:
+          maxLength: 15000
+          type: string
+          description: |
+            The actual search expression. Ensure your query follows [RFC 8259](https://datatracker.ietf.org/doc/html/rfc8259) and is valid JSON format,  you may need to escape certain characters to follow the [RFC 8259](https://datatracker.ietf.org/doc/html/rfc8259).
+          example: _sourceCategory=service
+        from:
+          maxLength: 24
+          type: string
+          description: |
+            The start date and time of the search. This follows the [ISO 8601](https://www.w3.org/TR/NOTE-datetime) date and time format.
+          example: '2017-07-26T00:00:00.000Z'
+        to:
+          maxLength: 24
+          type: string
+          description: |
+            The end date and time of the search. This follows the [ISO 8601](https://www.w3.org/TR/NOTE-datetime) date and time format.
+          example: '2017-07-26T00:00:00.000Z'
+        timezone:
+          type: string
+          description: The time zone if from/to is not in milliseconds. See this [Wikipedia article](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) for a list of time zone codes.
+          default: UTC
+        autoParsingMode:
+          pattern: ^(Manual|AutoParse)$
+          type: string
+          description: |
+            Define the parsing mode to scan the JSON format log messages. Possible values are:
+
+            AutoParse - System automatically figures out the fields to parse based on the search query.
+
+            Manual - No fields are parsed out automatically. For more information, refer to the [Dynamic Parsing](https://help.sumologic.com/docs/manage/field-extractions/create-field-extraction-rule/).
+          example: Manual
+          default: Manual
+          x-pattern-message: should be either 'Manual' or 'AutoParse'
+        requiresRawMessages:
+          pattern: ^(true|false)$
+          type: string
+          description: |
+            On enabling this field, the log messages applicable to the search are returned. Maximum value is 100,000. This is only applicable for aggregate queries.
+          default: 'false'
+          x-pattern-message: should be either 'true' or 'false'
+        maxRawRecords:
+          type: string
+          description: Maximum number of raw records to finish the search.
+        intervalTimeType:
+          pattern: ^(messageTime|receiptTime|searchableTime)$
+          type: string
+          description: This parameter defines whether you want to run the search by messageTime, receiptTime or searchableTime.
+          example: messageTime
+          default: messageTime
+          x-pattern-message: should be either 'messageTime' or 'receiptTime' or 'searchableTime'
+        childOrgIds:
+          type: array
+          description: |
+            List of child organization ids to run the search on.
+          example:
+            - '0000000000000001'
+            - '0000000000000002'
+          items:
+            type: string
+        includeAllChildOrgs:
+          type: boolean
+          description: |
+            When true, automatically resolves all child orgs of the authenticated parent and fans the search out across all of them. If this is set, it takes precedence over childOrgIds field. Default value is false.
+          default: false
+    CreateJobResponse:
+      type: object
+      properties:
+        warning:
+          type: string
+          description: Warnings value contains the detailed information about the warning while creating the search job.
+        id:
+          type: string
+          description: The search job identifier.
+        link:
+          $ref: '#/components/schemas/Link'
+        isAggregation:
+          type: boolean
+          description: Whether the query has aggregation operators.
+        isSummary:
+          type: boolean
+          description: Whether the query is a summary query.
+        isSortable:
+          type: boolean
+          description: Whether the results are sortable.
+        runnableQuery:
+          type: string
+          description: |
+            The final query string after parameterized variables are substituted, macros are expanded.
+        userReferencedFieldsSortable:
+          type: boolean
+          description: |
+            Whether the user's explicitly referenced fields can be re-sorted by clicking column headers.
+        operators:
+          type: array
+          description: |
+            List of special operators present in the query.
+          items:
+            type: string
+        tiersInQuery:
+          type: array
+          description: Analytics tiers referenced in the query.
+          items:
+            type: string
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+    ErrorResponse:
+      required:
+        - errors
+        - id
+      type: object
+      properties:
+        id:
+          type: string
+          description: An identifier for the error; this is unique to the specific API request.
+          example: IUUQI-DGH5I-TJ045
+        errors:
+          type: array
+          description: A list of one or more causes of the error.
+          example:
+            - code: auth:password_too_short
+              message: Your password was too short.
+            - code: auth:password_character_classes
+              message: Your password did not contain any non-alphanumeric characters
+          items:
+            $ref: '#/components/schemas/ErrorDescription'
+    SearchJobStatusResponse:
+      type: object
+      properties:
+        warning:
+          type: string
+          description: Warnings value contains the detailed information about the warning while obtaining the current status of a search job.
+        state:
+          type: string
+          description: Search job state. In case you are checking status for a multi child org query, you might see another status as 'Done Gathering Partial Results' which means that the query failed for some of the child orgs. You can check their reasons in audit logs with the query Id.
+          example: DONE GATHERING RESULTS
+        histogramBuckets:
+          type: array
+          description: Histogram buckets for the query.
+          items:
+            $ref: '#/components/schemas/HistogramBucket'
+        messageCount:
+          type: integer
+          description: Number of messages found or produced so far.
+          format: int64
+        recordCount:
+          type: integer
+          description: Number of records found or produced so far.
+          format: int64
+        pendingWarnings:
+          type: array
+          description: Pending warnings that have accumulated since the last time the status was requested.
+          items:
+            type: string
+        pendingErrors:
+          type: array
+          description: Pending errors that have accumulated since the last time the status was requested.
+          items:
+            type: string
+        usageDetails:
+          type: object
+          properties:
+            dataScannedInBytes:
+              type: integer
+              description: Data Scanned in Bytes.
+              format: int64
+          description: Usage details about the search job api. It includes data scanned in bytes during the search.
+        usageDetailsByMeteringType:
+          type: array
+          description: Usage details broken down by metering type. Each element contains dataScannedInBytes, meteringType, tier, and isChargeable.
+          items:
+            $ref: '#/components/schemas/UsageDetailsByMeteringType'
+        usageDetailsByTier:
+          type: array
+          description: Usage details broken down by analytics tier. Each element contains dataScannedInBytes and tier.
+          items:
+            $ref: '#/components/schemas/UsageDetailsByTier'
+        timeElapsed:
+          type: integer
+          description: Time elapsed in milliseconds since the search job started.
+          format: int64
+        searchedTimeRange:
+          $ref: '#/components/schemas/SearchedTimeRange'
+        showLogLevels:
+          type: boolean
+          description: Whether log level distribution data is available for this search job.
+        pendingMessageLocatorsAndOffsets:
+          type: array
+          description: Pending message locators and offsets accumulated since the last status request.
+          items:
+            $ref: '#/components/schemas/PendingMessageLocatorsAndOffset'
+        jobId:
+          type: string
+          description: The job identifier for this search job.
+        userMessages:
+          type: array
+          description: Informational user messages generated during the search. Each element contains type, key, and data.
+          items:
+            $ref: '#/components/schemas/UserMessage'
+        performance:
+          $ref: '#/components/schemas/Performance'
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+    SearchJobDeleteResponse:
+      type: object
+      properties:
+        warning:
+          type: string
+          description: Warnings value contains the detailed information about the warning while deleting a search job.
+          x-field-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+        jobId:
+          type: string
+          description: The Id of the search job which is deleted.
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+    SearchQueryPaginatedMessages:
+      required:
+        - fields
+        - messages
+      type: object
+      properties:
+        warning:
+          type: string
+          description: Detailed information about the warning while paging through the messages found by a search job.
+        fields:
+          type: array
+          description: List of all the fields defined for each of the messages returned.
+          items:
+            $ref: '#/components/schemas/Field'
+        messages:
+          type: array
+          description: Map of the field names to the field values.
+          items:
+            $ref: '#/components/schemas/Message'
+        autoPauseLimitReached:
+          type: boolean
+          description: Whether the auto-pause limit has been reached for this query.
+    SearchQueryPaginatedRecords:
+      required:
+        - fields
+        - records
+      type: object
+      properties:
+        warning:
+          type: string
+          description: Detailed information about the warning while paging through the records found by a search job.
+        fields:
+          type: array
+          description: List of all the fields defined for each of the records returned.
+          items:
+            $ref: '#/components/schemas/Field'
+        records:
+          type: array
+          description: Map of the field names to the field values.
+          items:
+            $ref: '#/components/schemas/Record'
+      x-class-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
+    Link:
+      type: object
+      properties:
+        rel:
+          type: string
+          description: Relation.
+        href:
+          type: string
+          description: URL of the search job.
+    ErrorDescription:
+      required:
+        - code
+        - message
+      type: object
+      properties:
+        code:
+          type: string
+          description: An error code describing the type of error.
+          example: auth:password_too_short
+        message:
+          type: string
+          description: A short English-language description of the error.
+          example: Your password was too short.
+        detail:
+          type: string
+          description: An optional fuller English-language description of the error.
+          example: Your password was 5 characters long, the minimum length is 12 characters. See http://example.com/password for more information.
+        meta:
+          type: string
+          description: An optional list of metadata about the error. (opaque JSON object)
+          example:
+            minLength: 12
+            actualLength: 5
+    HistogramBucket:
+      required:
+        - count
+        - length
+        - startTimestamp
+      type: object
+      properties:
+        startTimestamp:
+          type: integer
+          description: Start time of the bucket.
+          format: int64
+        length:
+          type: integer
+          description: Length is in milliseconds, tells the width of the bucket.
+          format: int64
+        count:
+          type: integer
+          description: Count of messages in this bucket.
+        logLevel:
+          type: string
+          description: Log level of messages in this bucket.
+    UsageDetailsByMeteringType:
+      required:
+        - dataScannedInBytes
+        - isChargeable
+        - meteringType
+        - tier
+      type: object
+      properties:
+        dataScannedInBytes:
+          type: integer
+          description: Data scanned in bytes for this metering type.
+          format: int64
+        meteringType:
+          type: string
+          description: The metering type.
+        tier:
+          type: string
+          description: The analytics tier.
+        isChargeable:
+          type: boolean
+          description: Whether this metering type is chargeable.
+    UsageDetailsByTier:
+      required:
+        - dataScannedInBytes
+        - tier
+      type: object
+      properties:
+        dataScannedInBytes:
+          type: integer
+          description: Data scanned in bytes for this tier.
+          format: int64
+        tier:
+          type: string
+          description: The analytics tier.
+    SearchedTimeRange:
+      type: object
+      properties:
+        startMillis:
+          type: integer
+          description: Start of the searched time range in epoch milliseconds.
+          format: int64
+        endMillis:
+          type: integer
+          description: End of the searched time range in epoch milliseconds.
+          format: int64
+      description: The time range that has been searched so far.
+    PendingMessageLocatorsAndOffset:
+      required:
+        - messageLocator
+        - offset
+      type: object
+      properties:
+        messageLocator:
+          $ref: '#/components/schemas/MessageLocator'
+        offset:
+          type: integer
+          description: The offset of the message.
+          format: int64
+    UserMessage:
+      required:
+        - key
+        - type
+      type: object
+      properties:
+        type:
+          type: string
+          description: The message type.
+        key:
+          type: string
+          description: The message key.
+        data:
+          type: string
+          description: The message data as a JSON string.
+    Performance:
+      type: object
+      properties:
+        difficulty:
+          type: string
+          description: The difficulty level of the search query.
+          enum:
+            - CALCULATION_DISABLED
+            - Unknown
+            - Easy
+            - Medium
+            - Hard
+        reasons:
+          type: array
+          description: Reasons explaining the difficulty classification.
+          items:
+            type: string
+      description: Performance characteristics of this search job.
+    Field:
+      required:
+        - fieldType
+        - keyField
+        - name
+      type: object
+      properties:
+        name:
+          type: string
+          description: Name of the field.
+        fieldType:
+          type: string
+          description: Type of the field.
+          example: long
+        keyField:
+          type: boolean
+          description: Flag if the field is a key field.
+        userReferenced:
+          type: boolean
+          description: Flag if the field is referenced by the user in the query.
+        autoParseUnreferenced:
+          type: boolean
+          description: Flag if the field was auto-parsed but not referenced in the query.
+    Message:
+      type: object
+      properties:
+        map:
+          maxProperties: 1000
+          type: object
+          additionalProperties:
+            type: string
+          description: Map message values.
+    Record:
+      type: object
+      properties:
+        map:
+          maxProperties: 1000
+          type: object
+          additionalProperties:
+            type: string
+          description: Map Records values.
+    MessageLocator:
+      type: object
+      properties:
+        blockId:
+          type: string
+          description: The block identifier.
+        messageId:
+          type: string
+          description: The message identifier.
+  x-stackQL-resources:
+    search_jobs:
+      id: sumologic.search_jobs.search_jobs
+      name: search_jobs
+      title: Search Jobs
+      methods:
+        create:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v2~1search~1jobs/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '202'
+          request:
+            mediaType: application/json
+            nativeCasing: camel
+        get:
+          operation:
+            $ref: '#/paths/~1v2~1search~1jobs~1{jobId}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+          request:
+            nativeCasing: camel
+        delete:
+          operation:
+            $ref: '#/paths/~1v2~1search~1jobs~1{jobId}/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+          request:
+            nativeCasing: camel
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/search_jobs/methods/get'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/search_jobs/methods/create'
+        update: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/search_jobs/methods/delete'
+        replace: []
+    messages:
+      id: sumologic.search_jobs.messages
+      name: messages
+      title: Messages
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1v2~1search~1jobs~1{jobId}~1messages/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.messages
+          request:
+            nativeCasing: camel
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/messages/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace: []
+    records:
+      id: sumologic.search_jobs.records
+      name: records
+      title: Records
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1v2~1search~1jobs~1{jobId}~1records/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.records
+          request:
+            nativeCasing: camel
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/records/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace: []
+servers:
+  - url: https://api.{region}.sumologic.com/api
+    description: Sumo Logic deployment API endpoint
+    variables:
+      region:
+        description: Sumo Logic deployment (au, ca, ch, de, eu, fed, in, jp, kr, us1, us2). Resolved from the SUMOLOGIC_ENVIRONMENT environment variable when it is set (x-stackQL-envVar, the same variable the Terraform provider reads); otherwise defaults to us2. A WHERE region = '...' value always takes precedence.
+        enum:
+          - au
+          - ca
+          - ch
+          - de
+          - eu
+          - fed
+          - in
+          - jp
+          - kr
+          - us1
+          - us2
+        default: us2
+        x-stackQL-envVar: SUMOLOGIC_ENVIRONMENT
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: token
+      location: query
+    responseToken:
+      key: next
+      location: body
