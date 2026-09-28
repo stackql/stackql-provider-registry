@@ -1,0 +1,3506 @@
+openapi: 3.0.1
+info:
+  title: Fivetran Connections API
+  description: 'Connections (formerly connectors): lifecycle, sync and resync, state, sync history, warnings, and the schema, table and column configuration.'
+  version: v1
+paths:
+  /v1/connections:
+    get:
+      tags:
+        - Connection Management
+      summary: List All Connections
+      description: Returns a list of all accessible connections within your Fivetran account.
+      operationId: list_connections
+      parameters:
+        - name: group_id
+          in: query
+          description: Filter the list to connections belonging to this group. Retrieve group IDs from the [List All Groups](https://fivetran.com/docs/rest-api/api-reference/groups/list-all-groups) endpoint.
+          required: false
+          schema:
+            type: string
+            example: group_id
+          example: group_id
+        - name: schema
+          in: query
+          description: Filter the list to connections whose schema name matches this value. Partial matches are not supported.
+          required: false
+          schema:
+            type: string
+            example: schema
+          example: schema
+        - name: cursor
+          in: query
+          description: Paging cursor, [read more about pagination](https://fivetran.com/docs/rest-api/pagination)
+          required: false
+          schema:
+            type: string
+            example: cursor_value
+          example: cursor_value
+        - name: limit
+          in: query
+          description: Number of records to fetch per page. Accepts a number in the range 1..1000; the default value is 100.
+          required: false
+          schema:
+            type: integer
+            format: int32
+            example: 100
+          example: 100
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Connections list retrieved successfully
+                  data:
+                    required:
+                      - items
+                    properties:
+                      items:
+                        type: array
+                        description: The collection of returned items
+                        items:
+                          $ref: '#/components/schemas/ConnectorResponse'
+                      next_cursor:
+                        type: string
+                        description: The value of the cursor parameter for the next page
+                        example: cursor_value
+                    type: object
+                type: object
+        '401':
+          description: Unauthorized error
+        '405':
+          description: Method not allowed error
+        '406':
+          description: Not acceptable error
+    post:
+      tags:
+        - Connection Management
+      summary: Create a Connection
+      description: |-
+        Creates a new connection within a specified group in your Fivetran account. Runs setup tests and returns testing results. <br />
+        > IMPORTANT: The `destination_schema_names` field will soon become a required field. Make sure to include it in your API requests when creating new connections to prevent future disruptions.
+        > IMPORTANT: If you want to get the fingerprint details, do not set `trust_fingerprints` to `true` when you create a connection with our REST API. We can only provide the fingerprint details through the failed SSH Tunnel Connection setup test. For a full walkthrough, see [Get Connection Fingerprint Details](https://fivetran.com/docs/rest-api/tutorials/get-connection-fingerprint-details).
+      operationId: create_connection
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewConnectorRequestV1'
+      responses:
+        '201':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Connection has been created
+                  data:
+                    $ref: '#/components/schemas/ConnectorResponseV1'
+                type: object
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found error
+        '406':
+          description: Not acceptable
+        '409':
+          description: Conflict
+        '415':
+          description: Unsupported media type
+  /v1/connections/{connection_id}:
+    get:
+      tags:
+        - Connection Management
+      summary: Retrieve Connection Details
+      description: Returns a connection configuration and status details if a valid identifier was provided.
+      operationId: connection_details
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Connection details retrieved successfully
+                  data:
+                    $ref: '#/components/schemas/ConnectorResponseV1'
+                type: object
+        '401':
+          description: Unauthorized error
+        '404':
+          description: Not found error
+        '405':
+          description: Method not allowed error
+        '406':
+          description: Not acceptable error
+    delete:
+      tags:
+        - Connection Management
+      summary: Delete a Connection
+      description: Deletes a connection from your Fivetran account.
+      operationId: delete_connection
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Connection with id 'string' has been deleted
+                type: object
+        '404':
+          description: Not found error
+    patch:
+      tags:
+        - Connection Management
+      summary: Update a Connection
+      description: |
+        Updates connection parameters for an existing connection within your Fivetran account.
+
+        This endpoint requires at least one persistent configuration parameter to be specified (e.g., `sync_frequency`, `paused`, `config`, `auth`, `daily_sync_time`, `schema_status`).
+
+        > IMPORTANT: Parameters like `trust_certificates`, `trust_fingerprints`, and `run_setup_tests` are test-control parameters that affect only the behavior of setup tests during the update and do not persist in the connection configuration; they cannot be used on their own. If you want to run setup tests without making configuration changes, use the POST `/v1/connections/{connectionId}/test` endpoint instead.
+      operationId: modify_connection
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateConnectorRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Connection has been updated
+                  data:
+                    $ref: '#/components/schemas/ConnectorResponseV1'
+                type: object
+        '404':
+          description: Not found error
+  /v1/connections/{connection_id}/connect-card:
+    post:
+      tags:
+        - Connection Management
+      summary: Create a Connect Card
+      description: Generates the Connect Card URI for the connection
+      operationId: connect_card
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectCardConfigRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Connection Connect Card has been created
+                  data:
+                    $ref: '#/components/schemas/ConnectorConnectCardResponse'
+                type: object
+        '400':
+          description: Bad request
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found error
+        '406':
+          description: Not acceptable
+        '415':
+          description: Unsupported media type
+  /v1/connections/{connection_id}/move:
+    post:
+      tags:
+        - Connection Management
+      summary: Move a Connection
+      description: 'Moves a connection from its current destination group to a different destination group. The connection must be paused before calling this endpoint. Use `sync_behavior` to control how data syncs after the move: `CONTINUE` preserves the existing sync cursor so the connection resumes incremental sync from where it left off; `BACKFILL` resets the cursor and triggers a historical sync; `CONTINUE_WITH_DATA` preserves the cursor and additionally migrates existing data to the new destination by starting an asynchronous job. Use the `job_id` returned in the response to monitor progress via the move-connection-job-status endpoint. `CONTINUE_WITH_DATA` is supported only when moving a connection from Snowflake Native tables to a MDLS-linked Snowflake Lakehouse destination.'
+      operationId: connection_moved
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveConnectionsRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Connection moved successfully
+                  data:
+                    $ref: '#/components/schemas/MoveConnectionsResponse'
+                type: object
+        '400':
+          description: Bad request error
+        '401':
+          description: Unauthorized error
+        '404':
+          description: Not found error
+        '406':
+          description: Not acceptable error
+        '415':
+          description: Unsupported media type error
+  /v1/connections/{connection_id}/move/{job_id}:
+    get:
+      tags:
+        - Connection Management
+      summary: Retrieve Move Connection Job Status
+      description: Retrieves the status of an asynchronous connection move job. Use this endpoint to monitor the progress of a connection move operation that was initiated with the `CONTINUE_WITH_DATA` sync behavior.
+      operationId: connection_moved_job_status
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+        - name: job_id
+          in: path
+          description: The unique identifier of the move job. This is returned in the response when you initiate a connection move.
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Move connection job status retrieved successfully
+                  data:
+                    $ref: '#/components/schemas/MoveConnectionJobResponse'
+                type: object
+        '400':
+          description: Bad request error
+        '401':
+          description: Unauthorized error
+        '404':
+          description: Not found error
+  /v1/connections/{connection_id}/resync:
+    post:
+      tags:
+        - Connection Management
+      summary: Re-sync Connection Data (Historical Sync)
+      description: Triggers a full historical sync of a connection or multiple schema tables within a connection. If the connection is paused, the table sync will be scheduled to be performed when the connection is re-enabled. If there is a data sync already in progress, we will try to complete it. If it fails, the request will be declined and the HTTP 409 Conflict error will be returned.
+      operationId: resync_connection
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResyncConnectorRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Sync has been successfully triggered for connection with id 'string'
+                type: object
+        '400':
+          description: Bad request error. Returned when the scope object is empty, a schema key maps to an empty table array, or the connector does not support table-level re-sync.
+        '401':
+          description: Unauthorized error
+        '404':
+          description: Not found error
+        '405':
+          description: Method not allowed error
+        '406':
+          description: Not acceptable error
+        '409':
+          description: Conflict error. Returned when a data sync is already in progress and cannot be completed before the re-sync can be scheduled.
+        '415':
+          description: Unsupported media type error
+  /v1/connections/{connection_id}/schemas:
+    get:
+      tags:
+        - Connection Schema Management
+      summary: Retrieve a Connection Schema Config
+      description: |
+
+        Returns the top-level schema configuration for an existing connection within your Fivetran account. The response includes global flags, every schema, each table, and only the columns that were explicitly overridden. 
+
+        Use this endpoint to read the current data-selection tree for a connection, to back up the schema before making edits, or to copy the configuration to another connection.
+
+        > NOTE: To restore a backed-up schema or copy the configuration to another connection, use the [Update a Connection Schema Config](https://fivetran.com/docs/rest-api/api-reference/connection-schema/modify-connection-schema-config) endpoint.
+
+        For more information, see the [Connection Schema config](https://fivetran.com/docs/rest-api/tutorials/connection-schema-configuration-use-cases) tutorial.
+
+        > NOTE: Unedited columns (those following table defaults) are omitted from the response. For a read-only cataloging workflow, walk this response from schemas to tables, inspect each table's `supports_columns_config` field, and call the [Retrieve Source Table Columns Config](https://fivetran.com/docs/rest-api/api-reference/connection-schema/connection-column-config) endpoint only for tables where that field is `true`.
+
+        For the NetSuite SuiteAnalytics, and Salesforce and Salesforce Sandbox connectors, the 'schemas' map field contains a single entry with the 'netsuite' or 'salesforce' key, respectively. For the 'schema.name_in_destination` name field, these connectors always return the destination schema name you set in the connection setup form.
+
+        For more information on using this API endpoint with the the Oracle Fusion Cloud Applications connectors, see the [Schema information documentation](https://fivetran.com/docs/connectors/applications/oracle-fusion-cloud-applications#schemainformation).
+
+        > IMPORTANT: This endpoint does not apply to [Magic Folder](https://fivetran.com/docs/connectors/files#magicfolder) connectors.
+      operationId: connection_schema_config
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Schema configuration retrieved successfully
+                  data:
+                    $ref: '#/components/schemas/StandardConfigResponse'
+                type: object
+    post:
+      tags:
+        - Connection Schema Management
+      summary: Set Up a New Connection Schema Config
+      description: |
+        Configures a Connection Schema for a new connection before the schema is captured from the source.
+
+        > NOTE: The response returns the exact settings provided in the request.
+
+        After the initial sync, when the connection captures the schema from the source, Fivetran attempts to apply the specified settings to the actual schema.
+        If certain tables or columns cannot be excluded, the settings for those entities are ignored.
+      operationId: pre_create_connection_schema_config
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StandardConfigCreateRequest'
+            examples:
+              pre_create_schema_config_request:
+                value:
+                  schemas:
+                    schema_name:
+                      enabled: true
+                      tables:
+                        table_name:
+                          enabled: true
+                          sync_mode: SOFT_DELETE
+                          columns:
+                            column_name:
+                              enabled: true
+                              hashed: false
+                  schema_change_handling: ALLOW_COLUMNS
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Schema configuration pre-created successfully
+                  data:
+                    $ref: '#/components/schemas/StandardConfigResponse'
+                type: object
+    patch:
+      tags:
+        - Connection Schema Management
+      summary: Update a Connection Schema Config
+      description: |
+        Updates the schema config for an existing connection within your Fivetran account.
+
+        > NOTE: For backward compatibility, the response may contain the 'enable_new_by_default' boolean field. It defines whether new schemas and tables discovered in the source are synced. The value is 'true' if you specify 'ALLOW_ALL' as a value of 'schema_change_handling'. In the future API versions, we may remove this field.
+        >
+        > The response contains all known schemas and tables. Also, it contains columns whose state has ever been set by the user. For more information, see also the [Connection Schema config](https://fivetran.com/docs/rest-api/tutorials/connection-schema-configuration-use-cases) tutorial.
+      operationId: modify_connection_schema_config
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StandardConfigUpdateRequest'
+            examples:
+              modify_schema_config_request:
+                value:
+                  schemas:
+                    schema_name:
+                      enabled: true
+                      tables:
+                        table_name:
+                          enabled: true
+                          sync_mode: SOFT_DELETE
+                          columns:
+                            column_name:
+                              enabled: true
+                              hashed: false
+                  schema_change_handling: BLOCK_ALL
+              modify_schema_config_row_filter_request:
+                value:
+                  schemas:
+                    schema_name:
+                      enabled: true
+                      tables:
+                        orders:
+                          enabled: true
+                          row_filter:
+                            name: active_orders
+                            description: Sync only active orders
+                            column_clauses:
+                              - column: status
+                                column_type: STRING
+                                operator: EQUALS
+                                values:
+                                  - ACTIVE
+                        customers:
+                          enabled: true
+                          row_filter: null
+                        events:
+                          enabled: true
+              modify_schema_config_row_filter_or_request:
+                value:
+                  schemas:
+                    schema_name:
+                      enabled: true
+                      tables:
+                        orders:
+                          enabled: true
+                          row_filter:
+                            name: high_value_or_us
+                            description: Sync high-value orders or US orders
+                            operator: OR
+                            column_clauses:
+                              - column: amount
+                                column_type: LONG
+                                operator: GREATER
+                                values:
+                                  - '1000'
+                              - column: country
+                                column_type: STRING
+                                operator: EQUALS
+                                values:
+                                  - US
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Schema configuration has been modified
+                  data:
+                    $ref: '#/components/schemas/StandardConfigResponse'
+                type: object
+  /v1/connections/{connection_id}/schemas/drop-columns:
+    post:
+      tags:
+        - Connection Schema Management
+      summary: Drop Blocked Columns from the Destination.
+      description: Mark multiple blocked columns for deletion from your destination tables. The columns will be dropped during the next sync.
+      operationId: delete_multiple_columns_connection_config
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DropColumnsRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Column(s) successfully marked for deletion
+                type: object
+        '400':
+          description: Bad request
+        '404':
+          description: Not found error
+        '409':
+          description: Column not in blocked state error
+  /v1/connections/{connection_id}/schemas/reload:
+    post:
+      tags:
+        - Connection Schema Management
+      summary: Reload a Connection Schema Config
+      description: |
+        Reloads the connection schema config for an existing connection within your Fivetran account.
+
+        > NOTE: This method reloads the full schema from the connection's data source. It may take a long time to complete the request. The method execution speed depends on the schema size and the number of databases, tables, and columns.
+        >
+        > The response contains all known schemas and tables. Also, it contains columns whose state has ever been set by the user. For more information, see also the [Connection Schema config](https://fivetran.com/docs/rest-api/tutorials/connection-schema-configuration-use-cases) tutorial.
+      operationId: reload_connection_schema_config
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReloadStandardConfigRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Schema configuration has been reloaded
+                  data:
+                    $ref: '#/components/schemas/StandardConfigResponse'
+                type: object
+  /v1/connections/{connection_id}/schemas/tables/resync:
+    post:
+      tags:
+        - Connection Schema Management
+      summary: Re-sync Connection Table Data
+      description: Triggers a historical sync of all data for multiple schema tables within a connection. This action does not override the standard sync frequency you defined in the Fivetran dashboard.
+      operationId: resync_tables
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                schema:
+                  title: Schema name
+                  uniqueItems: true
+                  type: array
+                  description: Schema name
+                  example:
+                    - table1
+                    - table2
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Re-sync has been triggered successfully
+                type: object
+  /v1/connections/{connection_id}/schemas/{schema_name}:
+    patch:
+      tags:
+        - Connection Schema Management
+      summary: Update a Connection Database Schema Config
+      description: |
+        Updates the database schema config for an existing connection within your Fivetran account (for a single schema within a connection with multiple schemas). 
+
+        > NOTE: The response contains all known schemas and tables. Also, it contains columns whose state has ever been set by the user. For more information, see also the [Connection Schema config](https://fivetran.com/docs/rest-api/tutorials/connection-schema-configuration-use-cases) tutorial. 
+
+        In this API call, the NetSuite SuiteAnalytics, Salesforce and Salesforce Sandbox connectors always return the schema name as 'netsuite' and 'salesforce', respectively. 
+
+        For more information about this API call for the Oracle Fusion Cloud Applications connectors, see our [Schema information](https://fivetran.com/docs/connectors/applications/oracle-fusion-cloud-applications#schemainformation) documentation.
+      operationId: modify_connection_database_schema_config
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+        - name: schema_name
+          in: path
+          description: The schema name as stored in the connection schema config. This value is case-sensitive; an incorrect case results in an HTTP 404 error.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchemaUpdateRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Database schema configuration has been modified
+                  data:
+                    $ref: '#/components/schemas/StandardConfigResponse'
+                type: object
+  /v1/connections/{connection_id}/schemas/{schema_name}/tables/{table_name}:
+    patch:
+      tags:
+        - Connection Schema Management
+      summary: Update a Connection Table Config
+      description: |
+        Updates the table config within your database schema for an existing connection within your Fivetran account.
+
+        For the NetSuite SuiteAnalytics and Salesforce and Salesforce Sandbox connectors, the 'schemas' map field will always have a single entry with the 'netsuite' or 'salesforce' key, respectively.
+      operationId: modify_connection_table_config
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+        - name: schema_name
+          in: path
+          description: The schema name as stored in the connection schema config. This value is case-sensitive; an incorrect case results in an HTTP 404 error.
+          required: true
+          schema:
+            type: string
+        - name: table_name
+          in: path
+          description: The table name as stored in the connection schema config. This value is case-sensitive; an incorrect case results in an HTTP 404 error.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TableUpdateRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Table configuration has been modified
+                  data:
+                    $ref: '#/components/schemas/StandardConfigResponse'
+                type: object
+  /v1/connections/{connection_id}/schemas/{schema_name}/tables/{table_name}/columns/{column_name}:
+    delete:
+      tags:
+        - Connection Schema Management
+      summary: Drop a Blocked Column From the Destination
+      description: |
+        Marks a blocked column for deletion from your destination table. The column will be dropped during the next sync.
+
+        For the NetSuite SuiteAnalytics and Salesforce and Salesforce Sandbox connectors, the 'schemas' map field will always have a single entry with the 'netsuite' or 'salesforce' key, respectively.
+      operationId: delete_column_connection_config
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+        - name: schema_name
+          in: path
+          description: The schema name as stored in the connection schema config. This value is case-sensitive; an incorrect case results in an HTTP 404 error.
+          required: true
+          schema:
+            type: string
+        - name: table_name
+          in: path
+          description: The table name as stored in the connection schema config. This value is case-sensitive; an incorrect case results in an HTTP 404 error.
+          required: true
+          schema:
+            type: string
+        - name: column_name
+          in: path
+          description: The column name as stored in the connection schema config. This value is case-sensitive; an incorrect case results in an HTTP 404 error.
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Column successfully marked for deletion
+                type: object
+        '400':
+          description: Bad request
+        '404':
+          description: Not found error
+        '409':
+          description: Column not in blocked state error
+    patch:
+      tags:
+        - Connection Schema Management
+      summary: Update a Connection Column Config
+      description: |
+        Updates the column config within your table for an existing connection within your Fivetran account.
+
+        For the NetSuite SuiteAnalytics and Salesforce and Salesforce Sandbox connectors, the 'schemas' map field will always have a single entry with the 'netsuite' or 'salesforce' key, respectively.
+        > NOTE: The response contains all known schemas and tables. Also, it contains columns whose state has ever been set by the user. For more information, see also the [Connection Schema config](https://fivetran.com/docs/rest-api/tutorials/connection-schema-configuration-use-cases) tutorial.
+      operationId: modify_connection_column_config
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+        - name: schema_name
+          in: path
+          description: The schema name as stored in the connection schema config. This value is case-sensitive; an incorrect case results in an HTTP 404 error.
+          required: true
+          schema:
+            type: string
+        - name: table_name
+          in: path
+          description: The table name as stored in the connection schema config. This value is case-sensitive; an incorrect case results in an HTTP 404 error.
+          required: true
+          schema:
+            type: string
+        - name: column_name
+          in: path
+          description: The column name as stored in the connection schema config. This value is case-sensitive; an incorrect case results in an HTTP 404 error.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ColumnUpdateRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Column configuration has been modified
+                  data:
+                    $ref: '#/components/schemas/StandardConfigResponse'
+                type: object
+  /v1/connections/{connection_id}/schemas/{schema_name}/tables/{table_name}/columns:
+    get:
+      tags:
+        - Connection Schema Management
+      summary: Retrieve Source Table Columns Config
+      description: |
+        Returns the real-time column list for one source table by querying the source. The response includes the current enabled and hashed flags, and the patchable fields.
+
+        To determine whether this endpoint is available for a table, first [retrieve the connection schema config](https://fivetran.com/docs/rest-api/api-reference/connection-schema/connection-schema-config) and check the table's public [`supports_columns_config` response field](https://fivetran.com/docs/rest-api/api-reference/connection-schema/connection-schema-config#supports_columns_config). Column-level schema metadata support is reported per table rather than as a static connector-wide list. If `supports_columns_config` is `false`, column metadata is not available for that table.
+
+        > NOTE: This endpoint works only for an existing connection that is in a 'Connected' state.
+
+        > NOTE: The connection schema config response includes every schema and table, but includes only columns that were explicitly overridden. Use this endpoint when you need the exhaustive real-time column list for a table that supports column-level configuration.
+      operationId: connection_column_config
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+        - name: schema_name
+          in: path
+          description: The database schema name within your destination
+          required: true
+          schema:
+            type: string
+        - name: table_name
+          in: path
+          description: The table name from the connection schema, using the original source system's naming conventions. This value is case-sensitive.
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Column configuration retrieved successfully
+                  data:
+                    $ref: '#/components/schemas/TableColumnsConfigResponse'
+                type: object
+  /v1/connections/{connection_id}/state:
+    get:
+      tags:
+        - Connection Management
+      summary: Retrieve Connection State
+      description: |
+        This endpoint returns the connection state for [Function](https://fivetran.com/docs/connectors/functions) and [Connector SDK](https://fivetran.com/docs/connector-sdk) connections. Sending a request for any other connection type returns `400 Bad Request`. To update the connection state, use [Update Connection State](https://fivetran.com/docs/rest-api/api-reference/connections/modify-connection-state).
+
+        To read the sync status for any connection type, use [Retrieve connection details](https://fivetran.com/docs/rest-api/api-reference/connections/connection-details) and inspect the `status` object in the response.
+      operationId: connection_state
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Connection state retrieved successfully
+                  data:
+                    $ref: '#/components/schemas/ConnectorStateResponse'
+                type: object
+        '400':
+          description: The specified connection does not support state management. Only Function and Connector SDK connectors support this operation.
+        '401':
+          description: Unauthorized error
+        '404':
+          description: Connection not found error.
+        '405':
+          description: Method not allowed error.
+        '406':
+          description: Not acceptable error
+    patch:
+      tags:
+        - Connection Management
+      summary: Update a Connection State
+      description: |
+        Updates the connection state. This endpoint is only supported for [Function](https://fivetran.com/docs/connectors/functions) and [Connection SDK](https://fivetran.com/docs/connectors/connector-sdk) connectors. To update the state, you should pause your connection first.
+
+        To update the connection state, do the following:
+
+          1. Pause connection using [Update a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/modify-connection) endpoint (set 'paused' to 'true').
+          2. Update the state by using the [Update Connection State](https://fivetran.com/docs/rest-api/api-reference/connections/modify-connection-state) endpoint.
+          3. Unpause the connection by setting the 'paused' parameter to 'false' in the [Update a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/modify-connection) endpoint request.
+      operationId: modify_connection_state
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFunctionOrConnectorSdkState'
+            examples:
+              update_connection_state_request:
+                value:
+                  state:
+                    cursor: '2024-01-01T00:00:00Z'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Connection state has been updated
+                  data:
+                    $ref: '#/components/schemas/ConnectorStateResponse'
+                type: object
+        '400':
+          description: 'Invalid request. Possible causes: the request body is missing or malformed, the connection state does not exist, or the specified connection is not a Function or Connector SDK connector.'
+        '401':
+          description: Unauthorized error
+        '404':
+          description: Connection not found error.
+        '405':
+          description: Method not allowed error.
+        '406':
+          description: Not acceptable error
+        '409':
+          description: Connection cannot be updated because the sync is in progress.
+        '415':
+          description: Unsupported media type error
+  /v1/connections/{connection_id}/sync:
+    post:
+      tags:
+        - Connection Management
+      summary: Sync Connection Data
+      description: |
+        Triggers a data sync for an existing connection within your Fivetran account without waiting for the next scheduled sync. This action does not override the standard sync frequency you defined in the Fivetran dashboard.
+
+        When `schedule_type` is set to `manual`, this endpoint is the only way syncs occur — including syncs in a `rescheduled` state. For a full walkthrough, see [Trigger Manual Syncs](https://fivetran.com/docs/rest-api/tutorials/trigger-syncs-manually).
+      operationId: sync_connection
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncConnectorRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Sync has been successfully triggered for connection with id 'string'
+                type: object
+        '401':
+          description: Unauthorized error
+        '404':
+          description: Not found error
+        '406':
+          description: Not acceptable error
+        '415':
+          description: Unsupported media type error
+  /v1/connections/{connection_id}/sync-history:
+    get:
+      tags:
+        - Connection Management
+      summary: Retrieve Connection Sync History
+      description: Returns a list of sync history records for the specified connection. The maximum time window is 7 days.
+      operationId: connection_sync_history
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+        - name: duration
+          in: query
+          description: Deprecated. Use `start_time` and `end_time` instead.
+          required: false
+          schema:
+            type: integer
+            format: int32
+        - name: start_time
+          in: query
+          description: The start of the time range for which to retrieve sync history, in ISO 8601 format (for example, 2026-01-01T00:00:00Z). If omitted, defaults to one hour before `end_time`. The maximum allowed range between `start_time` and `end_time` is 7 days.
+          required: false
+          schema:
+            type: string
+        - name: end_time
+          in: query
+          description: The end of the time range for which to retrieve sync history, in ISO 8601 format (for example, 2026-01-01T01:00:00Z). If omitted, defaults to one hour after `start_time`. Must be after `start_time`.
+          required: false
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          description: Paging cursor, [read more about pagination](https://fivetran.com/docs/rest-api/pagination)
+          required: false
+          schema:
+            type: string
+            example: cursor_value
+          example: cursor_value
+        - name: limit
+          in: query
+          description: Number of records to fetch per page. Accepts a number in the range 1..1000; the default value is 100.
+          required: false
+          schema:
+            type: integer
+            format: int32
+            example: 100
+          example: 100
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Operation performed successfully
+                  data:
+                    required:
+                      - items
+                    properties:
+                      items:
+                        type: array
+                        description: The collection of returned items
+                        items:
+                          $ref: '#/components/schemas/ConnectorSyncHistoryResponse'
+                      next_cursor:
+                        type: string
+                        description: The value of the cursor parameter for the next page
+                        example: cursor_value
+                    type: object
+                type: object
+        '400':
+          description: Bad request error. Returned when the duration between `start_time` and `end_time` exceeds 7 days, `start_time` is after `end_time`, or `start_time` is more than 7 days in the past.
+        '401':
+          description: Unauthorized error
+        '404':
+          description: Not found error
+        '405':
+          description: Method not allowed error
+        '406':
+          description: Not acceptable error
+  /v1/connections/{connection_id}/test:
+    post:
+      tags:
+        - Connection Management
+      summary: Run Connection Setup Tests
+      description: Runs the setup tests for an existing connection within your Fivetran account. Use this parameter to test the connection without making any configuration changes. You can optionally include `trust_certificates` or `trust_fingerprints` parameters to automatically approve certificates or fingerprints during the test run.
+      operationId: run_setup_tests
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunSetupTestsRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Setup tests have been completed
+                  data:
+                    $ref: '#/components/schemas/ConnectorResponseV1'
+                type: object
+        '400':
+          description: Bad request error. Returned when the request body is omitted entirely (as opposed to an empty object, which is accepted).
+        '401':
+          description: Unauthorized error
+        '404':
+          description: Not found error
+        '405':
+          description: Method not allowed error
+        '406':
+          description: Not acceptable error
+        '415':
+          description: Unsupported media type error
+  /v1/connections/{connection_id}/warnings:
+    get:
+      tags:
+        - Connection Management
+      summary: Retrieve Connection Warnings
+      description: Retrieve all active warnings for a connection, grouped by destination table. Each warning includes a code, message, error details, and creation timestamp.
+      operationId: connection_warnings
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Connection warnings retrieved successfully
+                  data:
+                    $ref: '#/components/schemas/ConnectionWarningsResponse'
+                type: object
+        '401':
+          description: Unauthorized error
+        '404':
+          description: Connection not found error
+        '405':
+          description: Method not allowed error
+        '406':
+          description: Not acceptable error
+  /v1/connections/{connection_id}/warnings/{warning_type}:
+    delete:
+      tags:
+        - Connection Management
+      summary: Dismiss Connection Warnings by Type
+      description: Dismiss all active warnings of a specific type for a connection. Requires the warning type to be registered in the warning type registry.
+      operationId: dismiss_connection_warning
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+        - name: warning_type
+          in: path
+          description: The warning type to dismiss (e.g., 'resync_table_warning', 'type_coercion_to_null_warning')
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Warnings of type 'string' dismissed for connection 'string'
+                type: object
+        '401':
+          description: Unauthorized error
+        '404':
+          description: Connection not found or warning type not registered
+        '405':
+          description: Method not allowed error
+        '406':
+          description: Not acceptable error
+components:
+  schemas:
+    ConnectorResponse:
+      required:
+        - connected_by
+        - created_at
+        - group_id
+        - id
+        - pause_after_trial
+        - paused
+        - schedule_type
+        - schema
+        - service
+        - status
+        - sync_frequency
+      type: object
+      properties:
+        id:
+          type: string
+          description: The unique identifier for the group within the Fivetran system.
+          example: connection_id
+        service:
+          type: string
+          description: The name for the connector type within the Fivetran system.
+          example: google_sheets
+        schema:
+          type: string
+          description: The name used both as the connection's name within the Fivetran system and as the source schema's name within your destination.
+          example: gsheets.table
+        paused:
+          type: boolean
+          description: Specifies whether the connection is paused.
+          example: false
+        status:
+          description: 'The current state of the connection. '
+          required:
+            - is_historical_sync
+            - setup_state
+            - sync_state
+            - update_state
+          type: object
+          properties:
+            tasks:
+              type: array
+              description: The collection of tasks for the connection
+              items:
+                $ref: '#/components/schemas/ConnectionTask'
+            warnings:
+              type: array
+              description: The collection of warnings for the connection
+              items:
+                $ref: '#/components/schemas/ConnectionWarning'
+            setup_state:
+              type: string
+              description: 'The current setup state of the connection. The available values are: <br /> - incomplete - the setup config is incomplete, the setup tests never succeeded <br /> - connected - the connection is properly set up <br /> - broken - the connection setup config is broken.'
+              example: connected
+            schema_status:
+              type: string
+              description: Schema status. Returned only for connectors that support [Universal Column Masking flow](https://fivetran.com/docs/rest-api/tutorials/schema-status).
+              example: ready
+            sync_state:
+              type: string
+              description: 'The current sync state of the connection. The available values are: <br /> - scheduled - the sync is waiting to be run <br /> - syncing - the sync is currently running <br /> - paused - the sync is currently paused <br /> - rescheduled - the sync is waiting until more API calls are available in the source service.'
+              example: scheduled
+            update_state:
+              type: string
+              description: 'The current data update state of the connection. The available values are: <br /> - on_schedule - the sync is running smoothly, no delays <br /> - delayed - the data is delayed for a longer time than expected for the update.'
+              example: delayed
+            is_historical_sync:
+              type: boolean
+              description: The boolean specifying whether the connection should be triggered to re-sync all historical data. If you set this parameter to TRUE, a [historical sync](https://fivetran.com/docs/getting-started/glossary#historicalsync) starts immediately. If a sync is currently running, it's canceled and restarted as a historical sync. All subsequent syncs after the historical sync completes will be incremental. If the value is FALSE or not specified, the connection doesn't re-sync historical data. This parameter is automatically reset to FALSE once the historical sync is completed.
+              example: false
+            rescheduled_for:
+              type: string
+              description: The UTC timestamp of the next scheduled sync attempt. Non-null only when `sync_state` is `"rescheduled"`. If `schedule_type` is `manual`, the connection expects the sync to be triggered at the designated time through the [Sync Connection Data](https://fivetran.com/docs/rest-api/api-reference/connections/sync-connection) endpoint.
+              format: date-time
+              example: '2024-12-01T15:43:29.013729Z'
+        config:
+          type: object
+          additionalProperties:
+            type: string
+            description: (opaque JSON object)
+          description: The connection setup configuration.
+        schedule:
+          $ref: '#/components/schemas/ConnectorSchedule'
+        group_id:
+          type: string
+          description: The unique identifier for the group within the Fivetran system.
+          example: group_id
+        service_version:
+          type: integer
+          description: The connector type version within the Fivetran system.
+          format: int32
+          example: 0
+        connected_by:
+          type: string
+          description: The unique identifier of the user who has created the connection in your account.
+          example: user_id
+        created_at:
+          type: string
+          description: The timestamp of when the group was created in your account.
+          format: date-time
+          example: '2024-12-01T15:43:29.013729Z'
+        succeeded_at:
+          type: string
+          description: The timestamp of the time the connection sync succeeded last time.
+          format: date-time
+          example: '2024-12-01T15:43:29.013729Z'
+        failed_at:
+          type: string
+          description: The timestamp of the time the connection sync failed last time.
+          format: date-time
+          example: '2024-12-01T15:43:29.013729Z'
+        pause_after_trial:
+          type: boolean
+          description: Specifies whether the connection should be paused after the free trial period has ended.
+          example: false
+        sync_frequency:
+          type: integer
+          description: The connection sync frequency in minutes. `null` when the connection's schedule has no single cadence to report, such as a custom cron or multiple-time-of-day schedule.
+          format: int32
+          example: 360
+        data_delay_threshold:
+          type: integer
+          format: int32
+        data_delay_sensitivity:
+          type: string
+          enum:
+            - LOW
+            - NORMAL
+            - HIGH
+            - CUSTOM
+            - SYNC_FREQUENCY
+        daily_sync_time:
+          type: string
+          description: The optional parameter that defines the sync start time when the sync frequency is already set or being set by the current request to 1440. It can be specified in one hour increments starting from 00:00 to 23:00. If not specified, we will use the baseline sync start time. This parameter has no effect on the 0 to 60 minutes offset used to determine the actual sync start time.
+          example: '14:00'
+        schedule_type:
+          type: string
+          description: 'The connection schedule config type. Supported values: auto, manual. Lets you disable or enable an automatic data sync on a schedule.'
+          example: auto
+        setup_tests:
+          type: array
+          description: Setup tests results
+          items:
+            $ref: '#/components/schemas/SetupTestResultResponse'
+        private_link_id:
+          type: string
+        networking_method:
+          type: string
+          enum:
+            - Directly
+            - SshTunnel
+            - PrivateLink
+            - ProxyAgent
+            - UnmanagedProxyAgent
+            - Unknown
+        proxy_agent_id:
+          type: string
+        source_sync_details:
+          type: string
+          description: Read-only, connector-specific sync state. Depending on the connector type, this object may include source scope identifiers such as accounts, profiles, or projects; per-entity cursors or checkpoints; or last-synced timestamps. This field is optional, and its schema varies by connector type. To determine whether a connector exposes this information and inspect its returned fields, use [Retrieve Connection Details](https://fivetran.com/docs/rest-api/api-reference/connections/connection-details). (opaque JSON object)
+        hybrid_deployment_agent_id:
+          type: string
+        connect_card:
+          $ref: '#/components/schemas/ConnectCardResponse'
+        connect_card_config:
+          $ref: '#/components/schemas/ConnectCardConfig'
+        destination_configuration:
+          $ref: '#/components/schemas/DestinationConfiguration'
+        destination_schema_names:
+          type: string
+          enum:
+            - FIVETRAN_NAMING
+            - SOURCE_NAMING
+        external_secrets_manager_id:
+          type: string
+        external_secrets_keys_config:
+          type: object
+          additionalProperties:
+            type: string
+    NewConnectorRequestV1:
+      required:
+        - group_id
+        - service
+      type: object
+      properties:
+        group_id:
+          type: string
+          description: The unique identifier of the destination group to create the connection in. Retrieve group IDs from the [List All Groups](https://fivetran.com/docs/rest-api/api-reference/groups/list-all-groups) endpoint.
+          example: group_id
+        service:
+          type: string
+          description: The connector name within the Fivetran system
+          example: google_ads
+        trust_certificates:
+          type: boolean
+          description: Specifies whether we should trust the certificate automatically during setup tests. The default value is FALSE. This parameter only affects the behavior of setup tests and does not persist in the connection configuration. When using the PATCH endpoint to update a connection, this parameter must be combined with `run_setup_tests=true` and at least one persistent configuration parameter (e.g., `sync_frequency`, `paused`, `config`, `auth`). If you only want to run setup tests with automatic certificate trust, use the POST `/v1/connections/{connectionId}/test` endpoint instead. If a certificate is not trusted automatically during testing, it has to be approved with [Certificates Management API Approve a destination certificate](https://fivetran.com/docs/rest-api/certificates#approveadestinationcertificate).
+          example: true
+        trust_fingerprints:
+          type: boolean
+          description: Specifies whether we should trust the SSH fingerprint automatically during setup tests. The default value is FALSE. This parameter only affects the behavior of setup tests and does not persist in the connection configuration. When using the PATCH endpoint to update a connection, this parameter must be combined with `run_setup_tests=true` and at least one persistent configuration parameter (e.g., `sync_frequency`, `paused`, `config`, `auth`). If you only want to run setup tests with automatic fingerprint trust, use the POST `/v1/connections/{connectionId}/test` endpoint instead. If a fingerprint is not trusted automatically during testing, it has to be approved with [Certificates Management API Approve a destination fingerprint](https://fivetran.com/docs/rest-api/certificates#approveadestinationfingerprint).
+          example: true
+        run_setup_tests:
+          type: boolean
+          description: Specifies whether the setup tests should be run automatically after updating the connection. The default value is TRUE. When using this parameter in a PATCH request, you must also include at least one persistent configuration parameter (e.g., `sync_frequency`, `paused`, `config`, `auth`). This parameter can be combined with `trust_certificates` or `trust_fingerprints` to automatically approve `certificates/fingerprints` during the test run. To run setup tests without making configuration changes, use the POST `/v1/connections/{connectionId}/test` endpoint instead.
+          example: true
+        paused:
+          type: boolean
+          description: Specifies whether the connection is paused
+          example: false
+        pause_after_trial:
+          type: boolean
+          description: Specifies whether the connection should be paused after the free trial period has ended
+          example: false
+        sync_frequency:
+          type: integer
+          description: The connection sync frequency in minutes. `null` when the connection's schedule has no single cadence to report, such as a custom cron or multiple-time-of-day schedule.
+          format: int32
+          example: 1440
+          enum:
+            - '1'
+            - '5'
+            - '15'
+            - '30'
+            - '60'
+            - '120'
+            - '180'
+            - '360'
+            - '480'
+            - '720'
+            - '1440'
+        data_delay_sensitivity:
+          type: string
+          description: 'The level of data delay notification threshold. Possible values: LOW, NORMAL, HIGH, CUSTOM, SYNC_FREQUENCY. The default value is LOW. CUSTOM is only available for customers using the [Enterprise plan](https://fivetran.com/docs/getting-started/pricing#fivetranplans) or above.'
+          example: LOW
+          enum:
+            - LOW
+            - NORMAL
+            - HIGH
+            - CUSTOM
+            - SYNC_FREQUENCY
+        data_delay_threshold:
+          type: integer
+          description: Custom sync delay notification threshold in minutes. The default value is 0. This parameter is only used when data_delay_sensitivity set to CUSTOM.
+          format: int32
+          example: 0
+        daily_sync_time:
+          type: string
+          description: The optional parameter that defines the sync start time when the sync frequency is already set or being set by the current request to 1440. It can be specified in one hour increments starting from 00:00 to 23:00. If not specified, we will use [the baseline sync start time](https://fivetran.com/docs/getting-started/syncoverview#syncfrequencyandscheduling). This parameter has no effect on the [0 to 60 minutes offset](https://fivetran.com/docs/getting-started/syncoverview#syncstarttimesandoffsets) used to determine the actual sync start time
+          example: '14:00'
+        schedule_type:
+          type: string
+          description: 'The connection schedule configuration type. Supported values: auto, manual'
+          example: auto
+          enum:
+            - auto
+            - manual
+        connect_card_config:
+          $ref: '#/components/schemas/ConnectCardConfig'
+        proxy_agent_id:
+          type: string
+          description: The unique identifier for the proxy agent within the Fivetran system
+          example: proxy_agent_id
+        private_link_id:
+          type: string
+          description: The unique identifier for the self-served private link that is used by the connection
+          example: private_link_id
+        networking_method:
+          type: string
+          enum:
+            - Directly
+            - PrivateLink
+            - SshTunnel
+            - ProxyAgent
+        hybrid_deployment_agent_id:
+          type: string
+          description: The unique identifier for the hybrid deployment agent within the Fivetran system. If not specified, the agent ID from the destination will be used
+          example: hybrid_deployment_agent_id
+        destination_configuration:
+          $ref: '#/components/schemas/DestinationConfiguration'
+        destination_schema_names:
+          type: string
+          description: |-
+            Defines how you want the schema names to appear in your destination. <br /> The available values are:  <br /> - FIVETRAN_NAMING - Use Fivetran naming conventions to simplify and standardize the schema, table and column names in the destination. <br /> - SOURCE_NAMING - Preserve source schema table and column names in the destination. <br /> You can modify your selection only before the initial sync. Learn more in [our documentation](https://fivetran.com/docs/core-concepts#namingconventions) <br />
+            > IMPORTANT: This field will soon become a required field. Make sure to include it in your API requests when creating new connections to prevent future disruptions.
+          example: FIVETRAN_NAMING
+          enum:
+            - FIVETRAN_NAMING
+            - SOURCE_NAMING
+        external_secrets_manager_id:
+          type: string
+          description: The unique identifier of the [External Secrets Manager](https://fivetran.com/docs/rest-api/api-reference/external-secrets-managers) instance. Connector service must [support](https://fivetran.com/docs/core-concepts/features/external-secret-managers#connectors) External Secrets Manager feature to use this field.
+          example: esm_id
+        auth:
+          type: object
+          additionalProperties: true
+          description: The `auth` object for the `service` in question (a JSON value; its keys depend on the `service`). The accepted keys per type are documented in the vendor's API reference and returned by the connector metadata endpoints.
+        config:
+          type: object
+          additionalProperties: true
+          description: The `config` object for the `service` in question (a JSON value; its keys depend on the `service`). The accepted keys per type are documented in the vendor's API reference and returned by the connector metadata endpoints.
+        external_secrets_keys_config:
+          type: object
+          additionalProperties: true
+          description: The `external_secrets_keys_config` object for the `service` in question (a JSON value; its keys depend on the `service`). The accepted keys per type are documented in the vendor's API reference and returned by the connector metadata endpoints.
+    ConnectorResponseV1:
+      required:
+        - created_at
+        - data_delay_sensitivity
+        - group_id
+        - id
+        - pause_after_trial
+        - paused
+        - schedule_type
+        - schema
+        - service
+        - service_version
+        - status
+        - sync_frequency
+      type: object
+      properties:
+        id:
+          type: string
+          description: The unique identifier of this connection. Use this value as the `connectionId` path parameter when calling other Connections API endpoints, such as [Retrieve Connection Details](https://fivetran.com/docs/rest-api/api-reference/connections/connection-details) or [Sync Connection Data](https://fivetran.com/docs/rest-api/api-reference/connections/sync-connection).
+          example: connection_id
+        service:
+          type: string
+          description: The connector name within the Fivetran system
+          example: google_ads
+        schema:
+          type: string
+          description: The name used both as the connection's name within the Fivetran system and as the source schema's name within your destination
+          example: schema.table
+        paused:
+          type: boolean
+          description: Specifies whether the connection is paused
+          example: false
+        status:
+          description: The current operational state of the connection, including setup state, sync state, update state, and any active tasks or warnings.
+          required:
+            - is_historical_sync
+            - setup_state
+            - sync_state
+            - update_state
+          type: object
+          properties:
+            tasks:
+              type: array
+              description: The collection of tasks for the connection
+              items:
+                $ref: '#/components/schemas/ConnectionTask'
+            warnings:
+              type: array
+              description: The collection of warnings for the connection
+              items:
+                $ref: '#/components/schemas/ConnectionWarning'
+            setup_state:
+              type: string
+              description: 'The current setup state of the connection. The available values are: <br /> - incomplete - the setup config is incomplete, the setup tests never succeeded <br /> - connected - the connection is properly set up <br /> - broken - the connection setup config is broken.'
+              example: connected
+            schema_status:
+              type: string
+              description: Schema status. Returned only for connectors that support [Universal Column Masking flow](https://fivetran.com/docs/rest-api/tutorials/schema-status).
+              example: ready
+            sync_state:
+              type: string
+              description: 'The current sync state of the connection. The available values are: <br /> - scheduled - the sync is waiting to be run <br /> - syncing - the sync is currently running <br /> - paused - the sync is currently paused <br /> - rescheduled - the sync is waiting until more API calls are available in the source service.'
+              example: scheduled
+            update_state:
+              type: string
+              description: 'The current data update state of the connection. The available values are: <br /> - on_schedule - the sync is running smoothly, no delays <br /> - delayed - the data is delayed for a longer time than expected for the update.'
+              example: delayed
+            is_historical_sync:
+              type: boolean
+              description: The boolean specifying whether the connection should be triggered to re-sync all historical data. If you set this parameter to TRUE, a [historical sync](https://fivetran.com/docs/getting-started/glossary#historicalsync) starts immediately. If a sync is currently running, it's canceled and restarted as a historical sync. All subsequent syncs after the historical sync completes will be incremental. If the value is FALSE or not specified, the connection doesn't re-sync historical data. This parameter is automatically reset to FALSE once the historical sync is completed.
+              example: false
+            rescheduled_for:
+              type: string
+              description: The UTC timestamp of the next scheduled sync attempt. Non-null only when `sync_state` is `"rescheduled"`. If `schedule_type` is `manual`, the connection expects the sync to be triggered at the designated time through the [Sync Connection Data](https://fivetran.com/docs/rest-api/api-reference/connections/sync-connection) endpoint.
+              format: date-time
+              example: '2024-12-01T15:43:29.013729Z'
+        schedule:
+          description: The connection's sync schedule configuration
+          type: object
+          properties:
+            cron:
+              type: string
+            interval:
+              type: integer
+              description: The sync interval in minutes
+              format: int32
+              example: 360
+            schedule_type:
+              type: string
+              description: 'The schedule type. Possible values: INTERVAL, TIME_OF_DAY'
+              example: INTERVAL
+              enum:
+                - TIME_OF_DAY
+                - INTERVAL
+                - CRON
+                - MANUAL
+            days_of_week:
+              uniqueItems: true
+              type: array
+              description: The days of the week on which the connection syncs
+              example:
+                - MONDAY
+                - TUESDAY
+                - WEDNESDAY
+                - THURSDAY
+                - FRIDAY
+                - SATURDAY
+                - SUNDAY
+              items:
+                type: string
+                enum:
+                  - MONDAY
+                  - TUESDAY
+                  - WEDNESDAY
+                  - THURSDAY
+                  - FRIDAY
+                  - SATURDAY
+                  - SUNDAY
+            time_of_day:
+              type: string
+        group_id:
+          type: string
+          description: The unique identifier of the destination group this connection belongs to. Use this value with the [List All Groups](https://fivetran.com/docs/rest-api/api-reference/groups/list-all-groups) or [Retrieve Group Details](https://fivetran.com/docs/rest-api/api-reference/groups/group-details) endpoints.
+          example: group_id
+        service_version:
+          type: integer
+          description: The connector version within the Fivetran system
+          format: int32
+          example: 0
+        connected_by:
+          type: string
+          description: The unique identifier of the user who created this connection. `null` if the connection was created programmatically without a user context. Use this value with the [Retrieve User Details](https://fivetran.com/docs/rest-api/api-reference/users/user-details) endpoint.
+          example: priceless_odour
+        created_at:
+          type: string
+          description: The timestamp of the time the connection was created in your account
+          format: date-time
+          example: '2023-12-01T15:43:29.013729Z'
+        succeeded_at:
+          type: string
+          description: The UTC timestamp of the most recent successful sync. `null` if the connection has never completed a successful sync.
+          format: date-time
+          example: '2024-03-17T12:31:40.870504Z'
+        failed_at:
+          type: string
+          description: The UTC timestamp of the most recent failed sync. `null` if the connection has never experienced a sync failure.
+          format: date-time
+          example: '2024-04-01T18:13:25.043659Z'
+        pause_after_trial:
+          type: boolean
+          description: Specifies whether the connection should be paused after the free trial period has ended
+          example: false
+        sync_frequency:
+          type: integer
+          description: The connection sync frequency in minutes. `null` when the connection's schedule has no single cadence to report, such as a custom cron or multiple-time-of-day schedule.
+          format: int32
+          example: 1440
+          enum:
+            - '1'
+            - '5'
+            - '15'
+            - '30'
+            - '60'
+            - '120'
+            - '180'
+            - '360'
+            - '480'
+            - '720'
+            - '1440'
+        data_delay_threshold:
+          type: integer
+          description: Custom sync delay notification threshold in minutes. The default value is 0. This parameter is only used when data_delay_sensitivity set to CUSTOM.
+          format: int32
+          example: 0
+        data_delay_sensitivity:
+          type: string
+          description: 'The level of data delay notification threshold. Possible values: LOW, NORMAL, HIGH, CUSTOM, SYNC_FREQUENCY. The default value is LOW. CUSTOM is only available for customers using the [Enterprise plan](https://fivetran.com/docs/getting-started/pricing#fivetranplans) or above.'
+          example: LOW
+          enum:
+            - LOW
+            - NORMAL
+            - HIGH
+            - CUSTOM
+            - SYNC_FREQUENCY
+        private_link_id:
+          type: string
+          description: The unique identifier for the self-served private link that is used by the connection
+          example: link_id
+        networking_method:
+          type: string
+          enum:
+            - Directly
+            - SshTunnel
+            - PrivateLink
+            - ProxyAgent
+            - UnmanagedProxyAgent
+            - Unknown
+        proxy_agent_id:
+          type: string
+          description: The unique identifier for the proxy agent within the Fivetran system
+          example: agent_id
+        daily_sync_time:
+          type: string
+          description: The daily sync start time, in `HH:MM` format (UTC), at which the connection syncs. Returned only when `sync_frequency` is `1440` and `daily_sync_time` was explicitly set. `null` otherwise.
+          example: '14:00'
+        schedule_type:
+          type: string
+          description: 'The connection schedule configuration type. Supported values: auto, manual'
+          example: auto
+        setup_tests:
+          type: array
+          description: Setup tests results for this connection
+          items:
+            $ref: '#/components/schemas/SetupTestResultResponse'
+        source_sync_details:
+          type: string
+          description: Read-only, connector-specific sync state. Depending on the connector type, this object may include source scope identifiers such as accounts, profiles, or projects; per-entity cursors or checkpoints; or last-synced timestamps. This field is optional, and its schema varies by connector type. To determine whether a connector exposes this information and inspect its returned fields, use [Retrieve Connection Details](https://fivetran.com/docs/rest-api/api-reference/connections/connection-details). (opaque JSON object)
+        connect_card:
+          $ref: '#/components/schemas/ConnectCardResponse'
+        connect_card_config:
+          $ref: '#/components/schemas/ConnectCardConfig'
+        hybrid_deployment_agent_id:
+          type: string
+          description: The unique identifier for the hybrid deployment agent within the Fivetran system. If not specified, the agent ID from the destination will be used
+          example: agent_id
+        destination_configuration:
+          $ref: '#/components/schemas/DestinationConfiguration'
+        destination_schema_names:
+          type: string
+          description: 'Defines how schema names appear in your destination.  <br /> The possible values are:  <br /> - FIVETRAN_NAMING - Uses Fivetran naming conventions to simplify and standardize the schema, table and column names in the destination. <br /> - SOURCE_NAMING - Preserves source schema table and column names in the destination. <br />'
+          example: FIVETRAN_NAMING
+          enum:
+            - FIVETRAN_NAMING
+            - SOURCE_NAMING
+        external_secrets_manager_id:
+          type: string
+          description: The unique identifier of the [External Secrets Manager](https://fivetran.com/docs/rest-api/api-reference/external-secrets-managers) instance. Connector service must [support](https://fivetran.com/docs/core-concepts/features/external-secret-managers#connectors) External Secrets Manager feature to use this field.
+          example: esm_id
+        config:
+          type: object
+          additionalProperties: true
+          description: The `config` object for the `service` in question (a JSON value; its keys depend on the `service`). The accepted keys per type are documented in the vendor's API reference and returned by the connector metadata endpoints.
+        external_secrets_keys_config:
+          type: object
+          additionalProperties: true
+          description: The `external_secrets_keys_config` object for the `service` in question (a JSON value; its keys depend on the `service`). The accepted keys per type are documented in the vendor's API reference and returned by the connector metadata endpoints.
+    UpdateConnectorRequest:
+      type: object
+      properties:
+        config:
+          description: The setup configuration. Check possible config formats in [create method](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection/)
+          type: string
+        auth:
+          description: The connector authorization settings. Check possible config formats in [create method](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection/)
+        paused:
+          type: boolean
+          description: Specifies whether the connection is paused
+          example: false
+        trust_certificates:
+          type: boolean
+          description: Specifies whether we should trust the certificate automatically during setup tests. The default value is FALSE. This parameter only affects the behavior of setup tests and does not persist in the connection configuration. When using the PATCH endpoint to update a connection, this parameter must be combined with `run_setup_tests=true` and at least one persistent configuration parameter (e.g., `sync_frequency`, `paused`, `config`, `auth`). If you only want to run setup tests with automatic certificate trust, use the POST `/v1/connections/{connectionId}/test` endpoint instead. If a certificate is not trusted automatically during testing, it has to be approved with [Certificates Management API Approve a destination certificate](https://fivetran.com/docs/rest-api/certificates#approveadestinationcertificate).
+          example: true
+        trust_fingerprints:
+          type: boolean
+          description: Specifies whether we should trust the SSH fingerprint automatically during setup tests. The default value is FALSE. This parameter only affects the behavior of setup tests and does not persist in the connection configuration. When using the PATCH endpoint to update a connection, this parameter must be combined with `run_setup_tests=true` and at least one persistent configuration parameter (e.g., `sync_frequency`, `paused`, `config`, `auth`). If you only want to run setup tests with automatic fingerprint trust, use the POST `/v1/connections/{connectionId}/test` endpoint instead. If a fingerprint is not trusted automatically during testing, it has to be approved with [Certificates Management API Approve a destination fingerprint](https://fivetran.com/docs/rest-api/certificates#approveadestinationfingerprint).
+          example: true
+        sync_frequency:
+          type: integer
+          description: The connection sync frequency in minutes. `null` when the connection's schedule has no single cadence to report, such as a custom cron or multiple-time-of-day schedule.
+          format: int32
+          example: 1440
+          enum:
+            - '1'
+            - '5'
+            - '15'
+            - '30'
+            - '60'
+            - '120'
+            - '180'
+            - '360'
+            - '480'
+            - '720'
+            - '1440'
+        data_delay_threshold:
+          type: integer
+          format: int32
+        data_delay_sensitivity:
+          type: string
+          enum:
+            - LOW
+            - NORMAL
+            - HIGH
+            - CUSTOM
+            - SYNC_FREQUENCY
+        daily_sync_time:
+          type: string
+          description: The daily sync start time, in `HH:MM` format (UTC), at which the connection syncs. Returned only when `sync_frequency` is `1440` and `daily_sync_time` was explicitly set. `null` otherwise.
+          example: '14:00'
+        pause_after_trial:
+          type: boolean
+          description: Specifies whether the connection should be paused after the free trial period has ended
+          example: false
+        schema_status:
+          type: string
+          description: Schema status.
+          example: BLOCKED_ON_CAPTURE
+          enum:
+            - blocked_on_capture
+            - ready
+        is_historical_sync:
+          type: boolean
+          description: The boolean specifying whether the connection should be triggered to re-sync all historical data. If you set this parameter to TRUE, a [historical sync](https://fivetran.com/docs/getting-started/glossary#historicalsync) starts immediately. If a sync is currently running, it's canceled and restarted as a historical sync. All subsequent syncs after the historical sync completes will be incremental. If the value is FALSE or not specified, the connection doesn't re-sync historical data. This parameter is automatically reset to FALSE once the historical sync is completed.
+          example: true
+        schedule_type:
+          type: string
+          description: 'The connection schedule configuration type. Supported values: auto, manual'
+          example: auto
+          enum:
+            - auto
+            - manual
+        run_setup_tests:
+          type: boolean
+          description: Specifies whether the setup tests should be run automatically after updating the connection. The default value is TRUE. When using this parameter in a PATCH request, you must also include at least one persistent configuration parameter (e.g., `sync_frequency`, `paused`, `config`, `auth`). This parameter can be combined with `trust_certificates` or `trust_fingerprints` to automatically approve `certificates/fingerprints` during the test run. To run setup tests without making configuration changes, use the POST `/v1/connections/{connectionId}/test` endpoint instead.
+          example: true
+        networking_method:
+          type: string
+          enum:
+            - Directly
+            - PrivateLink
+            - SshTunnel
+            - ProxyAgent
+        hybrid_deployment_agent_id:
+          type: string
+          description: The unique identifier for the hybrid deployment agent within the Fivetran system. If not specified, the agent ID from the destination will be used
+          example: hybrid_deployment_agent_id
+        proxy_agent_id:
+          type: string
+          description: The unique identifier for the proxy agent within the Fivetran system
+          example: proxy_agent_id
+        private_link_id:
+          type: string
+          description: The unique identifier for the self-served private link that is used by the connection
+          example: private_link_id
+        destination_configuration:
+          $ref: '#/components/schemas/DestinationConfiguration'
+        external_secrets_manager_id:
+          type: string
+          description: The unique identifier of the [External Secrets Manager](https://fivetran.com/docs/rest-api/api-reference/external-secrets-managers) instance. Connector service must [support](https://fivetran.com/docs/core-concepts/features/external-secret-managers#connectors) External Secrets Manager feature to use this field.
+        external_secrets_keys_config:
+          description: The setup configuration keys to be stored in external secrets manager. Check possible config formats in [create method](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection/)
+    ConnectCardConfigRequest:
+      required:
+        - connect_card_config
+      type: object
+      properties:
+        connect_card_config:
+          description: Configuration for the Connect Card flow. Connect Card is a Fivetran-hosted UI that allows your end users to authorize a connection without accessing the Fivetran dashboard. Use `redirect_uri` to control where users land after completing setup.
+          required:
+            - redirect_uri
+          type: object
+          properties:
+            redirect_uri:
+              type: string
+              description: The URI on your site we redirect the end user to after successful setup. The URI must start with the `https` or `http` prefix.
+              example: https://your.site/path
+            hide_setup_guide:
+              type: boolean
+              description: An optional parameter that lets you hide the embedded setup guide in the Connect Card.
+              example: true
+            all_fields:
+              type: boolean
+              description: An optional parameter that lets you show all fields on Connect Card including those that are hidden by default for certain connectors.
+              example: true
+    ConnectorConnectCardResponse:
+      required:
+        - connector_id
+      type: object
+      properties:
+        connector_id:
+          type: string
+          description: The unique identifier of the connection for which this Connect Card token was issued. This is the same value as the `connectionId` path parameter.
+          example: connection_id
+        connect_card:
+          $ref: '#/components/schemas/ConnectCardResponse'
+        connect_card_config:
+          $ref: '#/components/schemas/ConnectCardConfig'
+    MoveConnectionsRequest:
+      required:
+        - destination_group_id
+      type: object
+      properties:
+        destination_group_id:
+          type: string
+          description: The unique identifier of the destination group to move the connection to. Retrieve group IDs from the [List All Groups](https://fivetran.com/docs/rest-api/api-reference/groups/list-all-groups) endpoint.
+          example: destination_group_id
+        sync_behavior:
+          type: string
+          description: Controls how data syncs after the move. Use `CONTINUE` to preserve the existing sync cursor so the connection resumes incremental sync from where it left off. Use `BACKFILL` to reset the cursor and trigger a historical sync. Use `CONTINUE_WITH_DATA` to preserve the cursor and additionally migrate existing data to the new destination by starting an asynchronous job—use the `job_id` returned in the response to monitor progress. `CONTINUE_WITH_DATA` is supported only when moving a connection from Snowflake Native tables to a MDLS-linked Snowflake Lakehouse destination.
+          example: CONTINUE
+          enum:
+            - CONTINUE
+            - BACKFILL
+            - CONTINUE_WITH_DATA
+        force_move:
+          type: boolean
+          description: Set to `true` to confirm that you have completed all prerequisite steps for moving connectors with credential dependencies. Required when moving connectors whose credentials reference the source group—for example, connectors with AWS IAM external IDs or GCP service account credentials. The error response for affected connectors describes the required steps.
+          example: true
+    MoveConnectionsResponse:
+      required:
+        - connection_id
+        - destination_group_id
+        - source_group_id
+        - sync_behavior
+      type: object
+      properties:
+        connection_id:
+          type: string
+          description: The unique identifier of the connection that was moved.
+          example: connection_id
+        source_group_id:
+          type: string
+          description: The unique identifier of the destination group the connection was moved from.
+          example: source_group_id
+        destination_group_id:
+          type: string
+          description: The unique identifier of the destination group to move the connection to. Retrieve group IDs from the [List All Groups](https://fivetran.com/docs/rest-api/api-reference/groups/list-all-groups) endpoint.
+          example: destination_group_id
+        sync_behavior:
+          type: string
+          description: Controls how data syncs after the move. Use `CONTINUE` to preserve the existing sync cursor so the connection resumes incremental sync from where it left off. Use `BACKFILL` to reset the cursor and trigger a historical sync. Use `CONTINUE_WITH_DATA` to preserve the cursor and additionally migrate existing data to the new destination by starting an asynchronous job—use the `job_id` returned in the response to monitor progress. `CONTINUE_WITH_DATA` is supported only when moving a connection from Snowflake Native tables to a MDLS-linked Snowflake Lakehouse destination.
+          example: CONTINUE
+          enum:
+            - CONTINUE
+            - BACKFILL
+            - CONTINUE_WITH_DATA
+        moved_at:
+          type: string
+          description: The timestamp of when the connection was moved. Null when `sync_behavior` is `CONTINUE_WITH_DATA` (since the move runs asynchronously).
+          format: date-time
+          example: '2024-01-01T00:00:00Z'
+        job_id:
+          type: string
+          description: The unique identifier of the move job. Use this value to check the status of the move operation.
+          example: 01234567-89ab-cdef-0123-456789abcdef
+    MoveConnectionJobResponse:
+      required:
+        - connection_id
+        - created_at
+        - destination_group_id
+        - id
+        - source_group_id
+        - status
+      type: object
+      properties:
+        id:
+          type: string
+          description: The unique identifier of the move job. Use this value to check the status of the move operation.
+          example: 01234567-89ab-cdef-0123-456789abcdef
+        status:
+          type: string
+          description: 'The current status of the move job. Possible values: PENDING, IN_PROGRESS, SUCCESS, FAILED.'
+          example: IN_PROGRESS
+          enum:
+            - PENDING
+            - IN_PROGRESS
+            - SUCCESS
+            - FAILED
+        connection_id:
+          type: string
+          description: The unique identifier of the connection that was moved.
+          example: connection_id
+        source_group_id:
+          type: string
+          description: The unique identifier of the destination group the connection was moved from.
+          example: source_group_id
+        destination_group_id:
+          type: string
+          description: The unique identifier of the destination group to move the connection to. Retrieve group IDs from the [List All Groups](https://fivetran.com/docs/rest-api/api-reference/groups/list-all-groups) endpoint.
+          example: destination_group_id
+        created_at:
+          type: string
+          description: The timestamp of when the move job was created.
+          format: date-time
+          example: '2024-01-01T00:00:00Z'
+        started_at:
+          type: string
+          description: The timestamp of when the move job started processing. Null if the job has not started yet.
+          format: date-time
+          example: '2024-01-01T00:00:30Z'
+        completed_at:
+          type: string
+          description: The timestamp of when the move job completed (successfully or with failure). Null if the job has not completed yet.
+          format: date-time
+          example: '2024-01-01T00:05:00Z'
+        error_message:
+          type: string
+          description: The error message if the move job failed. Null if the job has not failed.
+          example: Error details if the job failed
+    ResyncConnectorRequest:
+      type: object
+      properties:
+        scope:
+          type: object
+          properties:
+            schema:
+              title: Schema name
+              uniqueItems: true
+              type: array
+              description: Schema name
+              example:
+                - table1
+                - table2
+              items:
+                type: string
+          description: |
+            A map where each key is a schema name and each value is a non-empty array of table names to re-sync within that schema.
+            Both the scope object and each schema's table array must be non-empty — an empty scope object or an empty table array returns 400.
+            If omitted or set to null, all schemas and tables of the connection are re-synced.
+            This parameter is only supported for connectors that support table-level re-sync (typically database connectors such as PostgreSQL, MySQL, and Oracle). Sending scope to an unsupported connector type (for example, Google Sheets) returns 400.
+            Retrieve valid schema and table names from GET /v1/connections/{connectionId}/schemas.
+    StandardConfigResponse:
+      required:
+        - schema_change_handling
+        - schemas
+      type: object
+      properties:
+        enable_new_by_default:
+          type: boolean
+          description: The boolean value specifying whether to enable new schemas, tables, and columns by default
+          example: true
+        schemas:
+          title: Schemas
+          type: object
+          properties:
+            schema:
+              $ref: '#/components/schemas/SchemaConfigResponse'
+          description: The set of schemas within your connection schema config. Each key is the schema name as stored in the connection schema config. Schema names are case-sensitive; an incorrect case results in an HTTP 404 error.
+        row_filtering_supported:
+          type: boolean
+          description: A boolean value that specifies whether row filtering is available for the tables in this connection. It is `true` only when the row filtering feature is enabled for the connection, the connector type supports row filtering. It is `false` when the connector type does not support row filtering. This field is omitted from the response when the row filtering feature is not enabled for the connection.
+          example: true
+        schema_change_handling:
+          type: string
+          description: 'The possible values for the schema_change_handling parameter are as follows: <br /> - `ALLOW_ALL` - all new schemas, tables, and columns which appear in the source after the initial setup are included in syncs <br /> - `ALLOW_COLUMNS` - all new schemas and tables which appear in the source after the initial setup are excluded from syncs, but new columns are included <br /> - `BLOCK_ALL` - all new schemas, tables, and columns which appear in the source after the initial setup are excluded from syncs'
+          example: ALLOW_ALL
+          enum:
+            - ALLOW_ALL
+            - ALLOW_COLUMNS
+            - BLOCK_ALL
+    StandardConfigCreateRequest:
+      required:
+        - schemas
+      type: object
+      properties:
+        schemas:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SchemaUpdateRequest'
+          description: The set of schemas within your connection schema config. Each key is the schema name as stored in the connection schema config. Schema names are case-sensitive; an incorrect case results in an HTTP 404 error.
+          example:
+            schema_name:
+              enabled: true
+              tables:
+                table_name:
+                  enabled: true
+                  columns:
+                    column_name:
+                      enabled: true
+        schema_change_handling:
+          type: string
+          description: 'The possible values for the schema_change_handling parameter are as follows: <br /> - `ALLOW_ALL` - all new schemas, tables, and columns which appear in the source after the initial setup are included in syncs <br /> - `ALLOW_COLUMNS` - all new schemas and tables which appear in the source after the initial setup are excluded from syncs, but new columns are included <br /> - `BLOCK_ALL` - all new schemas, tables, and columns which appear in the source after the initial setup are excluded from syncs'
+          example: ALLOW_COLUMNS
+          enum:
+            - ALLOW_ALL
+            - ALLOW_COLUMNS
+            - BLOCK_ALL
+    StandardConfigUpdateRequest:
+      type: object
+      properties:
+        schemas:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SchemaUpdateRequest'
+          description: The set of schemas within your connection schema config. Each key is the schema name as stored in the connection schema config. Schema names are case-sensitive; an incorrect case results in an HTTP 404 error.
+          example:
+            schema_name:
+              enabled: true
+              tables:
+                table_name:
+                  enabled: true
+                  columns:
+                    column_name:
+                      enabled: true
+        schema_change_handling:
+          type: string
+          description: 'The possible values for the schema_change_handling parameter are as follows: <br /> - `ALLOW_ALL` - all new schemas, tables, and columns which appear in the source after the initial setup are included in syncs <br /> - `ALLOW_COLUMNS` - all new schemas and tables which appear in the source after the initial setup are excluded from syncs, but new columns are included <br /> - `BLOCK_ALL` - all new schemas, tables, and columns which appear in the source after the initial setup are excluded from syncs'
+          example: BLOCK_ALL
+          enum:
+            - ALLOW_ALL
+            - ALLOW_COLUMNS
+            - BLOCK_ALL
+        is_type_locked:
+          type: boolean
+          description: The boolean value specifying whether the connection's destination data types are locked to the types determined from the source. If enabled before or immediately after the initial sync, the [type lock](https://fivetran.com/docs/using-fivetran/features/type-locking) captures the types determined at the initial sync; if enabled later, it captures the types determined on the first sync after enabling. Re-enabling an already-enabled lock does not change previously locked types.
+          example: false
+    DropColumnsRequest:
+      required:
+        - schemas
+      type: object
+      properties:
+        schemas:
+          title: Schemas
+          type: object
+          properties:
+            schema:
+              $ref: '#/components/schemas/DropColumnSchemaRequest'
+          description: The set of schemas within your connection schema config. Each key is the schema name as stored in the connection schema config. Schema names are case-sensitive; an incorrect case results in an HTTP 404 error.
+    ReloadStandardConfigRequest:
+      type: object
+      properties:
+        exclude_mode:
+          type: string
+          description: |
+            Specifies whether all schemas and tables will be enabled or disabled in the standard config. By specifying the `exclude_mode` parameter value, you can enable or disable syncing for all schemas and tables when reloading the connection schema config.
+
+            When the default `PRESERVE` value is set, all selected schemas and tables in the standard config preserve their state.
+
+            When the `EXCLUDE` value is set, the columns that haven't been updated by user yet are not excluded from the sync. Such columns may be present in the source and not displayed in the response, but they are considered to be included in the sync by default. If you enable syncing of their table, then all of these columns from the source will be synced in the next sync cycle. See also [Troubleshooting: How to enable syncs only for the columns you need](https://fivetran.com/docs/rest-api/tutorials/enable-sync-for-columns-you-need).
+          example: PRESERVE
+    SchemaUpdateRequest:
+      required:
+        - enabled
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: The boolean value specifying whether the sync for the table into the destination is enabled.
+          example: true
+        tables:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/TableUpdateRequest'
+          description: The set of tables within your database schema config. Each key is the table name as stored in the connection schema config. Table names are case-sensitive; an incorrect case results in an HTTP 404 error.
+    TableUpdateRequest:
+      required:
+        - enabled
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: The boolean value specifying whether the sync for the table into the destination is enabled.
+          example: true
+        columns:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/ColumnUpdateRequest'
+          description: The set of columns within your table schema config. Each key is the column name as stored in the connection schema config. Column names are case-sensitive; an incorrect case results in an HTTP 404 error. The `columns` object in the response contains the columns whose `enabled` value has been set by the user after the initial sync.
+        sync_mode:
+          type: string
+          description: This field appears in the response if the connection supports switching sync modes for tables
+          example: SOFT_DELETE
+          enum:
+            - SOFT_DELETE
+            - HISTORY
+            - LIVE
+        row_filter:
+          description: 'The [row filter](https://fivetran.com/docs/core-concepts/features/row-filter) for the table. A row filter restricts the rows synced to your destination to those that satisfy its clauses. This field uses three-state semantics: <br /> - `Absent` (the `row_filter` key is omitted from the request): The table''s existing row filter is left unchanged. <br /> - `null` (the `row_filter` key is present with a JSON null value): The table''s existing row filter, if any, is deleted. <br /> - `Object`: The provided object creates or replaces (upserts) the table''s existing row filter. <br /> Row filtering must be available for the connection; see the `row_filtering_supported` response field.'
+          example:
+            name: active_us_orders
+            description: Sync only active orders created on or after 2024 for US and Canadian customers
+            column_clauses:
+              - column: status
+                column_type: STRING
+                operator: EQUALS
+                values:
+                  - ACTIVE
+              - column: country
+                column_type: STRING
+                operator: IN
+                values:
+                  - US
+                  - CA
+              - column: created_at
+                column_type: DATETIME
+                operator: GREATER_OR_EQUALS
+                values:
+                  - '2024-01-01T00:00:00Z'
+          type: object
+          properties:
+            name:
+              type: string
+              description: A human-readable name for the row filter. Required when a row filter object is provided (upsert).
+              example: active_orders
+            description:
+              type: string
+              description: A human-readable description for the row filter. Required when a row filter object is provided (upsert).
+              example: Sync only active orders
+            operator:
+              type: string
+              description: The logical operator applied to the column clauses. `AND` means a row is synced only when it satisfies every clause; `OR` means a row is synced when it satisfies at least one clause. If omitted, defaults to `AND`. Only valid when `column_clauses` contains 2 or more clauses; setting it explicitly on a single-clause filter returns an error. For a single-clause filter, omit this field.
+              example: AND
+              enum:
+                - AND
+                - OR
+            column_clauses:
+              maxItems: 10
+              minItems: 0
+              type: array
+              description: The list of column clauses that make up the row filter. Clauses are combined according to the `operator` field (defaults to AND when omitted). The list must contain 1 to 10 clauses. If `operator` is explicitly set to `AND` or `OR`, the list must contain at least 2 clauses; for a single-clause filter, omit `operator` rather than setting it explicitly.
+              items:
+                $ref: '#/components/schemas/RowFilterClauseDto'
+          nullable: true
+    ColumnUpdateRequest:
+      required:
+        - enabled
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: The boolean value specifying whether the sync for the table into the destination is enabled.
+          example: true
+        hashed:
+          type: boolean
+          description: The boolean value specifying whether a column should be hashed
+          example: false
+        is_primary_key:
+          type: boolean
+        target_data_type:
+          type: string
+          description: The target data type for this column in the destination. Overrides Fivetran's default type mapping. Available target types depend on the column's source data type and destination. Set to null to remove an existing mapping and revert to the default.
+          example: String
+          enum:
+            - Unknown
+            - Boolean
+            - String
+            - Short
+            - Int
+            - Long
+            - Float
+            - Double
+            - BigDecimal
+            - Instant
+            - LocalDateTime
+            - LocalDate
+            - LocalTime
+            - Json
+            - Binary
+            - Xml
+    TableColumnsConfigResponse:
+      required:
+        - columns
+      type: object
+      properties:
+        columns:
+          title: Columns
+          type: object
+          properties:
+            column:
+              $ref: '#/components/schemas/ColumnConfigResponse'
+          description: The set of columns within your table schema config. Each key is the column name as stored in the connection schema config. Column names are case-sensitive; an incorrect case results in an HTTP 404 error. The `columns` object in the response contains the columns whose `enabled` value has been set by the user after the initial sync.
+    ConnectorStateResponse:
+      required:
+        - state
+      type: object
+      properties:
+        state:
+          type: string
+          description: A freeform JSON object representing the connector's cursor or internal state. The structure is defined by the connector implementation and varies by connector type. Returns 400 if no state has been written yet. (opaque JSON object)
+          example:
+            cursor: '2024-01-01T00:00:00Z'
+    UpdateFunctionOrConnectorSdkState:
+      type: object
+      properties:
+        state:
+          description: A freeform JSON object representing the connector's cursor or internal state to write. The structure is defined by the connector implementation and varies by connector type. If omitted or set to null, the existing state is preserved and the response returns 200 without modification.
+          example:
+            cursor: '2024-01-01T00:00:00Z'
+          type: string
+    SyncConnectorRequest:
+      type: object
+      properties:
+        force:
+          type: boolean
+          description: If force is true and the connection is currently syncing, it will stop the sync and re-run it. If force is false, the connection will sync only if it isn't currently syncing. The default value is false
+          example: true
+    ConnectorSyncHistoryResponse:
+      required:
+        - stages
+        - status
+        - sync_id
+      type: object
+      properties:
+        start:
+          type: string
+          description: The UTC timestamp of when the sync started, in ISO 8601 format. Null if the sync has not started yet.
+        end:
+          type: string
+          description: The UTC timestamp of when the sync finished, in ISO 8601 format. Null if the sync is still in progress.
+        status:
+          type: string
+          description: 'The outcome of the sync. Possible values: `COMPLETED`, `FAILURE`, `CANCELED`, `INCOMPLETE`, `RESCHEDULED`, `PAUSED`.'
+        reason:
+          type: string
+          description: The failure reason if the sync did not complete successfully. Omitted if the sync completed without errors.
+        stages:
+          description: The data volume processed in each stage of the sync pipeline.
+          type: object
+          properties:
+            extract:
+              description: Data volume metrics for the extract stage, in which data is read from the source system.
+              type: object
+              properties:
+                volume:
+                  type: number
+                  description: The volume of data processed in this stage, in megabytes. Null if volume data is not available for this stage.
+                  format: double
+            process:
+              description: Data volume metrics for the process stage, in which data is transformed and prepared for loading.
+              type: object
+              properties:
+                volume:
+                  type: number
+                  description: The volume of data processed in this stage, in megabytes. Null if volume data is not available for this stage.
+                  format: double
+            load:
+              description: Data volume metrics for the load stage, in which data is written to the destination.
+              type: object
+              properties:
+                volume:
+                  type: number
+                  description: The volume of data processed in this stage, in megabytes. Null if volume data is not available for this stage.
+                  format: double
+        sync_id:
+          type: string
+          description: The unique identifier of the sync.
+    RunSetupTestsRequest:
+      type: object
+      properties:
+        trust_certificates:
+          type: boolean
+          description: Specifies whether we should trust the certificate automatically during setup tests. The default value is FALSE. This parameter only affects the behavior of setup tests and does not persist in the connection configuration. When using the PATCH endpoint to update a connection, this parameter must be combined with `run_setup_tests=true` and at least one persistent configuration parameter (e.g., `sync_frequency`, `paused`, `config`, `auth`). If you only want to run setup tests with automatic certificate trust, use the POST `/v1/connections/{connectionId}/test` endpoint instead. If a certificate is not trusted automatically during testing, it has to be approved with [Certificates Management API Approve a destination certificate](https://fivetran.com/docs/rest-api/certificates#approveadestinationcertificate).
+          example: true
+        trust_fingerprints:
+          type: boolean
+          description: Specifies whether we should trust the SSH fingerprint automatically during setup tests. The default value is FALSE. This parameter only affects the behavior of setup tests and does not persist in the connection configuration. When using the PATCH endpoint to update a connection, this parameter must be combined with `run_setup_tests=true` and at least one persistent configuration parameter (e.g., `sync_frequency`, `paused`, `config`, `auth`). If you only want to run setup tests with automatic fingerprint trust, use the POST `/v1/connections/{connectionId}/test` endpoint instead. If a fingerprint is not trusted automatically during testing, it has to be approved with [Certificates Management API Approve a destination fingerprint](https://fivetran.com/docs/rest-api/certificates#approveadestinationfingerprint).
+          example: true
+    ConnectionWarningsResponse:
+      required:
+        - items
+      type: object
+      properties:
+        items:
+          type: array
+          description: Array of warnings grouped by destination table
+          items:
+            $ref: '#/components/schemas/TableWarnings'
+        next_cursor:
+          type: string
+          description: Pagination cursor for the next page of results
+          example: next_cursor_value
+    ConnectorStatusResponse:
+      required:
+        - is_historical_sync
+        - setup_state
+        - sync_state
+        - update_state
+      type: object
+      properties:
+        tasks:
+          type: array
+          description: The collection of tasks for the connection
+          items:
+            $ref: '#/components/schemas/ConnectionTask'
+        warnings:
+          type: array
+          description: The collection of warnings for the connection
+          items:
+            $ref: '#/components/schemas/ConnectionWarning'
+        setup_state:
+          type: string
+          description: 'The current setup state of the connection. The available values are: <br /> - incomplete - the setup config is incomplete, the setup tests never succeeded <br /> - connected - the connection is properly set up <br /> - broken - the connection setup config is broken.'
+          example: connected
+        schema_status:
+          type: string
+          description: Schema status. Returned only for connectors that support [Universal Column Masking flow](https://fivetran.com/docs/rest-api/tutorials/schema-status).
+          example: ready
+        sync_state:
+          type: string
+          description: 'The current sync state of the connection. The available values are: <br /> - scheduled - the sync is waiting to be run <br /> - syncing - the sync is currently running <br /> - paused - the sync is currently paused <br /> - rescheduled - the sync is waiting until more API calls are available in the source service.'
+          example: scheduled
+        update_state:
+          type: string
+          description: 'The current data update state of the connection. The available values are: <br /> - on_schedule - the sync is running smoothly, no delays <br /> - delayed - the data is delayed for a longer time than expected for the update.'
+          example: delayed
+        is_historical_sync:
+          type: boolean
+          description: The boolean specifying whether the connection should be triggered to re-sync all historical data. If you set this parameter to TRUE, a [historical sync](https://fivetran.com/docs/getting-started/glossary#historicalsync) starts immediately. If a sync is currently running, it's canceled and restarted as a historical sync. All subsequent syncs after the historical sync completes will be incremental. If the value is FALSE or not specified, the connection doesn't re-sync historical data. This parameter is automatically reset to FALSE once the historical sync is completed.
+          example: false
+        rescheduled_for:
+          type: string
+          description: The UTC timestamp of the next scheduled sync attempt. Non-null only when `sync_state` is `"rescheduled"`. If `schedule_type` is `manual`, the connection expects the sync to be triggered at the designated time through the [Sync Connection Data](https://fivetran.com/docs/rest-api/api-reference/connections/sync-connection) endpoint.
+          format: date-time
+          example: '2024-12-01T15:43:29.013729Z'
+    ConnectorSchedule:
+      type: object
+      properties:
+        cron:
+          type: string
+        interval:
+          type: integer
+          description: The sync interval in minutes
+          format: int32
+          example: 360
+        schedule_type:
+          type: string
+          description: 'The schedule type. Possible values: INTERVAL, TIME_OF_DAY'
+          example: INTERVAL
+          enum:
+            - TIME_OF_DAY
+            - INTERVAL
+            - CRON
+            - MANUAL
+        days_of_week:
+          uniqueItems: true
+          type: array
+          description: The days of the week on which the connection syncs
+          example:
+            - MONDAY
+            - TUESDAY
+            - WEDNESDAY
+            - THURSDAY
+            - FRIDAY
+            - SATURDAY
+            - SUNDAY
+          items:
+            type: string
+            enum:
+              - MONDAY
+              - TUESDAY
+              - WEDNESDAY
+              - THURSDAY
+              - FRIDAY
+              - SATURDAY
+              - SUNDAY
+        time_of_day:
+          type: string
+    SetupTestResultResponse:
+      required:
+        - status
+        - title
+      type: object
+      properties:
+        title:
+          type: string
+          description: 'A human-readable name for the setup test step. For example: Validate Login, Test Connection, Check Permissions.'
+          example: Validate Login
+        status:
+          type: string
+          description: 'The result of the individual setup test step. Possible values: PASSED, FAILED, SKIPPED.'
+          example: FAILED
+          enum:
+            - PASSED
+            - SKIPPED
+            - WARNING
+            - FAILED
+            - JOB_FAILED
+        message:
+          type: string
+          description: 'The result message for the setup test step. For example: Invalid login credentials.'
+          example: Invalid login credentials.
+        details:
+          type: string
+          description: Additional diagnostic information about the setup test result. Populated when the status is FAILED and more context is available beyond the message. (opaque JSON object)
+          example: Authentication failed (401 Unauthorized). Verify the provided credentials and permissions.
+    ConnectCardResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: A short-lived JWT that authorizes the end user to configure this connection via the Connect Card interface. Use the `uri` field directly to redirect users — it already embeds this token. If you need to construct your own URL, pass this value as the `auth` query parameter to `https://fivetran.com/connect-card/setup`.
+          example: eyJ0e...
+        uri:
+          type: string
+          description: The complete URL to redirect the end user to in order to authorize the connection. It embeds the auth token, redirect URI, and setup guide visibility as query parameters. Redirect the user directly to this address.
+          example: https://fivetran.com/connect-card/setup?redirect_uri=https://your.site/path&auth=eyJ0e...&hide_setup_guide=true
+    ConnectCardConfig:
+      required:
+        - redirect_uri
+      type: object
+      properties:
+        redirect_uri:
+          type: string
+          description: The URI on your site we redirect the end user to after successful setup. The URI must start with the `https` or `http` prefix.
+          example: https://your.site/path
+        hide_setup_guide:
+          type: boolean
+          description: An optional parameter that lets you hide the embedded setup guide in the Connect Card.
+          example: true
+        all_fields:
+          type: boolean
+          description: An optional parameter that lets you show all fields on Connect Card including those that are hidden by default for certain connectors.
+          example: true
+    DestinationConfiguration:
+      type: object
+      properties:
+        virtual_warehouse:
+          type: string
+          description: Snowflake's virtual warehouse used in the connection
+          example: virtual_warehouse
+    JsonNode:
+      type: string
+      description: (opaque JSON object)
+    SchemaConfigResponse:
+      required:
+        - enabled
+        - name_in_destination
+        - tables
+      type: object
+      properties:
+        name_in_destination:
+          type: string
+          description: The schema name within your destination in accordance with Fivetran conventional rules
+          example: schema_name_in_destination
+        enabled:
+          type: boolean
+          description: The boolean value specifying whether the sync for the table into the destination is enabled.
+          example: true
+        tables:
+          title: Tables
+          type: object
+          properties:
+            table:
+              $ref: '#/components/schemas/TableConfigResponse'
+          description: The set of tables within your database schema config. Each key is the table name as stored in the connection schema config. Table names are case-sensitive; an incorrect case results in an HTTP 404 error.
+    DropColumnSchemaRequest:
+      required:
+        - tables
+      type: object
+      properties:
+        tables:
+          title: Tables
+          type: object
+          properties:
+            table:
+              $ref: '#/components/schemas/DropColumnsTableRequest'
+          description: The set of tables within your database schema config. Each key is the table name as stored in the connection schema config. Table names are case-sensitive; an incorrect case results in an HTTP 404 error.
+    RowFilterDto:
+      type: object
+      properties:
+        name:
+          type: string
+          description: A human-readable name for the row filter. Required when a row filter object is provided (upsert).
+          example: active_orders
+        description:
+          type: string
+          description: A human-readable description for the row filter. Required when a row filter object is provided (upsert).
+          example: Sync only active orders
+        operator:
+          type: string
+          description: The logical operator applied to the column clauses. `AND` means a row is synced only when it satisfies every clause; `OR` means a row is synced when it satisfies at least one clause. If omitted, defaults to `AND`. Only valid when `column_clauses` contains 2 or more clauses; setting it explicitly on a single-clause filter returns an error. For a single-clause filter, omit this field.
+          example: AND
+          enum:
+            - AND
+            - OR
+        column_clauses:
+          maxItems: 10
+          minItems: 0
+          type: array
+          description: The list of column clauses that make up the row filter. Clauses are combined according to the `operator` field (defaults to AND when omitted). The list must contain 1 to 10 clauses. If `operator` is explicitly set to `AND` or `OR`, the list must contain at least 2 clauses; for a single-clause filter, omit `operator` rather than setting it explicitly.
+          items:
+            $ref: '#/components/schemas/RowFilterClauseDto'
+      nullable: true
+    ColumnConfigResponse:
+      required:
+        - enabled
+        - enabled_patch_settings
+        - hashed
+        - name_in_destination
+      type: object
+      properties:
+        name_in_destination:
+          type: string
+          description: The schema name within your destination in accordance with Fivetran conventional rules
+          example: column_name_in_destination
+        enabled:
+          type: boolean
+          description: The boolean value specifying whether the sync for the table into the destination is enabled.
+          example: true
+        hashed:
+          type: boolean
+          description: The boolean value specifying whether a column should be hashed
+          example: false
+        enabled_patch_settings:
+          $ref: '#/components/schemas/ColumnEnabledPatchSettings'
+        is_primary_key:
+          type: boolean
+        target_data_type:
+          type: string
+          description: The target data type for this column in the destination. Overrides Fivetran's default type mapping. Available target types depend on the column's source data type and destination. Set to null to remove an existing mapping and revert to the default.
+          example: String
+    Stages:
+      type: object
+      properties:
+        extract:
+          description: Data volume metrics for the extract stage, in which data is read from the source system.
+          type: object
+          properties:
+            volume:
+              type: number
+              description: The volume of data processed in this stage, in megabytes. Null if volume data is not available for this stage.
+              format: double
+        process:
+          description: Data volume metrics for the process stage, in which data is transformed and prepared for loading.
+          type: object
+          properties:
+            volume:
+              type: number
+              description: The volume of data processed in this stage, in megabytes. Null if volume data is not available for this stage.
+              format: double
+        load:
+          description: Data volume metrics for the load stage, in which data is written to the destination.
+          type: object
+          properties:
+            volume:
+              type: number
+              description: The volume of data processed in this stage, in megabytes. Null if volume data is not available for this stage.
+              format: double
+    TableWarnings:
+      required:
+        - warnings
+      type: object
+      properties:
+        schema:
+          type: string
+          description: The destination schema name. Omitted for warnings that are not scoped to a specific table.
+          example: my_schema
+        table:
+          type: string
+          description: The destination table name. Omitted for warnings that are not scoped to a specific table.
+          example: my_table
+        warnings:
+          type: array
+          description: List of warnings for this table
+          items:
+            $ref: '#/components/schemas/ConnectionWarningItem'
+    ConnectionTask:
+      type: object
+      properties:
+        code:
+          type: string
+          description: A machine-readable identifier for the condition type. Use this value to programmatically detect and respond to specific connection conditions.
+        message:
+          type: string
+          description: 'A human-readable label describing the condition. For example: Reconnect, Resync Table Warning.'
+        details:
+          type: string
+          description: Additional context about this condition beyond the message field.
+    ConnectionWarning:
+      type: object
+      properties:
+        code:
+          type: string
+          description: A machine-readable identifier for the condition type. Use this value to programmatically detect and respond to specific connection conditions.
+        message:
+          type: string
+          description: 'A human-readable label describing the condition. For example: Reconnect, Resync Table Warning.'
+        details:
+          type: string
+          description: Additional context about this condition beyond the message field.
+    TableConfigResponse:
+      required:
+        - columns
+        - enabled
+        - enabled_patch_settings
+        - name_in_destination
+        - supports_columns_config
+        - supports_history_mode
+      type: object
+      properties:
+        sync_mode:
+          type: string
+          description: This field appears in the response if the connection supports switching sync modes for tables
+          example: SOFT_DELETE
+          enum:
+            - SOFT_DELETE
+            - HISTORY
+            - LIVE
+        name_in_destination:
+          type: string
+          description: The schema name within your destination in accordance with Fivetran conventional rules
+          example: table_name_in_destination
+        enabled:
+          type: boolean
+          description: The boolean value specifying whether the sync for the table into the destination is enabled.
+          example: true
+        columns:
+          title: Columns
+          type: object
+          properties:
+            column:
+              $ref: '#/components/schemas/ColumnConfigResponse'
+          description: The set of columns within your table schema config. Each key is the column name as stored in the connection schema config. Column names are case-sensitive; an incorrect case results in an HTTP 404 error. The `columns` object in the response contains the columns whose `enabled` value has been set by the user after the initial sync.
+        enabled_patch_settings:
+          $ref: '#/components/schemas/TableEnabledPatchSettings'
+        supports_columns_config:
+          type: boolean
+          description: A boolean value that specifies if the table supports a column-level configuration.
+          example: true
+        supports_history_mode:
+          type: boolean
+          description: The boolean value that specifies if the table supports history mode.
+          example: true
+        row_filter:
+          description: The row filter configured for the table. Omitted when no row filter is configured for the table. The clauses are combined according to the `operator` field; `OR` is returned explicitly, while the default `AND` is represented by an omitted `operator` field. Row filtering must be available for the connection; see the `row_filtering_supported` response field.
+          type: object
+          properties:
+            name:
+              type: string
+              description: A human-readable name for the row filter. Required when a row filter object is provided (upsert).
+              example: active_orders
+            description:
+              type: string
+              description: A human-readable description for the row filter. Required when a row filter object is provided (upsert).
+              example: Sync only active orders
+            operator:
+              type: string
+              description: The logical operator applied to the column clauses. `AND` means a row is synced only when it satisfies every clause; `OR` means a row is synced when it satisfies at least one clause. If omitted, defaults to `AND`. Only valid when `column_clauses` contains 2 or more clauses; setting it explicitly on a single-clause filter returns an error. For a single-clause filter, omit this field.
+              example: AND
+              enum:
+                - AND
+                - OR
+            column_clauses:
+              maxItems: 10
+              minItems: 0
+              type: array
+              description: The list of column clauses that make up the row filter. Clauses are combined according to the `operator` field (defaults to AND when omitted). The list must contain 1 to 10 clauses. If `operator` is explicitly set to `AND` or `OR`, the list must contain at least 2 clauses; for a single-clause filter, omit `operator` rather than setting it explicitly.
+              items:
+                $ref: '#/components/schemas/RowFilterClauseDto'
+          nullable: true
+        parent_table:
+          type: string
+          description: The name of the table that this table is grouped under, if any. This field appears in the response only for tables that belong to a group (for example, a core table's child tables).
+          example: core_table_name
+    DropColumnsTableRequest:
+      required:
+        - columns
+      type: object
+      properties:
+        columns:
+          type: array
+          description: The set of columns within your table schema config. Each key is the column name as stored in the connection schema config. Column names are case-sensitive; an incorrect case results in an HTTP 404 error. The `columns` object in the response contains the columns whose `enabled` value has been set by the user after the initial sync.
+          items:
+            type: string
+    RowFilterClauseDto:
+      required:
+        - column_type
+        - operator
+        - values
+      type: object
+      properties:
+        column:
+          maxLength: 500
+          minLength: 0
+          type: string
+          description: The name of the source column the clause applies to. Maximum 500 characters.
+          example: status
+        operator:
+          type: string
+          description: 'The operator applied to the column. The operator must be compatible with `column_type`, and the number of `values` required depends on the operator: <br /> - `EQUALS`, `NOT_EQUALS` - valid for `LONG`, `FLOAT`, `DOUBLE`, `BIGDECIMAL`, `DATE`, `DATETIME`, and `STRING`; require exactly 1 value. <br /> - `LESS`, `LESS_OR_EQUALS`, `GREATER`, `GREATER_OR_EQUALS` - valid for `LONG`, `FLOAT`, `DOUBLE`, `BIGDECIMAL`, `DATE`, `DATETIME`, and `STRING`; require exactly 1 value. <br /> - `STARTS_WITH`, `CONTAINS` - valid for `STRING` only; require exactly 1 value. <br /> - `IN` - valid for `LONG`, `STRING`, `FLOAT`, and `DOUBLE` only; require at least 1 value. <br /> - `IS_NULL`, `IS_NOT_NULL` - valid for all types; require no values.'
+          example: EQUALS
+          enum:
+            - EQUALS
+            - NOT_EQUALS
+            - LESS
+            - LESS_OR_EQUALS
+            - GREATER
+            - GREATER_OR_EQUALS
+            - STARTS_WITH
+            - CONTAINS
+            - IN
+            - IS_NULL
+            - IS_NOT_NULL
+        values:
+          type: array
+          description: 'The list of values the operator compares against. Each value is a string of at most 1,000 characters; the API parses it according to column_type. The number of values must match the operator: exactly 1 for the comparison and string operators, at least 1 for `IN`, and 0 for `IS_NULL` and `IS_NOT_NULL`. For the `IN` operator on a STRING column, the combined length of all values must not exceed 10,000 characters.'
+          example:
+            - ACTIVE
+          items:
+            maxLength: 1000
+            minLength: 0
+            type: string
+        column_type:
+          type: string
+          description: 'The data type of the column. It determines which operators are valid and the required format of each value: <br /> - `LONG` - integer types (short, int, long). <br /> - `FLOAT` - single-precision floating-point number. <br /> - `DOUBLE` - double-precision floating-point number. <br /> - `BIGDECIMAL` - arbitrary-precision decimal number; each value is capped at 50 characters. <br /> - `STRING` - text. <br /> - `BOOLEAN` - accepts only the string values `true` or `false` (lowercase). <br /> - `DATE` - a date with no time component, in `yyyy-MM-dd` format (for example, `2024-01-01`). <br /> - `DATETIME` - a UTC timestamp ending in `Z`, in `yyyy-MM-ddTHH:mm:ssZ` format (for example, `2024-01-01T00:00:00Z`). Offsets other than `Z` are not accepted.'
+          example: STRING
+          enum:
+            - LONG
+            - FLOAT
+            - DOUBLE
+            - BIGDECIMAL
+            - STRING
+            - BOOLEAN
+            - DATE
+            - DATETIME
+    ColumnEnabledPatchSettings:
+      required:
+        - allowed
+      type: object
+      properties:
+        allowed:
+          type: boolean
+          description: The boolean value specifying whether the enabled property can be updated
+          example: false
+        reason:
+          type: string
+          description: The additional message indicating the reason why the enabled property cannot be updated. This field appears in the response only when the reason_code value is OTHER
+          example: ...
+        reason_code:
+          type: string
+          description: 'The reason code indicating the reason why the enabled property cannot be updated: <br /> SYSTEM_TABLE - the table is a system table <br /> DELETED - the table was deleted in the source <br /> OTHER - the table was excluded by the system for some reason <br /> This field appears in the response when the allowed property value is FALSE'
+          example: SYSTEM_COLUMN
+          enum:
+            - SYSTEM_COLUMN
+            - DELETED
+            - OTHER
+    Stage:
+      type: object
+      properties:
+        volume:
+          type: number
+          description: The volume of data processed in this stage, in megabytes. Null if volume data is not available for this stage.
+          format: double
+    ConnectionWarningItem:
+      required:
+        - code
+        - created_at
+        - message
+      type: object
+      properties:
+        code:
+          type: string
+          description: A machine-readable identifier for the condition type. Use this value to programmatically detect and respond to specific connection conditions.
+        message:
+          type: string
+          description: 'A human-readable label describing the condition. For example: Reconnect, Resync Table Warning.'
+        error_message:
+          type: string
+          description: Additional error details extracted from the warning
+          example: Connection refused
+        created_at:
+          type: string
+          description: ISO 8601 timestamp when the warning was created
+          format: date-time
+          example: '2024-03-17T12:31:40.870504Z'
+    TableEnabledPatchSettings:
+      required:
+        - allowed
+      type: object
+      properties:
+        allowed:
+          type: boolean
+          description: The boolean value specifying whether the enabled property can be updated
+          example: false
+        reason:
+          type: string
+          description: The additional message indicating the reason why the enabled property cannot be updated. This field appears in the response only when the reason_code value is OTHER
+          example: ...
+        reason_code:
+          type: string
+          description: 'The reason code indicating the reason why the enabled property cannot be updated: <br /> SYSTEM_TABLE - the table is a system table <br /> DELETED - the table was deleted in the source <br /> OTHER - the table was excluded by the system for some reason <br /> This field appears in the response when the allowed property value is FALSE'
+          example: SYSTEM_TABLE
+          enum:
+            - SYSTEM_TABLE
+            - DELETED
+            - OTHER
+  x-stackQL-resources:
+    connections:
+      id: fivetran.connections.connections
+      name: connections
+      title: Connections
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1v1~1connections/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data.items
+        create:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '201'
+            objectKey: $.data
+        get:
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        delete:
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}/patch'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        create_connect_card:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1connect-card/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        move:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1move/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        resync:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1resync/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        sync:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1sync/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        run_setup_tests:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1test/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/connections/methods/get'
+          - $ref: '#/components/x-stackQL-resources/connections/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/connections/methods/create'
+        update:
+          - $ref: '#/components/x-stackQL-resources/connections/methods/update'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/connections/methods/delete'
+        replace: []
+    move_jobs:
+      id: fivetran.connections.move_jobs
+      name: move_jobs
+      title: Move Jobs
+      methods:
+        get:
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1move~1{job_id}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/move_jobs/methods/get'
+        insert: []
+        update: []
+        delete: []
+        replace: []
+    schema_configs:
+      id: fivetran.connections.schema_configs
+      name: schema_configs
+      title: Schema Configs
+      methods:
+        get:
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1schemas/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        create:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1schemas/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        update:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1schemas/patch'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        drop_columns:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1schemas~1drop-columns/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        reload:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1schemas~1reload/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        resync_tables:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1schemas~1tables~1resync/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update_schema:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1schemas~1{schema_name}/patch'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        update_table:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1schemas~1{schema_name}~1tables~1{table_name}/patch'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/schema_configs/methods/get'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/schema_configs/methods/create'
+        update:
+          - $ref: '#/components/x-stackQL-resources/schema_configs/methods/update_table'
+          - $ref: '#/components/x-stackQL-resources/schema_configs/methods/update_schema'
+          - $ref: '#/components/x-stackQL-resources/schema_configs/methods/update'
+        delete: []
+        replace: []
+    columns:
+      id: fivetran.connections.columns
+      name: columns
+      title: Columns
+      methods:
+        delete:
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1schemas~1{schema_name}~1tables~1{table_name}~1columns~1{column_name}/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1schemas~1{schema_name}~1tables~1{table_name}~1columns~1{column_name}/patch'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        get:
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1schemas~1{schema_name}~1tables~1{table_name}~1columns/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/columns/methods/get'
+        insert: []
+        update:
+          - $ref: '#/components/x-stackQL-resources/columns/methods/update'
+        delete:
+          - $ref: '#/components/x-stackQL-resources/columns/methods/delete'
+        replace: []
+    states:
+      id: fivetran.connections.states
+      name: states
+      title: States
+      methods:
+        get:
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1state/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        update:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1state/patch'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/states/methods/get'
+        insert: []
+        update:
+          - $ref: '#/components/x-stackQL-resources/states/methods/update'
+        delete: []
+        replace: []
+    sync_history:
+      id: fivetran.connections.sync_history
+      name: sync_history
+      title: Sync History
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1sync-history/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data.items
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/sync_history/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace: []
+    warnings:
+      id: fivetran.connections.warnings
+      name: warnings
+      title: Warnings
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1warnings/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data.items
+        dismiss:
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1warnings~1{warning_type}/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/warnings/methods/list'
+        insert: []
+        update: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/warnings/methods/dismiss'
+        replace: []
+servers:
+  - url: https://api.fivetran.com
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: cursor
+      location: query
+    responseToken:
+      key: $.data.next_cursor
+      location: body
