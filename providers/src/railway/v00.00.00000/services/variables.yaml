@@ -1,0 +1,568 @@
+openapi: 3.0.3
+info:
+  title: Variables API
+  description: 'Service and shared environment variables: rendered values, variable metadata, upsert and delete.'
+  version: v00.00.00000
+servers:
+  - url: https://backboard.railway.com
+paths:
+  /graphql/v2?__resource=environment_variables&__method=list:
+    post:
+      operationId: environment_variables_list
+      summary: Lists Variable objects of a Environment
+      description: Lists Variable objects of a Environment. Backed by the Railway GraphQL query environment.variables.
+      externalDocs:
+        description: Railway public API documentation
+        url: https://docs.railway.com/integrations/api
+      x-stackQL-graphQL:
+        id: railway.variables.environment_variables.list
+        url: https://backboard.railway.com/graphql/v2
+        httpVerb: POST
+        responseSelection:
+          jsonPath: $.data.environment.variables.nodes[*]
+        cursor:
+          strategy: page_info
+          jsonPath: $.data.environment.variables.pageInfo.endCursor
+          terminateOnJsonPath: $.data.environment.variables.pageInfo.hasNextPage
+        query: 'query { environment(id: "{{ .environment_id }}" {{ if .project_id }}projectId: "{{ .project_id }}" {{ end }}) { variables(first: 100{{ .cursor }}) { edges { node { created_at: createdAt environment_id: environmentId id is_sealed: isSealed name references_: references service_id: serviceId updated_at: updatedAt } } pageInfo { hasNextPage endCursor } } } }'
+      x-stackql-protocol: graphql
+      parameters:
+        - name: environment_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: One row per Variable.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      environment:
+                        type: object
+                        properties:
+                          variables:
+                            type: object
+                            properties:
+                              nodes:
+                                type: array
+                                items:
+                                  $ref: '#/components/schemas/Variable'
+                              pageInfo:
+                                type: object
+                                properties:
+                                  hasNextPage:
+                                    type: boolean
+                                  endCursor:
+                                    type: string
+  /graphql/v2?__resource=variables_for_service_deployment&__method=list:
+    post:
+      operationId: variables_for_service_deployment_list
+      summary: All rendered variables that are required for a service deployment
+      description: All rendered variables that are required for a service deployment. Backed by the Railway GraphQL query variablesForServiceDeployment.
+      externalDocs:
+        description: Railway public API documentation
+        url: https://docs.railway.com/integrations/api
+      x-stackQL-graphQL:
+        id: railway.variables.variables_for_service_deployment.list
+        url: https://backboard.railway.com/graphql/v2
+        httpVerb: POST
+        responseSelection:
+          jsonPath: $.data.variablesForServiceDeployment[*]
+        cursor:
+          jsonPath: $.stackql_gql_get_sentinel
+        query: 'query { variablesForServiceDeployment(environmentId: "{{ .environment_id }}" projectId: "{{ .project_id }}" serviceId: "{{ .service_id }}") }'
+      x-stackql-protocol: graphql
+      parameters:
+        - name: environment_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: service_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: One row per entry of the map.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      variablesForServiceDeployment:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/EnvironmentVariablesEntry'
+  /graphql/v2?__resource=variables&__method=configure_shared:
+    post:
+      operationId: variables_configure_shared
+      summary: Configure a shared variable
+      description: Configure a shared variable. Backed by the Railway GraphQL mutation sharedVariableConfigure.
+      externalDocs:
+        description: Railway public API documentation
+        url: https://docs.railway.com/integrations/api
+      x-stackql-protocol: graphql
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - disabled_service_ids
+                - enabled_service_ids
+                - environment_id
+                - name
+                - project_id
+              properties:
+                disabled_service_ids:
+                  type: array
+                  items:
+                    type: string
+                enabled_service_ids:
+                  type: array
+                  items:
+                    type: string
+                environment_id:
+                  type: string
+                name:
+                  type: string
+                project_id:
+                  type: string
+      responses:
+        '200':
+          description: The Variable the mutation returns.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      sharedVariableConfigure:
+                        $ref: '#/components/schemas/Variable'
+  /graphql/v2?__resource=variables&__method=delete:
+    post:
+      operationId: variables_delete
+      summary: Deletes a variable
+      description: Deletes a variable. Backed by the Railway GraphQL mutation variableDelete.
+      externalDocs:
+        description: Railway public API documentation
+        url: https://docs.railway.com/integrations/api
+      x-stackql-protocol: graphql
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - environment_id
+                - name
+                - project_id
+              properties:
+                environment_id:
+                  type: string
+                name:
+                  type: string
+                project_id:
+                  type: string
+                service_id:
+                  type: string
+      responses:
+        '200':
+          description: The value the mutation returns, as the result column.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      variableDelete:
+                        $ref: '#/components/schemas/VariableDeleteResult'
+  /graphql/v2?__resource=variables&__method=list:
+    post:
+      operationId: variables_list
+      summary: All variables by pluginId or serviceId
+      description: All variables by pluginId or serviceId. If neither are provided, all shared variables are returned. Backed by the Railway GraphQL query variables.
+      externalDocs:
+        description: Railway public API documentation
+        url: https://docs.railway.com/integrations/api
+      x-stackQL-graphQL:
+        id: railway.variables.variables.list
+        url: https://backboard.railway.com/graphql/v2
+        httpVerb: POST
+        responseSelection:
+          jsonPath: $.data.variables[*]
+        cursor:
+          jsonPath: $.stackql_gql_get_sentinel
+        query: 'query { variables(environmentId: "{{ .environment_id }}" projectId: "{{ .project_id }}" {{ if .service_id }}serviceId: "{{ .service_id }}" {{ end }}{{ if .unrendered }}unrendered: {{ .unrendered }} {{ end }}) }'
+      x-stackql-protocol: graphql
+      parameters:
+        - name: environment_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: project_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: service_id
+          in: query
+          required: false
+          description: Provide a serviceId to get all variables for a specific service.
+          schema:
+            type: string
+        - name: unrendered
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: One row per entry of the map.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      variables:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/EnvironmentVariablesEntry'
+  /graphql/v2?__resource=variables&__method=upsert:
+    post:
+      operationId: variables_upsert
+      summary: Upserts a variable
+      description: Upserts a variable. Backed by the Railway GraphQL mutation variableUpsert.
+      externalDocs:
+        description: Railway public API documentation
+        url: https://docs.railway.com/integrations/api
+      x-stackql-protocol: graphql
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - environment_id
+                - name
+                - project_id
+                - value
+              properties:
+                environment_id:
+                  type: string
+                name:
+                  type: string
+                project_id:
+                  type: string
+                service_id:
+                  type: string
+                skip_deploys:
+                  type: boolean
+                  description: Skip deploys for affected services.
+                value:
+                  type: string
+      responses:
+        '200':
+          description: The value the mutation returns, as the result column.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      variableUpsert:
+                        $ref: '#/components/schemas/VariableUpsertResult'
+  /graphql/v2?__resource=variables&__method=upsert_collection:
+    post:
+      operationId: variables_upsert_collection
+      summary: Upserts a collection of variables
+      description: Upserts a collection of variables. Backed by the Railway GraphQL mutation variableCollectionUpsert.
+      externalDocs:
+        description: Railway public API documentation
+        url: https://docs.railway.com/integrations/api
+      x-stackql-protocol: graphql
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - environment_id
+                - project_id
+                - variables
+              properties:
+                environment_id:
+                  type: string
+                project_id:
+                  type: string
+                replace_:
+                  type: boolean
+                  description: When set to true, removes all existing variables before upserting the new collection.
+                service_id:
+                  type: string
+                skip_deploys:
+                  type: boolean
+                  description: Skip deploys for affected services.
+                variables:
+                  type: object
+      responses:
+        '200':
+          description: The value the mutation returns, as the result column.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      variableCollectionUpsert:
+                        $ref: '#/components/schemas/VariableCollectionUpsertResult'
+components:
+  schemas:
+    EnvironmentVariablesEntry:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Entry name
+        value:
+          type: string
+          description: Entry value
+    Variable:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        environment_id:
+          type: string
+        id:
+          type: string
+        is_sealed:
+          type: boolean
+        name:
+          type: string
+        references_:
+          type: array
+          items:
+            type: string
+        service_id:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+    VariableCollectionUpsertResult:
+      type: object
+      properties:
+        result:
+          type: boolean
+          description: Value returned by the variableCollectionUpsert mutation (Boolean!)
+    VariableDeleteResult:
+      type: object
+      properties:
+        result:
+          type: boolean
+          description: Value returned by the variableDelete mutation (Boolean!)
+    VariableUpsertResult:
+      type: object
+      properties:
+        result:
+          type: boolean
+          description: Value returned by the variableUpsert mutation (Boolean!)
+  x-stackQL-resources:
+    environment_variables:
+      id: railway.variables.environment_variables
+      name: environment_variables
+      title: Environment Variables
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1graphql~1v2?__resource=environment_variables&__method=list/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data.environment.variables.nodes
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{{- $c := index . "data" "environment" "variables" -}}{"data":{"environment":{"variables":{"nodes":[{{- $s := separator "," -}}{{- range $e := index $c "edges" -}}{{ call $s }}{{ toJson (index $e "node") }}{{- end -}}],"pageInfo":{{ toJson (index $c "pageInfo") }} }}} }'
+          x-stackql-protocol: graphql
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/environment_variables/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace: []
+    variables:
+      id: railway.variables.variables
+      name: variables
+      title: Variables
+      methods:
+        configure_shared:
+          config:
+            requestTranslate:
+              algorithm: drop_double_underscore_params
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1graphql~1v2?__resource=variables&__method=configure_shared/post'
+          request:
+            mediaType: application/json
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{"query":"mutation($disabled_service_ids: [String!]!, $enabled_service_ids: [String!]!, $environment_id: String!, $name: String!, $project_id: String!) { sharedVariableConfigure(input: { disabledServiceIds: $disabled_service_ids, enabledServiceIds: $enabled_service_ids, environmentId: $environment_id, name: $name, projectId: $project_id }) { created_at: createdAt environment_id: environmentId id is_sealed: isSealed name references_: references service_id: serviceId updated_at: updatedAt } }","variables":{ {{- $s := separator "," -}}{{- $v := "" -}}{{- $v = index . "disabled_service_ids" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"disabled_service_ids":{{ if eq (kindOf $v) "string" }}{{ $v }}{{ else }}{{ toJson $v }}{{ end }}{{- end -}}{{- $v = index . "enabled_service_ids" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"enabled_service_ids":{{ if eq (kindOf $v) "string" }}{{ $v }}{{ else }}{{ toJson $v }}{{ end }}{{- end -}}{{- $v = index . "environment_id" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"environment_id":{{ if eq (kindOf $v) "string" }}{{ toJson $v }}{{ else }}{{ toJson (printf "%v" $v) }}{{ end }}{{- end -}}{{- $v = index . "name" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"name":{{ if eq (kindOf $v) "string" }}{{ toJson $v }}{{ else }}{{ toJson (printf "%v" $v) }}{{ end }}{{- end -}}{{- $v = index . "project_id" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"project_id":{{ if eq (kindOf $v) "string" }}{{ toJson $v }}{{ else }}{{ toJson (printf "%v" $v) }}{{ end }}{{- end -}}{{- "" }} }}'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            overrideMediaType: application/json
+            objectKey: $.data.sharedVariableConfigure
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{{- if index . "errors" -}}{{- $m := "" -}}{{- range $i, $e := index . "errors" -}}{{- if $i -}}{{- $m = printf "%s; %v" $m (index $e "message") -}}{{- else -}}{{- $m = printf "%v" (index $e "message") -}}{{- end -}}{{- end -}}{{ getRegexpFirstMatch (printf "graphql error: %s" $m) "^(no_graphql_errors)$" }}{{- else -}}{{ toJson . }}{{- end -}}'
+          x-stackql-protocol: graphql
+        delete:
+          config:
+            requestTranslate:
+              algorithm: drop_double_underscore_params
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1graphql~1v2?__resource=variables&__method=delete/post'
+          request:
+            mediaType: application/json
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{"query":"mutation($environment_id: String!, $name: String!, $project_id: String!, $service_id: String) { variableDelete(input: { environmentId: $environment_id, name: $name, projectId: $project_id, serviceId: $service_id }) }","variables":{ {{- $s := separator "," -}}{{- $v := "" -}}{{- $v = index . "environment_id" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"environment_id":{{ if eq (kindOf $v) "string" }}{{ toJson $v }}{{ else }}{{ toJson (printf "%v" $v) }}{{ end }}{{- end -}}{{- $v = index . "name" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"name":{{ if eq (kindOf $v) "string" }}{{ toJson $v }}{{ else }}{{ toJson (printf "%v" $v) }}{{ end }}{{- end -}}{{- $v = index . "project_id" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"project_id":{{ if eq (kindOf $v) "string" }}{{ toJson $v }}{{ else }}{{ toJson (printf "%v" $v) }}{{ end }}{{- end -}}{{- $v = index . "service_id" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"service_id":{{ if eq (kindOf $v) "string" }}{{ toJson $v }}{{ else }}{{ toJson (printf "%v" $v) }}{{ end }}{{- end -}}{{- "" }} }}'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            overrideMediaType: application/json
+            objectKey: $.data.variableDelete
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{{- if index . "errors" -}}{{- $m := "" -}}{{- range $i, $e := index . "errors" -}}{{- if $i -}}{{- $m = printf "%s; %v" $m (index $e "message") -}}{{- else -}}{{- $m = printf "%v" (index $e "message") -}}{{- end -}}{{- end -}}{{ getRegexpFirstMatch (printf "graphql error: %s" $m) "^(no_graphql_errors)$" }}{{- else -}}{"data":{"variableDelete":{"result":{{ toJson (index (index . "data") "variableDelete") }}}}}{{- end -}}'
+          x-stackql-protocol: graphql
+        list:
+          operation:
+            $ref: '#/paths/~1graphql~1v2?__resource=variables&__method=list/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data.variables
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{"data":{"variables":[{{- $s := separator "," -}}{{- range $k, $v := index (index . "data") "variables" -}}{{ call $s }}{"name":{{ toJson $k }},"value":{{ toJson $v }}}{{- end -}}]}}'
+          x-stackql-protocol: graphql
+        upsert:
+          config:
+            requestTranslate:
+              algorithm: drop_double_underscore_params
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1graphql~1v2?__resource=variables&__method=upsert/post'
+          request:
+            mediaType: application/json
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{"query":"mutation($environment_id: String!, $name: String!, $project_id: String!, $service_id: String, $skip_deploys: Boolean, $value: String!) { variableUpsert(input: { environmentId: $environment_id, name: $name, projectId: $project_id, serviceId: $service_id, skipDeploys: $skip_deploys, value: $value }) }","variables":{ {{- $s := separator "," -}}{{- $v := "" -}}{{- $v = index . "environment_id" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"environment_id":{{ if eq (kindOf $v) "string" }}{{ toJson $v }}{{ else }}{{ toJson (printf "%v" $v) }}{{ end }}{{- end -}}{{- $v = index . "name" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"name":{{ if eq (kindOf $v) "string" }}{{ toJson $v }}{{ else }}{{ toJson (printf "%v" $v) }}{{ end }}{{- end -}}{{- $v = index . "project_id" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"project_id":{{ if eq (kindOf $v) "string" }}{{ toJson $v }}{{ else }}{{ toJson (printf "%v" $v) }}{{ end }}{{- end -}}{{- $v = index . "service_id" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"service_id":{{ if eq (kindOf $v) "string" }}{{ toJson $v }}{{ else }}{{ toJson (printf "%v" $v) }}{{ end }}{{- end -}}{{- $v = index . "skip_deploys" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"skip_deploys":{{ if eq (kindOf $v) "string" }}{{ toBool $v }}{{ else }}{{ toJson $v }}{{ end }}{{- end -}}{{- $v = index . "value" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"value":{{ if eq (kindOf $v) "string" }}{{ toJson $v }}{{ else }}{{ toJson (printf "%v" $v) }}{{ end }}{{- end -}}{{- "" }} }}'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            overrideMediaType: application/json
+            objectKey: $.data.variableUpsert
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{{- if index . "errors" -}}{{- $m := "" -}}{{- range $i, $e := index . "errors" -}}{{- if $i -}}{{- $m = printf "%s; %v" $m (index $e "message") -}}{{- else -}}{{- $m = printf "%v" (index $e "message") -}}{{- end -}}{{- end -}}{{ getRegexpFirstMatch (printf "graphql error: %s" $m) "^(no_graphql_errors)$" }}{{- else -}}{"data":{"variableUpsert":{"result":{{ toJson (index (index . "data") "variableUpsert") }}}}}{{- end -}}'
+          x-stackql-protocol: graphql
+        upsert_collection:
+          config:
+            requestTranslate:
+              algorithm: drop_double_underscore_params
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1graphql~1v2?__resource=variables&__method=upsert_collection/post'
+          request:
+            mediaType: application/json
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{"query":"mutation($environment_id: String!, $project_id: String!, $replace_: Boolean, $service_id: String, $skip_deploys: Boolean, $variables: EnvironmentVariables!) { variableCollectionUpsert(input: { environmentId: $environment_id, projectId: $project_id, replace: $replace_, serviceId: $service_id, skipDeploys: $skip_deploys, variables: $variables }) }","variables":{ {{- $s := separator "," -}}{{- $v := "" -}}{{- $v = index . "environment_id" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"environment_id":{{ if eq (kindOf $v) "string" }}{{ toJson $v }}{{ else }}{{ toJson (printf "%v" $v) }}{{ end }}{{- end -}}{{- $v = index . "project_id" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"project_id":{{ if eq (kindOf $v) "string" }}{{ toJson $v }}{{ else }}{{ toJson (printf "%v" $v) }}{{ end }}{{- end -}}{{- $v = index . "replace_" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"replace_":{{ if eq (kindOf $v) "string" }}{{ toBool $v }}{{ else }}{{ toJson $v }}{{ end }}{{- end -}}{{- $v = index . "service_id" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"service_id":{{ if eq (kindOf $v) "string" }}{{ toJson $v }}{{ else }}{{ toJson (printf "%v" $v) }}{{ end }}{{- end -}}{{- $v = index . "skip_deploys" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"skip_deploys":{{ if eq (kindOf $v) "string" }}{{ toBool $v }}{{ else }}{{ toJson $v }}{{ end }}{{- end -}}{{- $v = index . "variables" -}}{{- if ne (kindOf $v) "invalid" -}}{{ call $s }}"variables":{{ if eq (kindOf $v) "string" }}{{ $v }}{{ else }}{{ toJson $v }}{{ end }}{{- end -}}{{- "" }} }}'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            overrideMediaType: application/json
+            objectKey: $.data.variableCollectionUpsert
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{{- if index . "errors" -}}{{- $m := "" -}}{{- range $i, $e := index . "errors" -}}{{- if $i -}}{{- $m = printf "%s; %v" $m (index $e "message") -}}{{- else -}}{{- $m = printf "%v" (index $e "message") -}}{{- end -}}{{- end -}}{{ getRegexpFirstMatch (printf "graphql error: %s" $m) "^(no_graphql_errors)$" }}{{- else -}}{"data":{"variableCollectionUpsert":{"result":{{ toJson (index (index . "data") "variableCollectionUpsert") }}}}}{{- end -}}'
+          x-stackql-protocol: graphql
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/variables/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/variables/methods/upsert'
+          - $ref: '#/components/x-stackQL-resources/variables/methods/upsert_collection'
+        update: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/variables/methods/delete'
+        replace: []
+    variables_for_service_deployment:
+      id: railway.variables.variables_for_service_deployment
+      name: variables_for_service_deployment
+      title: Variables For Service Deployment
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1graphql~1v2?__resource=variables_for_service_deployment&__method=list/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data.variablesForServiceDeployment
+            transform:
+              type: golang_template_json_v0.3.0
+              body: '{"data":{"variablesForServiceDeployment":[{{- $s := separator "," -}}{{- range $k, $v := index (index . "data") "variablesForServiceDeployment" -}}{{ call $s }}{"name":{{ toJson $k }},"value":{{ toJson $v }}}{{- end -}}]}}'
+          x-stackql-protocol: graphql
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/variables_for_service_deployment/methods/list'
+        insert: []
+        update: []
+        delete: []
+        replace: []
