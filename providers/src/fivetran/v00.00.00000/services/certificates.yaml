@@ -1,104 +1,16 @@
 openapi: 3.0.1
-servers:
-  - url: 'https://api.fivetran.com'
-    variables: {}
 info:
-  title: OpenAPI Definition - certificates
-  description: Certificate Management
+  title: Fivetran Certificates API
+  description: TLS certificates and SSH fingerprints approved for connections and destinations.
   version: v1
-security:
-  - basicAuth: []
-components:
-  schemas:
-    TrustCertificateRequest:
-      required:
-        - encoded_cert
-        - hash
-      type: object
-      properties:
-        connector_id:
-          type: string
-          description: The unique identifier for the connector
-        destination_id:
-          type: string
-          description: The unique identifier for the destination.
-        hash:
-          type: string
-          description: Hash of the certificate.
-        encoded_cert:
-          type: string
-          description: The certificate encoded in base64.
-    TrustFingerprintRequest:
-      required:
-        - hash
-        - public_key
-      type: object
-      properties:
-        connector_id:
-          type: string
-          description: The unique identifier for the connector
-        destination_id:
-          type: string
-          description: The unique identifier for the destination
-        hash:
-          type: string
-          description: Hash of the fingerprint
-        public_key:
-          type: string
-          description: The SSH public key
-  responses: {}
-  securitySchemes:
-    basicAuth:
-      type: http
-      scheme: basic
-  x-stackQL-resources:
-    certificates:
-      id: fivetran.certificates.certificates
-      name: certificates
-      title: Certificates
-      methods:
-        approve_certificate:
-          operation:
-            $ref: '#/paths/~1v1~1certificates/post'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
-        select: []
-        insert: []
-        update: []
-        delete: []
-    fingerprints:
-      id: fivetran.certificates.fingerprints
-      name: fingerprints
-      title: Fingerprints
-      methods:
-        approve_fingerprint:
-          operation:
-            $ref: '#/paths/~1v1~1fingerprints/post'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
-        select: []
-        insert: []
-        update: []
-        delete: []
 paths:
   /v1/certificates:
     post:
       tags:
         - Certificate Management
-      summary: Approve a certificate
-      description: 'Approves a certificate for a connector/destination, so Fivetran trusts this certificate for a source/destination database. The connector/destination setup tests will fail if a non-approved certificate is provided.'
+      summary: (Deprecated) Approve a Certificate
+      description: Approves a certificate for a connection/destination, so Fivetran trusts this certificate for a source/destination database. The connection/destination setup tests will fail if a non-approved certificate is provided.
       operationId: approve_certificate
-      parameters:
-        - name: Accept
-          in: header
-          schema:
-            type: string
-            example: application/json
-            default: application/json
       requestBody:
         content:
           application/json:
@@ -110,44 +22,1166 @@ paths:
           content:
             application/json:
               schema:
+                required:
+                  - code
+                  - message
                 properties:
                   code:
                     type: string
                     description: Response status code
+                    example: Success
                   message:
                     type: string
                     description: Response status text
+                    example: The certificate has been approved.
                 type: object
-  /v1/fingerprints:
-    post:
+      deprecated: true
+  /v1/connections/{connection_id}/certificates:
+    get:
       tags:
         - Certificate Management
-      summary: Approve a fingerprint
-      description: 'Approves a fingerprint, so Fivetran trusts this fingerprint for a source/destination database, and connectors can connect to the source/destination through an SSH tunnel'
-      operationId: approve_fingerprint
+      summary: List Certificates Approved for the Connection
+      description: Returns the list of approved certificates for the specified connection.
+      operationId: get_connection_certificates_list
       parameters:
-        - name: Accept
-          in: header
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
           schema:
             type: string
-            example: application/json
-            default: application/json
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TrustFingerprintRequest'
+        - name: cursor
+          in: query
+          description: Paging cursor, [read more about pagination](https://fivetran.com/docs/rest-api/pagination)
+          required: false
+          schema:
+            type: string
+            example: cursor_value
+          example: cursor_value
+        - name: limit
+          in: query
+          description: Number of records to fetch per page. Accepts a number in the range 1..1000; the default value is 100.
+          required: false
+          schema:
+            type: integer
+            format: int32
+            example: 100
+          example: 100
       responses:
         '200':
           description: Successful response
           content:
             application/json:
               schema:
+                required:
+                  - code
+                  - data
                 properties:
                   code:
                     type: string
                     description: Response status code
+                    example: Success
                   message:
                     type: string
                     description: Response status text
+                    example: Connection certificates retrieved successfully
+                  data:
+                    required:
+                      - items
+                    properties:
+                      items:
+                        type: array
+                        description: The collection of returned items
+                        items:
+                          $ref: '#/components/schemas/CertificateDetailsResponse'
+                      next_cursor:
+                        type: string
+                        description: The value of the cursor parameter for the next page
+                        example: cursor_value
+                    type: object
                 type: object
+        '404':
+          description: Connection not found.
+    post:
+      tags:
+        - Certificate Management
+      summary: Approve a Certificate for the Connection
+      description: |
+        Approves a certificate, so Fivetran trusts this certificate for a source database connection. 
+        The connection setup tests will fail if a non-approved certificate is provided.
+
+        > NOTE: This is only required for source connections based on the following databases: 
+        >  - [MySQL](https://fivetran.com/docs/connectors/databases/mysql#supportedservices)
+        >  - [PostgreSQL](https://fivetran.com/docs/connectors/databases/postgresql#supportedservices)
+        >  - [SQLServer](https://fivetran.com/docs/connectors/databases/sql-server#supportedservices)
+      operationId: approve_connection_certificate
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveCertificateRequest'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: The certificate has been approved.
+                  data:
+                    $ref: '#/components/schemas/CertificateDetailsResponse'
+                type: object
+        '400':
+          description: Missing `hash` or `encoded_cert` fields in request payload
+        '404':
+          description: Connection not found
+  /v1/connections/{connection_id}/certificates/{hash}:
+    get:
+      tags:
+        - Certificate Management
+      summary: Retrieve Connection Certificate Details
+      description: Returns details of the certificate approved for the specified connection with specified certificate hash.
+      operationId: get_connection_certificate_details
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+        - name: hash
+          in: path
+          description: The unique identifier of the certificate (Base64URL encoded hash of the certificate).
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Connection certificate details retrieved successfully
+                  data:
+                    $ref: '#/components/schemas/CertificateDetailsResponse'
+                type: object
+        '404':
+          description: Certificate with specified hash not found
+    delete:
+      tags:
+        - Certificate Management
+      summary: Revoke Connection Certificate
+      description: Revokes a certificate, so Fivetran no longer trusts it while connecting to the source database.
+      operationId: revoke_connection_certificate
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+        - name: hash
+          in: path
+          description: The unique identifier of the certificate (Base64URL encoded hash of the certificate).
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Certificate 'string' has been revoked for connection 'string'
+                type: object
+        '404':
+          description: Certificate with specified hash not found
+  /v1/connections/{connection_id}/fingerprints:
+    get:
+      tags:
+        - Certificate Management
+      summary: List Fingerprints Approved for the Connection
+      description: Returns the list of approved SSH fingerprints for specified connection
+      operationId: get_connection_fingerprints_list
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          description: Paging cursor, [read more about pagination](https://fivetran.com/docs/rest-api/pagination)
+          required: false
+          schema:
+            type: string
+            example: cursor_value
+          example: cursor_value
+        - name: limit
+          in: query
+          description: Number of records to fetch per page. Accepts a number in the range 1..1000; the default value is 100.
+          required: false
+          schema:
+            type: integer
+            format: int32
+            example: 100
+          example: 100
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Connection fingerprints retrieved successfully
+                  data:
+                    required:
+                      - items
+                    properties:
+                      items:
+                        type: array
+                        description: The collection of returned items
+                        items:
+                          $ref: '#/components/schemas/FingerprintDetailsResponse'
+                      next_cursor:
+                        type: string
+                        description: The value of the cursor parameter for the next page
+                        example: cursor_value
+                    type: object
+                type: object
+        '404':
+          description: Connection not found
+    post:
+      tags:
+        - Certificate Management
+      summary: Approve a Fingerprint for the Connection
+      description: Approves a fingerprint, enabling Fivetran to trust it for a source database and establish connections via an SSH tunnel.
+      operationId: approve_connection_fingerprint
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveFingerprintRequest'
+      responses:
+        '200':
+          description: Successful response
+        '201':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                  data:
+                    $ref: '#/components/schemas/FingerprintDetailsResponse'
+        '400':
+          description: Missing `hash` or `public_key` fields in request payload
+        '404':
+          description: Connection not found
+  /v1/connections/{connection_id}/fingerprints/{hash}:
+    get:
+      tags:
+        - Certificate Management
+      summary: Retrieve Connection Fingerprint Details
+      description: Returns SSH fingerprint details approved for specified connection with specified hash
+      operationId: get_connection_fingerprint_details
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+        - name: hash
+          in: path
+          description: The unique identifier of the fingerprint (Base64URL encoded hash of the fingerprint).
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Connection fingerprint details retrieved successfully
+                  data:
+                    $ref: '#/components/schemas/FingerprintDetailsResponse'
+                type: object
+        '404':
+          description: Fingerprint with specified hash not found
+    delete:
+      tags:
+        - Certificate Management
+      summary: Revoke Connection Fingerprint
+      description: Revokes a fingerprint, so Fivetran no longer trusts it while connecting to the source database through an SSH tunnel.
+      operationId: revoke_connection_fingerprint
+      parameters:
+        - name: connection_id
+          in: path
+          description: The unique identifier of the connection. Retrieve it from the `id` field in the [List All Connections](https://fivetran.com/docs/rest-api/api-reference/connections/list-connections) response, or from the `id` field returned when you [Create a Connection](https://fivetran.com/docs/rest-api/api-reference/connections/create-connection).
+          required: true
+          schema:
+            type: string
+        - name: hash
+          in: path
+          description: The unique identifier of the fingerprint (Base64URL encoded hash of the fingerprint).
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Fingerprint with hash 'string' has been revoked for connection with id 'string'
+                type: object
+        '404':
+          description: Fingerprint with specified hash not found
+  /v1/destinations/{destination_id}/certificates:
+    get:
+      tags:
+        - Certificate Management
+      summary: List Certificates Approved for the Destination
+      description: Returns the list of approved certificates for the specified destination.
+      operationId: get_destination_certificates_list
+      parameters:
+        - name: destination_id
+          in: path
+          description: The unique identifier for the destination within the Fivetran system.
+          required: true
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          description: Paging cursor, [read more about pagination](https://fivetran.com/docs/rest-api/pagination)
+          required: false
+          schema:
+            type: string
+            example: cursor_value
+          example: cursor_value
+        - name: limit
+          in: query
+          description: Number of records to fetch per page. Accepts a number in the range 1..1000; the default value is 100.
+          required: false
+          schema:
+            type: integer
+            format: int32
+            example: 100
+          example: 100
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Destination certificates retrieved successfully
+                  data:
+                    required:
+                      - items
+                    properties:
+                      items:
+                        type: array
+                        description: The collection of returned items
+                        items:
+                          $ref: '#/components/schemas/CertificateDetailsResponse'
+                      next_cursor:
+                        type: string
+                        description: The value of the cursor parameter for the next page
+                        example: cursor_value
+                    type: object
+                type: object
+        '404':
+          description: Destination not found
+    post:
+      tags:
+        - Certificate Management
+      summary: Approve a Certificate for the Destination
+      description: |
+        Approves a certificate, so Fivetran trusts this certificate for a destination database connection. 
+        The destination connection setup tests will fail if a non-approved certificate is provided.
+
+        > NOTE: This is only required for destination connections based on the following databases: 
+        >  - [MySQL](https://fivetran.com/docs/destinations/mysql#supportedimplementations)
+        >  - [PostgreSQL](https://fivetran.com/docs/destinations/postgresql#supportedimplementations)
+        >  - [SQLServer](https://fivetran.com/docs/destinations/sql-server#supportedimplementations)
+      operationId: approve_destination_certificate
+      parameters:
+        - name: destination_id
+          in: path
+          description: The unique identifier for the destination within the Fivetran system.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveCertificateRequest_approve_destination_certificate'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: The certificate has been approved.
+                  data:
+                    $ref: '#/components/schemas/CertificateDetailsResponse'
+                type: object
+        '400':
+          description: Missing `hash` or `encoded_cert` fields in request payload
+        '404':
+          description: Destination not found
+  /v1/destinations/{destination_id}/certificates/{hash}:
+    get:
+      tags:
+        - Certificate Management
+      summary: Retrieve Destination Certificate Details
+      description: Returns details of the certificate approved for the specified destination with specified certificate hash.
+      operationId: get_destination_certificate_details
+      parameters:
+        - name: destination_id
+          in: path
+          description: The unique identifier for the destination within the Fivetran system.
+          required: true
+          schema:
+            type: string
+        - name: hash
+          in: path
+          description: The unique identifier of the certificate (Base64URL encoded hash of the certificate).
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Destination certificate details retrieved successfully
+                  data:
+                    $ref: '#/components/schemas/CertificateDetailsResponse'
+                type: object
+        '404':
+          description: Certificate with specified hash not found
+    delete:
+      tags:
+        - Certificate Management
+      summary: Revoke Destination Certificate
+      description: Revokes a certificate, so Fivetran no longer trusts it while connecting to the destination database.
+      operationId: revoke_destination_certificate
+      parameters:
+        - name: destination_id
+          in: path
+          description: The unique identifier for the destination within the Fivetran system.
+          required: true
+          schema:
+            type: string
+        - name: hash
+          in: path
+          description: The unique identifier of the certificate (Base64URL encoded hash of the certificate).
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Certificate 'string' has been revoked for destination 'string'
+                type: object
+        '404':
+          description: Certificate with specified hash not found
+  /v1/destinations/{destination_id}/fingerprints:
+    get:
+      tags:
+        - Certificate Management
+      summary: List Fingerprints Approved for the Destination
+      description: Returns the list of approved SSH fingerprints for specified destination
+      operationId: get_destination_fingerprints_list
+      parameters:
+        - name: destination_id
+          in: path
+          description: The unique identifier for the destination within the Fivetran system.
+          required: true
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          description: Paging cursor, [read more about pagination](https://fivetran.com/docs/rest-api/pagination)
+          required: false
+          schema:
+            type: string
+            example: cursor_value
+          example: cursor_value
+        - name: limit
+          in: query
+          description: Number of records to fetch per page. Accepts a number in the range 1..1000; the default value is 100.
+          required: false
+          schema:
+            type: integer
+            format: int32
+            example: 100
+          example: 100
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Destination fingerprints retrieved successfully
+                  data:
+                    required:
+                      - items
+                    properties:
+                      items:
+                        type: array
+                        description: The collection of returned items
+                        items:
+                          $ref: '#/components/schemas/FingerprintDetailsResponse'
+                      next_cursor:
+                        type: string
+                        description: The value of the cursor parameter for the next page
+                        example: cursor_value
+                    type: object
+                type: object
+        '404':
+          description: Destination not found
+    post:
+      tags:
+        - Certificate Management
+      summary: Approve a Fingerprint for the Destination
+      description: Approves a fingerprint, enabling Fivetran to trust it for a destination database and establish connections via an SSH tunnel.
+      operationId: approve_destination_fingerprint
+      parameters:
+        - name: destination_id
+          in: path
+          description: The unique identifier for the destination within the Fivetran system.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveFingerprintRequest_approve_destination_fingerprint'
+      responses:
+        '200':
+          description: Successful response
+        '201':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                  data:
+                    $ref: '#/components/schemas/FingerprintDetailsResponse'
+        '400':
+          description: Missing `hash` or `public_key` fields in request payload
+        '404':
+          description: Destination not found
+  /v1/destinations/{destination_id}/fingerprints/{hash}:
+    get:
+      tags:
+        - Certificate Management
+      summary: Retrieve Destination Fingerprint Details
+      description: Returns SSH fingerprint details approved for specified destination with specified hash
+      operationId: get_destination_fingerprint_details
+      parameters:
+        - name: destination_id
+          in: path
+          description: The unique identifier for the destination within the Fivetran system.
+          required: true
+          schema:
+            type: string
+        - name: hash
+          in: path
+          description: The unique identifier of the fingerprint (Base64URL encoded hash of the fingerprint).
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - data
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Destination fingerprint details retrieved successfully
+                  data:
+                    $ref: '#/components/schemas/FingerprintDetailsResponse'
+                type: object
+        '404':
+          description: Fingerprint with specified hash not found
+    delete:
+      tags:
+        - Certificate Management
+      summary: Revoke Destination Fingerprint
+      description: Revokes a fingerprint, so Fivetran no longer trusts it while connecting to the destination database through an SSH tunnel.
+      operationId: revoke_destination_fingerprint
+      parameters:
+        - name: destination_id
+          in: path
+          description: The unique identifier for the destination within the Fivetran system.
+          required: true
+          schema:
+            type: string
+        - name: hash
+          in: path
+          description: The unique identifier of the fingerprint (Base64URL encoded hash of the fingerprint).
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    description: Response status code
+                    example: Success
+                  message:
+                    type: string
+                    description: Response status text
+                    example: Fingerprint with hash = 'string' has been revoked for destination id = 'string'
+                type: object
+        '404':
+          description: Fingerprint with specified hash not found
+components:
+  schemas:
+    TrustCertificateRequest:
+      required:
+        - encoded_cert
+        - hash
+      type: object
+      properties:
+        hash:
+          type: string
+          description: Hash of the certificate.
+          example: jhg5UI7fgrI6yy...
+        encoded_cert:
+          type: string
+          description: The certificate encoded in base64.
+          example: MIID9DCCAtygAwIBAgIBQjANBgkqhkiG9w0BAQUFADCBijELMAkGA1UEBhMCV...
+        connection_id:
+          type: string
+          description: The unique identifier for the connection within the Fivetran system.
+          example: connection_id
+        destination_id:
+          type: string
+          description: The unique identifier for the destination within the Fivetran system.
+          example: destination_id
+    CertificateDetailsResponse:
+      required:
+        - hash
+        - id
+        - name
+        - public_key
+        - sha1
+        - sha256
+        - type
+        - validated_by
+        - validated_date
+      type: object
+      properties:
+        id:
+          type: string
+          description: The unique identifier of the certificate (Base64URL encoded hash of the certificate).
+          example: Y29ubmVjdG9yIGNlcnRpZmljYXRlIGhhc2g
+        name:
+          type: string
+          description: The certificate name.
+          example: Certificate Name
+        hash:
+          type: string
+          description: Hash of the certificate.
+          example: jhg5UI7fgrI6yy...
+        type:
+          type: string
+          description: Type of the certificate.
+          example: TLS
+        sha1:
+          type: string
+          description: SHA1 of certificate.
+          example: c8de1d13vtu435ilj435lj345796d8jh7hk8hgk
+        sha256:
+          type: string
+          description: SHA256 of certificate.
+          example: 5vt6rt6jtr654eef94ec3f91122a623b389f4d331ff330026e43af21013vb45f
+        public_key:
+          type: string
+          description: The certificate decoded public key.
+          example: 'Sun RSA public key, 2048 bits params: null modulus: 7685655455... public exponent: 65537'
+        validated_date:
+          type: string
+          description: Date when certificate has been validated and approved.
+          format: date-time
+          example: '2023-08-20T10:15:20.677566Z'
+        validated_by:
+          type: string
+          description: The unique identified for the user who has approved the certificate.
+          example: user_id
+    ApproveCertificateRequest:
+      required:
+        - encoded_cert
+        - hash
+      type: object
+      properties:
+        hash:
+          type: string
+          description: Hash of the certificate.
+          example: jhg5UI7fgrI6yy...
+        encoded_cert:
+          type: string
+          description: The certificate encoded in base64.
+          example: MIID9DCCAtygAwIBAgIBQjANBgkqhkiG9w0BAQUFADCBijELMAkGA1UEBhMCV...
+    FingerprintDetailsResponse:
+      required:
+        - hash
+        - id
+        - public_key
+        - validated_by
+        - validated_date
+      type: object
+      properties:
+        id:
+          type: string
+          description: The unique identifier of the fingerprint (Base64URL encoded hash of the fingerprint).
+          example: Y29ubmVjdG9yIGZpbmdlcnByaW50IGhhc2g
+        hash:
+          type: string
+          description: Hash of the fingerprint.
+          example: eUtPirI6yy...
+        public_key:
+          type: string
+          description: The SSH public key.
+          example: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC6 ... fivetran user key
+        validated_date:
+          type: string
+          description: Date when fingerprint has been validated and approved.
+          format: date-time
+          example: '2024-01-01T00:00:00Z'
+        validated_by:
+          type: string
+          description: The unique identified for the user who has approved the fingerprint.
+          example: user_id
+    ApproveFingerprintRequest:
+      required:
+        - hash
+        - public_key
+      type: object
+      properties:
+        hash:
+          type: string
+          description: Hash of the fingerprint.
+          example: eUtPirI6yy...
+        public_key:
+          type: string
+          description: The SSH public key.
+          example: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC6 ... fivetran user key
+    ApproveCertificateRequest_approve_destination_certificate:
+      required:
+        - encoded_cert
+        - hash
+      type: object
+      properties:
+        hash:
+          type: string
+          description: Hash of the certificate.
+          example: jhg5UI7fgrI6yy...
+        encoded_cert:
+          type: string
+          description: The certificate encoded in base64.
+          example: MIID9DCCAtygAwIBAgIBQjANBgkqhkiG9w0BAQUFADCBijELMAkGA1UEBhMCV...
+    ApproveFingerprintRequest_approve_destination_fingerprint:
+      required:
+        - hash
+        - public_key
+      type: object
+      properties:
+        hash:
+          type: string
+          description: Hash of the fingerprint.
+          example: eUtPirI6yy...
+        public_key:
+          type: string
+          description: The SSH public key.
+          example: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC6 ... fivetran user key
+  x-stackQL-resources:
+    certificates:
+      id: fivetran.certificates.certificates
+      name: certificates
+      title: Certificates
+      methods:
+        approve:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1certificates/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select: []
+        insert: []
+        update: []
+        delete: []
+        replace: []
+    connection_certificates:
+      id: fivetran.certificates.connection_certificates
+      name: connection_certificates
+      title: Connection Certificates
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1certificates/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data.items
+        create:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1certificates/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        get:
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1certificates~1{hash}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        delete:
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1certificates~1{hash}/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/connection_certificates/methods/get'
+          - $ref: '#/components/x-stackQL-resources/connection_certificates/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/connection_certificates/methods/create'
+        update: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/connection_certificates/methods/delete'
+        replace: []
+    connection_fingerprints:
+      id: fivetran.certificates.connection_fingerprints
+      name: connection_fingerprints
+      title: Connection Fingerprints
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1fingerprints/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data.items
+        create:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1fingerprints/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        get:
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1fingerprints~1{hash}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        delete:
+          operation:
+            $ref: '#/paths/~1v1~1connections~1{connection_id}~1fingerprints~1{hash}/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/connection_fingerprints/methods/get'
+          - $ref: '#/components/x-stackQL-resources/connection_fingerprints/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/connection_fingerprints/methods/create'
+        update: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/connection_fingerprints/methods/delete'
+        replace: []
+    destination_certificates:
+      id: fivetran.certificates.destination_certificates
+      name: destination_certificates
+      title: Destination Certificates
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1v1~1destinations~1{destination_id}~1certificates/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data.items
+        create:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1destinations~1{destination_id}~1certificates/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        get:
+          operation:
+            $ref: '#/paths/~1v1~1destinations~1{destination_id}~1certificates~1{hash}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        delete:
+          operation:
+            $ref: '#/paths/~1v1~1destinations~1{destination_id}~1certificates~1{hash}/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/destination_certificates/methods/get'
+          - $ref: '#/components/x-stackQL-resources/destination_certificates/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/destination_certificates/methods/create'
+        update: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/destination_certificates/methods/delete'
+        replace: []
+    destination_fingerprints:
+      id: fivetran.certificates.destination_fingerprints
+      name: destination_fingerprints
+      title: Destination Fingerprints
+      methods:
+        list:
+          operation:
+            $ref: '#/paths/~1v1~1destinations~1{destination_id}~1fingerprints/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data.items
+        create:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1v1~1destinations~1{destination_id}~1fingerprints/post'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        get:
+          operation:
+            $ref: '#/paths/~1v1~1destinations~1{destination_id}~1fingerprints~1{hash}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.data
+        delete:
+          operation:
+            $ref: '#/paths/~1v1~1destinations~1{destination_id}~1fingerprints~1{hash}/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+      sqlVerbs:
+        select:
+          - $ref: '#/components/x-stackQL-resources/destination_fingerprints/methods/get'
+          - $ref: '#/components/x-stackQL-resources/destination_fingerprints/methods/list'
+        insert:
+          - $ref: '#/components/x-stackQL-resources/destination_fingerprints/methods/create'
+        update: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/destination_fingerprints/methods/delete'
+        replace: []
+servers:
+  - url: https://api.fivetran.com
+x-stackQL-config:
+  pagination:
+    requestToken:
+      key: cursor
+      location: query
+    responseToken:
+      key: $.data.next_cursor
+      location: body
