@@ -1,6 +1,20 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { exec } from 'node:child_process';
+
+// subject line of a GitHub generated merge commit, e.g.
+//   Merge pull request #11 from stackql/feature/testing2
+//   Merge pull request #11 from stackql/feature/testing2 [skip ci]
+const MERGE_COMMIT_RE = /^Merge pull request #(\d+) from (\S+)/;
+// subject line of a GitHub generated squash merge commit, e.g.
+//   some pull request title (#11)
+const SQUASH_COMMIT_RE = /\(#(\d+)\)\s*$/;
+
+function requireDigits(name, value) {
+  if (!/^\d+$/.test(String(value))) {
+    throw new Error(`${name} must be numeric, got: ${JSON.stringify(value)}`);
+  }
+  return String(value);
+}
 
 async function run() {
   try {
@@ -26,24 +40,40 @@ async function run() {
       baseSha = context.payload.before;
       message = context.payload.head_commit.message.split('\n')[0];
       console.log(`Commit Message: ${message}`);
-      // Merge pull request #11 from stackql/feature/testing2
-      const commitMessageParts = message.split(' ');
-      prNumber = commitMessageParts[3].split('#')[1];
-      sourceBranch = commitMessageParts[5].replace(`${context.payload.organization.login}/`, '');
       targetBranch = context.payload.ref.replace('refs/heads/', '');
-      // console.log(JSON.stringify(context, undefined, 2));
+      const mergeMatch = MERGE_COMMIT_RE.exec(message);
+      const squashMatch = SQUASH_COMMIT_RE.exec(message);
+      if (mergeMatch) {
+        prNumber = mergeMatch[1];
+        sourceBranch = mergeMatch[2];
+        const ownerPrefix = `${context.repo.owner}/`;
+        if (sourceBranch.startsWith(ownerPrefix)) {
+          sourceBranch = sourceBranch.substring(ownerPrefix.length);
+        }
+      } else if (squashMatch) {
+        prNumber = squashMatch[1];
+        sourceBranch = '';
+      } else {
+        core.setFailed(`Unable to determine pull request number from commit message: ${message}`);
+        return;
+      }
     } else {
       core.setFailed(`Unsupported event: ${eventName}`);
       return;
     }
-    exec(`echo "REG_EVENT=${eventName}" >> $GITHUB_ENV`);
-    exec(`echo "REG_SHA=${shortSha}" >> $GITHUB_ENV`);
-    exec(`echo "REG_COMMIT_SHA=${commitSha}" >> $GITHUB_ENV`);
-    exec(`echo "REG_BASE_SHA=${baseSha}" >> $GITHUB_ENV`);
-    exec(`echo "REG_ACTION=${action}" >> $GITHUB_ENV`);
-    exec(`echo "REG_PR_NO=${prNumber}" >> $GITHUB_ENV`);
-    exec(`echo "REG_SOURCE_BRANCH=${sourceBranch}" >> $GITHUB_ENV`);
-    exec(`echo "REG_TARGET_BRANCH=${targetBranch}" >> $GITHUB_ENV`);
+    prNumber = requireDigits('pull request number', prNumber);
+
+    // branch names, pull request titles and commit messages are contributor
+    // controlled. exportVariable appends to $GITHUB_ENV using a heredoc
+    // delimiter; nothing here is passed through a shell.
+    core.exportVariable('REG_EVENT', eventName);
+    core.exportVariable('REG_SHA', shortSha);
+    core.exportVariable('REG_COMMIT_SHA', commitSha);
+    core.exportVariable('REG_BASE_SHA', baseSha);
+    core.exportVariable('REG_ACTION', action);
+    core.exportVariable('REG_PR_NO', prNumber);
+    core.exportVariable('REG_SOURCE_BRANCH', sourceBranch);
+    core.exportVariable('REG_TARGET_BRANCH', targetBranch);
   } catch (error) {
     core.setFailed(error.message);
     return;

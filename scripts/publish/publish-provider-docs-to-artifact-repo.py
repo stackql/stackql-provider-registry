@@ -2,12 +2,15 @@ import sys, json, os, boto3, botocore
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key, Attr
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+from common.provider_tree import require_safe_name
+
 #
 # get env vars
 #
 
 print("getting REG_TARGET_BRANCH env var...")
-target_branch = os.getenv('REG_TARGET_BRANCH')
+target_branch = require_safe_name(os.getenv('REG_TARGET_BRANCH'), 'REG_TARGET_BRANCH')
 
 print("getting REG_SHA env var...")
 commit_sha = os.getenv('REG_SHA')
@@ -82,8 +85,8 @@ for obj in repo_bucket.objects.all():
 print("getting updated providers...")
 for provider in providers:
     provider_name = provider['provider']
-    provider_dir = provider['provider_dir']
-    version = provider['target_version']
+    provider_dir = require_safe_name(provider['provider_dir'], 'provider directory name')
+    version = require_safe_name(provider['target_version'], 'target version')
 
     print("processing %s (%s) version %s..." % (provider_name, target_branch, version))
 
