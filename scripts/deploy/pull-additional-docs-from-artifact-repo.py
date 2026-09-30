@@ -3,8 +3,14 @@ from botocore.exceptions import ClientError
 from datetime import datetime, timedelta
 from dateutil.relativedelta import *
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+from common.provider_tree import parse_artifact_key, require_safe_name
+
 print("getting REG_ARTIFACT_REPO_BUCKET env var...")
 repo_bucket_name = os.getenv('REG_ARTIFACT_REPO_BUCKET')
+
+print("getting REG_PROVIDER_PATH env var...")
+provider_path = os.getenv('REG_PROVIDER_PATH')
 
 ## TODO: 
 ## implement min, max and age rules
@@ -37,7 +43,7 @@ providers = json.loads(os.getenv('PROVIDERS'))
 updated_providers = []
 print("getting updated providers...")
 for provider in providers:
-    updated_providers.append(provider['provider_dir'])
+    updated_providers.append(require_safe_name(provider['provider_dir'], 'provider directory name'))
 
 #
 # pull additional docs from artifact repo needed for deployment
@@ -80,7 +86,8 @@ print("additional files needed to pull: %s" %(str(req_files)))
 
 for req_file in req_files:
     print("pulling %s from artifact repo to [%s/%s]" % (req_file, os.getenv('REG_WEBSITE_DIR'), req_file))
-    provider_dir = req_file.split('/')[-2]
+    # the object key is joined onto a local path below: accept only <REG_PROVIDER_PATH>/<provider>/<file>
+    provider_dir, _ = parse_artifact_key(req_file, provider_path)
     print("creating dest dir for %s (if it doesn't exist)..." % (provider_dir))
     os.makedirs("%s/%s/%s" % (os.getenv('REG_WEBSITE_DIR'), os.getenv('REG_PROVIDER_PATH'), provider_dir), exist_ok=True)
     s3_client.download_file(repo_bucket_name, req_file, "%s/%s" % (os.getenv('REG_WEBSITE_DIR'), req_file))
