@@ -1,5 +1,8 @@
 import json, os, tarfile, subprocess, sys, shutil
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+from common.provider_tree import require_safe_name
+
 def tardirectory(srcdir, arcname, dir2tar):
     p = subprocess.Popen(["tar", "-czf", arcname, dir2tar], stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=srcdir)
     p.wait()
@@ -12,12 +15,12 @@ print("getting PROVIDERS env var...")
 providers = json.loads(os.getenv('PROVIDERS'))
 
 print("getting REG_TARGET_BRANCH env var...")
-target_branch = os.getenv('REG_TARGET_BRANCH')
+target_branch = require_safe_name(os.getenv('REG_TARGET_BRANCH'), 'REG_TARGET_BRANCH')
 
 for provider in providers:
     provider_name = provider["provider"]
-    provider_dir = provider["provider_dir"]
-    version = provider["target_version"]
+    provider_dir = require_safe_name(provider["provider_dir"], 'provider directory name')
+    version = require_safe_name(provider["target_version"], 'target version')
 
     if target_branch == 'main':
         key = "%s.tgz" % (version)
