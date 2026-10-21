@@ -41,7 +41,7 @@ The public StackQL Provider Registry is served from Cloudflare, using the follow
 
 ## Contributing
 
-Please see [.github/CONTRIBUTING.md](/.github/CONTRIBUTING.md).
+Please see [CONTRIBUTING.md](/CONTRIBUTING.md).
 
 ## Developing a Provider
 
