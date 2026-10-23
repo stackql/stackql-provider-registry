@@ -1,75 +1,41 @@
+# Provider signing command line
 
-# Working with the command line tool
+Requires Go 1.27.3 or later:
 
-To build the signing and verification tool:
-
+```sh
+cd signing
+go build -o ../pqsig ./cmd/pqsig
+cd ..
 ```
-go build -o ed25519tool ./signing/Ed25519/app/cmd/main
+
+Provision a new production key without writing or displaying the private seed:
+
+```sh
+./pqsig keygen -kid stackql-2026-01 \
+  -public-keys new-public-keys.json \
+  -github-secret MLDSA_SIGNING_SEED \
+  -repo stackql/stackql-provider-registry
 ```
 
-Then, from the repository root directory:
+The command generates an ML-DSA-65 key, pipes its hex-encoded 32-byte seed
+directly to `gh secret set`, and writes only the public key. It refuses to
+overwrite the public key file. Review and add the public entry to
+[`signing/pqsig/keys.json`](../signing/pqsig/keys.json); never commit a seed.
+For rotation, add rather than replace public entries until old archives expire.
+Ship the updated verifier before using the new key to publish documents.
 
-```bash
-. ./scripts/setup-env.sh
+Sign in place, or write to a separate output:
 
-CREDENTIALS_DIR="${REPOSITORY_ROOT_DIR}/signing/Ed25519/setup/scratchpad"
-TESTING_INPUT_DIR="${REPOSITORY_ROOT_DIR}/signing/Ed25519/test"
-TESTING_OUTPUT_DIR="${CREDENTIALS_DIR}"
-
-PRIVATE_KEY_FILE="smoke-testing-private-key.pem"
-
-PUBLIC_KEY_FILE="smoke-testing-public-key.pem"
-
-CERT_FILE="smoke-testing-cert.pem"
-
-CSR_FILE="smoke-testing.csr"
-
-## Create key pair and cert
-./ed25519tool createkeys ${CREDENTIALS_DIR}/${PRIVATE_KEY_FILE} ${CREDENTIALS_DIR}/${PUBLIC_KEY_FILE} ${CREDENTIALS_DIR}/${CERT_FILE} ${CREDENTIALS_DIR}/${CSR_FILE}
-
-## Store the private key in an env var
-SIGNING_KEY_SECRET=$(cat ${CREDENTIALS_DIR}/${PRIVATE_KEY_FILE})
-
-## Sign some files
-./ed25519tool sign --privatekeyenvvar="SIGNING_KEY_SECRET" --signaturetime="Jan 2 15:04:05 2006" ${TESTING_INPUT_DIR}/sample-infile.txt -o ${TESTING_OUTPUT_DIR}/old-timestamp-sample-infile.txt.sig
-
-./ed25519tool sign --privatekeyenvvar="SIGNING_KEY_SECRET"  --signaturetime="Jan 2 15:04:05 2023" ${TESTING_INPUT_DIR}/sample-infile.txt -o ${TESTING_OUTPUT_DIR}/acceptable-timestamp-sample-infile.txt.sig
-
-./ed25519tool sign --privatekeyenvvar="SIGNING_KEY_SECRET"  --signaturetime="now" ${TESTING_INPUT_DIR}/sample-infile.txt -o ${TESTING_OUTPUT_DIR}/now-timestamp-sample-infile.txt.sig
-
-./ed25519tool sign --privatekeyenvvar="SIGNING_KEY_SECRET"  --signaturetime="Jan 2 15:04:05 2033" ${TESTING_INPUT_DIR}/sample-infile.txt -o ${TESTING_OUTPUT_DIR}/future-timestamp-sample-infile.txt.sig
-
-## Now, verify
-
-## will succeed
-./ed25519tool verify --publickeypath=${CREDENTIALS_DIR}/${PUBLIC_KEY_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/old-timestamp-sample-infile.txt.sig
-
-## should and will fail with timestamp message
-./ed25519tool certverify --localcerts.signingbundle=${CREDENTIALS_DIR}/${CERT_FILE} --localcerts.cabundle=${CREDENTIALS_DIR}/${CERT_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/old-timestamp-sample-infile.txt.sig
-
-## will succeed
-./ed25519tool verify --publickeypath=${CREDENTIALS_DIR}/${PUBLIC_KEY_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/acceptable-timestamp-sample-infile.txt.sig
-
-## will succeed
-./ed25519tool certverify --localcerts.signingbundle=${CREDENTIALS_DIR}/${CERT_FILE} --localcerts.cabundle=${CREDENTIALS_DIR}/${CERT_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/acceptable-timestamp-sample-infile.txt.sig
-
-## will succeed
-./ed25519tool verify --publickeypath=${CREDENTIALS_DIR}/${PUBLIC_KEY_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/now-timestamp-sample-infile.txt.sig
-
-## will succeed
-./ed25519tool certverify --localcerts.signingbundle=${CREDENTIALS_DIR}/${CERT_FILE} --localcerts.cabundle=${CREDENTIALS_DIR}/${CERT_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/now-timestamp-sample-infile.txt.sig
-
-
-## all good with self signed CA if we supply it as a command line arg
-./ed25519tool certverify --localcerts.signingbundle=${CREDENTIALS_DIR}/${CERT_FILE} --localcerts.cabundle=${CREDENTIALS_DIR}/${CERT_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt --strict=true ${TESTING_OUTPUT_DIR}/acceptable-timestamp-sample-infile.txt.sig
-
-## will fail due to self-signed certificate in strict mode, if we do not supply same as CA
-./ed25519tool certverify --localcerts.signingbundle=${CREDENTIALS_DIR}/${CERT_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt --strict=true ${TESTING_OUTPUT_DIR}/acceptable-timestamp-sample-infile.txt.sig
-
-## will succeed
-./ed25519tool verify --publickeypath=${CREDENTIALS_DIR}/${PUBLIC_KEY_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/future-timestamp-sample-infile.txt.sig
-
-## should and will fail with timestamp message
-./ed25519tool certverify --localcerts.signingbundle=${CREDENTIALS_DIR}/${CERT_FILE} --localcerts.cabundle=${CREDENTIALS_DIR}/${CERT_FILE} ${TESTING_INPUT_DIR}/sample-infile.txt ${TESTING_OUTPUT_DIR}/future-timestamp-sample-infile.txt.sig
-
+```sh
+# STACKQL_SIGNING_SEED is supplied by the secret manager, not a command argument.
+./pqsig sign-doc -kid stackql-2026-01 provider.yaml
+./pqsig sign-doc -kid stackql-2026-01 -out signed.yaml provider.yaml
+./pqsig verify-doc signed.yaml
+./pqsig verify-doc -public-keys custom-public-keys.json signed.yaml
+./pqsig validate-doc provider.yaml
 ```
+
+`sign-doc` checks the generated signature before replacing the output. It does
+not assert that the key is an embedded production key; `verify-doc` does that.
+CI runs both before publishing. Missing seeds, unknown keys, malformed documents
+and invalid signatures exit nonzero. See [the format and policy](signing-and-verification.md).
