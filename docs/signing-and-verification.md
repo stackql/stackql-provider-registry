@@ -1,72 +1,92 @@
+# Quantum-safe provider document signatures
 
-# Cryptographic Signing of Provider Repository Artifacts 
+Provider documents use **ML-DSA-65**, the post-quantum signature scheme specified
+by FIPS 204, implemented by Go 1.27's standard-library `crypto/mldsa`.
+This is algorithm compliance, not a claim that the deployment is FIPS 140 validated.
+There is no Ed25519, X.509, signed timestamp, certificate-renewal tool, or `.sig`
+sidecar fallback.
 
-## Preamble
+Every `provider.yaml` and service document carries:
 
-### Industry norms
-
-We draw the analogy that signing of documents in our repository is similar in nature to signing software archives in a software distribution repository.  At this stage of our development especially there are differences in scale, volume and frequency of update.  We are thinking for the future.
-
-As of early 2022, [PGP](https://en.wikipedia.org/wiki/Pretty_Good_Privacy) is still the pre-eminent signing mechanism for software repositories, eg:
-
-- [maven / gradle](https://central.sonatype.org/publish/requirements/#sign-files-with-gpgpgp)
-- [debian](https://www.debian.org/doc/manuals/securing-debian-manual/deb-pack-sign.en.html) 
-
-### The trouble with PGP
-
-There is some furore over the continued utility of PGP:
-
-- High profile published exploits in [GnuPG](https://bugs.chromium.org/p/project-zero/issues/detail?id=2145) and [PGP for email encryption](https://www.usenix.org/system/files/conference/usenixsecurity18/sec18-poddebniak.pdf).
-- `golang` has effectively [dropped standard lib support for PGP](https://golang.org/issue/44226).
-
-[^1] aggregates a bunch of concerns.  And [^2] is in a similar vein.
-
-We do not make any judgement on the future of PGP, beyond assessing it as unsuitable for a repository beginning life today.
-
-[^1]: https://latacora.micro.blog/2019/07/16/the-pgp-problem.html
-[^2]: https://blog.gtank.cc/modern-alternatives-to-pgp/
-
-### Alternatives
-
-In light of [^1] and [^2], some indicated options for software signing instead of PGP:
-
-- [TUF](https://theupdateframework.io/).  This does not come with an obvious public key distribution pattern and [the provided reference implementation](https://github.com/theupdateframework/python-tuf) contain a bunch of public keys baked in.  We prefer to avoid this method of key distribution, favouring something that is either fully automated or leverages existing chain of trust infrastructure.
-- [signify](https://www.openbsd.org/papers/bsdcan-signify.html) / [minisign](https://jedisct1.github.io/minisign/).  Both use the `Ed25519` algorithm.  Former is used for BSD distro signing.  Key distribution is not automated.
-
-
-### Ed25519
-
-The "Edwards-Curve Digital Signature Algorithm (EdDSA)" including `Ed25519` and `Ed448` variants are described in [RFC3082](https://datatracker.ietf.org/doc/html/rfc8032).
-
-
-Some more context and sample code can be drawn from:
-
-- https://www.scottbrady91.com/openssl/creating-elliptical-curve-keys-using-openssl
-- https://www.openssl.org/docs/man1.1.1/man7/Ed25519.html
-- https://www.openssl.org/docs/manmaster/man1/openssl-pkeyutl.html
-
-
-### Corollary
-
-1. Given the controversy around PGP, we will avoid that.
-2. We will use the indicated `Ed25519` signing algorithm.
-3. We will couple (2) with a code signing pattern inclusive of chain of trust, similar in nature to [this](https://www.digicert.com/signing/code-signing-certificates#Code-Signing).
-
-### Practicalities
-
-It is possible retrospectively regenerate certificates manually (requires `faketime`):
-
-```bash
-
-signing/Ed25519/setup/re-generate-faketime.sh
-
+```yaml
+x-stackql-signature:
+  format: raw-v1
+  alg: ML-DSA-65
+  kid: stackql-2026-01
+  sig: <6618 hexadecimal characters>
+  end: stackql-provider-signature
 ```
 
-Easiest thing is edit this script to reflect desired window start datetime.  Of course, you will need to possess key material and ensure it is in expected location per script.
+[`signing/pqsig`](../signing/pqsig) owns the wire format, payload framing,
+signing, verification and embedded public keys. Both SDKs use this package;
+they must not implement separate framing logic.
+It is published as the small, nested Go module
+`github.com/stackql/stackql-provider-registry/signing`, with tags named
+`signing/vX.Y.Z`. Provider YAML data is not shipped in this module: the full
+registry exceeds Go's module-zip size limit.
 
-Then, simply copy the output from `signing/Ed25519/setup/out/stackql-cert.pem` to both:
+The initial prerelease is `signing/v0.1.0-alpha01` (module version
+`v0.1.0-alpha01`). Squash the library feature branch before tagging its final
+commit, then merge it with a merge commit, not squash or rebase, so the tagged
+commit remains in `main` history. SDK releases follow the same rule. Consumers
+pin named module versions and run `go mod tidy` before CI; published tags must
+never be moved. StackQL itself can be squash-merged as usual.
 
-- `signing/Ed25519/app/edcrypto/embeddedcerts/signingcerts/stackql-signing-bundle.pem`.
-- `signing/Ed25519/app/edcrypto/embeddedcerts/stackql-root-cert-bundle.pem`.
+1. The payload is the exact original block-style YAML mapping, including its
+   original whitespace, comments and line endings.
+2. Append a separating LF and the exact field shown above, with two-space
+   indentation, the prescribed field order, and a final LF.
+3. Sign or verify the payload bytes (excluding the separating LF and frame)
+   with ML-DSA context `stackql-provider-doc-bytes-v1`.
+4. On success, parse the returned **exact authenticated payload**, not the
+   envelope-bearing document.
 
-Following this, need to propogate a new version of this module through the toolchain.
+Only the prescribed terminal frame is accepted. Extra fields, trailing content,
+duplicate frames, malformed signatures and unknown formats fail closed.
+Multiple YAML documents, flow-style/JSON roots and explicit `...` document-end
+markers cannot carry this frame and are rejected. An existing raw-v1 frame can
+be replaced when re-signing. Editing or reformatting a signed file invalidates it.
+
+This intentionally supersedes the issues' RFC 8785 proposal: an audit found
+hundreds of existing documents with aliases and large numeric values that
+canonical JSON could not preserve exactly. Raw payload signatures preserve
+those existing specifications without rounding numbers or rewriting YAML.
+Public trust stores map key IDs to hex-encoded ML-DSA-65 public keys.
+Unknown IDs, algorithms, malformed envelopes, missing signatures and tampering
+fail closed when verification is enabled.
+
+## CI and key management
+
+The production seed is held only in the registry's `MLDSA_SIGNING_SEED` Actions
+secret; the public key is in [`keys.json`](../signing/pqsig/keys.json).
+The packaging script signs into the staged tree, never the source tree.
+PR builds use ephemeral seeds, never the production secret. Trusted publication
+jobs additionally verify against the embedded public keys before packaging.
+The standalone signature checks run even when no provider source changed.
+
+See [CLI usage and rotation](command-line-tool.md). Keep old public keys while
+their signed archives remain supported. There is no certificate expiry or
+automatic trust-on-first-use.
+
+## Runtime compatibility and scope
+
+StackQL's default `verifyConfig.nopVerify: true` is unchanged. Explicit
+`nopVerify: false` requires an embedded ML-DSA signature on every document read.
+Existing unsigned providers and old sidecar-only archives remain usable with
+verification disabled; enabling verification requires republishing/re-signing
+them. Legacy certificate configuration and sidecars are no longer used.
+An explicit `publicKeys` map replaces the embedded roots for private registries.
+
+any-sdk verifies local, cached and remote reads. omnisdk offers
+`stackqldoc.WithVerifier` and `Args.DocumentVerifier`, including referenced
+operation documents. Verified omnisdk reads bypass the shared parsed-document
+cache so an unverified or differently trusted cache entry cannot be reused.
+
+This change does **not** authenticate archive downloads or extraction, the
+provider index, freshness, or provider/version placement. It does not prevent
+rollback to an older valid signed document. Those are separate trust-policy
+and verify-before-extraction work under stackql/stackql#832.
+
+The originally proposed dual-sign/fallback transition is intentionally omitted:
+verification has been opt-in for years, and the coordinated migration removes
+the legacy implementation rather than maintaining two trust mechanisms.
