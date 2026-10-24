@@ -66,7 +66,8 @@ jobs:
         if: env.NUM_PROVIDERS > 0
         uses: actions/setup-go@v6
         with:
-          go-version: ^1.19
+          go-version-file: go.mod
+          cache-dependency-path: signing/go.sum
           check-latest: true
           cache: true
         id: go
@@ -74,7 +75,8 @@ jobs:
       - name: "[PACKAGE] build sign tool"
         if: env.NUM_PROVIDERS > 0
         run: |
-          go build -o ed25519tool ./signing/Ed25519/app/cmd/main
+          cd signing
+          go build -o ../pqsig ./cmd/pqsig
 
       - name: "[PACKAGE] prepare provider dirs"
         if: env.NUM_PROVIDERS > 0
@@ -94,12 +96,17 @@ jobs:
       - name: "[PACKAGE] sign provider docs"
         if: env.NUM_PROVIDERS > 0
         env:
-          SIGNING_VERSION: v1
-          SIGNING_CERT: ${{ secrets.V1_SIGNING_CERT }}
-          SIGNING_PRIV_KEY: '${{ secrets.V1_SIGNING_PRIV_KEY }}'
-          SIGNING_PUB_KEY: ${{ secrets.V1_SIGNING_PUB_KEY }}
+          STACKQL_SIGNING_KID: stackql-2026-01
+          STACKQL_SIGNING_SEED: ${{ github.event_name != 'pull_request' && secrets.MLDSA_SIGNING_SEED || '' }}
         run: |
+          # PRs exercise the complete packaging path without a production signing key.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            export STACKQL_SIGNING_SEED="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+          fi
           python scripts/package/sign-provider-docs.py
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            find signed/providers/src -type f -name '*.yaml' -exec ./pqsig verify-doc {} +
+          fi
 
       - name: "[PACKAGE] package provider docs"
         if: env.NUM_PROVIDERS > 0
@@ -122,6 +129,10 @@ jobs:
           do
             echo "testing ${provider}..."
             sh test-provider.sh "$provider" false "$providersdir"
+            if [ "${{ github.event_name }}" != "pull_request" ]; then
+              python verify-provider.py "$provider" \
+                --registry-root "$providersdir" --stackql-bin "$(pwd)/stackql"
+            fi
           done < ../providers.txt
 
       #
