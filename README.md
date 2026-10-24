@@ -6,6 +6,14 @@
 
 A repository of `provider` interface documents supporting [stackql](https://stackql.io/) ([stackql GitHub repo](https://github.com/stackql/stackql)). 
 
+> [!IMPORTANT]
+> New and updated provider revisions published after the signing cutover use
+> quantum-safe ML-DSA-65 signatures. Signature verification requires
+> **StackQL v0.13 or later** and remains opt-in, disabled by default. Existing
+> provider revisions gain the new signatures as they are updated or republished;
+> legacy revisions must be republished before they can pass the new verifier.
+> See [signing and verification](docs/signing-and-verification.md).
+
 ## Table of Contents
 
 <!-- BEGIN TABLE OF CONTENTS -->
