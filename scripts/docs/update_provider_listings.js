@@ -6,56 +6,11 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..', '..');
+const IMAGES_DIR = path.join(ROOT, 'images');
+const SOURCE_DIR = path.join(ROOT, 'providers', 'src');
 const MANIFEST_URL = 'https://registry.stackql.app/providers/dist/providers.yaml';
 const TOC_MARKER = 'TABLE OF CONTENTS';
 const CATALOG_MARKER = 'PROVIDER CATALOG';
-
-// Display names and icons from stackql.io's provider tiles, keyed by source directory.
-const PROVIDERS = {
-  anthropic: ['Anthropic', 'anthropic.png'],
-  anthropic_admin: ['Anthropic Admin', 'anthropic.png'],
-  aws: ['Amazon Web Services', 'aws.ico'],
-  awscc: ['AWS Cloud Control', 'aws.ico'],
-  azure: ['Microsoft Azure', 'azure.ico'],
-  azure_extras: ['Azure Extras', 'azure.ico'],
-  azure_isv: ['Azure ISV', 'azure.ico'],
-  azure_stack: ['Azure Stack', 'azure.ico'],
-  clickhouse: ['ClickHouse', 'clickhouse.ico'],
-  cloudflare: ['Cloudflare', 'cloudflare.ico'],
-  confluent: ['Confluent', 'confluent.ico'],
-  databricks_account: ['Databricks Account', 'databricks.ico'],
-  databricks_workspace: ['Databricks Workspace', 'databricks.ico'],
-  datadog: ['DataDog', 'datadog.ico'],
-  deno: ['Deno Deploy', 'deno.ico'],
-  digitalocean: ['Digital Ocean', 'digitalocean.png'],
-  entra_id: ['Microsoft Entra ID', 'entra_id.svg'],
-  firebase: ['Firebase', 'firebase.png'],
-  fivetran: ['Fivetran', 'fivetran.png'],
-  github: ['GitHub', 'github.ico'],
-  gitlab: ['GitLab', 'gitlab.ico'],
-  godaddy: ['GoDaddy', 'godaddy.png'],
-  googleadmin: ['Google Admin', 'googleadmin.ico'],
-  'googleapis.com': ['Google Cloud Platform', 'google.ico'],
-  googleworkspace: ['Google Workspace', 'googleworkspace.ico'],
-  homebrew: ['Homebrew', 'homebrew.ico'],
-  k8s: ['Kubernetes', 'k8s.png'],
-  kafka: ['Kafka', 'kafka.png'],
-  lambda: ['Lambda Cloud', 'lambda.svg'],
-  linode: ['Linode', 'linode.ico'],
-  netlify: ['Netlify', 'netlify.ico'],
-  nvidia: ['NVIDIA NGC', 'nvidia.ico'],
-  oci: ['Oracle Cloud Infrastructure', 'oci.ico'],
-  okta: ['Okta', 'okta.png'],
-  openai: ['OpenAI', 'openai.ico'],
-  openai_admin: ['OpenAI Admin', 'openai.ico'],
-  pagerduty: ['PagerDuty', 'pagerduty.svg'],
-  railway: ['Railway', 'railway.ico'],
-  snowflake: ['Snowflake', 'snowflake.ico'],
-  sumologic: ['SumoLogic', 'sumologic.png'],
-  supabase: ['Supabase', 'supabase.ico'],
-  typesafe: ['TypeSafe AI', 'typesafe.png'],
-  vercel: ['Vercel', 'vercel.ico'],
-};
 
 function git(args) {
   return execFileSync('git', ['--no-pager', ...args], {
@@ -71,7 +26,7 @@ function parseManifest(text) {
   let provider;
   let expectingVersions = false;
   let rootSeen = false;
-  for (const line of text.replace(/^\uFEFF/, '').split(/\r?\n/)) {
+  for (const line of text.replace(/^﻿/, '').split(/\r?\n/)) {
     if (!line.trim()) continue;
     if (line === 'providers:' && !rootSeen) {
       rootSeen = true;
@@ -132,6 +87,54 @@ function releaseDates(log) {
   return dates;
 }
 
+// Index icon files by stem (file name without extension); the first file in sorted order wins per stem.
+function iconIndex(dir = IMAGES_DIR) {
+  const icons = new Map();
+  for (const file of fs.readdirSync(dir).sort()) {
+    if (!fs.statSync(path.join(dir, file)).isFile()) continue;
+    const stem = path.parse(file).name;
+    if (!icons.has(stem)) icons.set(stem, file);
+  }
+  return icons;
+}
+
+// Exact stem match first, otherwise the longest stem the provider name starts with,
+// so databricks.ico serves databricks_account and databricks_workspace. Undefined when nothing matches.
+function resolveIcon(name, icons) {
+  let best;
+  for (const stem of icons.keys()) {
+    if (name.startsWith(stem) && (!best || stem.length > best.length)) best = stem;
+  }
+  return best === undefined ? undefined : icons.get(best);
+}
+
+// Top-level id from a provider document; nested ids are indented and never match.
+function providerId(document) {
+  const match = /^id:[ \t]*["']?([A-Za-z0-9_.-]+)["']?[ \t]*\r?$/m.exec(document);
+  return match ? match[1] : undefined;
+}
+
+// Map registry provider ids to providers/src directories (googleapis.com publishes as google).
+function sourceDirectories(dir = SOURCE_DIR) {
+  const sources = new Map();
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    let id;
+    for (const version of fs.readdirSync(path.join(dir, entry.name)).sort()) {
+      const file = path.join(dir, entry.name, version, 'provider.yaml');
+      if (!fs.existsSync(file)) continue;
+      id = providerId(fs.readFileSync(file, 'utf8'));
+      if (id) break;
+    }
+    id = id || entry.name;
+    if (sources.has(id)) {
+      throw new Error(`Provider ${id} has multiple source directories: ${sources.get(id)}, ${entry.name}`);
+    }
+    sources.set(id, entry.name);
+  }
+  return sources;
+}
+
 function replaceBlock(readme, marker, content) {
   const begin = `<!-- BEGIN ${marker} -->`;
   const end = `<!-- END ${marker} -->`;
@@ -169,27 +172,22 @@ function tableOfContents(readme) {
   return entries.join('\n');
 }
 
-function buildCatalog(manifest, dates, firstPublished, root = ROOT) {
+function buildCatalog(manifest, dates, firstPublished, icons) {
   const rows = [
-    '| Icon | Provider | Full Name | Latest Version | Date First Published | Date Last Published |',
-    '| --- | --- | --- | --- | --- | --- |',
+    '| Icon | Provider | Latest Version | Date First Published | Date Last Published |',
+    '| --- | --- | --- | --- | --- |',
   ];
-  const names = [...manifest.keys()].map((name) => name === 'google' ? 'googleapis.com' : name).sort();
-  for (const name of names) {
-    if (!Object.hasOwn(PROVIDERS, name)) throw new Error(`Add display name and icon metadata for ${name}`);
-    const [fullName, icon] = PROVIDERS[name];
-    if (!fs.statSync(path.join(root, 'images', icon)).isFile()) {
-      throw new Error(`Missing favicon for ${name}: images/${icon}`);
-    }
-    const registryName = name === 'googleapis.com' ? 'google' : name;
-    const latest = [...manifest.get(registryName)].sort(compareVersions).at(-1);
+  for (const name of [...manifest.keys()].sort()) {
+    const icon = resolveIcon(name, icons);
+    const image = icon ? `<img src="images/${icon}" alt="${name}" width="24" height="24">` : '';
+    const latest = [...manifest.get(name)].sort(compareVersions).at(-1);
     const last = dates.get(latest);
     if (!last) throw new Error(`No production release commit for ${name} ${latest}; fetch production Git history`);
-    const first = firstPublished(name, registryName);
+    const first = firstPublished(name);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(first) || first > last) {
       throw new Error(`Invalid first publication date for ${name}: ${first}`);
     }
-    rows.push(`| <img src="images/${icon}" alt="${fullName}" width="24" height="24"> | \`${name}\` | ${fullName} | \`${latest}\` | ${first} | ${last} |`);
+    rows.push(`| ${image} | \`${name}\` | \`${latest}\` | ${first} | ${last} |`);
   }
   return rows.join('\n');
 }
@@ -207,17 +205,20 @@ async function main(args = process.argv.slice(2)) {
   }
   const commit = git(['rev-parse', '--verify', `${ref}^{commit}`]);
   const dates = releaseDates(git(['log', '--first-parent', '--format=%cI%x09%s', commit]));
+  const icons = iconIndex();
+  const sources = sourceDirectories();
   const response = await fetch(MANIFEST_URL, { signal: AbortSignal.timeout(30000) });
   if (!response.ok) throw new Error(`Registry request failed: HTTP ${response.status}`);
   const manifest = parseManifest(await response.text());
-  const catalog = buildCatalog(manifest, dates, (name, registryName) => {
+  const catalog = buildCatalog(manifest, dates, (name) => {
+    const source = sources.get(name) || name;
     const history = git([
       'log', '--first-parent', '--reverse', '--format=%cI', commit, '--',
-      `providers/src/${name}`, `providers/dist/${name}`, `providers/dist/${registryName}`,
+      `providers/src/${source}`, `providers/dist/${source}`, `providers/dist/${name}`,
     ]);
     if (!history) throw new Error(`No production history for ${name}`);
     return utcDate(history.split(/\r?\n/)[0]);
-  });
+  }, icons);
   const readmePath = path.join(ROOT, 'README.md');
   const original = fs.readFileSync(readmePath, 'utf8');
   const newline = original.includes('\r\n') ? '\r\n' : '\n';
@@ -240,4 +241,7 @@ if (require.main === module) {
   });
 }
 
-module.exports = { parseManifest, compareVersions, utcDate, releaseDates, replaceBlock, tableOfContents, buildCatalog };
+module.exports = {
+  parseManifest, compareVersions, utcDate, releaseDates, iconIndex, resolveIcon, providerId,
+  sourceDirectories, replaceBlock, tableOfContents, buildCatalog,
+};
