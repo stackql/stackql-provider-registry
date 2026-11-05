@@ -6,14 +6,31 @@ info:
     (workspace-level APIs), generated from the Databricks Python SDK.
   version: 0.1.0
   x-stackql-sdk-version: 0.123.0
-  x-stackql-date-generated: '2026-07-31'
+  x-stackql-date-generated: '2026-11-01'
   x-stackql-sdk-namespace: databricks.sdk.service.vectorsearch
 servers:
-  - url: https://{deployment_name}.cloud.databricks.com
+  - url: https://{deployment_name}.{workspace_domain}
     variables:
       deployment_name:
-        description: The Databricks Workspace Deployment Name
+        description: >-
+          The Databricks workspace deployment name: the host prefix of the
+          workspace URL (dbc-abcd0123-a1bc on AWS, adb-1234567890123456.7 on
+          Azure, 1234567890123456.7 on GCP). Set DATABRICKS_DEPLOYMENT_NAME to
+          default it for the session.
         default: dbc-abcd0123-a1bc
+        x-stackQL-envVar: DATABRICKS_DEPLOYMENT_NAME
+      workspace_domain:
+        description: >-
+          The Databricks workspace domain suffix for the cloud. Selected by
+          DATABRICKS_CLOUD (aws, azure or gcp; default aws).
+        default: cloud.databricks.com
+        x-stackQL-envVarSelector:
+          envVar: DATABRICKS_CLOUD
+          default: aws
+          values:
+            aws: cloud.databricks.com
+            azure: azuredatabricks.net
+            gcp: gcp.databricks.com
 paths:
   /api/2.0/vector-search/endpoints:
     post:
@@ -31,8 +48,6 @@ paths:
           Type of endpoint
         :param budget_policy_id: str (optional)
           The budget policy id to be applied
-        :param num_replicas: int (optional)
-          Initial number of replicas for the endpoint. If not specified, defaults to 1.
         :param target_qps: int (optional)
           Target QPS for the endpoint. Mutually exclusive with num_replicas. The actual replica count is
           calculated at index creation/sync time based on this value. Best-effort target; the system does not
@@ -61,11 +76,6 @@ paths:
                 budget_policy_id:
                   type: string
                   description: The budget policy id to be applied
-                num_replicas:
-                  type: integer
-                  description: >-
-                    Initial number of replicas for the endpoint. If not
-                    specified, defaults to 1.
                 target_qps:
                   type: integer
                   description: >-
@@ -224,12 +234,6 @@ paths:
 
         :param endpoint_name: str
           Name of the AI Search endpoint
-        :param replication_factor: int (optional)
-          OpenSearch replication factor. Directly sets userThroughputSettings.replicationFactor. Mutually
-          exclusive with target_qps (and the deprecated min_qps alias). Must be non-negative (0 = no
-          replication). The autoscaler caps the effective value based on endpoint scaling settings. Note: This
-          is the raw replication factor, not "total data copies". For the user-facing replica count (which
-          uses total-copies semantics), see PatchEndpointThroughputRequest.num_replicas.
         :param target_qps: int (optional)
           Target QPS for the endpoint. Best-effort; the system does not guarantee this QPS will be achieved.
 
@@ -247,17 +251,6 @@ paths:
             schema:
               type: object
               properties:
-                replication_factor:
-                  type: integer
-                  description: >-
-                    OpenSearch replication factor. Directly sets
-                    userThroughputSettings.replicationFactor. Mutually exclusive
-                    with target_qps (and the deprecated min_qps alias). Must be
-                    non-negative (0 = no replication). The autoscaler caps the
-                    effective value based on endpoint scaling settings. Note:
-                    This is the raw replication factor, not "total data copies".
-                    For the user-facing replica count (which uses total-copies
-                    semantics), see PatchEndpointThroughputRequest.num_replicas.
                 target_qps:
                   type: integer
                   description: >-
@@ -518,95 +511,6 @@ paths:
                   message:
                     type: string
       x-stackql-sdk-source: VectorSearchEndpointsAPI
-  /api/2.0/vector-search/endpoints/{endpoint_name}/throughput:
-    patch:
-      operationId: vector_search_endpoints_patch_endpoint_throughput
-      summary: Update the throughput (concurrency) of an endpoint
-      tags:
-        - vectorsearch
-        - vector_search_endpoints
-      description: |-
-        Update the throughput (concurrency) of an endpoint
-
-        :param endpoint_name: str
-          Name of the AI Search endpoint
-        :param all_or_nothing: bool (optional)
-          If true, the request will fail if the requested concurrency or limits cannot be exactly met. If
-          false, the request will be adjusted to the closest possible value.
-        :param concurrency: float (optional)
-          Requested concurrency (total CPU) for the endpoint. If not specified, the current concurrency is
-          maintained.
-        :param maximum_concurrency_allowed: float (optional)
-          Maximum concurrency allowed for the endpoint. If not specified, the current maximum is maintained.
-        :param minimal_concurrency_allowed: float (optional)
-          Minimum concurrency allowed for the endpoint. If not specified, the current minimum is maintained.
-        :param num_replicas: int (optional)
-          Requested number of data copies for the endpoint (including primary). For example: num_replicas=2
-          means 2 total copies of the data (1 primary + 1 replica). If not specified, the current replication
-          factor is maintained. Valid range: 1-6 (where 1 = no replication, 6 = 1 primary + 5 replicas).
-
-        :returns: :class:`PatchEndpointThroughputResponse`
-      parameters:
-        - name: endpoint_name
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Name of the AI Search endpoint
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                all_or_nothing:
-                  type: boolean
-                  description: >-
-                    If true, the request will fail if the requested concurrency
-                    or limits cannot be exactly met. If false, the request will
-                    be adjusted to the closest possible value.
-                concurrency:
-                  type: number
-                  description: >-
-                    Requested concurrency (total CPU) for the endpoint. If not
-                    specified, the current concurrency is maintained.
-                maximum_concurrency_allowed:
-                  type: number
-                  description: >-
-                    Maximum concurrency allowed for the endpoint. If not
-                    specified, the current maximum is maintained.
-                minimal_concurrency_allowed:
-                  type: number
-                  description: >-
-                    Minimum concurrency allowed for the endpoint. If not
-                    specified, the current minimum is maintained.
-                num_replicas:
-                  type: integer
-                  description: >-
-                    Requested number of data copies for the endpoint (including
-                    primary). For example: num_replicas=2 means 2 total copies
-                    of the data (1 primary + 1 replica). If not specified, the
-                    current replication factor is maintained. Valid range: 1-6
-                    (where 1 = no replication, 6 = 1 primary + 5 replicas).
-      responses:
-        '200':
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PatchEndpointThroughputResponse'
-        default:
-          description: Error response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                  message:
-                    type: string
-      x-stackql-sdk-source: VectorSearchEndpointsAPI
   /api/2.0/vector-search/endpoints/{name}/metrics:
     post:
       operationId: vector_search_endpoints_retrieve_user_visible_metrics
@@ -689,6 +593,96 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RetrieveUserVisibleMetricsResponse'
+        default:
+          description: Error response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+      x-stackql-sdk-source: VectorSearchEndpointsAPI
+  /api/2.0/vector-search/endpoints/{endpoint_name}/start:
+    post:
+      operationId: vector_search_endpoints_start_endpoint
+      summary: >-
+        Start a stopped endpoint. The endpoint serves the same indexes it had
+        when it stopped.
+      tags:
+        - vectorsearch
+        - vector_search_endpoints
+      description: >-
+        Start a stopped endpoint. The endpoint serves the same indexes it had
+        when it stopped.
+
+
+        :param endpoint_name: str
+          Name of the AI Search endpoint
+
+        :returns: :class:`EndpointInfo`
+      parameters:
+        - name: endpoint_name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Name of the AI Search endpoint
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndpointInfo'
+        default:
+          description: Error response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+      x-stackql-sdk-source: VectorSearchEndpointsAPI
+  /api/2.0/vector-search/endpoints/{endpoint_name}/stop:
+    post:
+      operationId: vector_search_endpoints_stop_endpoint
+      summary: >-
+        Stop an endpoint. Stopping removes the endpoint's serving compute and
+        retains its indexes. A stopped
+      tags:
+        - vectorsearch
+        - vector_search_endpoints
+      description: >-
+        Stop an endpoint. Stopping removes the endpoint's serving compute and
+        retains its indexes. A stopped
+
+        endpoint can't serve queries or sync indexes until it is started.
+
+
+        :param endpoint_name: str
+          Name of the AI Search endpoint
+
+        :returns: :class:`EndpointInfo`
+      parameters:
+        - name: endpoint_name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Name of the AI Search endpoint
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndpointInfo'
         default:
           description: Error response
           content:
@@ -893,11 +887,6 @@ paths:
                         the source table are synced with the index. The primary
                         key column and embedding source column or embedding
                         vector column are always synced.
-                    effective_budget_policy_id:
-                      type: string
-                      description: The budget policy id applied to the AI Search index
-                    effective_usage_policy_id:
-                      type: string
                     embedding_source_columns:
                       type: array
                       items:
@@ -982,13 +971,6 @@ paths:
                       description: >-
                         The columns that contain the embedding vectors. The
                         format should be array[double].
-                    requested_schema_json:
-                      type: string
-                      description: >-
-                        The index schema exactly as the user supplied it on
-                        create, preserving the original type spellings (e.g.
-                        ``integer``) rather than Unity Catalog's canonical names
-                        (e.g. ``int``) that ``schema_json`` returns.
                     schema_json:
                       type: string
                       description: >-
@@ -1220,140 +1202,6 @@ paths:
                   message:
                     type: string
       x-stackql-sdk-source: VectorSearchIndexesAPI
-  /api/2.0/vector-search/indexes/{name}/autoeval:
-    get:
-      operationId: vector_search_indexes_get_auto_eval_status
-      summary: Returns the status of the latest autoeval run for a vector index.
-      tags:
-        - vectorsearch
-        - vector_search_indexes
-      description: |-
-        Returns the status of the latest autoeval run for a vector index.
-
-        :param name: str
-          Fully qualified index name (catalog.schema.index).
-
-        :returns: :class:`GetAutoEvalStatusResponse`
-      parameters:
-        - name: name
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Fully qualified index name (catalog.schema.index).
-      responses:
-        '200':
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GetAutoEvalStatusResponse'
-        default:
-          description: Error response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                  message:
-                    type: string
-      x-stackql-sdk-source: VectorSearchIndexesAPI
-    post:
-      operationId: vector_search_indexes_run_auto_eval
-      summary: Triggers an autoeval quality evaluation for a vector index.
-      tags:
-        - vectorsearch
-        - vector_search_indexes
-      description: |-
-        Triggers an autoeval quality evaluation for a vector index.
-
-        :param name: str
-          Fully qualified index name (catalog.schema.index).
-        :param num_queries: int (optional)
-          Number of queries to generate for evaluation (default: 50).
-        :param num_results: int (optional)
-          Number of results to fetch per query (default: 10).
-        :param query_types: List[str] (optional)
-          Query types to evaluate (default: FULL_TEXT, ANN, HYBRID).
-        :param queryset_query_column: str (optional)
-          Column in ``queryset_table`` holding the query text. Required when ``queryset_table`` is set;
-          ignored otherwise.
-        :param queryset_relevant_docs_column: str (optional)
-          Optional column in ``queryset_table`` holding the ground-truth relevant document IDs for each query
-          (STRING or ARRAY<STRING>). When set, recall@k is reported against these labels; when unset,
-          evaluation falls back to LLM-judged metrics only. Ignored when ``queryset_table`` is unset.
-        :param queryset_table: str (optional)
-          Fully qualified Unity Catalog table (catalog.schema.table) of evaluation queries to run against the
-          index. When set, queries are read from this table and synthetic query generation is skipped. The
-          table takes precedence over any automatically detected query source.
-
-        :returns: :class:`RunAutoEvalResponse`
-      parameters:
-        - name: name
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Fully qualified index name (catalog.schema.index).
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                num_queries:
-                  type: integer
-                  description: 'Number of queries to generate for evaluation (default: 50).'
-                num_results:
-                  type: integer
-                  description: 'Number of results to fetch per query (default: 10).'
-                query_types:
-                  type: array
-                  items:
-                    type: string
-                  description: 'Query types to evaluate (default: FULL_TEXT, ANN, HYBRID).'
-                queryset_query_column:
-                  type: string
-                  description: >-
-                    Column in ``queryset_table`` holding the query text.
-                    Required when ``queryset_table`` is set; ignored otherwise.
-                queryset_relevant_docs_column:
-                  type: string
-                  description: >-
-                    Optional column in ``queryset_table`` holding the
-                    ground-truth relevant document IDs for each query (STRING or
-                    ARRAY<STRING>). When set, recall@k is reported against these
-                    labels; when unset, evaluation falls back to LLM-judged
-                    metrics only. Ignored when ``queryset_table`` is unset.
-                queryset_table:
-                  type: string
-                  description: >-
-                    Fully qualified Unity Catalog table (catalog.schema.table)
-                    of evaluation queries to run against the index. When set,
-                    queries are read from this table and synthetic query
-                    generation is skipped. The table takes precedence over any
-                    automatically detected query source.
-      responses:
-        '200':
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RunAutoEvalResponse'
-        default:
-          description: Error response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                  message:
-                    type: string
-      x-stackql-sdk-source: VectorSearchIndexesAPI
   /api/2.0/vector-search/indexes/{index_name}/query:
     post:
       operationId: vector_search_indexes_query_index
@@ -1484,18 +1332,6 @@ paths:
                   properties:
                     model:
                       type: string
-                    model_type:
-                      type: string
-                      x-enum:
-                        - MODEL_TYPE_BASE
-                        - MODEL_TYPE_FINETUNED
-                      description: >-
-                        EXPERIMENTAL. Discriminator for how the ``model`` field
-                        is interpreted: BASE/UNSPECIFIED expects the literal
-                        "databricks_reranker"; FINETUNED treats ``model`` as a
-                        Model Serving endpoint name in the caller's workspace.
-                        See the doc comment on ``model`` for the per-case
-                        contract.
                     parameters:
                       type: object
                       properties:
@@ -1614,104 +1450,6 @@ paths:
                   message:
                     type: string
       x-stackql-sdk-source: VectorSearchIndexesAPI
-  /api/2.0/vector-search/indexes/{name}/reranker-finetuning:
-    post:
-      operationId: vector_search_indexes_run_reranker_finetuning
-      summary: Triggers reranker finetuning for a vector index.
-      tags:
-        - vectorsearch
-        - vector_search_indexes
-      description: |-
-        Triggers reranker finetuning for a vector index.
-
-        :param name: str
-          Fully qualified index name (catalog.schema.index).
-        :param embedding_model: str (optional)
-          Model-serving endpoint name. Reranker finetuning only supports managed Delta Sync indices
-          (Databricks-computed embeddings), so this field is informational — it is auto-derived from the
-          index and not used to embed training queries locally.
-        :param model_name: str (optional)
-          Fully qualified UC name for the registered finetuned model (catalog.schema.model). When unset, the
-          handler derives a default of ``<catalog>.<schema>.reranker_<index_short_name>`` from ``name``.
-        :param num_queries: int (optional)
-          Cap on the number of queries sampled from ``query_table`` (or generated when ``query_table`` is
-          unset). Use -1 to process all queries (the data-gen default). Lower values cut LLM-judge cost and
-          run time.
-        :param query_column: str (optional)
-          Column in ``query_table`` containing the query text. Ignored when ``query_table`` is unset. Defaults
-          to "query_text" when omitted.
-        :param query_table: str (optional)
-          Optional fully qualified UC Delta table holding training queries (catalog.schema.table). When unset,
-          the data-gen job synthesises queries from the index corpus via an LLM.
-
-        :returns: :class:`RunRerankerFinetuningResponse`
-      parameters:
-        - name: name
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Fully qualified index name (catalog.schema.index).
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                embedding_model:
-                  type: string
-                  description: >-
-                    Model-serving endpoint name. Reranker finetuning only
-                    supports managed Delta Sync indices (Databricks-computed
-                    embeddings), so this field is informational — it is
-                    auto-derived from the index and not used to embed training
-                    queries locally.
-                model_name:
-                  type: string
-                  description: >-
-                    Fully qualified UC name for the registered finetuned model
-                    (catalog.schema.model). When unset, the handler derives a
-                    default of
-                    ``<catalog>.<schema>.reranker_<index_short_name>`` from
-                    ``name``.
-                num_queries:
-                  type: integer
-                  description: >-
-                    Cap on the number of queries sampled from ``query_table``
-                    (or generated when ``query_table`` is unset). Use -1 to
-                    process all queries (the data-gen default). Lower values cut
-                    LLM-judge cost and run time.
-                query_column:
-                  type: string
-                  description: >-
-                    Column in ``query_table`` containing the query text. Ignored
-                    when ``query_table`` is unset. Defaults to "query_text" when
-                    omitted.
-                query_table:
-                  type: string
-                  description: >-
-                    Optional fully qualified UC Delta table holding training
-                    queries (catalog.schema.table). When unset, the data-gen job
-                    synthesises queries from the index corpus via an LLM.
-      responses:
-        '200':
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RunRerankerFinetuningResponse'
-        default:
-          description: Error response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                  message:
-                    type: string
-      x-stackql-sdk-source: VectorSearchIndexesAPI
   /api/2.0/vector-search/indexes/{index_name}/scan:
     post:
       operationId: vector_search_indexes_scan_index
@@ -1808,57 +1546,6 @@ paths:
                   message:
                     type: string
       x-stackql-sdk-source: VectorSearchIndexesAPI
-  /api/2.0/vector-search/indexes/{index_name}/usage-policy:
-    patch:
-      operationId: vector_search_indexes_update_index_budget_policy
-      summary: Update the budget policy of an index
-      tags:
-        - vectorsearch
-        - vector_search_indexes
-      description: |-
-        Update the budget policy of an index
-
-        :param index_name: str
-          Name of the AI Search index
-        :param usage_policy_id: str (optional)
-          The usage policy id to be applied
-
-        :returns: :class:`UpdateVectorIndexUsagePolicyResponse`
-      parameters:
-        - name: index_name
-          in: path
-          required: true
-          schema:
-            type: string
-          description: Name of the AI Search index
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                usage_policy_id:
-                  type: string
-                  description: The usage policy id to be applied
-      responses:
-        '200':
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UpdateVectorIndexUsagePolicyResponse'
-        default:
-          description: Error response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                  message:
-                    type: string
-      x-stackql-sdk-source: VectorSearchIndexesAPI
   /api/2.0/vector-search/indexes/{index_name}/upsert-data:
     post:
       operationId: vector_search_indexes_upsert_data_vector_index
@@ -1916,65 +1603,6 @@ paths:
       x-stackql-sdk-source: VectorSearchIndexesAPI
 components:
   schemas:
-    AdjustedThroughputRequest:
-      type: object
-      properties:
-        concurrency:
-          type: number
-          description: Adjusted concurrency (total CPU) for the endpoint
-        maximum_concurrency_allowed:
-          type: number
-          description: Adjusted maximum concurrency allowed for the endpoint
-        minimal_concurrency_allowed:
-          type: number
-          description: Adjusted minimum concurrency allowed for the endpoint
-      description: Adjusted throughput request parameters
-    AutoEvalJob:
-      type: object
-      properties:
-        current_stage:
-          $ref: '#/components/schemas/AutoEvalStage'
-          description: Pipeline stage currently in progress.
-        dashboard_url:
-          type: string
-          description: Lakeview dashboard URL for the latest run's results.
-        metrics_table_full_name:
-          type: string
-          description: >-
-            Fully qualified Delta table name where per-run metrics are persisted
-            (``autoeval_metrics_<index>``).
-        mlflow_experiment_id:
-          type: string
-          description: >-
-            MLflow experiment_id used by the autoeval wheel. Stable per index.
-            The UI uses this to construct an "Open in MLflow" deep link without
-            an additional MLflow tag fetch.
-        mlflow_run_id:
-          type: string
-          description: MLflow run_id of the latest autoeval run. Per-run, latest only.
-        overall_progress:
-          type: number
-          description: >-
-            Overall progress across all stages, in the range [0.0, 1.0]. Capped
-            at 0.99 while the run is RUNNING — the bar only reaches 1.0 when
-            status flips to AUTO_EVAL_DISPLAY_STATUS_SUCCEEDED.
-        progress_on_current_stage:
-          type: integer
-          description: >-
-            Items completed within the current stage (e.g., queries generated,
-            (query_type, reranker, phase) tuples evaluated, results saved).
-        results_table_full_name:
-          type: string
-          description: >-
-            Fully qualified Delta table name where per-query results are
-            persisted (``autoeval_results_<index>``).
-        total_for_current_stage:
-          type: integer
-          description: Total items expected within the current stage.
-      description: >-
-        State of the most recent autoeval Databricks Jobs background-compute run
-        for an index. The UI
-            uses this to render the staged progress bar.
     ColumnInfo:
       type: object
       properties:
@@ -2033,11 +1661,6 @@ components:
             leave this field blank, all columns from the source table are synced
             with the index. The primary key column and embedding source column
             or embedding vector column are always synced.
-        effective_budget_policy_id:
-          type: string
-          description: The budget policy id applied to the AI Search index
-        effective_usage_policy_id:
-          type: string
         embedding_source_columns:
           type: array
           items:
@@ -2082,11 +1705,6 @@ components:
             leave this field blank, all columns from the source table are synced
             with the index. The primary key column and embedding source column
             or embedding vector column are always synced.
-        effective_budget_policy_id:
-          type: string
-          description: The budget policy id applied to the AI Search index
-        effective_usage_policy_id:
-          type: string
         embedding_source_columns:
           type: array
           items:
@@ -2132,13 +1750,6 @@ components:
           description: >-
             The columns that contain the embedding vectors. The format should be
             array[double].
-        requested_schema_json:
-          type: string
-          description: >-
-            The index schema exactly as the user supplied it on create,
-            preserving the original type spellings (e.g. ``integer``) rather
-            than Unity Catalog's canonical names (e.g. ``int``) that
-            ``schema_json`` returns.
         schema_json:
           type: string
           description: >-
@@ -2210,17 +1821,21 @@ components:
         scaling_info:
           $ref: '#/components/schemas/EndpointScalingInfo'
           description: Scaling information for the endpoint
-        throughput_info:
-          $ref: '#/components/schemas/EndpointThroughputInfo'
-          description: Throughput information for the endpoint
     EndpointScalingInfo:
       type: object
       properties:
         requested_target_qps:
           type: integer
+          description: >-
+            The requested QPS target for the endpoint. Best-effort; the system
+            does not guarantee this QPS will be achieved.
         state:
           $ref: '#/components/schemas/ScalingChangeState'
           description: The current state of the scaling change request.
+      description: >-
+        Scaling information for a Standard endpoint: the current scaling state,
+        the requested QPS
+            target, and the progress of an in-progress scaling change.
     EndpointStatus:
       type: object
       properties:
@@ -2231,37 +1846,6 @@ components:
           $ref: '#/components/schemas/EndpointStatusState'
           description: Current state of the endpoint
       description: Status information of an endpoint
-    EndpointThroughputInfo:
-      type: object
-      properties:
-        change_request_message:
-          type: string
-          description: Additional information about the throughput change request
-        change_request_state:
-          $ref: '#/components/schemas/ThroughputChangeRequestState'
-          description: The state of the most recent throughput change request
-        current_concurrency:
-          type: number
-          description: The current concurrency (total CPU) allocated to the endpoint
-        current_concurrency_utilization_percentage:
-          type: number
-          description: The current utilization of concurrency as a percentage (0-100)
-        current_num_replicas:
-          type: integer
-          description: The current number of replicas allocated to the endpoint
-        maximum_concurrency_allowed:
-          type: number
-          description: The maximum concurrency allowed for this endpoint
-        minimal_concurrency_allowed:
-          type: number
-          description: The minimum concurrency allowed for this endpoint
-        requested_concurrency:
-          type: number
-          description: The requested concurrency (total CPU) for the endpoint
-        requested_num_replicas:
-          type: integer
-          description: The requested number of replicas for the endpoint
-      description: Throughput information for an endpoint
     FacetResultData:
       type: object
       properties:
@@ -2278,38 +1862,6 @@ components:
           type: integer
           description: Number of facet rows returned.
       description: Facet aggregation rows returned by a query.
-    GetAutoEvalStatusResponse:
-      type: object
-      properties:
-        end_time_ms:
-          type: integer
-        job_id:
-          type: string
-          description: >-
-            Databricks Jobs job_id of the autoeval background-compute job for
-            this index, so the UI can surface a link to the job. Unset when no
-            autoeval job exists for the index yet.
-        latest_run:
-          $ref: '#/components/schemas/AutoEvalJob'
-          description: >-
-            State of the latest autoeval run, including stage progress.
-            Populated only while status is AUTO_EVAL_DISPLAY_STATUS_RUNNING and
-            the running wheel has reported at least one stage update. Absent for
-            terminal states.
-        run_as_user:
-          type: string
-          description: >-
-            The user the latest job run was created as. Used by the UI to
-            construct the per-run MLflow dashboard URL.
-        state_message:
-          type: string
-          description: >-
-            Free-form failure copy from the underlying job. Populated only when
-            status is AUTO_EVAL_DISPLAY_STATUS_FAILED. Capped server-side to
-            bound payload size when the job emits long stack traces.
-        status:
-          $ref: '#/components/schemas/AutoEvalDisplayStatus'
-          description: Current display status of the latest autoeval run.
     GetVectorSearchEndpointPermissionLevelsResponse:
       type: object
       properties:
@@ -2432,17 +1984,6 @@ components:
         effective_budget_policy_id:
           type: string
           description: The budget policy applied to the AI Search endpoint.
-    PatchEndpointThroughputResponse:
-      type: object
-      properties:
-        adjusted_request:
-          $ref: '#/components/schemas/AdjustedThroughputRequest'
-        message:
-          type: string
-          description: Message explaining the status or any adjustments made
-        status:
-          $ref: '#/components/schemas/ThroughputPatchStatus'
-          description: The status of the throughput change request
     QueryVectorIndexResponse:
       type: object
       properties:
@@ -2467,14 +2008,6 @@ components:
       properties:
         model:
           type: string
-        model_type:
-          $ref: '#/components/schemas/RerankerConfigModelType'
-          description: >-
-            EXPERIMENTAL. Discriminator for how the ``model`` field is
-            interpreted: BASE/UNSPECIFIED expects the literal
-            "databricks_reranker"; FINETUNED treats ``model`` as a Model Serving
-            endpoint name in the caller's workspace. See the doc comment on
-            ``model`` for the per-case contract.
         parameters:
           $ref: '#/components/schemas/RerankerConfigRerankerParameters'
           description: >-
@@ -2535,12 +2068,6 @@ components:
             A token that can be used to get the next page of results. If not
             present, there are no more results to show.
       description: Response containing user-visible metrics
-    RunAutoEvalResponse:
-      type: object
-      properties: {}
-    RunRerankerFinetuningResponse:
-      type: object
-      properties: {}
     ScanVectorIndexResponse:
       type: object
       properties:
@@ -2573,14 +2100,6 @@ components:
         name:
           type: string
           description: The name of the AI Search endpoint whose custom tags were updated.
-    UpdateVectorIndexUsagePolicyResponse:
-      type: object
-      properties:
-        effective_usage_policy_id:
-          type: string
-        usage_policy_id:
-          type: string
-          description: The updated usage policy id
     UpsertDataResult:
       type: object
       properties:
@@ -2715,62 +2234,6 @@ components:
           type: string
         permission_level:
           $ref: '#/components/schemas/VectorSearchEndpointPermissionLevel'
-    AutoEvalDisplayStatus:
-      type: string
-      x-enum:
-        - AUTO_EVAL_DISPLAY_STATUS_FAILED
-        - AUTO_EVAL_DISPLAY_STATUS_PENDING
-        - AUTO_EVAL_DISPLAY_STATUS_RUNNING
-        - AUTO_EVAL_DISPLAY_STATUS_SUCCEEDED
-      description: |-
-        Create a collection of name/value pairs.
-
-        Example enumeration:
-
-        >>> class Color(Enum):
-        ...     RED = 1
-        ...     BLUE = 2
-        ...     GREEN = 3
-
-        Access them by:
-
-        - attribute access:
-
-          >>> Color.RED
-          <Color.RED: 1>
-
-        - value lookup:
-
-          >>> Color(1)
-          <Color.RED: 1>
-
-        - name lookup:
-
-          >>> Color['RED']
-          <Color.RED: 1>
-
-        Enumerations can be iterated over, and know how many members they have:
-
-        >>> len(Color)
-        3
-
-        >>> list(Color)
-        [<Color.RED: 1>, <Color.BLUE: 2>, <Color.GREEN: 3>]
-
-        Methods can be added to enumerations, and members can have their own
-        attributes -- see the documentation for details.
-    AutoEvalStage:
-      type: string
-      x-enum:
-        - AUTO_EVAL_STAGE_FEW_SHOT_QUERIES
-        - AUTO_EVAL_STAGE_GENERATE_QUERIES
-        - AUTO_EVAL_STAGE_GENERATE_RESULTS
-        - AUTO_EVAL_STAGE_METRICS_COMPUTATION
-      description: >-
-        Pipeline stages within a single autoeval run, in execution order. Used
-        together with AutoEvalJob
-
-        to drive a staged progress bar in the UI.
     DeleteDataStatus:
       type: string
       x-enum:
@@ -2822,6 +2285,9 @@ components:
         - ONLINE
         - PROVISIONING
         - RED_STATE
+        - STARTING
+        - STOPPED
+        - STOPPING
         - YELLOW_STATE
       description: Current state of the endpoint
     EndpointType:
@@ -2864,12 +2330,6 @@ components:
         - ``CONTINUOUS``: If the pipeline uses continuous execution, the
         pipeline processes new data as
           it arrives in the source table to keep vector index fresh.
-    RerankerConfigModelType:
-      type: string
-      x-enum:
-        - MODEL_TYPE_BASE
-        - MODEL_TYPE_FINETUNED
-      description: EXPERIMENTAL. Selects how ``model`` is interpreted.
     ScalingChangeState:
       type: string
       x-enum:
@@ -2913,23 +2373,6 @@ components:
 
         Methods can be added to enumerations, and members can have their own
         attributes -- see the documentation for details.
-    ThroughputChangeRequestState:
-      type: string
-      x-enum:
-        - CHANGE_ADJUSTED
-        - CHANGE_FAILED
-        - CHANGE_IN_PROGRESS
-        - CHANGE_REACHED_MAXIMUM
-        - CHANGE_REACHED_MINIMUM
-        - CHANGE_SUCCESS
-      description: Throughput change request state
-    ThroughputPatchStatus:
-      type: string
-      x-enum:
-        - PATCH_ACCEPTED
-        - PATCH_FAILED
-        - PATCH_REJECTED
-      description: Response status for throughput change requests
     UpsertDataStatus:
       type: string
       x-enum:
@@ -3039,6 +2482,20 @@ components:
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        start:
+          operation:
+            $ref: >-
+              #/paths/~1api~12.0~1vector-search~1endpoints~1{endpoint_name}~1start/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        stop:
+          operation:
+            $ref: >-
+              #/paths/~1api~12.0~1vector-search~1endpoints~1{endpoint_name}~1stop/post
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
         update_endpoint_budget_policy:
           config:
             requestBodyTranslate:
@@ -3081,16 +2538,6 @@ components:
           operation:
             $ref: >-
               #/paths/~1api~12.0~1vector-search~1endpoints~1{endpoint_name}/patch
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        patch_throughput:
-          config:
-            requestBodyTranslate:
-              algorithm: naive
-          operation:
-            $ref: >-
-              #/paths/~1api~12.0~1vector-search~1endpoints~1{endpoint_name}~1throughput/patch
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -3263,54 +2710,6 @@ components:
         update: []
         delete:
           - $ref: '#/components/x-stackQL-resources/indexes/methods/delete'
-        replace: []
-    vector_search_indexes:
-      id: databricks_workspace.vectorsearch.vector_search_indexes
-      name: vector_search_indexes
-      title: Vector Search Indexes
-      methods:
-        vector_search_indexes_get_auto_eval_status:
-          operation:
-            $ref: '#/paths/~1api~12.0~1vector-search~1indexes~1{name}~1autoeval/get'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        run_auto_eval:
-          config:
-            requestBodyTranslate:
-              algorithm: naive
-          operation:
-            $ref: '#/paths/~1api~12.0~1vector-search~1indexes~1{name}~1autoeval/post'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        run_reranker_finetuning:
-          config:
-            requestBodyTranslate:
-              algorithm: naive
-          operation:
-            $ref: >-
-              #/paths/~1api~12.0~1vector-search~1indexes~1{name}~1reranker-finetuning/post
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        update_index_budget_policy:
-          config:
-            requestBodyTranslate:
-              algorithm: naive
-          operation:
-            $ref: >-
-              #/paths/~1api~12.0~1vector-search~1indexes~1{index_name}~1usage-policy/patch
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-      sqlVerbs:
-        select:
-          - $ref: >-
-              #/components/x-stackQL-resources/vector_search_indexes/methods/vector_search_indexes_get_auto_eval_status
-        insert: []
-        update: []
-        delete: []
         replace: []
 x-stackQL-config:
   pagination:

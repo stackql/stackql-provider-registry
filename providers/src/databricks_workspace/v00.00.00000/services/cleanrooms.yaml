@@ -6,14 +6,31 @@ info:
     APIs), generated from the Databricks Python SDK.
   version: 0.1.0
   x-stackql-sdk-version: 0.123.0
-  x-stackql-date-generated: '2026-07-31'
+  x-stackql-date-generated: '2026-11-01'
   x-stackql-sdk-namespace: databricks.sdk.service.cleanrooms
 servers:
-  - url: https://{deployment_name}.cloud.databricks.com
+  - url: https://{deployment_name}.{workspace_domain}
     variables:
       deployment_name:
-        description: The Databricks Workspace Deployment Name
+        description: >-
+          The Databricks workspace deployment name: the host prefix of the
+          workspace URL (dbc-abcd0123-a1bc on AWS, adb-1234567890123456.7 on
+          Azure, 1234567890123456.7 on GCP). Set DATABRICKS_DEPLOYMENT_NAME to
+          default it for the session.
         default: dbc-abcd0123-a1bc
+        x-stackQL-envVar: DATABRICKS_DEPLOYMENT_NAME
+      workspace_domain:
+        description: >-
+          The Databricks workspace domain suffix for the cloud. Selected by
+          DATABRICKS_CLOUD (aws, azure or gcp; default aws).
+        default: cloud.databricks.com
+        x-stackQL-envVarSelector:
+          envVar: DATABRICKS_CLOUD
+          default: aws
+          values:
+            aws: cloud.databricks.com
+            azure: azuredatabricks.net
+            gcp: gcp.databricks.com
 paths:
   /api/2.0/clean-rooms/{clean_room_name}/assets/{asset_type.value}/{name}/revisions/{etag}:
     get:
@@ -211,289 +228,272 @@ paths:
             schema:
               type: object
               properties:
-                asset:
+                name:
+                  type: string
+                  description: >-
+                    A fully qualified name that uniquely identifies the asset
+                    within the clean room. This is also the name displayed in
+                    the clean room UI. For UC securable assets (tables, volumes,
+                    etc.), the format is
+                    *shared_catalog*.*shared_schema*.*asset_name* For notebooks,
+                    the name is the notebook file name. For jar analyses, the
+                    name is the jar analysis name. For Genie spaces, the name is
+                    derived from the clean room; the caller does not choose it.
+                asset_type:
+                  type: string
+                  x-enum:
+                    - FOREIGN_TABLE
+                    - JAR_ANALYSIS
+                    - NOTEBOOK_FILE
+                    - TABLE
+                    - VIEW
+                    - VOLUME
+                  description: The type of the asset.
+                added_at:
+                  type: integer
+                  description: >-
+                    When the asset is added to the clean room, in epoch
+                    milliseconds.
+                clean_room_name:
+                  type: string
+                  description: >-
+                    The name of the clean room this asset belongs to. This field
+                    is required for create operations and populated by the
+                    server for responses.
+                foreign_table:
                   type: object
                   properties:
-                    name:
+                    columns:
                       type: string
-                      description: >-
-                        A fully qualified name that uniquely identifies the
-                        asset within the clean room. This is also the name
-                        displayed in the clean room UI. For UC securable assets
-                        (tables, volumes, etc.), the format is
-                        *shared_catalog*.*shared_schema*.*asset_name* For
-                        notebooks, the name is the notebook file name. For jar
-                        analyses, the name is the jar analysis name.
-                    asset_type:
+                  description: >-
+                    Foreign table details available to all collaborators of the
+                    clean room. Present if and only if **asset_type** is
+                    **FOREIGN_TABLE**
+                foreign_table_local_details:
+                  type: object
+                  properties:
+                    local_name:
                       type: string
-                      x-enum:
-                        - FOREIGN_TABLE
-                        - GENIE_SPACE
-                        - JAR_ANALYSIS
-                        - NOTEBOOK_FILE
-                        - TABLE
-                        - VIEW
-                        - VOLUME
-                      description: The type of the asset.
-                    added_at:
-                      type: integer
-                      description: >-
-                        When the asset is added to the clean room, in epoch
-                        milliseconds.
-                    clean_room_name:
-                      type: string
-                      description: >-
-                        The name of the clean room this asset belongs to. This
-                        field is required for create operations and populated by
-                        the server for responses.
-                    foreign_table:
-                      type: object
-                      properties:
-                        columns:
-                          type: string
-                      description: >-
-                        Foreign table details available to all collaborators of
-                        the clean room. Present if and only if **asset_type** is
-                        **FOREIGN_TABLE**
-                    foreign_table_local_details:
-                      type: object
-                      properties:
-                        local_name:
-                          type: string
-                      required:
-                        - local_name
-                      description: >-
-                        Local details for a foreign that are only available to
-                        its owner. Present if and only if **asset_type** is
-                        **FOREIGN_TABLE**
-                    genie_space:
-                      type: object
-                      properties: {}
-                      description: >-
-                        Genie space details. The space_id sub-field is only
-                        returned to the owner; other fields (e.g.
-                        prompts_limit_per_day) are visible to all collaborators.
-                        Present if and only if **asset_type** is **GENIE_SPACE**
-                    jar_analysis:
-                      type: object
-                      properties:
-                        central_jar_file_paths:
-                          type: array
-                          items:
-                            type: string
-                        description:
-                          type: string
-                          description: >-
-                            Optional description of the jar analysis shown to
-                            all collaborators.
-                        environment_version:
-                          type: string
-                          description: >-
-                            The serverless environment version used to execute
-                            the JAR analysis (e.g. "4"). Defaults to
-                            "4-scala-preview" if not specified.
-                        etag:
-                          type: string
-                          description: >-
-                            Server generated etag that represents the jar
-                            analysis version.
-                        main_class_name:
-                          type: string
-                          description: >-
-                            The full name of the class containing the main
-                            method to be executed. This class must be contained
-                            in a JAR provided as a library The code must use
-                            ``SparkContext.getOrCreate`` to obtain a Spark
-                            context; otherwise, runs of the job fail
-                        review_state:
-                          type: string
-                          x-enum:
-                            - APPROVED
-                            - PENDING
-                            - REJECTED
-                          description: Top-level status derived from all reviews.
-                        reviews:
-                          type: array
-                          items:
-                            type: object
-                            properties:
-                              comment:
-                                type: string
-                                description: review comment
-                              created_at_millis:
-                                type: integer
-                                description: timestamp of when the review was submitted
-                              review_state:
-                                type: string
-                                x-enum:
-                                  - APPROVED
-                                  - PENDING
-                                  - REJECTED
-                                description: review outcome
-                              review_sub_reason:
-                                type: string
-                                x-enum:
-                                  - AUTO_APPROVED
-                                description: >-
-                                  specified when the review was not explicitly
-                                  made by a user
-                              reviewer_collaborator_alias:
-                                type: string
-                                description: collaborator alias of the reviewer
-                            description: >-
-                              This only applies to a JAR Analysis as a
-                              first-class asset in the Clean Room, and not to
-                              Volumes
-                          description: All existing approvals or rejections.
-                        runner_collaborator_aliases:
-                          type: array
-                          items:
-                            type: string
-                          description: Collaborators that can run the jar.
-                      description: >-
-                        Jar analysis details available to all collaborators of
-                        the clean room. Present if and only if **asset_type** is
-                        **JAR_ANALYSIS**
-                    notebook:
-                      type: object
-                      properties:
-                        notebook_content:
-                          type: string
-                        description:
-                          type: string
-                          description: >-
-                            Optional description of the notebook shown to all
-                            collaborators.
-                        environment_version:
-                          type: string
-                          description: >-
-                            The serverless environment version used to execute
-                            the notebook (e.g. "4"). Defaults to "2" if not
-                            specified.
-                        etag:
-                          type: string
-                          description: >-
-                            Server generated etag that represents the notebook
-                            version.
-                        review_state:
-                          type: string
-                          x-enum:
-                            - APPROVED
-                            - PENDING
-                            - REJECTED
-                          description: Top-level status derived from all reviews
-                        reviews:
-                          type: array
-                          items:
-                            type: object
-                            properties:
-                              comment:
-                                type: string
-                              created_at_millis:
-                                type: integer
-                                description: >-
-                                  When the review was submitted, in epoch
-                                  milliseconds
-                              review_state:
-                                type: string
-                                x-enum:
-                                  - APPROVED
-                                  - PENDING
-                                  - REJECTED
-                                description: Review outcome
-                              review_sub_reason:
-                                type: string
-                                x-enum:
-                                  - AUTO_APPROVED
-                                  - BACKFILLED
-                                description: >-
-                                  Specified when the review was not explicitly
-                                  made by a user
-                              reviewer_collaborator_alias:
-                                type: string
-                                description: Collaborator alias of the reviewer
-                          description: All existing approvals or rejections
-                        runner_collaborator_aliases:
-                          type: array
-                          items:
-                            type: string
-                          description: Aliases of collaborators that can run the notebook.
-                      required:
-                        - notebook_content
-                      description: >-
-                        Notebook details available to all collaborators of the
-                        clean room. Present if and only if **asset_type** is
-                        **NOTEBOOK_FILE**
-                    owner_collaborator_alias:
-                      type: string
-                      description: The alias of the collaborator who owns this asset
-                    status:
-                      type: string
-                      x-enum:
-                        - ACTIVE
-                        - PENDING
-                        - PERMISSION_DENIED
-                      description: Status of the asset
-                    table:
-                      type: object
-                      properties:
-                        columns:
-                          type: string
-                      description: >-
-                        Table details available to all collaborators of the
-                        clean room. Present if and only if **asset_type** is
-                        **TABLE**
-                    table_local_details:
-                      type: object
-                      properties:
-                        local_name:
-                          type: string
-                        partitions:
-                          type: string
-                          description: >-
-                            Partition filtering specification for a shared
-                            table.
-                      required:
-                        - local_name
-                      description: >-
-                        Local details for a table that are only available to its
-                        owner. Present if and only if **asset_type** is
-                        **TABLE**
-                    view:
-                      type: object
-                      properties:
-                        columns:
-                          type: string
-                      description: >-
-                        View details available to all collaborators of the clean
-                        room. Present if and only if **asset_type** is **VIEW**
-                    view_local_details:
-                      type: object
-                      properties:
-                        local_name:
-                          type: string
-                      required:
-                        - local_name
-                      description: >-
-                        Local details for a view that are only available to its
-                        owner. Present if and only if **asset_type** is **VIEW**
-                    volume_local_details:
-                      type: object
-                      properties:
-                        local_name:
-                          type: string
-                      required:
-                        - local_name
-                      description: >-
-                        Local details for a volume that are only available to
-                        its owner. Present if and only if **asset_type** is
-                        **VOLUME**
                   required:
-                    - name
-                    - asset_type
-                  description: Metadata of the clean room asset
+                    - local_name
+                  description: >-
+                    Local details for a foreign that are only available to its
+                    owner. Present if and only if **asset_type** is
+                    **FOREIGN_TABLE**
+                jar_analysis:
+                  type: object
+                  properties:
+                    central_jar_file_paths:
+                      type: array
+                      items:
+                        type: string
+                    description:
+                      type: string
+                      description: >-
+                        Optional description of the jar analysis shown to all
+                        collaborators.
+                    environment_version:
+                      type: string
+                      description: >-
+                        The serverless environment version used to execute the
+                        JAR analysis (e.g. "4"). If not specified, uses the
+                        service-configured JAR analysis default.
+                    etag:
+                      type: string
+                      description: >-
+                        Server generated etag that represents the jar analysis
+                        version.
+                    main_class_name:
+                      type: string
+                      description: >-
+                        The full name of the class containing the main method to
+                        be executed. This class must be contained in a JAR
+                        provided as a library The code must use
+                        ``SparkContext.getOrCreate`` to obtain a Spark context;
+                        otherwise, runs of the job fail
+                    review_state:
+                      type: string
+                      x-enum:
+                        - APPROVED
+                        - PENDING
+                        - REJECTED
+                      description: Top-level status derived from all reviews.
+                    reviews:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          comment:
+                            type: string
+                            description: review comment
+                          created_at_millis:
+                            type: integer
+                            description: timestamp of when the review was submitted
+                          review_state:
+                            type: string
+                            x-enum:
+                              - APPROVED
+                              - PENDING
+                              - REJECTED
+                            description: review outcome
+                          review_sub_reason:
+                            type: string
+                            x-enum:
+                              - AUTO_APPROVED
+                            description: >-
+                              specified when the review was not explicitly made
+                              by a user
+                          reviewer_collaborator_alias:
+                            type: string
+                            description: collaborator alias of the reviewer
+                        description: >-
+                          This only applies to a JAR Analysis as a first-class
+                          asset in the Clean Room, and not to Volumes
+                      description: All existing approvals or rejections.
+                    runner_collaborator_aliases:
+                      type: array
+                      items:
+                        type: string
+                      description: Collaborators that can run the jar.
+                  description: >-
+                    Jar analysis details available to all collaborators of the
+                    clean room. Present if and only if **asset_type** is
+                    **JAR_ANALYSIS**
+                notebook:
+                  type: object
+                  properties:
+                    notebook_content:
+                      type: string
+                    description:
+                      type: string
+                      description: >-
+                        Optional description of the notebook shown to all
+                        collaborators.
+                    environment_version:
+                      type: string
+                      description: >-
+                        The serverless environment version used to execute the
+                        notebook (e.g. "4"). Defaults to "2" if not specified.
+                    etag:
+                      type: string
+                      description: >-
+                        Server generated etag that represents the notebook
+                        version.
+                    review_state:
+                      type: string
+                      x-enum:
+                        - APPROVED
+                        - PENDING
+                        - REJECTED
+                      description: Top-level status derived from all reviews
+                    reviews:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          comment:
+                            type: string
+                          created_at_millis:
+                            type: integer
+                            description: >-
+                              When the review was submitted, in epoch
+                              milliseconds
+                          review_state:
+                            type: string
+                            x-enum:
+                              - APPROVED
+                              - PENDING
+                              - REJECTED
+                            description: Review outcome
+                          review_sub_reason:
+                            type: string
+                            x-enum:
+                              - AUTO_APPROVED
+                              - BACKFILLED
+                            description: >-
+                              Specified when the review was not explicitly made
+                              by a user
+                          reviewer_collaborator_alias:
+                            type: string
+                            description: Collaborator alias of the reviewer
+                      description: All existing approvals or rejections
+                    runner_collaborator_aliases:
+                      type: array
+                      items:
+                        type: string
+                      description: Aliases of collaborators that can run the notebook.
+                  required:
+                    - notebook_content
+                  description: >-
+                    Notebook details available to all collaborators of the clean
+                    room. Present if and only if **asset_type** is
+                    **NOTEBOOK_FILE**
+                owner_collaborator_alias:
+                  type: string
+                  description: The alias of the collaborator who owns this asset
+                status:
+                  type: string
+                  x-enum:
+                    - ACTIVE
+                    - PENDING
+                    - PERMISSION_DENIED
+                  description: Status of the asset
+                table:
+                  type: object
+                  properties:
+                    columns:
+                      type: string
+                  description: >-
+                    Table details available to all collaborators of the clean
+                    room. Present if and only if **asset_type** is **TABLE** or
+                    **STREAMING_TABLE**
+                table_local_details:
+                  type: object
+                  properties:
+                    local_name:
+                      type: string
+                    partitions:
+                      type: string
+                      description: Partition filtering specification for a shared table.
+                  required:
+                    - local_name
+                  description: >-
+                    Local details for a table that are only available to its
+                    owner. Present if and only if **asset_type** is **TABLE** or
+                    **STREAMING_TABLE**
+                view:
+                  type: object
+                  properties:
+                    columns:
+                      type: string
+                  description: >-
+                    View details available to all collaborators of the clean
+                    room. Present if and only if **asset_type** is **VIEW** or
+                    **METRIC_VIEW**
+                view_local_details:
+                  type: object
+                  properties:
+                    local_name:
+                      type: string
+                  required:
+                    - local_name
+                  description: >-
+                    Local details for a view that are only available to its
+                    owner. Present if and only if **asset_type** is **VIEW** or
+                    **METRIC_VIEW**
+                volume_local_details:
+                  type: object
+                  properties:
+                    local_name:
+                      type: string
+                  required:
+                    - local_name
+                  description: >-
+                    Local details for a volume that are only available to its
+                    owner. Present if and only if **asset_type** is **VOLUME**
               required:
-                - asset
+                - name
+                - asset_type
       responses:
         '200':
           description: Success
@@ -608,7 +608,6 @@ paths:
                   type: string
                   x-enum:
                     - FOREIGN_TABLE
-                    - GENIE_SPACE
                     - JAR_ANALYSIS
                     - NOTEBOOK_FILE
                     - TABLE
@@ -818,7 +817,7 @@ paths:
           *shared_catalog*.*shared_schema*.*asset_name*
 
           For notebooks, the name is the notebook file name. For jar analyses, the name is the jar analysis
-          name.
+          name. For Genie spaces, the name is derived from the clean room; the caller does not choose it.
         :param asset: :class:`CleanRoomAsset`
           The asset to update. The asset's ``name`` and ``asset_type`` fields are used to identify the asset
           to update.
@@ -847,310 +846,281 @@ paths:
             For UC securable assets (tables, volumes, etc.), the format is
             *shared_catalog*.*shared_schema*.*asset_name* For notebooks, the
             name is the notebook file name. For jar analyses, the name is the
-            jar analysis name.
+            jar analysis name. For Genie spaces, the name is derived from the
+            clean room; the caller does not choose it.
       requestBody:
         content:
           application/json:
             schema:
               type: object
               properties:
+                name:
+                  type: string
+                  description: >-
+                    A fully qualified name that uniquely identifies the asset
+                    within the clean room. This is also the name displayed in
+                    the clean room UI. For UC securable assets (tables, volumes,
+                    etc.), the format is
+                    *shared_catalog*.*shared_schema*.*asset_name* For notebooks,
+                    the name is the notebook file name. For jar analyses, the
+                    name is the jar analysis name. For Genie spaces, the name is
+                    derived from the clean room; the caller does not choose it.
                 asset_type:
                   type: string
                   x-enum:
                     - FOREIGN_TABLE
-                    - GENIE_SPACE
                     - JAR_ANALYSIS
                     - NOTEBOOK_FILE
                     - TABLE
                     - VIEW
                     - VOLUME
                   description: The type of the asset.
-                asset:
+                added_at:
+                  type: integer
+                  description: >-
+                    When the asset is added to the clean room, in epoch
+                    milliseconds.
+                clean_room_name:
+                  type: string
+                  description: >-
+                    The name of the clean room this asset belongs to. This field
+                    is required for create operations and populated by the
+                    server for responses.
+                foreign_table:
                   type: object
                   properties:
-                    name:
+                    columns:
                       type: string
-                      description: >-
-                        A fully qualified name that uniquely identifies the
-                        asset within the clean room. This is also the name
-                        displayed in the clean room UI. For UC securable assets
-                        (tables, volumes, etc.), the format is
-                        *shared_catalog*.*shared_schema*.*asset_name* For
-                        notebooks, the name is the notebook file name. For jar
-                        analyses, the name is the jar analysis name.
-                    asset_type:
-                      type: string
-                      x-enum:
-                        - FOREIGN_TABLE
-                        - GENIE_SPACE
-                        - JAR_ANALYSIS
-                        - NOTEBOOK_FILE
-                        - TABLE
-                        - VIEW
-                        - VOLUME
-                      description: The type of the asset.
-                    added_at:
-                      type: integer
-                      description: >-
-                        When the asset is added to the clean room, in epoch
-                        milliseconds.
-                    clean_room_name:
-                      type: string
-                      description: >-
-                        The name of the clean room this asset belongs to. This
-                        field is required for create operations and populated by
-                        the server for responses.
-                    foreign_table:
-                      type: object
-                      properties:
-                        columns:
-                          type: string
-                      description: >-
-                        Foreign table details available to all collaborators of
-                        the clean room. Present if and only if **asset_type** is
-                        **FOREIGN_TABLE**
-                    foreign_table_local_details:
-                      type: object
-                      properties:
-                        local_name:
-                          type: string
-                      required:
-                        - local_name
-                      description: >-
-                        Local details for a foreign that are only available to
-                        its owner. Present if and only if **asset_type** is
-                        **FOREIGN_TABLE**
-                    genie_space:
-                      type: object
-                      properties: {}
-                      description: >-
-                        Genie space details. The space_id sub-field is only
-                        returned to the owner; other fields (e.g.
-                        prompts_limit_per_day) are visible to all collaborators.
-                        Present if and only if **asset_type** is **GENIE_SPACE**
-                    jar_analysis:
-                      type: object
-                      properties:
-                        central_jar_file_paths:
-                          type: array
-                          items:
-                            type: string
-                        description:
-                          type: string
-                          description: >-
-                            Optional description of the jar analysis shown to
-                            all collaborators.
-                        environment_version:
-                          type: string
-                          description: >-
-                            The serverless environment version used to execute
-                            the JAR analysis (e.g. "4"). Defaults to
-                            "4-scala-preview" if not specified.
-                        etag:
-                          type: string
-                          description: >-
-                            Server generated etag that represents the jar
-                            analysis version.
-                        main_class_name:
-                          type: string
-                          description: >-
-                            The full name of the class containing the main
-                            method to be executed. This class must be contained
-                            in a JAR provided as a library The code must use
-                            ``SparkContext.getOrCreate`` to obtain a Spark
-                            context; otherwise, runs of the job fail
-                        review_state:
-                          type: string
-                          x-enum:
-                            - APPROVED
-                            - PENDING
-                            - REJECTED
-                          description: Top-level status derived from all reviews.
-                        reviews:
-                          type: array
-                          items:
-                            type: object
-                            properties:
-                              comment:
-                                type: string
-                                description: review comment
-                              created_at_millis:
-                                type: integer
-                                description: timestamp of when the review was submitted
-                              review_state:
-                                type: string
-                                x-enum:
-                                  - APPROVED
-                                  - PENDING
-                                  - REJECTED
-                                description: review outcome
-                              review_sub_reason:
-                                type: string
-                                x-enum:
-                                  - AUTO_APPROVED
-                                description: >-
-                                  specified when the review was not explicitly
-                                  made by a user
-                              reviewer_collaborator_alias:
-                                type: string
-                                description: collaborator alias of the reviewer
-                            description: >-
-                              This only applies to a JAR Analysis as a
-                              first-class asset in the Clean Room, and not to
-                              Volumes
-                          description: All existing approvals or rejections.
-                        runner_collaborator_aliases:
-                          type: array
-                          items:
-                            type: string
-                          description: Collaborators that can run the jar.
-                      description: >-
-                        Jar analysis details available to all collaborators of
-                        the clean room. Present if and only if **asset_type** is
-                        **JAR_ANALYSIS**
-                    notebook:
-                      type: object
-                      properties:
-                        notebook_content:
-                          type: string
-                        description:
-                          type: string
-                          description: >-
-                            Optional description of the notebook shown to all
-                            collaborators.
-                        environment_version:
-                          type: string
-                          description: >-
-                            The serverless environment version used to execute
-                            the notebook (e.g. "4"). Defaults to "2" if not
-                            specified.
-                        etag:
-                          type: string
-                          description: >-
-                            Server generated etag that represents the notebook
-                            version.
-                        review_state:
-                          type: string
-                          x-enum:
-                            - APPROVED
-                            - PENDING
-                            - REJECTED
-                          description: Top-level status derived from all reviews
-                        reviews:
-                          type: array
-                          items:
-                            type: object
-                            properties:
-                              comment:
-                                type: string
-                              created_at_millis:
-                                type: integer
-                                description: >-
-                                  When the review was submitted, in epoch
-                                  milliseconds
-                              review_state:
-                                type: string
-                                x-enum:
-                                  - APPROVED
-                                  - PENDING
-                                  - REJECTED
-                                description: Review outcome
-                              review_sub_reason:
-                                type: string
-                                x-enum:
-                                  - AUTO_APPROVED
-                                  - BACKFILLED
-                                description: >-
-                                  Specified when the review was not explicitly
-                                  made by a user
-                              reviewer_collaborator_alias:
-                                type: string
-                                description: Collaborator alias of the reviewer
-                          description: All existing approvals or rejections
-                        runner_collaborator_aliases:
-                          type: array
-                          items:
-                            type: string
-                          description: Aliases of collaborators that can run the notebook.
-                      required:
-                        - notebook_content
-                      description: >-
-                        Notebook details available to all collaborators of the
-                        clean room. Present if and only if **asset_type** is
-                        **NOTEBOOK_FILE**
-                    owner_collaborator_alias:
-                      type: string
-                      description: The alias of the collaborator who owns this asset
-                    status:
-                      type: string
-                      x-enum:
-                        - ACTIVE
-                        - PENDING
-                        - PERMISSION_DENIED
-                      description: Status of the asset
-                    table:
-                      type: object
-                      properties:
-                        columns:
-                          type: string
-                      description: >-
-                        Table details available to all collaborators of the
-                        clean room. Present if and only if **asset_type** is
-                        **TABLE**
-                    table_local_details:
-                      type: object
-                      properties:
-                        local_name:
-                          type: string
-                        partitions:
-                          type: string
-                          description: >-
-                            Partition filtering specification for a shared
-                            table.
-                      required:
-                        - local_name
-                      description: >-
-                        Local details for a table that are only available to its
-                        owner. Present if and only if **asset_type** is
-                        **TABLE**
-                    view:
-                      type: object
-                      properties:
-                        columns:
-                          type: string
-                      description: >-
-                        View details available to all collaborators of the clean
-                        room. Present if and only if **asset_type** is **VIEW**
-                    view_local_details:
-                      type: object
-                      properties:
-                        local_name:
-                          type: string
-                      required:
-                        - local_name
-                      description: >-
-                        Local details for a view that are only available to its
-                        owner. Present if and only if **asset_type** is **VIEW**
-                    volume_local_details:
-                      type: object
-                      properties:
-                        local_name:
-                          type: string
-                      required:
-                        - local_name
-                      description: >-
-                        Local details for a volume that are only available to
-                        its owner. Present if and only if **asset_type** is
-                        **VOLUME**
-                  required:
-                    - name
-                    - asset_type
                   description: >-
-                    The asset to update. The asset's ``name`` and ``asset_type``
-                    fields are used to identify the asset to update.
+                    Foreign table details available to all collaborators of the
+                    clean room. Present if and only if **asset_type** is
+                    **FOREIGN_TABLE**
+                foreign_table_local_details:
+                  type: object
+                  properties:
+                    local_name:
+                      type: string
+                  required:
+                    - local_name
+                  description: >-
+                    Local details for a foreign that are only available to its
+                    owner. Present if and only if **asset_type** is
+                    **FOREIGN_TABLE**
+                jar_analysis:
+                  type: object
+                  properties:
+                    central_jar_file_paths:
+                      type: array
+                      items:
+                        type: string
+                    description:
+                      type: string
+                      description: >-
+                        Optional description of the jar analysis shown to all
+                        collaborators.
+                    environment_version:
+                      type: string
+                      description: >-
+                        The serverless environment version used to execute the
+                        JAR analysis (e.g. "4"). If not specified, uses the
+                        service-configured JAR analysis default.
+                    etag:
+                      type: string
+                      description: >-
+                        Server generated etag that represents the jar analysis
+                        version.
+                    main_class_name:
+                      type: string
+                      description: >-
+                        The full name of the class containing the main method to
+                        be executed. This class must be contained in a JAR
+                        provided as a library The code must use
+                        ``SparkContext.getOrCreate`` to obtain a Spark context;
+                        otherwise, runs of the job fail
+                    review_state:
+                      type: string
+                      x-enum:
+                        - APPROVED
+                        - PENDING
+                        - REJECTED
+                      description: Top-level status derived from all reviews.
+                    reviews:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          comment:
+                            type: string
+                            description: review comment
+                          created_at_millis:
+                            type: integer
+                            description: timestamp of when the review was submitted
+                          review_state:
+                            type: string
+                            x-enum:
+                              - APPROVED
+                              - PENDING
+                              - REJECTED
+                            description: review outcome
+                          review_sub_reason:
+                            type: string
+                            x-enum:
+                              - AUTO_APPROVED
+                            description: >-
+                              specified when the review was not explicitly made
+                              by a user
+                          reviewer_collaborator_alias:
+                            type: string
+                            description: collaborator alias of the reviewer
+                        description: >-
+                          This only applies to a JAR Analysis as a first-class
+                          asset in the Clean Room, and not to Volumes
+                      description: All existing approvals or rejections.
+                    runner_collaborator_aliases:
+                      type: array
+                      items:
+                        type: string
+                      description: Collaborators that can run the jar.
+                  description: >-
+                    Jar analysis details available to all collaborators of the
+                    clean room. Present if and only if **asset_type** is
+                    **JAR_ANALYSIS**
+                notebook:
+                  type: object
+                  properties:
+                    notebook_content:
+                      type: string
+                    description:
+                      type: string
+                      description: >-
+                        Optional description of the notebook shown to all
+                        collaborators.
+                    environment_version:
+                      type: string
+                      description: >-
+                        The serverless environment version used to execute the
+                        notebook (e.g. "4"). Defaults to "2" if not specified.
+                    etag:
+                      type: string
+                      description: >-
+                        Server generated etag that represents the notebook
+                        version.
+                    review_state:
+                      type: string
+                      x-enum:
+                        - APPROVED
+                        - PENDING
+                        - REJECTED
+                      description: Top-level status derived from all reviews
+                    reviews:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          comment:
+                            type: string
+                          created_at_millis:
+                            type: integer
+                            description: >-
+                              When the review was submitted, in epoch
+                              milliseconds
+                          review_state:
+                            type: string
+                            x-enum:
+                              - APPROVED
+                              - PENDING
+                              - REJECTED
+                            description: Review outcome
+                          review_sub_reason:
+                            type: string
+                            x-enum:
+                              - AUTO_APPROVED
+                              - BACKFILLED
+                            description: >-
+                              Specified when the review was not explicitly made
+                              by a user
+                          reviewer_collaborator_alias:
+                            type: string
+                            description: Collaborator alias of the reviewer
+                      description: All existing approvals or rejections
+                    runner_collaborator_aliases:
+                      type: array
+                      items:
+                        type: string
+                      description: Aliases of collaborators that can run the notebook.
+                  required:
+                    - notebook_content
+                  description: >-
+                    Notebook details available to all collaborators of the clean
+                    room. Present if and only if **asset_type** is
+                    **NOTEBOOK_FILE**
+                owner_collaborator_alias:
+                  type: string
+                  description: The alias of the collaborator who owns this asset
+                status:
+                  type: string
+                  x-enum:
+                    - ACTIVE
+                    - PENDING
+                    - PERMISSION_DENIED
+                  description: Status of the asset
+                table:
+                  type: object
+                  properties:
+                    columns:
+                      type: string
+                  description: >-
+                    Table details available to all collaborators of the clean
+                    room. Present if and only if **asset_type** is **TABLE** or
+                    **STREAMING_TABLE**
+                table_local_details:
+                  type: object
+                  properties:
+                    local_name:
+                      type: string
+                    partitions:
+                      type: string
+                      description: Partition filtering specification for a shared table.
+                  required:
+                    - local_name
+                  description: >-
+                    Local details for a table that are only available to its
+                    owner. Present if and only if **asset_type** is **TABLE** or
+                    **STREAMING_TABLE**
+                view:
+                  type: object
+                  properties:
+                    columns:
+                      type: string
+                  description: >-
+                    View details available to all collaborators of the clean
+                    room. Present if and only if **asset_type** is **VIEW** or
+                    **METRIC_VIEW**
+                view_local_details:
+                  type: object
+                  properties:
+                    local_name:
+                      type: string
+                  required:
+                    - local_name
+                  description: >-
+                    Local details for a view that are only available to its
+                    owner. Present if and only if **asset_type** is **VIEW** or
+                    **METRIC_VIEW**
+                volume_local_details:
+                  type: object
+                  properties:
+                    local_name:
+                      type: string
+                  required:
+                    - local_name
+                  description: >-
+                    Local details for a volume that are only available to its
+                    owner. Present if and only if **asset_type** is **VOLUME**
               required:
+                - name
                 - asset_type
-                - asset
+                - asset_type
       responses:
         '200':
           description: Success
@@ -1421,43 +1391,35 @@ paths:
             schema:
               type: object
               properties:
-                auto_approval_rule:
-                  type: object
-                  properties:
-                    author_collaborator_alias:
-                      type: string
-                    author_scope:
-                      type: string
-                      x-enum:
-                        - ANY_AUTHOR
-                      description: >-
-                        Scope of authors covered by the rule. Only one of
-                        ``author_collaborator_alias`` and ``author_scope`` can
-                        be set.
-                    clean_room_name:
-                      type: string
-                      description: >-
-                        The name of the clean room this auto-approval rule
-                        belongs to.
-                    created_at:
-                      type: integer
-                      description: >-
-                        Timestamp of when the rule was created, in epoch
-                        milliseconds.
-                    rule_id:
-                      type: string
-                      description: A generated UUID identifying the rule.
-                    rule_owner_collaborator_alias:
-                      type: string
-                      description: The owner of the rule to whom the rule applies.
-                    runner_collaborator_alias:
-                      type: string
-                      description: Collaborator alias of the runner covered by the rule.
+                author_collaborator_alias:
+                  type: string
+                author_scope:
+                  type: string
+                  x-enum:
+                    - ANY_AUTHOR
                   description: >-
-                    The auto-approval rule to update. The rule_id field is used
-                    to identify the rule to update.
-              required:
-                - auto_approval_rule
+                    Scope of authors covered by the rule. Only one of
+                    ``author_collaborator_alias`` and ``author_scope`` can be
+                    set.
+                clean_room_name:
+                  type: string
+                  description: >-
+                    The name of the clean room this auto-approval rule belongs
+                    to.
+                created_at:
+                  type: integer
+                  description: >-
+                    Timestamp of when the rule was created, in epoch
+                    milliseconds.
+                rule_id:
+                  type: string
+                  description: A generated UUID identifying the rule.
+                rule_owner_collaborator_alias:
+                  type: string
+                  description: The owner of the rule to whom the rule applies.
+                runner_collaborator_alias:
+                  type: string
+                  description: Collaborator alias of the runner covered by the rule.
       responses:
         '200':
           description: Success
@@ -1658,14 +1620,95 @@ paths:
             schema:
               type: object
               properties:
-                clean_room:
+                access_restricted:
+                  type: string
+                  x-enum:
+                    - CSP_MISMATCH
+                    - NO_RESTRICTION
+                  description: >-
+                    Create a collection of name/value pairs.
+
+
+                    Example enumeration:
+
+
+                    >>> class Color(Enum):
+
+                    ...     RED = 1
+
+                    ...     BLUE = 2
+
+                    ...     GREEN = 3
+
+
+                    Access them by:
+
+
+                    - attribute access:
+
+                      >>> Color.RED
+                      <Color.RED: 1>
+
+                    - value lookup:
+
+                      >>> Color(1)
+                      <Color.RED: 1>
+
+                    - name lookup:
+
+                      >>> Color['RED']
+                      <Color.RED: 1>
+
+                    Enumerations can be iterated over, and know how many members
+                    they have:
+
+
+                    >>> len(Color)
+
+                    3
+
+
+                    >>> list(Color)
+
+                    [<Color.RED: 1>, <Color.BLUE: 2>, <Color.GREEN: 3>]
+
+
+                    Methods can be added to enumerations, and members can have
+                    their own
+
+                    attributes -- see the documentation for details.
+                comment:
+                  type: string
+                created_at:
+                  type: integer
+                  description: When the clean room was created, in epoch milliseconds.
+                enable_shared_output:
+                  type: boolean
+                  description: >-
+                    Whether allow task to write to shared output schema. When
+                    enabled, clean room task runs triggered by the current
+                    collaborator can write to the run-scoped shared output
+                    schema which is accessible by all collaborators.
+                local_collaborator_alias:
+                  type: string
+                  description: The alias of the collaborator tied to the local clean room.
+                name:
+                  type: string
+                  description: >-
+                    The name of the clean room. It should follow `UC securable
+                    naming requirements
+                    <https://docs.databricks.com/en/data-governance/unity-catalog/index.html#securable-object-naming-requirements>`__.
+                output_catalog:
                   type: object
                   properties:
-                    access_restricted:
+                    catalog_name:
+                      type: string
+                    status:
                       type: string
                       x-enum:
-                        - CSP_MISMATCH
-                        - NO_RESTRICTION
+                        - CREATED
+                        - NOT_CREATED
+                        - NOT_ELIGIBLE
                       description: >-
                         Create a collection of name/value pairs.
 
@@ -1718,323 +1761,193 @@ paths:
                         have their own
 
                         attributes -- see the documentation for details.
-                    comment:
+                  description: >-
+                    Output catalog of the clean room. It is an output only
+                    field. Output catalog is manipulated using the separate
+                    CreateCleanRoomOutputCatalog API.
+                owner:
+                  type: string
+                  description: >-
+                    This is the Databricks username of the owner of the local
+                    clean room securable for permission management.
+                remote_detailed_info:
+                  type: object
+                  properties:
+                    central_clean_room_id:
                       type: string
-                    created_at:
-                      type: integer
-                      description: When the clean room was created, in epoch milliseconds.
+                      description: Central clean room ID.
+                    cloud_vendor:
+                      type: string
+                      description: Cloud vendor (aws,azure,gcp) of the central clean room.
+                    collaborators:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          collaborator_alias:
+                            type: string
+                            description: >-
+                              Collaborator alias specified by the clean room
+                              creator. It is unique across all collaborators of
+                              this clean room, and used to derive multiple
+                              values internally such as catalog alias and clean
+                              room name for single metastore clean rooms. It
+                              should follow `UC securable naming requirements
+                              <https://docs.databricks.com/en/data-governance/unity-catalog/index.html#securable-object-naming-requirements>`__.
+                          display_name:
+                            type: string
+                            description: >-
+                              Generated display name for the collaborator. In
+                              the case of a single metastore clean room, it is
+                              the clean room name. For x-metastore clean rooms,
+                              it is the organization name of the metastore. It
+                              is not restricted to these values and could change
+                              in the future
+                          global_metastore_id:
+                            type: string
+                            description: >-
+                              The global Unity Catalog metastore ID of the
+                              collaborator. The identifier is of format
+                              cloud:region:metastore-uuid.
+                          invite_recipient_email:
+                            type: string
+                            description: >-
+                              Email of the user who is receiving the clean room
+                              "invitation". It should be empty for the creator
+                              of the clean room, and non-empty for the invitees
+                              of the clean room. It is only returned in the
+                              output when clean room creator calls GET
+                          invite_recipient_workspace_id:
+                            type: integer
+                            description: >-
+                              Workspace ID of the user who is receiving the
+                              clean room "invitation". Must be specified if
+                              invite_recipient_email is specified. It should be
+                              empty when the collaborator is the creator of the
+                              clean room.
+                          organization_name:
+                            type: string
+                            description: >-
+                              [Organization
+                              name](:method:metastores/list#metastores-delta_sharing_organization_name)
+                              configured in the metastore
+                        required:
+                          - collaborator_alias
+                        description: Publicly visible clean room collaborator.
+                      description: >-
+                        Collaborators in the central clean room. There should
+                        one and only one collaborator in the list that satisfies
+                        the owner condition: 1. It has the creator's
+                        global_metastore_id (determined by caller of
+                        CreateCleanRoom). 2. Its invite_recipient_email is
+                        empty.
+                    compliance_security_profile:
+                      type: object
+                      properties:
+                        compliance_standards:
+                          type: string
+                          description: >-
+                            The list of compliance standards that the compliance
+                            security profile is configured to enforce.
+                        is_enabled:
+                          type: boolean
+                          description: Whether the compliance security profile is enabled.
+                      description: >-
+                        The compliance security profile used to process
+                        regulated data following compliance standards.
+                    creator:
+                      type: object
+                      properties:
+                        collaborator_alias:
+                          type: string
+                          description: >-
+                            Collaborator alias specified by the clean room
+                            creator. It is unique across all collaborators of
+                            this clean room, and used to derive multiple values
+                            internally such as catalog alias and clean room name
+                            for single metastore clean rooms. It should follow
+                            `UC securable naming requirements
+                            <https://docs.databricks.com/en/data-governance/unity-catalog/index.html#securable-object-naming-requirements>`__.
+                        display_name:
+                          type: string
+                          description: >-
+                            Generated display name for the collaborator. In the
+                            case of a single metastore clean room, it is the
+                            clean room name. For x-metastore clean rooms, it is
+                            the organization name of the metastore. It is not
+                            restricted to these values and could change in the
+                            future
+                        global_metastore_id:
+                          type: string
+                          description: >-
+                            The global Unity Catalog metastore ID of the
+                            collaborator. The identifier is of format
+                            cloud:region:metastore-uuid.
+                        invite_recipient_email:
+                          type: string
+                          description: >-
+                            Email of the user who is receiving the clean room
+                            "invitation". It should be empty for the creator of
+                            the clean room, and non-empty for the invitees of
+                            the clean room. It is only returned in the output
+                            when clean room creator calls GET
+                        invite_recipient_workspace_id:
+                          type: integer
+                          description: >-
+                            Workspace ID of the user who is receiving the clean
+                            room "invitation". Must be specified if
+                            invite_recipient_email is specified. It should be
+                            empty when the collaborator is the creator of the
+                            clean room.
+                        organization_name:
+                          type: string
+                          description: >-
+                            [Organization
+                            name](:method:metastores/list#metastores-delta_sharing_organization_name)
+                            configured in the metastore
+                      required:
+                        - collaborator_alias
+                      description: Collaborator who creates the clean room.
+                    egress_network_policy:
+                      type: string
+                      description: >-
+                        Egress network policy to apply to the central clean room
+                        workspace.
                     enable_shared_output:
                       type: boolean
                       description: >-
-                        Whether allow task to write to shared output schema.
-                        When enabled, clean room task runs triggered by the
-                        current collaborator can write to the run-scoped shared
-                        output schema which is accessible by all collaborators.
-                    local_collaborator_alias:
+                        Whether to enable shared output for the central clean
+                        room. When enabled, clean room task runs can write to
+                        the run-scoped shared output schema which is accessible
+                        by all collaborators.
+                    package_provider_collaborator_alias:
                       type: string
                       description: >-
-                        The alias of the collaborator tied to the local clean
-                        room.
-                    name:
+                        Alias of the provider collaborator. If set, packaged
+                        clean rooms mode is enabled. The consumer's experience
+                        is restricted: they can view notebook names and READMEs,
+                        add their own data assets, and trigger runs, but cannot
+                        view notebook code, provider data assets, or notebook
+                        run output.
+                    region:
                       type: string
-                      description: >-
-                        The name of the clean room. It should follow `UC
-                        securable naming requirements
-                        <https://docs.databricks.com/en/data-governance/unity-catalog/index.html#securable-object-naming-requirements>`__.
-                    output_catalog:
-                      type: object
-                      properties:
-                        catalog_name:
-                          type: string
-                        status:
-                          type: string
-                          x-enum:
-                            - CREATED
-                            - NOT_CREATED
-                            - NOT_ELIGIBLE
-                          description: >-
-                            Create a collection of name/value pairs.
-
-
-                            Example enumeration:
-
-
-                            >>> class Color(Enum):
-
-                            ...     RED = 1
-
-                            ...     BLUE = 2
-
-                            ...     GREEN = 3
-
-
-                            Access them by:
-
-
-                            - attribute access:
-
-                              >>> Color.RED
-                              <Color.RED: 1>
-
-                            - value lookup:
-
-                              >>> Color(1)
-                              <Color.RED: 1>
-
-                            - name lookup:
-
-                              >>> Color['RED']
-                              <Color.RED: 1>
-
-                            Enumerations can be iterated over, and know how many
-                            members they have:
-
-
-                            >>> len(Color)
-
-                            3
-
-
-                            >>> list(Color)
-
-                            [<Color.RED: 1>, <Color.BLUE: 2>, <Color.GREEN: 3>]
-
-
-                            Methods can be added to enumerations, and members
-                            can have their own
-
-                            attributes -- see the documentation for details.
-                      description: >-
-                        Output catalog of the clean room. It is an output only
-                        field. Output catalog is manipulated using the separate
-                        CreateCleanRoomOutputCatalog API.
-                    owner:
-                      type: string
-                      description: >-
-                        This is the Databricks username of the owner of the
-                        local clean room securable for permission management.
-                    remote_detailed_info:
-                      type: object
-                      properties:
-                        central_clean_room_id:
-                          type: string
-                          description: Central clean room ID.
-                        cloud_vendor:
-                          type: string
-                          description: >-
-                            Cloud vendor (aws,azure,gcp) of the central clean
-                            room.
-                        collaborators:
-                          type: array
-                          items:
-                            type: object
-                            properties:
-                              collaborator_alias:
-                                type: string
-                                description: >-
-                                  Collaborator alias specified by the clean room
-                                  creator. It is unique across all collaborators
-                                  of this clean room, and used to derive
-                                  multiple values internally such as catalog
-                                  alias and clean room name for single metastore
-                                  clean rooms. It should follow `UC securable
-                                  naming requirements
-                                  <https://docs.databricks.com/en/data-governance/unity-catalog/index.html#securable-object-naming-requirements>`__.
-                              display_name:
-                                type: string
-                                description: >-
-                                  Generated display name for the collaborator.
-                                  In the case of a single metastore clean room,
-                                  it is the clean room name. For x-metastore
-                                  clean rooms, it is the organization name of
-                                  the metastore. It is not restricted to these
-                                  values and could change in the future
-                              global_metastore_id:
-                                type: string
-                                description: >-
-                                  The global Unity Catalog metastore ID of the
-                                  collaborator. The identifier is of format
-                                  cloud:region:metastore-uuid.
-                              invite_recipient_email:
-                                type: string
-                                description: >-
-                                  Email of the user who is receiving the clean
-                                  room "invitation". It should be empty for the
-                                  creator of the clean room, and non-empty for
-                                  the invitees of the clean room. It is only
-                                  returned in the output when clean room creator
-                                  calls GET
-                              invite_recipient_workspace_id:
-                                type: integer
-                                description: >-
-                                  Workspace ID of the user who is receiving the
-                                  clean room "invitation". Must be specified if
-                                  invite_recipient_email is specified. It should
-                                  be empty when the collaborator is the creator
-                                  of the clean room.
-                              organization_name:
-                                type: string
-                                description: >-
-                                  [Organization
-                                  name](:method:metastores/list#metastores-delta_sharing_organization_name)
-                                  configured in the metastore
-                            required:
-                              - collaborator_alias
-                            description: Publicly visible clean room collaborator.
-                          description: >-
-                            Collaborators in the central clean room. There
-                            should one and only one collaborator in the list
-                            that satisfies the owner condition: 1. It has the
-                            creator's global_metastore_id (determined by caller
-                            of CreateCleanRoom). 2. Its invite_recipient_email
-                            is empty.
-                        compliance_security_profile:
-                          type: object
-                          properties:
-                            compliance_standards:
-                              type: string
-                              description: >-
-                                The list of compliance standards that the
-                                compliance security profile is configured to
-                                enforce.
-                            is_enabled:
-                              type: boolean
-                              description: >-
-                                Whether the compliance security profile is
-                                enabled.
-                          description: >-
-                            The compliance security profile used to process
-                            regulated data following compliance standards.
-                        creator:
-                          type: object
-                          properties:
-                            collaborator_alias:
-                              type: string
-                              description: >-
-                                Collaborator alias specified by the clean room
-                                creator. It is unique across all collaborators
-                                of this clean room, and used to derive multiple
-                                values internally such as catalog alias and
-                                clean room name for single metastore clean
-                                rooms. It should follow `UC securable naming
-                                requirements
-                                <https://docs.databricks.com/en/data-governance/unity-catalog/index.html#securable-object-naming-requirements>`__.
-                            display_name:
-                              type: string
-                              description: >-
-                                Generated display name for the collaborator. In
-                                the case of a single metastore clean room, it is
-                                the clean room name. For x-metastore clean
-                                rooms, it is the organization name of the
-                                metastore. It is not restricted to these values
-                                and could change in the future
-                            global_metastore_id:
-                              type: string
-                              description: >-
-                                The global Unity Catalog metastore ID of the
-                                collaborator. The identifier is of format
-                                cloud:region:metastore-uuid.
-                            invite_recipient_email:
-                              type: string
-                              description: >-
-                                Email of the user who is receiving the clean
-                                room "invitation". It should be empty for the
-                                creator of the clean room, and non-empty for the
-                                invitees of the clean room. It is only returned
-                                in the output when clean room creator calls GET
-                            invite_recipient_workspace_id:
-                              type: integer
-                              description: >-
-                                Workspace ID of the user who is receiving the
-                                clean room "invitation". Must be specified if
-                                invite_recipient_email is specified. It should
-                                be empty when the collaborator is the creator of
-                                the clean room.
-                            organization_name:
-                              type: string
-                              description: >-
-                                [Organization
-                                name](:method:metastores/list#metastores-delta_sharing_organization_name)
-                                configured in the metastore
-                          required:
-                            - collaborator_alias
-                          description: Collaborator who creates the clean room.
-                        egress_network_policy:
-                          type: string
-                          description: >-
-                            Egress network policy to apply to the central clean
-                            room workspace.
-                        enable_shared_output:
-                          type: boolean
-                          description: >-
-                            Whether to enable shared output for the central
-                            clean room. When enabled, clean room task runs can
-                            write to the run-scoped shared output schema which
-                            is accessible by all collaborators.
-                        package_provider_collaborator_alias:
-                          type: string
-                          description: >-
-                            Alias of the provider collaborator. If set, packaged
-                            clean rooms mode is enabled. The consumer's
-                            experience is restricted: they can view notebook
-                            names and READMEs, add their own data assets, and
-                            trigger runs, but cannot view notebook code,
-                            provider data assets, or notebook run output.
-                        region:
-                          type: string
-                          description: Region of the central clean room.
-                      description: >-
-                        Central clean room details. During creation, users need
-                        to specify cloud_vendor, region, and
-                        collaborators.global_metastore_id. This field will not
-                        be filled in the ListCleanRooms call.
-                    replication_config:
-                      type: object
-                      properties:
-                        enabled:
-                          type: boolean
-                          description: >-
-                            Whether this collaborator's input share is
-                            replicated into the central clean-room region.
-                        schedule:
-                          type: object
-                          properties:
-                            interval:
-                              type: object
-                              properties:
-                                duration:
-                                  type: string
-                                  description: >-
-                                    How often the collaborator's input-share
-                                    data should be replicated. When unset, the
-                                    service-default interval applies.
-                              description: Fixed-interval replication schedule.
-                          description: >-
-                            Optional schedule describing when replication runs.
-                            When unset, the service-default schedule (currently
-                            every hour) applies.
-                      description: >-
-                        Replication setting for the calling collaborator's input
-                        share. Set via UpdateCleanRoom before the collaborator
-                        adds their first asset (immutable thereafter), and read
-                        back on GetCleanRoom. When enabled, that collaborator's
-                        input data is replicated into the central clean-room
-                        region.
-                    status:
-                      type: string
-                      x-enum:
-                        - ACTIVE
-                        - DELETED
-                        - FAILED
-                        - PROVISIONING
-                      description: Clean room status.
-                    updated_at:
-                      type: integer
-                      description: >-
-                        When the clean room was last updated, in epoch
-                        milliseconds.
-              required:
-                - clean_room
+                      description: Region of the central clean room.
+                  description: >-
+                    Central clean room details. During creation, users need to
+                    specify cloud_vendor, region, and
+                    collaborators.global_metastore_id. This field will not be
+                    filled in the ListCleanRooms call.
+                status:
+                  type: string
+                  x-enum:
+                    - ACTIVE
+                    - DELETED
+                    - FAILED
+                    - PROVISIONING
+                  description: Clean room status.
+                updated_at:
+                  type: integer
+                  description: When the clean room was last updated, in epoch milliseconds.
       responses:
         '200':
           description: Success
@@ -2137,71 +2050,66 @@ paths:
             schema:
               type: object
               properties:
-                output_catalog:
-                  type: object
-                  properties:
-                    catalog_name:
-                      type: string
-                    status:
-                      type: string
-                      x-enum:
-                        - CREATED
-                        - NOT_CREATED
-                        - NOT_ELIGIBLE
-                      description: >-
-                        Create a collection of name/value pairs.
+                catalog_name:
+                  type: string
+                status:
+                  type: string
+                  x-enum:
+                    - CREATED
+                    - NOT_CREATED
+                    - NOT_ELIGIBLE
+                  description: >-
+                    Create a collection of name/value pairs.
 
 
-                        Example enumeration:
+                    Example enumeration:
 
 
-                        >>> class Color(Enum):
+                    >>> class Color(Enum):
 
-                        ...     RED = 1
+                    ...     RED = 1
 
-                        ...     BLUE = 2
+                    ...     BLUE = 2
 
-                        ...     GREEN = 3
-
-
-                        Access them by:
+                    ...     GREEN = 3
 
 
-                        - attribute access:
-
-                          >>> Color.RED
-                          <Color.RED: 1>
-
-                        - value lookup:
-
-                          >>> Color(1)
-                          <Color.RED: 1>
-
-                        - name lookup:
-
-                          >>> Color['RED']
-                          <Color.RED: 1>
-
-                        Enumerations can be iterated over, and know how many
-                        members they have:
+                    Access them by:
 
 
-                        >>> len(Color)
+                    - attribute access:
 
-                        3
+                      >>> Color.RED
+                      <Color.RED: 1>
+
+                    - value lookup:
+
+                      >>> Color(1)
+                      <Color.RED: 1>
+
+                    - name lookup:
+
+                      >>> Color['RED']
+                      <Color.RED: 1>
+
+                    Enumerations can be iterated over, and know how many members
+                    they have:
 
 
-                        >>> list(Color)
+                    >>> len(Color)
 
-                        [<Color.RED: 1>, <Color.BLUE: 2>, <Color.GREEN: 3>]
+                    3
 
 
-                        Methods can be added to enumerations, and members can
-                        have their own
+                    >>> list(Color)
 
-                        attributes -- see the documentation for details.
-              required:
-                - output_catalog
+                    [<Color.RED: 1>, <Color.BLUE: 2>, <Color.GREEN: 3>]
+
+
+                    Methods can be added to enumerations, and members can have
+                    their own
+
+                    attributes -- see the documentation for details.
       responses:
         '200':
           description: Success
@@ -2670,38 +2578,6 @@ paths:
                         to specify cloud_vendor, region, and
                         collaborators.global_metastore_id. This field will not
                         be filled in the ListCleanRooms call.
-                    replication_config:
-                      type: object
-                      properties:
-                        enabled:
-                          type: boolean
-                          description: >-
-                            Whether this collaborator's input share is
-                            replicated into the central clean-room region.
-                        schedule:
-                          type: object
-                          properties:
-                            interval:
-                              type: object
-                              properties:
-                                duration:
-                                  type: string
-                                  description: >-
-                                    How often the collaborator's input-share
-                                    data should be replicated. When unset, the
-                                    service-default interval applies.
-                              description: Fixed-interval replication schedule.
-                          description: >-
-                            Optional schedule describing when replication runs.
-                            When unset, the service-default schedule (currently
-                            every hour) applies.
-                      description: >-
-                        Replication setting for the calling collaborator's input
-                        share. Set via UpdateCleanRoom before the collaborator
-                        adds their first asset (immutable thereafter), and read
-                        back on GetCleanRoom. When enabled, that collaborator's
-                        input data is replicated into the central clean-room
-                        region.
                     status:
                       type: string
                       x-enum:
@@ -2779,14 +2655,6 @@ components:
             Central clean room details. During creation, users need to specify
             cloud_vendor, region, and collaborators.global_metastore_id. This
             field will not be filled in the ListCleanRooms call.
-        replication_config:
-          $ref: '#/components/schemas/ReplicationConfig'
-          description: >-
-            Replication setting for the calling collaborator's input share. Set
-            via UpdateCleanRoom before the collaborator adds their first asset
-            (immutable thereafter), and read back on GetCleanRoom. When enabled,
-            that collaborator's input data is replicated into the central
-            clean-room region.
         status:
           $ref: '#/components/schemas/CleanRoomStatusEnum'
           description: Clean room status.
@@ -2804,7 +2672,8 @@ components:
             For UC securable assets (tables, volumes, etc.), the format is
             *shared_catalog*.*shared_schema*.*asset_name* For notebooks, the
             name is the notebook file name. For jar analyses, the name is the
-            jar analysis name.
+            jar analysis name. For Genie spaces, the name is derived from the
+            clean room; the caller does not choose it.
         asset_type:
           $ref: '#/components/schemas/CleanRoomAssetAssetType'
           description: The type of the asset.
@@ -2827,13 +2696,6 @@ components:
           description: >-
             Local details for a foreign that are only available to its owner.
             Present if and only if **asset_type** is **FOREIGN_TABLE**
-        genie_space:
-          $ref: '#/components/schemas/CleanRoomAssetGenieSpace'
-          description: >-
-            Genie space details. The space_id sub-field is only returned to the
-            owner; other fields (e.g. prompts_limit_per_day) are visible to all
-            collaborators. Present if and only if **asset_type** is
-            **GENIE_SPACE**
         jar_analysis:
           $ref: '#/components/schemas/CleanRoomAssetJarAnalysis'
           description: >-
@@ -2854,22 +2716,24 @@ components:
           $ref: '#/components/schemas/CleanRoomAssetTable'
           description: >-
             Table details available to all collaborators of the clean room.
-            Present if and only if **asset_type** is **TABLE**
+            Present if and only if **asset_type** is **TABLE** or
+            **STREAMING_TABLE**
         table_local_details:
           $ref: '#/components/schemas/CleanRoomAssetTableLocalDetails'
           description: >-
             Local details for a table that are only available to its owner.
-            Present if and only if **asset_type** is **TABLE**
+            Present if and only if **asset_type** is **TABLE** or
+            **STREAMING_TABLE**
         view:
           $ref: '#/components/schemas/CleanRoomAssetView'
           description: >-
             View details available to all collaborators of the clean room.
-            Present if and only if **asset_type** is **VIEW**
+            Present if and only if **asset_type** is **VIEW** or **METRIC_VIEW**
         view_local_details:
           $ref: '#/components/schemas/CleanRoomAssetViewLocalDetails'
           description: >-
             Local details for a view that are only available to its owner.
-            Present if and only if **asset_type** is **VIEW**
+            Present if and only if **asset_type** is **VIEW** or **METRIC_VIEW**
         volume_local_details:
           $ref: '#/components/schemas/CleanRoomAssetVolumeLocalDetails'
           description: >-
@@ -2891,9 +2755,6 @@ components:
           type: string
       required:
         - local_name
-    CleanRoomAssetGenieSpace:
-      type: object
-      properties: {}
     CleanRoomAssetJarAnalysis:
       type: object
       properties:
@@ -2908,7 +2769,8 @@ components:
           type: string
           description: >-
             The serverless environment version used to execute the JAR analysis
-            (e.g. "4"). Defaults to "4-scala-preview" if not specified.
+            (e.g. "4"). If not specified, uses the service-configured JAR
+            analysis default.
         etag:
           type: string
           description: Server generated etag that represents the jar analysis version.
@@ -3425,52 +3287,6 @@ components:
       required:
         - etag
         - review_state
-    ReplicationConfig:
-      type: object
-      properties:
-        enabled:
-          type: boolean
-          description: >-
-            Whether this collaborator's input share is replicated into the
-            central clean-room region.
-        schedule:
-          $ref: '#/components/schemas/ReplicationSchedule'
-          description: >-
-            Optional schedule describing when replication runs. When unset, the
-            service-default schedule (currently every hour) applies.
-      description: >-
-        Replication setting for a collaborator's input share. When enabled, that
-        collaborator's input
-            data is replicated into the central clean-room region so the clean room can run locally against
-            replicated data instead of reaching across regions to the source.
-
-            This is settable (via UpdateCleanRoom) until the collaborator adds their first asset, and is
-            immutable thereafter. Copied from (not imported) the managed-catalog share-level
-            ReplicationConfig.
-    ReplicationInterval:
-      type: object
-      properties:
-        duration:
-          type: string
-          description: >-
-            How often the collaborator's input-share data should be replicated.
-            When unset, the service-default interval applies.
-      description: |-
-        How often a collaborator's replicated input share is refreshed.
-
-            Copied from (not imported) the managed-catalog share-level ReplicationInterval so the clean-room
-            API and the Delta Sharing API stay independently evolvable.
-    ReplicationSchedule:
-      type: object
-      properties:
-        interval:
-          $ref: '#/components/schemas/ReplicationInterval'
-          description: Fixed-interval replication schedule.
-      description: >-
-        Schedule describing when a collaborator's replicated input share is
-        refreshed.
-
-            Copied from (not imported) the managed-catalog share-level ReplicationSchedule.
     CleanRoomAccessRestricted:
       type: string
       x-enum:
@@ -3517,7 +3333,6 @@ components:
       type: string
       x-enum:
         - FOREIGN_TABLE
-        - GENIE_SPACE
         - JAR_ANALYSIS
         - NOTEBOOK_FILE
         - TABLE
