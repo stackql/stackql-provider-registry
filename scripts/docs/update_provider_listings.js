@@ -12,11 +12,12 @@ const MANIFEST_URL = 'https://registry.stackql.app/providers/dist/providers.yaml
 const TOC_MARKER = 'TABLE OF CONTENTS';
 const CATALOG_MARKER = 'PROVIDER CATALOG';
 
-function git(args) {
+function git(args, options = {}) {
   return execFileSync('git', ['--no-pager', ...args], {
     cwd: ROOT,
     encoding: 'utf8',
     maxBuffer: 16 * 1024 * 1024,
+    ...options,
   }).trim();
 }
 
@@ -135,6 +136,18 @@ function sourceDirectories(dir = SOURCE_DIR) {
   return sources;
 }
 
+// First-publication dates already in the README catalog, keyed by provider. The earliest commit that
+// introduced a provider never changes, so these are reused instead of walking Git history again.
+function firstPublishedDates(readme) {
+  const dates = new Map();
+  const block = (readme.split(`<!-- BEGIN ${CATALOG_MARKER} -->`)[1] || '').split(`<!-- END ${CATALOG_MARKER} -->`)[0];
+  for (const line of block.split(/\r?\n/)) {
+    const match = /^\|[^|]*\| `([^`]+)` \| `v\d+\.\d+\.\d+` \| (\d{4}-\d{2}-\d{2}) \| \d{4}-\d{2}-\d{2} \|$/.exec(line);
+    if (match) dates.set(match[1], match[2]);
+  }
+  return dates;
+}
+
 function replaceBlock(readme, marker, content) {
   const begin = `<!-- BEGIN ${marker} -->`;
   const end = `<!-- END ${marker} -->`;
@@ -195,22 +208,35 @@ function buildCatalog(manifest, dates, firstPublished, icons) {
 async function main(args = process.argv.slice(2)) {
   let ref = 'origin/main';
   let check = false;
+  let fetchRef = false;
+  let rebuild = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--check') check = true;
+    else if (args[i] === '--fetch') fetchRef = true;
+    else if (args[i] === '--rebuild') rebuild = true;
     else if (args[i] === '--git-ref' && args[i + 1] && !args[i + 1].startsWith('-')) ref = args[++i];
     else throw new Error(`Unknown or incomplete argument: ${args[i]}`);
   }
   if (git(['rev-parse', '--is-shallow-repository']) !== 'false') {
     throw new Error('Full Git history is required; run git fetch --unshallow');
   }
+  if (fetchRef) {
+    const remote = /^([^/]+)\/(.+)$/.exec(ref);
+    if (!remote) throw new Error(`--fetch requires a <remote>/<branch> ref, not ${ref}`);
+    git(['fetch', '--quiet', remote[1], remote[2]], { timeout: 60000, stdio: ['ignore', 'pipe', 'inherit'] });
+  }
   const commit = git(['rev-parse', '--verify', `${ref}^{commit}`]);
   const dates = releaseDates(git(['log', '--first-parent', '--format=%cI%x09%s', commit]));
   const icons = iconIndex();
   const sources = sourceDirectories();
+  const readmePath = path.join(ROOT, 'README.md');
+  const original = fs.readFileSync(readmePath, 'utf8');
+  const known = rebuild ? new Map() : firstPublishedDates(original);
   const response = await fetch(MANIFEST_URL, { signal: AbortSignal.timeout(30000) });
   if (!response.ok) throw new Error(`Registry request failed: HTTP ${response.status}`);
   const manifest = parseManifest(await response.text());
   const catalog = buildCatalog(manifest, dates, (name) => {
+    if (known.has(name)) return known.get(name);
     const source = sources.get(name) || name;
     const history = git([
       'log', '--first-parent', '--reverse', '--format=%cI', commit, '--',
@@ -219,8 +245,6 @@ async function main(args = process.argv.slice(2)) {
     if (!history) throw new Error(`No production history for ${name}`);
     return utcDate(history.split(/\r?\n/)[0]);
   }, icons);
-  const readmePath = path.join(ROOT, 'README.md');
-  const original = fs.readFileSync(readmePath, 'utf8');
   const newline = original.includes('\r\n') ? '\r\n' : '\n';
   let updated = replaceBlock(original.replace(/\r\n/g, '\n'), CATALOG_MARKER, catalog);
   updated = replaceBlock(updated, TOC_MARKER, tableOfContents(updated)).replace(/\n/g, newline);
@@ -243,5 +267,5 @@ if (require.main === module) {
 
 module.exports = {
   parseManifest, compareVersions, utcDate, releaseDates, iconIndex, resolveIcon, providerId,
-  sourceDirectories, replaceBlock, tableOfContents, buildCatalog,
+  sourceDirectories, firstPublishedDates, replaceBlock, tableOfContents, buildCatalog,
 };

@@ -7,7 +7,7 @@ const path = require('node:path');
 const { test } = require('node:test');
 const {
   parseManifest, compareVersions, utcDate, releaseDates, iconIndex, resolveIcon, providerId,
-  sourceDirectories, replaceBlock, tableOfContents, buildCatalog,
+  sourceDirectories, firstPublishedDates, replaceBlock, tableOfContents, buildCatalog,
 } = require('./update_provider_listings');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -104,6 +104,22 @@ test('maps registry ids to source directories from the top-level provider docume
     write('google', 'v00.00.00000', 'id: google\n');
     assert.throws(() => sourceDirectories(dir), /multiple source directories/);
   });
+});
+
+test('reuses first-publication dates from the existing catalog block only', () => {
+  const readme = [
+    '| `outside` | `v26.01.00001` | 2020-01-01 | 2020-01-02 |',
+    '<!-- BEGIN PROVIDER CATALOG -->',
+    '| Icon | Provider | Latest Version | Date First Published | Date Last Published |',
+    '| --- | --- | --- | --- | --- |',
+    '| <img src="images/aws.ico" alt="aws" width="24" height="24"> | `aws` | `v26.08.00444` | 2022-08-19 | 2026-08-20 |',
+    '|  | `newprovider` | `v26.10.00481` | 2026-10-21 | 2026-10-21 |',
+    '| <img src="images/old.ico" alt="old" width="24" height="24"> | `old` | Old Name | `v26.08.00444` | 2022-08-19 | 2026-08-20 |',
+    '<!-- END PROVIDER CATALOG -->',
+    '| `after` | `v26.01.00001` | 2020-01-01 | 2020-01-02 |',
+  ].join('\r\n');
+  assert.deepEqual([...firstPublishedDates(readme)], [['aws', '2022-08-19'], ['newprovider', '2026-10-21']]);
+  assert.deepEqual([...firstPublishedDates('no catalog here')], []);
 });
 
 test('replaces only generated blocks and rejects missing, reversed or duplicate markers', () => {
