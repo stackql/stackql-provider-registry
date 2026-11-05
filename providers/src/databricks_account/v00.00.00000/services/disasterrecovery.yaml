@@ -6,12 +6,27 @@ info:
     (account-level APIs), generated from the Databricks Python SDK.
   version: 0.1.0
   x-stackql-sdk-version: 0.123.0
-  x-stackql-date-generated: '2026-07-31'
+  x-stackql-date-generated: '2026-11-01'
   x-stackql-sdk-namespace: databricks.sdk.service.disasterrecovery
 servers:
-  - url: https://accounts.cloud.databricks.com
+  - url: https://{account_host}
+    variables:
+      account_host:
+        description: >-
+          The Databricks account console host. Selected by DATABRICKS_CLOUD
+          (aws, azure or gcp; default aws), or set explicitly with
+          DATABRICKS_ACCOUNT_HOST (bare host, no scheme).
+        default: accounts.cloud.databricks.com
+        x-stackQL-envVar: DATABRICKS_ACCOUNT_HOST
+        x-stackQL-envVarSelector:
+          envVar: DATABRICKS_CLOUD
+          default: aws
+          values:
+            aws: accounts.cloud.databricks.com
+            azure: accounts.azuredatabricks.net
+            gcp: accounts.gcp.databricks.com
 paths:
-  /api/disaster-recovery/v1/{parent}/failover-groups:
+  /api/disaster-recovery/v1/accounts/{account_id}/failover-groups:
     post:
       operationId: disaster_recovery_create_failover_group
       summary: Create a new failover group.
@@ -33,12 +48,15 @@ paths:
 
         :returns: :class:`FailoverGroup`
       parameters:
-        - name: parent
+        - name: account_id
           in: path
           required: true
           schema:
             type: string
-          description: 'The parent resource. Format: accounts/{account_id}.'
+          description: >-
+            The `account_id` segment of the `parent` resource name
+            (`accounts/{account_id}`). The parent resource. Format:
+            accounts/{account_id}.
         - name: failover_group_id
           in: query
           required: true
@@ -61,227 +79,175 @@ paths:
             schema:
               type: object
               properties:
-                failover_group:
+                regions:
+                  type: array
+                  items:
+                    type: string
+                  description: List of all regions participating in this failover group.
+                workspace_sets:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: Resource name for this workspace set.
+                      workspace_ids:
+                        type: array
+                        items:
+                          type: string
+                        description: >-
+                          Workspace IDs in this set. The system derives and
+                          validates regions. All workspaces must be in the
+                          Mission Critical tier.
+                      replicate_workspace_assets:
+                        type: boolean
+                        description: >-
+                          Whether to enable control plane DR (notebooks, jobs,
+                          clusters, etc.) for this set. Defaults to false.
+                      stable_url_names:
+                        type: array
+                        items:
+                          type: string
+                        description: >-
+                          Resource names of stable URLs associated with this
+                          workspace set. Format:
+                          accounts/{account_id}/stable-urls/{stable_url_id}. The
+                          referenced stable URLs must already exist (via
+                          CreateStableUrl).
+                    required:
+                      - name
+                      - workspace_ids
+                    description: >-
+                      A set of workspaces that replicate to each other across
+                      regions.
+                  description: >-
+                    Workspace sets, each containing workspaces that replicate to
+                    each other.
+                initial_primary_region:
+                  type: string
+                  description: >-
+                    Initial primary region. Used only in Create requests to set
+                    the starting primary region. Not returned in responses.
+                create_time:
+                  type: string
+                  format: date-time
+                  description: Time at which this failover group was created.
+                effective_primary_region:
+                  type: string
+                  description: >-
+                    Current effective primary region. Replication flows FROM
+                    workspaces in this region. Changes after a successful
+                    failover.
+                etag:
+                  type: string
+                  description: >-
+                    Opaque version string for optimistic locking.
+                    Server-generated and returned in responses.
+                has_replication_point_blocking_errors:
+                  type: boolean
+                  description: True if errors currently block the replication point.
+                initial_replication_progress:
                   type: object
                   properties:
-                    regions:
-                      type: array
-                      items:
-                        type: string
-                      description: >-
-                        List of all regions participating in this failover
-                        group.
-                    workspace_sets:
+                    completed:
+                      type: integer
+                      description: Percent complete, 0-100.
+                  description: >-
+                    Initial replication progress of all in-scope assets. Set
+                    only when the FailoverGroup is in INITIAL_REPLICATION state.
+                name:
+                  type: string
+                  description: >-
+                    Fully qualified resource name in the format
+                    accounts/{account_id}/failover-groups/{failover_group_id}.
+                replication_point:
+                  type: string
+                  format: date-time
+                  description: The latest point in time to which data has been replicated.
+                state:
+                  type: string
+                  x-enum:
+                    - ACTIVE
+                    - CREATING
+                    - CREATION_FAILED
+                    - DELETING
+                    - DELETION_FAILED
+                    - FAILING_OVER
+                    - FAILOVER_FAILED
+                    - INITIAL_REPLICATION
+                  description: Aggregate state of the failover group.
+                unity_catalog_assets:
+                  type: object
+                  properties:
+                    catalogs:
                       type: array
                       items:
                         type: object
                         properties:
                           name:
                             type: string
-                            description: Resource name for this workspace set.
-                          workspace_ids:
-                            type: array
-                            items:
-                              type: string
-                            description: >-
-                              Workspace IDs in this set. The system derives and
-                              validates regions. All workspaces must be in the
-                              Mission Critical tier.
-                          asset_replication_config:
-                            type: object
-                            properties:
-                              enable_jobs:
-                                type: boolean
-                                description: Whether to replicate jobs.
-                              enable_clusters:
-                                type: boolean
-                                description: >-
-                                  Whether to replicate clusters (including
-                                  cluster policies, instance profiles, global
-                                  init scripts, and worker environment
-                                  overlays).
-                              enable_warehouse:
-                                type: boolean
-                                description: Whether to replicate SQL warehouses.
-                              enable_sql_workspace:
-                                type: boolean
-                                description: Whether to replicate the SQL workspace.
-                              enable_libraries:
-                                type: boolean
-                                description: Whether to replicate libraries.
-                              enable_notebooks:
-                                type: boolean
-                                description: Whether to replicate notebooks.
-                              enable_files:
-                                type: boolean
-                                description: Whether to replicate workspace files.
-                              enable_queries:
-                                type: boolean
-                                description: Whether to replicate SQL queries.
-                              enable_dashboards:
-                                type: boolean
-                                description: Whether to replicate dashboards.
-                            required:
-                              - enable_jobs
-                              - enable_clusters
-                              - enable_warehouse
-                              - enable_sql_workspace
-                              - enable_libraries
-                              - enable_notebooks
-                              - enable_files
-                              - enable_queries
-                              - enable_dashboards
-                            description: >-
-                              Per-asset-type control over which workspace assets
-                              are replicated. Applies only when
-                              replicate_workspace_assets is true. When omitted
-                              while control plane DR is enabled, every asset
-                              type is replicated.
-                          replicate_workspace_assets:
-                            type: boolean
-                            description: >-
-                              Whether to enable control plane DR (notebooks,
-                              jobs, clusters, etc.) for this set. Defaults to
-                              false.
-                          stable_url_names:
-                            type: array
-                            items:
-                              type: string
-                            description: >-
-                              Resource names of stable URLs associated with this
-                              workspace set. Format:
-                              accounts/{account_id}/stable-urls/{stable_url_id}.
-                              The referenced stable URLs must already exist (via
-                              CreateStableUrl).
+                            description: The name of the UC catalog to replicate.
                         required:
                           - name
-                          - workspace_ids
-                        description: >-
-                          A set of workspaces that replicate to each other
-                          across regions.
-                      description: >-
-                        Workspace sets, each containing workspaces that
-                        replicate to each other.
-                    initial_primary_region:
+                        description: A Unity Catalog catalog to replicate.
+                      description: UC catalogs to replicate.
+                    data_replication_workspace_set:
                       type: string
                       description: >-
-                        Initial primary region. Used only in Create requests to
-                        set the starting primary region. Not returned in
-                        responses.
-                    create_time:
-                      type: string
-                      format: date-time
-                      description: Time at which this failover group was created.
-                    effective_primary_region:
-                      type: string
-                      description: >-
-                        Current effective primary region. Replication flows FROM
-                        workspaces in this region. Changes after a successful
-                        failover.
-                    etag:
-                      type: string
-                      description: >-
-                        Opaque version string for optimistic locking.
-                        Server-generated and returned in responses.
-                    name:
-                      type: string
-                      description: >-
-                        Fully qualified resource name in the format
-                        accounts/{account_id}/failover-groups/{failover_group_id}.
-                    replication_point:
-                      type: string
-                      format: date-time
-                      description: >-
-                        The latest point in time to which data has been
-                        replicated.
-                    state:
-                      type: string
-                      x-enum:
-                        - ACTIVE
-                        - CREATING
-                        - CREATION_FAILED
-                        - DELETING
-                        - DELETION_FAILED
-                        - FAILING_OVER
-                        - FAILOVER_FAILED
-                        - INITIAL_REPLICATION
-                      description: Aggregate state of the failover group.
-                    unity_catalog_assets:
-                      type: object
-                      properties:
-                        catalogs:
-                          type: array
-                          items:
-                            type: object
-                            properties:
-                              name:
-                                type: string
-                                description: The name of the UC catalog to replicate.
-                            required:
-                              - name
-                            description: A Unity Catalog catalog to replicate.
-                          description: UC catalogs to replicate.
-                        data_replication_workspace_set:
-                          type: string
-                          description: >-
-                            The workspace set whose workspaces will be used for
-                            data replication of all UC catalogs' underlying
-                            storage.
-                        location_mappings:
-                          type: array
-                          items:
-                            type: object
-                            properties:
-                              name:
-                                type: string
-                                description: Resource name for this location.
-                              uri_by_region:
-                                type: array
-                                items:
-                                  type: object
-                                  properties:
-                                    region:
-                                      type: string
-                                      description: The region name.
-                                    uri:
-                                      type: string
-                                      description: The storage URI for this region.
-                                  required:
-                                    - region
-                                    - uri
-                                  description: >-
-                                    A single entry in a location mapping,
-                                    mapping a region to a storage URI. Used
-                                    instead of
-                                        map<string, string> for proto2 compatibility.
-                                description: >-
-                                  URI for each region. Each entry maps a region
-                                  name to a storage URI.
-                            required:
-                              - name
-                              - uri_by_region
+                        The workspace set whose workspaces will be used for data
+                        replication of all UC catalogs' underlying storage.
+                    location_mappings:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                            description: Resource name for this location.
+                          uri_by_region:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                region:
+                                  type: string
+                                  description: The region name.
+                                uri:
+                                  type: string
+                                  description: The storage URI for this region.
+                              required:
+                                - region
+                                - uri
+                              description: >-
+                                A single entry in a location mapping, mapping a
+                                region to a storage URI. Used instead of
+                                    map<string, string> for proto2 compatibility.
                             description: >-
-                              A location mapping identified by a name, with URIs
-                              per region. The system derives replication
-                                  direction from effective_primary_region.
-                          description: >-
-                            Location mappings - storage URI per region for each
-                            location.
-                      required:
-                        - catalogs
-                        - data_replication_workspace_set
-                      description: Unity Catalog replication configuration.
-                    update_time:
-                      type: string
-                      format: date-time
-                      description: Time at which this failover group was last modified.
+                              URI for each region. Each entry maps a region name
+                              to a storage URI.
+                        required:
+                          - name
+                          - uri_by_region
+                        description: >-
+                          A location mapping identified by a name, with URIs per
+                          region. The system derives replication
+                              direction from effective_primary_region.
+                      description: >-
+                        Location mappings - storage URI per region for each
+                        location.
                   required:
-                    - regions
-                    - workspace_sets
-                    - initial_primary_region
-                  description: The failover group to create.
+                    - catalogs
+                    - data_replication_workspace_set
+                  description: Unity Catalog replication configuration.
+                update_time:
+                  type: string
+                  format: date-time
+                  description: Time at which this failover group was last modified.
               required:
-                - failover_group
+                - regions
+                - workspace_sets
+                - initial_primary_region
       responses:
         '200':
           description: Success
@@ -332,12 +298,15 @@ paths:
 
         :returns: Iterator over :class:`FailoverGroup`
       parameters:
-        - name: parent
+        - name: account_id
           in: path
           required: true
           schema:
             type: string
-          description: 'The parent resource. Format: accounts/{account_id}.'
+          description: >-
+            The `account_id` segment of the `parent` resource name
+            (`accounts/{account_id}`). The parent resource. Format:
+            accounts/{account_id}.
         - name: page_size
           in: query
           required: false
@@ -376,7 +345,7 @@ paths:
                   message:
                     type: string
       x-stackql-sdk-source: DisasterRecoveryAPI
-  /api/disaster-recovery/v1/{parent}/stable-urls:
+  /api/disaster-recovery/v1/accounts/{account_id}/stable-urls:
     post:
       operationId: disaster_recovery_create_stable_url
       summary: Create a new stable URL.
@@ -398,12 +367,15 @@ paths:
 
         :returns: :class:`StableUrl`
       parameters:
-        - name: parent
+        - name: account_id
           in: path
           required: true
           schema:
             type: string
-          description: 'The parent resource. Format: accounts/{account_id}.'
+          description: >-
+            The `account_id` segment of the `parent` resource name
+            (`accounts/{account_id}`). The parent resource. Format:
+            accounts/{account_id}.
         - name: stable_url_id
           in: query
           required: true
@@ -424,60 +396,53 @@ paths:
             schema:
               type: object
               properties:
-                stable_url:
-                  type: object
-                  properties:
-                    initial_workspace_id:
-                      type: string
-                      description: >-
-                        The workspace this stable URL is initially bound to.
-                        Used only in Create requests to associate the stable URL
-                        with a workspace. Not returned in responses.
-                    effective_workspace_id:
-                      type: string
-                      description: >-
-                        The workspace this stable URL currently routes to. Set
-                        to ``initial_workspace_id`` at creation, advanced to the
-                        failover group's primary while attached (including
-                        across a failover), and preserved when the stable URL is
-                        detached from its failover group. Read this to see where
-                        an unattached stable URL points: after a failover
-                        followed by a detach it reflects the post-failover
-                        primary, not ``initial_workspace_id``.
-                    failover_group_name:
-                      type: string
-                      description: >-
-                        Fully qualified resource name of the FailoverGroup this
-                        stable URL is currently linked to, in the format
-                        ``accounts/{account_id}/failover-groups/{failover_group_id}``.
-                        Empty when the stable URL is not attached to any
-                        failover group.
-                    name:
-                      type: string
-                      description: >-
-                        Fully qualified resource name. Format:
-                        accounts/{account_id}/stable-urls/{stable_url_id}.
-                    stable_workspace_id:
-                      type: string
-                      description: >-
-                        The stable workspace ID for this stable URL. Generated
-                        on creation and immutable thereafter; identifies the URL
-                        across failovers and is the same value embedded in the
-                        ``url`` (as the ``w=`` query parameter for SPOG URLs, or
-                        in the ``conn-<id>`` hostname for Private-Link URLs).
-                    url:
-                      type: string
-                      description: >-
-                        The stable URL endpoint. Generated on creation and
-                        immutable thereafter. For non-Private-Link workspaces
-                        this is ``https://<spog_host>/?w=<connection_id>``. For
-                        Private-Link workspaces this is the per-connection
-                        hostname.
-                  required:
-                    - initial_workspace_id
-                  description: The stable URL to create.
+                initial_workspace_id:
+                  type: string
+                  description: >-
+                    The workspace this stable URL is initially bound to. Used
+                    only in Create requests to associate the stable URL with a
+                    workspace. Not returned in responses.
+                effective_workspace_id:
+                  type: string
+                  description: >-
+                    The workspace this stable URL currently routes to. Set to
+                    ``initial_workspace_id`` at creation, advanced to the
+                    failover group's primary while attached (including across a
+                    failover), and preserved when the stable URL is detached
+                    from its failover group. Read this to see where an
+                    unattached stable URL points: after a failover followed by a
+                    detach it reflects the post-failover primary, not
+                    ``initial_workspace_id``.
+                failover_group_name:
+                  type: string
+                  description: >-
+                    Fully qualified resource name of the FailoverGroup this
+                    stable URL is currently linked to, in the format
+                    ``accounts/{account_id}/failover-groups/{failover_group_id}``.
+                    Empty when the stable URL is not attached to any failover
+                    group.
+                name:
+                  type: string
+                  description: >-
+                    Fully qualified resource name. Format:
+                    accounts/{account_id}/stable-urls/{stable_url_id}.
+                stable_workspace_id:
+                  type: string
+                  description: >-
+                    The stable workspace ID for this stable URL. Generated on
+                    creation and immutable thereafter; identifies the URL across
+                    failovers and is the same value embedded in the ``url`` (as
+                    the ``w=`` query parameter for SPOG URLs, or in the
+                    ``conn-<id>`` hostname for Private-Link URLs).
+                url:
+                  type: string
+                  description: >-
+                    The stable URL endpoint. Generated on creation and immutable
+                    thereafter. For non-Private-Link workspaces this is
+                    ``https://<spog_host>/?w=<connection_id>``. For Private-Link
+                    workspaces this is the per-connection hostname.
               required:
-                - stable_url
+                - initial_workspace_id
       responses:
         '200':
           description: Success
@@ -521,12 +486,15 @@ paths:
 
         :returns: Iterator over :class:`StableUrl`
       parameters:
-        - name: parent
+        - name: account_id
           in: path
           required: true
           schema:
             type: string
-          description: 'The parent resource. Format: accounts/{account_id}.'
+          description: >-
+            The `account_id` segment of the `parent` resource name
+            (`accounts/{account_id}`). The parent resource. Format:
+            accounts/{account_id}.
         - name: page_size
           in: query
           required: false
@@ -565,27 +533,52 @@ paths:
                   message:
                     type: string
       x-stackql-sdk-source: DisasterRecoveryAPI
-  /api/disaster-recovery/v1/{name}:
+  /api/disaster-recovery/v1/accounts/{account_id}/failover-groups/{failover_group_id}:
     delete:
-      operationId: disaster_recovery_delete_stable_url
-      summary: Delete a stable URL.
+      operationId: disaster_recovery_delete_failover_group
+      summary: Delete a failover group.
       tags:
         - disasterrecovery
         - disaster_recovery
       description: |-
-        Delete a stable URL.
+        Delete a failover group.
 
         :param name: str
-          The fully qualified resource name. Format: accounts/{account_id}/stable-urls/{stable_url_id}.
+          The fully qualified resource name of the failover group to delete. Format:
+          accounts/{account_id}/failover-groups/{failover_group_id}.
+        :param etag: str (optional)
+          Opaque version string for optimistic locking. If provided, must match the current etag. If omitted,
+          the delete proceeds without an etag check.
       parameters:
-        - name: name
+        - name: account_id
           in: path
           required: true
           schema:
             type: string
           description: >-
-            The fully qualified resource name. Format:
-            accounts/{account_id}/stable-urls/{stable_url_id}.
+            The `account_id` segment of the `name` resource name
+            (`accounts/{account_id}/failover-groups/{failover_group_id}`). The
+            fully qualified resource name of the failover group to delete.
+            Format: accounts/{account_id}/failover-groups/{failover_group_id}.
+        - name: failover_group_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `failover_group_id` segment of the `name` resource name
+            (`accounts/{account_id}/failover-groups/{failover_group_id}`). The
+            fully qualified resource name of the failover group to delete.
+            Format: accounts/{account_id}/failover-groups/{failover_group_id}.
+        - name: etag
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >-
+            Opaque version string for optimistic locking. If provided, must
+            match the current etag. If omitted, the delete proceeds without an
+            etag check.
       responses:
         '200':
           description: Success
@@ -602,34 +595,47 @@ paths:
                     type: string
       x-stackql-sdk-source: DisasterRecoveryAPI
     get:
-      operationId: disaster_recovery_get_stable_url
-      summary: Get a stable URL.
+      operationId: disaster_recovery_get_failover_group
+      summary: Get a failover group.
       tags:
         - disasterrecovery
         - disaster_recovery
       description: |-
-        Get a stable URL.
+        Get a failover group.
 
         :param name: str
-          The fully qualified resource name. Format: accounts/{account_id}/stable-urls/{stable_url_id}.
+          The fully qualified resource name of the failover group. Format:
+          accounts/{account_id}/failover-groups/{failover_group_id}.
 
-        :returns: :class:`StableUrl`
+        :returns: :class:`FailoverGroup`
       parameters:
-        - name: name
+        - name: account_id
           in: path
           required: true
           schema:
             type: string
           description: >-
-            The fully qualified resource name. Format:
-            accounts/{account_id}/stable-urls/{stable_url_id}.
+            The `account_id` segment of the `name` resource name
+            (`accounts/{account_id}/failover-groups/{failover_group_id}`). The
+            fully qualified resource name of the failover group. Format:
+            accounts/{account_id}/failover-groups/{failover_group_id}.
+        - name: failover_group_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `failover_group_id` segment of the `name` resource name
+            (`accounts/{account_id}/failover-groups/{failover_group_id}`). The
+            fully qualified resource name of the failover group. Format:
+            accounts/{account_id}/failover-groups/{failover_group_id}.
       responses:
         '200':
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StableUrl'
+                $ref: '#/components/schemas/FailoverGroup'
         default:
           description: Error response
           content:
@@ -666,13 +672,25 @@ paths:
 
         :returns: :class:`FailoverGroup`
       parameters:
-        - name: name
+        - name: account_id
           in: path
           required: true
           schema:
             type: string
           description: >-
-            Fully qualified resource name in the format
+            The `account_id` segment of the `name` resource name
+            (`accounts/{account_id}/failover-groups/{failover_group_id}`). Fully
+            qualified resource name in the format
+            accounts/{account_id}/failover-groups/{failover_group_id}.
+        - name: failover_group_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `failover_group_id` segment of the `name` resource name
+            (`accounts/{account_id}/failover-groups/{failover_group_id}`). Fully
+            qualified resource name in the format
             accounts/{account_id}/failover-groups/{failover_group_id}.
         - name: update_mask
           in: query
@@ -696,229 +714,175 @@ paths:
             schema:
               type: object
               properties:
-                failover_group:
+                regions:
+                  type: array
+                  items:
+                    type: string
+                  description: List of all regions participating in this failover group.
+                workspace_sets:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: Resource name for this workspace set.
+                      workspace_ids:
+                        type: array
+                        items:
+                          type: string
+                        description: >-
+                          Workspace IDs in this set. The system derives and
+                          validates regions. All workspaces must be in the
+                          Mission Critical tier.
+                      replicate_workspace_assets:
+                        type: boolean
+                        description: >-
+                          Whether to enable control plane DR (notebooks, jobs,
+                          clusters, etc.) for this set. Defaults to false.
+                      stable_url_names:
+                        type: array
+                        items:
+                          type: string
+                        description: >-
+                          Resource names of stable URLs associated with this
+                          workspace set. Format:
+                          accounts/{account_id}/stable-urls/{stable_url_id}. The
+                          referenced stable URLs must already exist (via
+                          CreateStableUrl).
+                    required:
+                      - name
+                      - workspace_ids
+                    description: >-
+                      A set of workspaces that replicate to each other across
+                      regions.
+                  description: >-
+                    Workspace sets, each containing workspaces that replicate to
+                    each other.
+                initial_primary_region:
+                  type: string
+                  description: >-
+                    Initial primary region. Used only in Create requests to set
+                    the starting primary region. Not returned in responses.
+                create_time:
+                  type: string
+                  format: date-time
+                  description: Time at which this failover group was created.
+                effective_primary_region:
+                  type: string
+                  description: >-
+                    Current effective primary region. Replication flows FROM
+                    workspaces in this region. Changes after a successful
+                    failover.
+                etag:
+                  type: string
+                  description: >-
+                    Opaque version string for optimistic locking.
+                    Server-generated and returned in responses.
+                has_replication_point_blocking_errors:
+                  type: boolean
+                  description: True if errors currently block the replication point.
+                initial_replication_progress:
                   type: object
                   properties:
-                    regions:
-                      type: array
-                      items:
-                        type: string
-                      description: >-
-                        List of all regions participating in this failover
-                        group.
-                    workspace_sets:
+                    completed:
+                      type: integer
+                      description: Percent complete, 0-100.
+                  description: >-
+                    Initial replication progress of all in-scope assets. Set
+                    only when the FailoverGroup is in INITIAL_REPLICATION state.
+                name:
+                  type: string
+                  description: >-
+                    Fully qualified resource name in the format
+                    accounts/{account_id}/failover-groups/{failover_group_id}.
+                replication_point:
+                  type: string
+                  format: date-time
+                  description: The latest point in time to which data has been replicated.
+                state:
+                  type: string
+                  x-enum:
+                    - ACTIVE
+                    - CREATING
+                    - CREATION_FAILED
+                    - DELETING
+                    - DELETION_FAILED
+                    - FAILING_OVER
+                    - FAILOVER_FAILED
+                    - INITIAL_REPLICATION
+                  description: Aggregate state of the failover group.
+                unity_catalog_assets:
+                  type: object
+                  properties:
+                    catalogs:
                       type: array
                       items:
                         type: object
                         properties:
                           name:
                             type: string
-                            description: Resource name for this workspace set.
-                          workspace_ids:
-                            type: array
-                            items:
-                              type: string
-                            description: >-
-                              Workspace IDs in this set. The system derives and
-                              validates regions. All workspaces must be in the
-                              Mission Critical tier.
-                          asset_replication_config:
-                            type: object
-                            properties:
-                              enable_jobs:
-                                type: boolean
-                                description: Whether to replicate jobs.
-                              enable_clusters:
-                                type: boolean
-                                description: >-
-                                  Whether to replicate clusters (including
-                                  cluster policies, instance profiles, global
-                                  init scripts, and worker environment
-                                  overlays).
-                              enable_warehouse:
-                                type: boolean
-                                description: Whether to replicate SQL warehouses.
-                              enable_sql_workspace:
-                                type: boolean
-                                description: Whether to replicate the SQL workspace.
-                              enable_libraries:
-                                type: boolean
-                                description: Whether to replicate libraries.
-                              enable_notebooks:
-                                type: boolean
-                                description: Whether to replicate notebooks.
-                              enable_files:
-                                type: boolean
-                                description: Whether to replicate workspace files.
-                              enable_queries:
-                                type: boolean
-                                description: Whether to replicate SQL queries.
-                              enable_dashboards:
-                                type: boolean
-                                description: Whether to replicate dashboards.
-                            required:
-                              - enable_jobs
-                              - enable_clusters
-                              - enable_warehouse
-                              - enable_sql_workspace
-                              - enable_libraries
-                              - enable_notebooks
-                              - enable_files
-                              - enable_queries
-                              - enable_dashboards
-                            description: >-
-                              Per-asset-type control over which workspace assets
-                              are replicated. Applies only when
-                              replicate_workspace_assets is true. When omitted
-                              while control plane DR is enabled, every asset
-                              type is replicated.
-                          replicate_workspace_assets:
-                            type: boolean
-                            description: >-
-                              Whether to enable control plane DR (notebooks,
-                              jobs, clusters, etc.) for this set. Defaults to
-                              false.
-                          stable_url_names:
-                            type: array
-                            items:
-                              type: string
-                            description: >-
-                              Resource names of stable URLs associated with this
-                              workspace set. Format:
-                              accounts/{account_id}/stable-urls/{stable_url_id}.
-                              The referenced stable URLs must already exist (via
-                              CreateStableUrl).
+                            description: The name of the UC catalog to replicate.
                         required:
                           - name
-                          - workspace_ids
-                        description: >-
-                          A set of workspaces that replicate to each other
-                          across regions.
-                      description: >-
-                        Workspace sets, each containing workspaces that
-                        replicate to each other.
-                    initial_primary_region:
+                        description: A Unity Catalog catalog to replicate.
+                      description: UC catalogs to replicate.
+                    data_replication_workspace_set:
                       type: string
                       description: >-
-                        Initial primary region. Used only in Create requests to
-                        set the starting primary region. Not returned in
-                        responses.
-                    create_time:
-                      type: string
-                      format: date-time
-                      description: Time at which this failover group was created.
-                    effective_primary_region:
-                      type: string
-                      description: >-
-                        Current effective primary region. Replication flows FROM
-                        workspaces in this region. Changes after a successful
-                        failover.
-                    etag:
-                      type: string
-                      description: >-
-                        Opaque version string for optimistic locking.
-                        Server-generated and returned in responses.
-                    name:
-                      type: string
-                      description: >-
-                        Fully qualified resource name in the format
-                        accounts/{account_id}/failover-groups/{failover_group_id}.
-                    replication_point:
-                      type: string
-                      format: date-time
-                      description: >-
-                        The latest point in time to which data has been
-                        replicated.
-                    state:
-                      type: string
-                      x-enum:
-                        - ACTIVE
-                        - CREATING
-                        - CREATION_FAILED
-                        - DELETING
-                        - DELETION_FAILED
-                        - FAILING_OVER
-                        - FAILOVER_FAILED
-                        - INITIAL_REPLICATION
-                      description: Aggregate state of the failover group.
-                    unity_catalog_assets:
-                      type: object
-                      properties:
-                        catalogs:
-                          type: array
-                          items:
-                            type: object
-                            properties:
-                              name:
-                                type: string
-                                description: The name of the UC catalog to replicate.
-                            required:
-                              - name
-                            description: A Unity Catalog catalog to replicate.
-                          description: UC catalogs to replicate.
-                        data_replication_workspace_set:
-                          type: string
-                          description: >-
-                            The workspace set whose workspaces will be used for
-                            data replication of all UC catalogs' underlying
-                            storage.
-                        location_mappings:
-                          type: array
-                          items:
-                            type: object
-                            properties:
-                              name:
-                                type: string
-                                description: Resource name for this location.
-                              uri_by_region:
-                                type: array
-                                items:
-                                  type: object
-                                  properties:
-                                    region:
-                                      type: string
-                                      description: The region name.
-                                    uri:
-                                      type: string
-                                      description: The storage URI for this region.
-                                  required:
-                                    - region
-                                    - uri
-                                  description: >-
-                                    A single entry in a location mapping,
-                                    mapping a region to a storage URI. Used
-                                    instead of
-                                        map<string, string> for proto2 compatibility.
-                                description: >-
-                                  URI for each region. Each entry maps a region
-                                  name to a storage URI.
-                            required:
-                              - name
-                              - uri_by_region
+                        The workspace set whose workspaces will be used for data
+                        replication of all UC catalogs' underlying storage.
+                    location_mappings:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                            description: Resource name for this location.
+                          uri_by_region:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                region:
+                                  type: string
+                                  description: The region name.
+                                uri:
+                                  type: string
+                                  description: The storage URI for this region.
+                              required:
+                                - region
+                                - uri
+                              description: >-
+                                A single entry in a location mapping, mapping a
+                                region to a storage URI. Used instead of
+                                    map<string, string> for proto2 compatibility.
                             description: >-
-                              A location mapping identified by a name, with URIs
-                              per region. The system derives replication
-                                  direction from effective_primary_region.
-                          description: >-
-                            Location mappings - storage URI per region for each
-                            location.
-                      required:
-                        - catalogs
-                        - data_replication_workspace_set
-                      description: Unity Catalog replication configuration.
-                    update_time:
-                      type: string
-                      format: date-time
-                      description: Time at which this failover group was last modified.
+                              URI for each region. Each entry maps a region name
+                              to a storage URI.
+                        required:
+                          - name
+                          - uri_by_region
+                        description: >-
+                          A location mapping identified by a name, with URIs per
+                          region. The system derives replication
+                              direction from effective_primary_region.
+                      description: >-
+                        Location mappings - storage URI per region for each
+                        location.
                   required:
-                    - regions
-                    - workspace_sets
-                    - initial_primary_region
-                  description: >-
-                    The failover group with updated fields. The name field
-                    identifies the resource and is populated from the URL path.
+                    - catalogs
+                    - data_replication_workspace_set
+                  description: Unity Catalog replication configuration.
+                update_time:
+                  type: string
+                  format: date-time
+                  description: Time at which this failover group was last modified.
               required:
-                - failover_group
+                - regions
+                - workspace_sets
+                - initial_primary_region
       responses:
         '200':
           description: Success
@@ -938,7 +902,108 @@ paths:
                   message:
                     type: string
       x-stackql-sdk-source: DisasterRecoveryAPI
-  /api/disaster-recovery/v1/{name}/failover:
+  /api/disaster-recovery/v1/accounts/{account_id}/stable-urls/{stable_url_id}:
+    delete:
+      operationId: disaster_recovery_delete_stable_url
+      summary: Delete a stable URL.
+      tags:
+        - disasterrecovery
+        - disaster_recovery
+      description: |-
+        Delete a stable URL.
+
+        :param name: str
+          The fully qualified resource name. Format: accounts/{account_id}/stable-urls/{stable_url_id}.
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `account_id` segment of the `name` resource name
+            (`accounts/{account_id}/stable-urls/{stable_url_id}`). The fully
+            qualified resource name. Format:
+            accounts/{account_id}/stable-urls/{stable_url_id}.
+        - name: stable_url_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `stable_url_id` segment of the `name` resource name
+            (`accounts/{account_id}/stable-urls/{stable_url_id}`). The fully
+            qualified resource name. Format:
+            accounts/{account_id}/stable-urls/{stable_url_id}.
+      responses:
+        '200':
+          description: Success
+        default:
+          description: Error response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+      x-stackql-sdk-source: DisasterRecoveryAPI
+    get:
+      operationId: disaster_recovery_get_stable_url
+      summary: Get a stable URL.
+      tags:
+        - disasterrecovery
+        - disaster_recovery
+      description: |-
+        Get a stable URL.
+
+        :param name: str
+          The fully qualified resource name. Format: accounts/{account_id}/stable-urls/{stable_url_id}.
+
+        :returns: :class:`StableUrl`
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `account_id` segment of the `name` resource name
+            (`accounts/{account_id}/stable-urls/{stable_url_id}`). The fully
+            qualified resource name. Format:
+            accounts/{account_id}/stable-urls/{stable_url_id}.
+        - name: stable_url_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `stable_url_id` segment of the `name` resource name
+            (`accounts/{account_id}/stable-urls/{stable_url_id}`). The fully
+            qualified resource name. Format:
+            accounts/{account_id}/stable-urls/{stable_url_id}.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StableUrl'
+        default:
+          description: Error response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+      x-stackql-sdk-source: DisasterRecoveryAPI
+  /api/disaster-recovery/v1/accounts/{account_id}/failover-groups/{failover_group_id}/failover:
     post:
       operationId: disaster_recovery_failover_failover_group
       summary: Initiate a failover to a new primary region.
@@ -962,13 +1027,25 @@ paths:
 
         :returns: :class:`FailoverGroup`
       parameters:
-        - name: name
+        - name: account_id
           in: path
           required: true
           schema:
             type: string
           description: >-
-            The fully qualified resource name of the failover group to failover.
+            The `account_id` segment of the `name` resource name
+            (`accounts/{account_id}/failover-groups/{failover_group_id}`). The
+            fully qualified resource name of the failover group to failover.
+            Format: accounts/{account_id}/failover-groups/{failover_group_id}.
+        - name: failover_group_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `failover_group_id` segment of the `name` resource name
+            (`accounts/{account_id}/failover-groups/{failover_group_id}`). The
+            fully qualified resource name of the failover group to failover.
             Format: accounts/{account_id}/failover-groups/{failover_group_id}.
       requestBody:
         content:
@@ -1017,59 +1094,6 @@ paths:
       x-stackql-sdk-source: DisasterRecoveryAPI
 components:
   schemas:
-    AssetReplicationConfig:
-      type: object
-      properties:
-        enable_jobs:
-          type: boolean
-          description: Whether to replicate jobs.
-        enable_clusters:
-          type: boolean
-          description: >-
-            Whether to replicate clusters (including cluster policies, instance
-            profiles, global init scripts, and worker environment overlays).
-        enable_warehouse:
-          type: boolean
-          description: Whether to replicate SQL warehouses.
-        enable_sql_workspace:
-          type: boolean
-          description: Whether to replicate the SQL workspace.
-        enable_libraries:
-          type: boolean
-          description: Whether to replicate libraries.
-        enable_notebooks:
-          type: boolean
-          description: Whether to replicate notebooks.
-        enable_files:
-          type: boolean
-          description: Whether to replicate workspace files.
-        enable_queries:
-          type: boolean
-          description: Whether to replicate SQL queries.
-        enable_dashboards:
-          type: boolean
-          description: Whether to replicate dashboards.
-      required:
-        - enable_jobs
-        - enable_clusters
-        - enable_warehouse
-        - enable_sql_workspace
-        - enable_libraries
-        - enable_notebooks
-        - enable_files
-        - enable_queries
-        - enable_dashboards
-      description: >-
-        Per-asset-type control over which workspace assets are replicated for a
-        workspace set. Applies
-            only when replicate_workspace_assets is true. Each toggle enables replication of one asset type
-            (or, for the workspace tree, one sub-type). Folders and permissions are always replicated for a
-            coherent recovery copy and therefore have no toggle.
-
-            This message is all-or-nothing: if it is provided, every toggle must be set (a partial config is
-            rejected). Omitting the containing asset_replication_config field entirely selects the default
-            of replicating every asset type; sending the message means the caller opts into explicit
-            per-type control and must therefore state each type.
     FailoverGroup:
       type: object
       properties:
@@ -1104,6 +1128,14 @@ components:
           description: >-
             Opaque version string for optimistic locking. Server-generated and
             returned in responses.
+        has_replication_point_blocking_errors:
+          type: boolean
+          description: True if errors currently block the replication point.
+        initial_replication_progress:
+          $ref: '#/components/schemas/InitialReplicationProgress'
+          description: >-
+            Initial replication progress of all in-scope assets. Set only when
+            the FailoverGroup is in INITIAL_REPLICATION state.
         name:
           type: string
           description: >-
@@ -1131,6 +1163,16 @@ components:
         A failover group manages disaster recovery across workspace sets,
         coordinating Unity Catalog and
             workspace assets replication.
+    InitialReplicationProgress:
+      type: object
+      properties:
+        completed:
+          type: integer
+          description: Percent complete, 0-100.
+      description: >-
+        Progress of the initial replication of all in-scope assets (Unity
+        Catalog and workspace assets)
+            of a FailoverGroup. Populated only while the FailoverGroup is in INITIAL_REPLICATION.
     ListFailoverGroupsResponse:
       type: object
       properties:
@@ -1289,12 +1331,6 @@ components:
           description: >-
             Workspace IDs in this set. The system derives and validates regions.
             All workspaces must be in the Mission Critical tier.
-        asset_replication_config:
-          $ref: '#/components/schemas/AssetReplicationConfig'
-          description: >-
-            Per-asset-type control over which workspace assets are replicated.
-            Applies only when replicate_workspace_assets is true. When omitted
-            while control plane DR is enabled, every asset type is replicated.
         replicate_workspace_assets:
           type: boolean
           description: >-
@@ -1341,24 +1377,39 @@ components:
               algorithm: naive
           operation:
             $ref: >-
-              #/paths/~1api~1disaster-recovery~1v1~1{parent}~1failover-groups/post
+              #/paths/~1api~1disaster-recovery~1v1~1accounts~1{account_id}~1failover-groups/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         list:
           operation:
             $ref: >-
-              #/paths/~1api~1disaster-recovery~1v1~1{parent}~1failover-groups/get
+              #/paths/~1api~1disaster-recovery~1v1~1accounts~1{account_id}~1failover-groups/get
           response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.failover_groups
+        delete:
+          operation:
+            $ref: >-
+              #/paths/~1api~1disaster-recovery~1v1~1accounts~1{account_id}~1failover-groups~1{failover_group_id}/delete
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        get:
+          operation:
+            $ref: >-
+              #/paths/~1api~1disaster-recovery~1v1~1accounts~1{account_id}~1failover-groups~1{failover_group_id}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
         update:
           config:
             requestBodyTranslate:
               algorithm: naive
           operation:
-            $ref: '#/paths/~1api~1disaster-recovery~1v1~1{name}/patch'
+            $ref: >-
+              #/paths/~1api~1disaster-recovery~1v1~1accounts~1{account_id}~1failover-groups~1{failover_group_id}/patch
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -1367,18 +1418,21 @@ components:
             requestBodyTranslate:
               algorithm: naive
           operation:
-            $ref: '#/paths/~1api~1disaster-recovery~1v1~1{name}~1failover/post'
+            $ref: >-
+              #/paths/~1api~1disaster-recovery~1v1~1accounts~1{account_id}~1failover-groups~1{failover_group_id}~1failover/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
       sqlVerbs:
         select:
+          - $ref: '#/components/x-stackQL-resources/failover_groups/methods/get'
           - $ref: '#/components/x-stackQL-resources/failover_groups/methods/list'
         insert:
           - $ref: '#/components/x-stackQL-resources/failover_groups/methods/create'
         update:
           - $ref: '#/components/x-stackQL-resources/failover_groups/methods/update'
-        delete: []
+        delete:
+          - $ref: '#/components/x-stackQL-resources/failover_groups/methods/delete'
         replace: []
     stable_urls:
       id: databricks_account.disasterrecovery.stable_urls
@@ -1390,33 +1444,37 @@ components:
             requestBodyTranslate:
               algorithm: naive
           operation:
-            $ref: '#/paths/~1api~1disaster-recovery~1v1~1{parent}~1stable-urls/post'
+            $ref: >-
+              #/paths/~1api~1disaster-recovery~1v1~1accounts~1{account_id}~1stable-urls/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         list:
           operation:
-            $ref: '#/paths/~1api~1disaster-recovery~1v1~1{parent}~1stable-urls/get'
+            $ref: >-
+              #/paths/~1api~1disaster-recovery~1v1~1accounts~1{account_id}~1stable-urls/get
           response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.stable_urls
         delete:
           operation:
-            $ref: '#/paths/~1api~1disaster-recovery~1v1~1{name}/delete'
+            $ref: >-
+              #/paths/~1api~1disaster-recovery~1v1~1accounts~1{account_id}~1stable-urls~1{stable_url_id}/delete
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         get:
           operation:
-            $ref: '#/paths/~1api~1disaster-recovery~1v1~1{name}/get'
+            $ref: >-
+              #/paths/~1api~1disaster-recovery~1v1~1accounts~1{account_id}~1stable-urls~1{stable_url_id}/get
           response:
             mediaType: application/json
             openAPIDocKey: '200'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/stable_urls/methods/list'
           - $ref: '#/components/x-stackQL-resources/stable_urls/methods/get'
+          - $ref: '#/components/x-stackQL-resources/stable_urls/methods/list'
         insert:
           - $ref: '#/components/x-stackQL-resources/stable_urls/methods/create'
         update: []

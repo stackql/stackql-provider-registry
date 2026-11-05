@@ -5,14 +5,28 @@ info:
     Python SDK.
   version: 0.1.0
   x-stackql-sdk-version: 0.123.0
-  x-stackql-date-generated: '2026-07-31'
+  x-stackql-date-generated: '2026-11-01'
   x-stackql-sdk-namespace: databricks.sdk.service.iam
 servers:
-- url: https://{deployment_name}.cloud.databricks.com
+- url: https://{deployment_name}.{workspace_domain}
   variables:
     deployment_name:
-      description: The Databricks Workspace Deployment Name
+      description: 'The Databricks workspace deployment name: the host prefix of the workspace URL (dbc-abcd0123-a1bc on AWS,
+        adb-1234567890123456.7 on Azure, 1234567890123456.7 on GCP). Set DATABRICKS_DEPLOYMENT_NAME to default it for the
+        session.'
       default: dbc-abcd0123-a1bc
+      x-stackQL-envVar: DATABRICKS_DEPLOYMENT_NAME
+    workspace_domain:
+      description: The Databricks workspace domain suffix for the cloud. Selected by DATABRICKS_CLOUD (aws, azure or gcp;
+        default aws).
+      default: cloud.databricks.com
+      x-stackQL-envVarSelector:
+        envVar: DATABRICKS_CLOUD
+        default: aws
+        values:
+          aws: cloud.databricks.com
+          azure: azuredatabricks.net
+          gcp: gcp.databricks.com
 paths:
   /api/2.0/access-control/check-policy-v2:
     get:
@@ -1147,7 +1161,6 @@ paths:
                         - CAN_VIEW
                         - CAN_VIEW_METADATA
                         - IS_OWNER
-                        - UNSPECIFIED
                         description: Permission level
                       service_principal_name:
                         type: string
@@ -1247,7 +1260,6 @@ paths:
                         - CAN_VIEW
                         - CAN_VIEW_METADATA
                         - IS_OWNER
-                        - UNSPECIFIED
                         description: Permission level
                       service_principal_name:
                         type: string
@@ -2459,12 +2471,13 @@ paths:
       x-stackql-sdk-source: UsersV2API
     put:
       operationId: users_v2_update
-      summary: Replaces a user's information with the data supplied in request.
+      summary: Replaces a user's information with the data supplied in request. The ``userName`` and ``emails``
       tags:
       - iam
       - users_v2
       description: |-
-        Replaces a user's information with the data supplied in request.
+        Replaces a user's information with the data supplied in request. The ``userName`` and ``emails``
+        attributes cannot be updated through this API; any supplied changes to them are ignored (no-op).
 
         :param id: str
           Databricks user ID.
@@ -2476,7 +2489,8 @@ paths:
           <https://docs.databricks.com/administration-guide/users-groups/best-practices.html#enable-identity-federation>`__.
           Use Account SCIM APIs to update ``displayName``.
         :param emails: List[:class:`ComplexValue`] (optional)
-          All the emails associated with the Databricks user.
+          All the emails associated with the Databricks user. This attribute cannot be updated through the
+          SCIM PATCH or PUT APIs; any supplied change is ignored.
         :param entitlements: List[:class:`ComplexValue`] (optional)
           Entitlements assigned to the user. See `assigning entitlements
           <https://docs.databricks.com/administration-guide/users-groups/index.html#assigning-entitlements>`__
@@ -2490,7 +2504,8 @@ paths:
         :param schemas: List[:class:`UserSchema`] (optional)
           The schema of the user.
         :param user_name: str (optional)
-          Email address of the Databricks user.
+          Email address of the Databricks user. This attribute cannot be updated through the SCIM PATCH or PUT
+          APIs; any supplied change is ignored.
       parameters:
       - name: id
         in: path
@@ -2527,7 +2542,8 @@ paths:
                         type: string
                       value:
                         type: string
-                  description: All the emails associated with the Databricks user.
+                  description: All the emails associated with the Databricks user. This attribute cannot be updated through
+                    the SCIM PATCH or PUT APIs; any supplied change is ignored.
                 entitlements:
                   type: array
                   items:
@@ -2634,7 +2650,8 @@ paths:
                   description: The schema of the user.
                 userName:
                   type: string
-                  description: Email address of the Databricks user.
+                  description: Email address of the Databricks user. This attribute cannot be updated through the SCIM PATCH
+                    or PUT APIs; any supplied change is ignored.
       responses:
         '200':
           description: Success
@@ -3295,16 +3312,10 @@ components:
     PermissionAssignments:
       type: object
       properties:
-        next_page_token:
-          type: string
         permission_assignments:
           type: array
           items:
             $ref: '#/components/schemas/PermissionAssignment'
-          description: Array of permissions assignments defined for a workspace.
-        prev_page_token:
-          type: string
-          description: Token to retrieve the previous page of results.
     PermissionOutput:
       type: object
       properties:
@@ -3751,7 +3762,6 @@ components:
       - CAN_VIEW
       - CAN_VIEW_METADATA
       - IS_OWNER
-      - UNSPECIFIED
       description: Permission level
     RequestAuthzIdentity:
       type: string
@@ -4353,7 +4363,6 @@ components:
                 JSON_EXTRACT(e.value, '$.primary') AS is_primary
               FROM databricks_workspace.iam.users_v2 u,
                    JSON_EACH(u.emails) e
-              WHERE u.deployment_name = '{{ deployment_name }}'
             fallback:
               predicate: sqlDialect == "postgres"
               ddl: |-
@@ -4371,7 +4380,6 @@ components:
                   (e.value->>'primary')::boolean AS is_primary
                 FROM databricks_workspace.iam.users_v2 u,
                      jsonb_array_elements(u.emails::jsonb) AS e
-                WHERE u.deployment_name = '{{ deployment_name }}'
     vw_user_roles:
       name: vw_user_roles
       id: databricks_workspace.iam.vw_user_roles
@@ -4409,7 +4417,6 @@ components:
                 JSON_EXTRACT(r.value, '$.value') AS role
               FROM databricks_workspace.iam.users_v2 u,
                    JSON_EACH(u.roles) r
-              WHERE u.deployment_name = '{{ deployment_name }}'
             fallback:
               predicate: sqlDialect == "postgres"
               ddl: |-
@@ -4421,7 +4428,6 @@ components:
                   r.value->>'value' AS role
                 FROM databricks_workspace.iam.users_v2 u,
                      jsonb_array_elements(u.roles::jsonb) AS r
-                WHERE u.deployment_name = '{{ deployment_name }}'
     vw_user_entitlements:
       name: vw_user_entitlements
       id: databricks_workspace.iam.vw_user_entitlements
@@ -4460,7 +4466,6 @@ components:
                 JSON_EXTRACT(e.value, '$.value') AS entitlement
               FROM databricks_workspace.iam.users_v2 u,
                    JSON_EACH(u.entitlements) e
-              WHERE u.deployment_name = '{{ deployment_name }}'
             fallback:
               predicate: sqlDialect == "postgres"
               ddl: |-
@@ -4472,7 +4477,6 @@ components:
                   e.value->>'value' AS entitlement
                 FROM databricks_workspace.iam.users_v2 u,
                      jsonb_array_elements(u.entitlements::jsonb) AS e
-                WHERE u.deployment_name = '{{ deployment_name }}'
     vw_user_groups:
       name: vw_user_groups
       id: databricks_workspace.iam.vw_user_groups
@@ -4522,7 +4526,6 @@ components:
                 JSON_EXTRACT(g.value, '$.type') AS group_type
               FROM databricks_workspace.iam.users_v2 u,
                    JSON_EACH(u.groups) g
-              WHERE u.deployment_name = '{{ deployment_name }}'
             fallback:
               predicate: sqlDialect == "postgres"
               ddl: |-
@@ -4537,7 +4540,6 @@ components:
                   g.value->>'type' AS group_type
                 FROM databricks_workspace.iam.users_v2 u,
                      jsonb_array_elements(u.groups::jsonb) AS g
-                WHERE u.deployment_name = '{{ deployment_name }}'
     vw_group_members:
       name: vw_group_members
       id: databricks_workspace.iam.vw_group_members
@@ -4583,7 +4585,6 @@ components:
                 JSON_EXTRACT(m.value, '$.type') AS member_type
               FROM databricks_workspace.iam.groups_v2 g,
                    JSON_EACH(g.members) m
-              WHERE g.deployment_name = '{{ deployment_name }}'
             fallback:
               predicate: sqlDialect == "postgres"
               ddl: |-
@@ -4597,7 +4598,6 @@ components:
                   m.value->>'type' AS member_type
                 FROM databricks_workspace.iam.groups_v2 g,
                      jsonb_array_elements(g.members::jsonb) AS m
-                WHERE g.deployment_name = '{{ deployment_name }}'
     vw_group_entitlements:
       name: vw_group_entitlements
       id: databricks_workspace.iam.vw_group_entitlements
@@ -4632,7 +4632,6 @@ components:
                 JSON_EXTRACT(e.value, '$.value') AS entitlement
               FROM databricks_workspace.iam.groups_v2 g,
                    JSON_EACH(g.entitlements) e
-              WHERE g.deployment_name = '{{ deployment_name }}'
             fallback:
               predicate: sqlDialect == "postgres"
               ddl: |-
@@ -4643,7 +4642,6 @@ components:
                   e.value->>'value' AS entitlement
                 FROM databricks_workspace.iam.groups_v2 g,
                      jsonb_array_elements(g.entitlements::jsonb) AS e
-                WHERE g.deployment_name = '{{ deployment_name }}'
     vw_group_roles:
       name: vw_group_roles
       id: databricks_workspace.iam.vw_group_roles
@@ -4677,7 +4675,6 @@ components:
                 JSON_EXTRACT(r.value, '$.value') AS role
               FROM databricks_workspace.iam.groups_v2 g,
                    JSON_EACH(g.roles) r
-              WHERE g.deployment_name = '{{ deployment_name }}'
             fallback:
               predicate: sqlDialect == "postgres"
               ddl: |-
@@ -4688,7 +4685,6 @@ components:
                   r.value->>'value' AS role
                 FROM databricks_workspace.iam.groups_v2 g,
                      jsonb_array_elements(g.roles::jsonb) AS r
-                WHERE g.deployment_name = '{{ deployment_name }}'
     vw_service_principal_entitlements:
       name: vw_service_principal_entitlements
       id: databricks_workspace.iam.vw_service_principal_entitlements
@@ -4731,7 +4727,6 @@ components:
                 JSON_EXTRACT(e.value, '$.value') AS entitlement
               FROM databricks_workspace.iam.service_principals_v2 sp,
                    JSON_EACH(sp.entitlements) e
-              WHERE sp.deployment_name = '{{ deployment_name }}'
             fallback:
               predicate: sqlDialect == "postgres"
               ddl: |-
@@ -4744,7 +4739,6 @@ components:
                   e.value->>'value' AS entitlement
                 FROM databricks_workspace.iam.service_principals_v2 sp,
                      jsonb_array_elements(sp.entitlements::jsonb) AS e
-                WHERE sp.deployment_name = '{{ deployment_name }}'
     vw_service_principal_roles:
       name: vw_service_principal_roles
       id: databricks_workspace.iam.vw_service_principal_roles
@@ -4786,7 +4780,6 @@ components:
                 JSON_EXTRACT(r.value, '$.value') AS role
               FROM databricks_workspace.iam.service_principals_v2 sp,
                    JSON_EACH(sp.roles) r
-              WHERE sp.deployment_name = '{{ deployment_name }}'
             fallback:
               predicate: sqlDialect == "postgres"
               ddl: |-
@@ -4799,7 +4792,6 @@ components:
                   r.value->>'value' AS role
                 FROM databricks_workspace.iam.service_principals_v2 sp,
                      jsonb_array_elements(sp.roles::jsonb) AS r
-                WHERE sp.deployment_name = '{{ deployment_name }}'
     vw_permissions:
       name: vw_permissions
       id: databricks_workspace.iam.vw_permissions
@@ -4873,9 +4865,6 @@ components:
               FROM databricks_workspace.iam.permissions p,
                    JSON_EACH(p.access_control_list) acl,
                    JSON_EACH(JSON_EXTRACT(acl.value, '$.all_permissions')) perm
-              WHERE p.deployment_name = '{{ deployment_name }}'
-              AND p.request_object_type = '{{ request_object_type }}'
-              AND p.request_object_id = '{{ request_object_id }}'
             fallback:
               predicate: sqlDialect == "postgres"
               ddl: |-
@@ -4895,9 +4884,6 @@ components:
                 FROM databricks_workspace.iam.permissions p,
                      jsonb_array_elements(p.access_control_list::jsonb) AS acl,
                      jsonb_array_elements((acl.value->'all_permissions')::jsonb) AS perm
-                WHERE p.deployment_name = '{{ deployment_name }}'
-                AND p.request_object_type = '{{ request_object_type }}'
-                AND p.request_object_id = '{{ request_object_id }}'
     vw_rule_set_grant_principals:
       name: vw_rule_set_grant_principals
       id: databricks_workspace.iam.vw_rule_set_grant_principals
@@ -4942,9 +4928,6 @@ components:
               FROM databricks_workspace.iam.rule_sets rs,
                    JSON_EACH(rs.grant_rules) gr,
                    JSON_EACH(JSON_EXTRACT(gr.value, '$.principals')) pr
-              WHERE rs.deployment_name = '{{ deployment_name }}'
-              AND rs.name = '{{ name }}'
-              AND rs.etag = '{{ etag }}'
             fallback:
               predicate: sqlDialect == "postgres"
               ddl: |-
@@ -4957,9 +4940,6 @@ components:
                 FROM databricks_workspace.iam.rule_sets rs,
                      jsonb_array_elements(rs.grant_rules::jsonb) AS gr,
                      jsonb_array_elements((gr.value->'principals')::jsonb) AS pr
-                WHERE rs.deployment_name = '{{ deployment_name }}'
-                AND rs.name = '{{ name }}'
-                AND rs.etag = '{{ etag }}'
 x-stackQL-config:
   pagination:
     requestToken:

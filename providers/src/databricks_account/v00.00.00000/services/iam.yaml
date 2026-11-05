@@ -5,10 +5,23 @@ info:
     SDK.
   version: 0.1.0
   x-stackql-sdk-version: 0.123.0
-  x-stackql-date-generated: '2026-07-31'
+  x-stackql-date-generated: '2026-11-01'
   x-stackql-sdk-namespace: databricks.sdk.service.iam
 servers:
-- url: https://accounts.cloud.databricks.com
+- url: https://{account_host}
+  variables:
+    account_host:
+      description: The Databricks account console host. Selected by DATABRICKS_CLOUD (aws, azure or gcp; default aws), or
+        set explicitly with DATABRICKS_ACCOUNT_HOST (bare host, no scheme).
+      default: accounts.cloud.databricks.com
+      x-stackQL-envVar: DATABRICKS_ACCOUNT_HOST
+      x-stackQL-envVarSelector:
+        envVar: DATABRICKS_CLOUD
+        default: aws
+        values:
+          aws: accounts.cloud.databricks.com
+          azure: accounts.azuredatabricks.net
+          gcp: accounts.gcp.databricks.com
 paths:
   /api/2.0/preview/accounts/{account_id}/access-control/assignable-roles:
     get:
@@ -1650,12 +1663,13 @@ paths:
       x-stackql-sdk-source: AccountUsersV2API
     put:
       operationId: account_users_v2_update
-      summary: Replaces a user's information with the data supplied in request.
+      summary: Replaces a user's information with the data supplied in request. The ``userName`` and ``emails``
       tags:
       - iam
       - account_users_v2
       description: |-
-        Replaces a user's information with the data supplied in request.
+        Replaces a user's information with the data supplied in request. The ``userName`` and ``emails``
+        attributes cannot be updated through this API; any supplied changes to them are ignored (no-op).
 
         :param id: str
           Databricks user ID.
@@ -1664,14 +1678,16 @@ paths:
         :param display_name: str (optional)
           String that represents a concatenation of given and family names. For example ``John Smith``.
         :param emails: List[:class:`ComplexValue`] (optional)
-          All the emails associated with the Databricks user.
+          All the emails associated with the Databricks user. This attribute cannot be updated through the
+          SCIM PATCH or PUT APIs; any supplied change is ignored.
         :param external_id: str (optional)
           External ID is not currently supported. It is reserved for future use.
         :param name: :class:`Name` (optional)
         :param roles: List[:class:`ComplexValue`] (optional)
           Indicates if the group has the admin role.
         :param user_name: str (optional)
-          Email address of the Databricks user.
+          Email address of the Databricks user. This attribute cannot be updated through the SCIM PATCH or PUT
+          APIs; any supplied change is ignored.
       parameters:
       - name: account_id
         in: path
@@ -1711,7 +1727,8 @@ paths:
                         type: string
                       value:
                         type: string
-                  description: All the emails associated with the Databricks user.
+                  description: All the emails associated with the Databricks user. This attribute cannot be updated through
+                    the SCIM PATCH or PUT APIs; any supplied change is ignored.
                 externalId:
                   type: string
                   description: External ID is not currently supported. It is reserved for future use.
@@ -1741,7 +1758,8 @@ paths:
                   description: Indicates if the group has the admin role.
                 userName:
                   type: string
-                  description: Email address of the Databricks user.
+                  description: Email address of the Databricks user. This attribute cannot be updated through the SCIM PATCH
+                    or PUT APIs; any supplied change is ignored.
       responses:
         '200':
           description: Success
@@ -1976,12 +1994,6 @@ paths:
 
         :param workspace_id: int
           The workspace ID for the account.
-        :param filter: str (optional)
-          Filter string to search principals.
-        :param max_results: int (optional)
-          Maximum number of permission assignments to return.
-        :param page_token: str (optional)
-          Page token returned by previous call to retrieve the next page of results.
 
         :returns: Iterator over :class:`PermissionAssignment`
       parameters:
@@ -1996,24 +2008,6 @@ paths:
         schema:
           type: integer
         description: The workspace ID for the account.
-      - name: filter
-        in: query
-        required: false
-        schema:
-          type: string
-        description: Filter string to search principals.
-      - name: max_results
-        in: query
-        required: false
-        schema:
-          type: integer
-        description: Maximum number of permission assignments to return.
-      - name: page_token
-        in: query
-        required: false
-        schema:
-          type: string
-        description: Page token returned by previous call to retrieve the next page of results.
       responses:
         '200':
           description: Success
@@ -2505,16 +2499,10 @@ components:
     PermissionAssignments:
       type: object
       properties:
-        next_page_token:
-          type: string
         permission_assignments:
           type: array
           items:
             $ref: '#/components/schemas/PermissionAssignment'
-          description: Array of permissions assignments defined for a workspace.
-        prev_page_token:
-          type: string
-          description: Token to retrieve the previous page of results.
     PermissionOutput:
       type: object
       properties:
@@ -2961,7 +2949,6 @@ components:
       - CAN_VIEW
       - CAN_VIEW_METADATA
       - IS_OWNER
-      - UNSPECIFIED
       description: Permission level
     RequestAuthzIdentity:
       type: string
@@ -3424,7 +3411,6 @@ components:
                 JSON_EXTRACT(r.value, '$.value') AS role
               FROM databricks_account.iam.account_users u,
                    JSON_EACH(u.roles) r
-              WHERE account_id = '{{ account_id }}'
             fallback:
               predicate: sqlDialect == "postgres"
               ddl: |-
@@ -3436,7 +3422,6 @@ components:
                   r.value->>'value' AS role
                 FROM databricks_account.iam.account_users u,
                      jsonb_array_elements(u.roles::jsonb) AS r
-                WHERE account_id = '{{ account_id }}'
     vw_account_group_members:
       name: vw_account_group_members
       id: databricks_account.iam.vw_account_group_members
@@ -3482,7 +3467,6 @@ components:
                 JSON_EXTRACT(m.value, '$.type') AS member_type
               FROM databricks_account.iam.account_groups g,
                    JSON_EACH(g.members) m
-              WHERE account_id = '{{ account_id }}'
             fallback:
               predicate: sqlDialect == "postgres"
               ddl: |-
@@ -3496,7 +3480,6 @@ components:
                   m.value->>'type' AS member_type
                 FROM databricks_account.iam.account_groups g,
                      jsonb_array_elements(g.members::jsonb) AS m
-                WHERE account_id = '{{ account_id }}'
     vw_account_group_roles:
       name: vw_account_group_roles
       id: databricks_account.iam.vw_account_group_roles
@@ -3530,7 +3513,6 @@ components:
                 JSON_EXTRACT(r.value, '$.value') AS role
               FROM databricks_account.iam.account_groups g,
                    JSON_EACH(g.roles) r
-              WHERE account_id = '{{ account_id }}'
             fallback:
               predicate: sqlDialect == "postgres"
               ddl: |-
@@ -3541,7 +3523,6 @@ components:
                   r.value->>'value' AS role
                 FROM databricks_account.iam.account_groups g,
                      jsonb_array_elements(g.roles::jsonb) AS r
-                WHERE account_id = '{{ account_id }}'
     vw_account_service_principal_roles:
       name: vw_account_service_principal_roles
       id: databricks_account.iam.vw_account_service_principal_roles
@@ -3583,7 +3564,6 @@ components:
                 JSON_EXTRACT(r.value, '$.value') AS role
               FROM databricks_account.iam.account_service_principals sp,
                    JSON_EACH(sp.roles) r
-              WHERE account_id = '{{ account_id }}'
             fallback:
               predicate: sqlDialect == "postgres"
               ddl: |-
@@ -3596,7 +3576,6 @@ components:
                   r.value->>'value' AS role
                 FROM databricks_account.iam.account_service_principals sp,
                      jsonb_array_elements(sp.roles::jsonb) AS r
-                WHERE account_id = '{{ account_id }}'
     vw_workspace_assignments:
       name: vw_workspace_assignments
       id: databricks_account.iam.vw_workspace_assignments
@@ -3649,8 +3628,6 @@ components:
                 p.value AS permission
               FROM databricks_account.iam.workspace_assignment wa,
                    JSON_EACH(wa.permissions) p
-              WHERE account_id = '{{ account_id }}'
-              AND workspace_id = '{{ workspace_id }}'
             fallback:
               predicate: sqlDialect == "postgres"
               ddl: |-
@@ -3665,8 +3642,6 @@ components:
                   p.value AS permission
                 FROM databricks_account.iam.workspace_assignment wa,
                      jsonb_array_elements(wa.permissions::jsonb) AS p
-                WHERE account_id = '{{ account_id }}'
-                AND workspace_id = '{{ workspace_id }}'
 x-stackQL-config:
   pagination:
     requestToken:
