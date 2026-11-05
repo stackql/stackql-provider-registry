@@ -6,16 +6,33 @@ info:
     (workspace-level APIs), generated from the Databricks Python SDK.
   version: 0.1.0
   x-stackql-sdk-version: 0.123.0
-  x-stackql-date-generated: '2026-07-31'
+  x-stackql-date-generated: '2026-11-01'
   x-stackql-sdk-namespace: databricks.sdk.service.bundledeployments
 servers:
-  - url: https://{deployment_name}.cloud.databricks.com
+  - url: https://{deployment_name}.{workspace_domain}
     variables:
       deployment_name:
-        description: The Databricks Workspace Deployment Name
+        description: >-
+          The Databricks workspace deployment name: the host prefix of the
+          workspace URL (dbc-abcd0123-a1bc on AWS, adb-1234567890123456.7 on
+          Azure, 1234567890123456.7 on GCP). Set DATABRICKS_DEPLOYMENT_NAME to
+          default it for the session.
         default: dbc-abcd0123-a1bc
+        x-stackQL-envVar: DATABRICKS_DEPLOYMENT_NAME
+      workspace_domain:
+        description: >-
+          The Databricks workspace domain suffix for the cloud. Selected by
+          DATABRICKS_CLOUD (aws, azure or gcp; default aws).
+        default: cloud.databricks.com
+        x-stackQL-envVarSelector:
+          envVar: DATABRICKS_CLOUD
+          default: aws
+          values:
+            aws: cloud.databricks.com
+            azure: azuredatabricks.net
+            gcp: gcp.databricks.com
 paths:
-  /api/2.0/bundle/{name}/complete:
+  /api/2.0/bundle/deployments/{deployment_id}/versions/{version_id}/complete:
     post:
       operationId: bundle_deployments_complete_version
       summary: Marks a version as complete and releases the deployment lock.
@@ -35,21 +52,31 @@ paths:
         :param name: str
           The name of the version to complete. Format: deployments/{deployment_id}/versions/{version_id}
         :param completion_reason: :class:`VersionComplete`
-          The reason for completing the version. Must be a terminal reason: VERSION_COMPLETE_SUCCESS,
-          VERSION_COMPLETE_FAILURE, or VERSION_COMPLETE_FORCE_ABORT.
+          The reason for completing the version. Must be VERSION_COMPLETE_SUCCESS or VERSION_COMPLETE_FAILURE.
         :param force: bool (optional)
-          If true, force-completes the version even if the caller is not the original creator. The
-          completion_reason must be VERSION_COMPLETE_FORCE_ABORT when force is true.
+          If true, force-completes the version even if the caller is not the original creator.
 
         :returns: :class:`Version`
       parameters:
-        - name: name
+        - name: deployment_id
           in: path
           required: true
           schema:
             type: string
           description: >-
-            The name of the version to complete. Format:
+            The `deployment_id` segment of the `name` resource name
+            (`deployments/{deployment_id}/versions/{version_id}`). The name of
+            the version to complete. Format:
+            deployments/{deployment_id}/versions/{version_id}
+        - name: version_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `version_id` segment of the `name` resource name
+            (`deployments/{deployment_id}/versions/{version_id}`). The name of
+            the version to complete. Format:
             deployments/{deployment_id}/versions/{version_id}
       requestBody:
         content:
@@ -65,15 +92,13 @@ paths:
                     - VERSION_COMPLETE_LEASE_EXPIRED
                     - VERSION_COMPLETE_SUCCESS
                   description: >-
-                    The reason for completing the version. Must be a terminal
-                    reason: VERSION_COMPLETE_SUCCESS, VERSION_COMPLETE_FAILURE,
-                    or VERSION_COMPLETE_FORCE_ABORT.
+                    The reason for completing the version. Must be
+                    VERSION_COMPLETE_SUCCESS or VERSION_COMPLETE_FAILURE.
                 force:
                   type: boolean
                   description: >-
                     If true, force-completes the version even if the caller is
-                    not the original creator. The completion_reason must be
-                    VERSION_COMPLETE_FORCE_ABORT when force is true.
+                    not the original creator.
               required:
                 - completion_reason
       responses:
@@ -106,8 +131,9 @@ paths:
         Creates a new deployment in the workspace.
 
         :param deployment: :class:`Deployment`
-          The deployment to create. The caller must set ``initial_parent_path``. Other fields are ignored on
-          input and populated by the service.
+          The deployment to create. ``initial_parent_path`` is required. ``display_name``, ``target_name``,
+          ``deployment_mode``, and ``workspace_info`` may be set; every other field is assigned by the service
+          and ignored on input.
 
         :returns: :class:`Deployment`
       requestBody:
@@ -116,157 +142,138 @@ paths:
             schema:
               type: object
               properties:
-                deployment:
+                create_time:
+                  type: string
+                  format: date-time
+                  description: When the deployment was created.
+                created_by:
+                  type: string
+                  description: >-
+                    The user who created the deployment (email or principal
+                    name). Empty if authoritative deployment metadata does not
+                    identify a creator or the principal cannot be resolved.
+                deployment_mode:
+                  type: string
+                  x-enum:
+                    - DEPLOYMENT_MODE_DEVELOPMENT
+                    - DEPLOYMENT_MODE_PRODUCTION
+                  description: Bundle target deployment mode (development or production).
+                destroy_time:
+                  type: string
+                  format: date-time
+                  description: >-
+                    When deletion was recorded. Unset if deletion has not been
+                    recorded. This response metadata does not determine the
+                    deployment's lifecycle status.
+                destroyed_by:
+                  type: string
+                  description: >-
+                    The user who destroyed the deployment (email or principal
+                    name). Unset if the deployment has not been destroyed.
+                display_name:
+                  type: string
+                  description: >-
+                    Human-readable name for the deployment, up to 256
+                    characters.
+                git_info:
                   type: object
                   properties:
-                    create_time:
+                    branch:
                       type: string
-                      format: date-time
-                      description: When the deployment was created.
-                    created_by:
+                      description: Branch the source was deployed from.
+                    commit:
                       type: string
-                      description: >-
-                        The user who created the deployment (email or principal
-                        name).
-                    deployment_mode:
+                      description: Commit SHA of the deployed source.
+                    origin_url:
                       type: string
-                      x-enum:
-                        - DEPLOYMENT_MODE_DEVELOPMENT
-                        - DEPLOYMENT_MODE_PRODUCTION
-                      description: >-
-                        Bundle target deployment mode (development or
-                        production), derived from the most recent version's
-                        mode.
-                    destroy_time:
-                      type: string
-                      format: date-time
-                      description: >-
-                        When deletion was recorded. Unset if deletion has not
-                        been recorded. This response metadata does not determine
-                        the deployment's lifecycle status.
-                    destroyed_by:
-                      type: string
-                      description: >-
-                        The user who destroyed the deployment (email or
-                        principal name). Unset if the deployment has not been
-                        destroyed.
-                    display_name:
-                      type: string
-                      description: >-
-                        Human-readable name for the deployment, up to 256
-                        characters. Output only: clients update it by setting
-                        ``display_name`` when creating a version.
-                    git_info:
-                      type: object
-                      properties:
-                        branch:
-                          type: string
-                          description: Branch the source was deployed from.
-                        commit:
-                          type: string
-                          description: Commit SHA of the deployed source.
-                        origin_url:
-                          type: string
-                          description: URL of the git remote the source was deployed from.
-                      description: >-
-                        Git provenance of the deployment's source, derived from
-                        the latest version.
-                    initial_parent_path:
-                      type: string
-                      description: >-
-                        The workspace path of the existing folder where the
-                        deployment is initially created. Must be absolute and
-                        canonical, with single separators, no ``.`` or ``..``
-                        segments, and no trailing slash unless the path is
-                        ``/``. It may contain at most 24 path segments,
-                        excluding an optional leading ``/Workspace`` segment.
-                        The complete path may contain up to 1,024 characters,
-                        and each segment may contain up to 511 characters. This
-                        field is input only and is not returned in create, get,
-                        or list responses.
-                    last_successful_version_id:
-                      type: string
-                      description: >-
-                        The version_id of the most recent version that completed
-                        successfully. Unset until a version has completed
-                        successfully. Unlike last_version_id, it is not advanced
-                        when a version fails, so it always points at the last
-                        known-good deployment state (or is unset if there has
-                        never been one).
-                    last_version_id:
-                      type: string
-                      description: The version_id of the most recent deployment version.
-                    name:
-                      type: string
-                      description: >-
-                        Resource name of the deployment. Format:
-                        deployments/{deployment_id}
-                    status:
-                      type: string
-                      x-enum:
-                        - DEPLOYMENT_STATUS_ACTIVE
-                        - DEPLOYMENT_STATUS_DELETED
-                        - DEPLOYMENT_STATUS_FAILED
-                        - DEPLOYMENT_STATUS_IN_PROGRESS
-                      description: Current status of the deployment.
-                    target_name:
-                      type: string
-                      description: >-
-                        The bundle target name associated with this deployment.
-                        Output only: it is denormalized from the latest version,
-                        not set directly on the deployment.
-                    update_time:
-                      type: string
-                      format: date-time
-                      description: When the deployment was last updated.
-                    updated_by:
-                      type: string
-                      description: >-
-                        The user who most recently updated the deployment (email
-                        or principal name).
-                    workspace_info:
-                      type: object
-                      properties:
-                        bundle_root_path:
-                          type: string
-                          description: >-
-                            Path of the bundle root (the directory containing
-                            databricks.yml) relative to git_folder_path. Empty
-                            when the deployment is not from a Databricks Git
-                            folder.
-                        file_path:
-                          type: string
-                          description: >-
-                            Absolute workspace path where the deployed bundle
-                            files live. Mirrors the workspace.file_path field in
-                            DABs bundle config.
-                        git_folder_path:
-                          type: string
-                          description: >-
-                            When deployed from a Databricks Git folder, the
-                            absolute workspace path of that folder; empty for
-                            local deploys.
-                        root_path:
-                          type: string
-                          description: >-
-                            Absolute workspace path of the deployment root — the
-                            base path the deployed files live under. Mirrors
-                            workspace.root_path in the DABs bundle config;
-                            file_path is its files subdirectory.
-                        source_linked:
-                          type: boolean
-                          description: >-
-                            Whether files are served directly from the source
-                            sync root instead of being copied into file_path.
-                      description: >-
-                        Workspace location of the deployment, derived from the
-                        latest version.
+                      description: URL of the git remote the source was deployed from.
                   description: >-
-                    The deployment to create. The caller must set
-                    ``initial_parent_path``. Other fields are ignored on input
-                    and populated by the service.
-              required:
-                - deployment
+                    Git provenance of the deployment's source, derived from the
+                    latest version.
+                initial_parent_path:
+                  type: string
+                  description: >-
+                    The workspace path of the existing folder where the
+                    deployment is initially created. Must be absolute and
+                    canonical, with single separators, no ``.`` or ``..``
+                    segments, and no trailing slash unless the path is ``/``. It
+                    may contain at most 24 path segments, excluding an optional
+                    leading ``/Workspace`` segment. The complete path may
+                    contain up to 1,024 characters, and each segment may contain
+                    up to 511 characters. This field is input only and is not
+                    returned in create, get, or list responses.
+                last_successful_version_id:
+                  type: string
+                  description: >-
+                    The version_id of the most recent version that completed
+                    successfully. Unset until a version has completed
+                    successfully. Unlike last_version_id, it is not advanced
+                    when a version fails, so it always points at the last
+                    known-good deployment state (or is unset if there has never
+                    been one).
+                last_version_id:
+                  type: string
+                  description: The version_id of the most recent deployment version.
+                name:
+                  type: string
+                  description: >-
+                    Resource name of the deployment. Format:
+                    deployments/{deployment_id}
+                status:
+                  type: string
+                  x-enum:
+                    - DEPLOYMENT_STATUS_ACTIVE
+                    - DEPLOYMENT_STATUS_DELETED
+                    - DEPLOYMENT_STATUS_FAILED
+                    - DEPLOYMENT_STATUS_IN_PROGRESS
+                  description: Current status of the deployment.
+                target_name:
+                  type: string
+                  description: The bundle target name associated with this deployment.
+                update_time:
+                  type: string
+                  format: date-time
+                  description: When the deployment was last updated.
+                updated_by:
+                  type: string
+                  description: >-
+                    The user who most recently updated the deployment (email or
+                    principal name). Empty if authoritative deployment metadata
+                    does not identify a modifier or the principal cannot be
+                    resolved.
+                workspace_info:
+                  type: object
+                  properties:
+                    bundle_root_path:
+                      type: string
+                      description: >-
+                        Path of the bundle root (the directory containing
+                        databricks.yml) relative to git_folder_path. Empty when
+                        the deployment is not from a Databricks Git folder.
+                    file_path:
+                      type: string
+                      description: >-
+                        Absolute workspace path where the deployed bundle files
+                        live. Mirrors the workspace.file_path field in DABs
+                        bundle config.
+                    git_folder_path:
+                      type: string
+                      description: >-
+                        When deployed from a Databricks Git folder, the absolute
+                        workspace path of that folder; empty for local deploys.
+                    root_path:
+                      type: string
+                      description: >-
+                        Absolute workspace path of the deployment root — the
+                        base path the deployed files live under. Mirrors
+                        workspace.root_path in the DABs bundle config; file_path
+                        is its files subdirectory.
+                    source_linked:
+                      type: boolean
+                      description: >-
+                        Whether files are served directly from the source sync
+                        root instead of being copied into file_path.
+                  description: Workspace location of the deployment.
       responses:
         '200':
           description: Success
@@ -295,61 +302,20 @@ paths:
       description: |-
         Lists deployments in the workspace.
 
-        :param filter: str (optional)
-          A filter expression restricting which deployments are returned, in the style of AIP-160
-          (https://google.aip.dev/160). The expression is a conjunction of one or more ``field operator
-          value`` terms joined by ``AND`` (case-insensitive); a deployment is returned only when it matches
-          every term. Whitespace around terms is ignored, and a value containing spaces must be wrapped in
-          double quotes. An unset or empty filter returns all deployments. Filtering applies only to live
-          deployments; deleted deployments are never returned regardless of the filter.
-
-          Supported terms:
-
-          - ``status = <STATUS>``: exact match on the deployment status. The value is a ``DeploymentStatus``
-            enum value, with or without the ``DEPLOYMENT_STATUS_`` prefix and case-insensitive (e.g. ``status
-            = ACTIVE``).
-          - ``deployment_mode = <MODE>``: exact match on the deployment mode. The value is a
-            ``DeploymentMode`` enum value, with or without the ``DEPLOYMENT_MODE_`` prefix and
-            case-insensitive (e.g. ``deployment_mode = DEVELOPMENT``).
-          - ``display_name = "<name>"``: exact match on the display name.
-          - ``display_name : "<substring>"``: case-insensitive substring match on the display name.
-
-          For example: ``status = ACTIVE AND display_name : "etl"``.
         :param page_size: int (optional)
           The maximum number of deployments to return. The service may return fewer than this value. If
-          unspecified, at most 20 deployments will be returned. The maximum value is 100; values above 100
-          will be coerced to 100.
+          unspecified, at most 20 deployments will be returned. The maximum value is 1000; values above 1000
+          will be coerced to 1000.
         :param page_token: str (optional)
           A page token, received from a previous ``ListDeployments`` call. Provide this to retrieve the
           subsequent page.
+        :param show_deleted: bool (optional)
+          Whether to include soft-deleted deployments in the response. Defaults to false. When true, returns
+          both live and soft-deleted deployments visible to the caller, subject to the filter. Soft-deleted
+          deployments have status ``DEPLOYMENT_STATUS_DELETED``.
 
         :returns: Iterator over :class:`Deployment`
       parameters:
-        - name: filter
-          in: query
-          required: false
-          schema:
-            type: string
-          description: >-
-            A filter expression restricting which deployments are returned, in
-            the style of AIP-160 (https://google.aip.dev/160). The expression is
-            a conjunction of one or more ``field operator value`` terms joined
-            by ``AND`` (case-insensitive); a deployment is returned only when it
-            matches every term. Whitespace around terms is ignored, and a value
-            containing spaces must be wrapped in double quotes. An unset or
-            empty filter returns all deployments. Filtering applies only to live
-            deployments; deleted deployments are never returned regardless of
-            the filter. Supported terms: - ``status = <STATUS>``: exact match on
-            the deployment status. The value is a ``DeploymentStatus`` enum
-            value, with or without the ``DEPLOYMENT_STATUS_`` prefix and
-            case-insensitive (e.g. ``status = ACTIVE``). - ``deployment_mode =
-            <MODE>``: exact match on the deployment mode. The value is a
-            ``DeploymentMode`` enum value, with or without the
-            ``DEPLOYMENT_MODE_`` prefix and case-insensitive (e.g.
-            ``deployment_mode = DEVELOPMENT``). - ``display_name = "<name>"``:
-            exact match on the display name. - ``display_name : "<substring>"``:
-            case-insensitive substring match on the display name. For example:
-            ``status = ACTIVE AND display_name : "etl"``.
         - name: page_size
           in: query
           required: false
@@ -358,8 +324,8 @@ paths:
           description: >-
             The maximum number of deployments to return. The service may return
             fewer than this value. If unspecified, at most 20 deployments will
-            be returned. The maximum value is 100; values above 100 will be
-            coerced to 100.
+            be returned. The maximum value is 1000; values above 1000 will be
+            coerced to 1000.
         - name: page_token
           in: query
           required: false
@@ -368,6 +334,16 @@ paths:
           description: >-
             A page token, received from a previous ``ListDeployments`` call.
             Provide this to retrieve the subsequent page.
+        - name: show_deleted
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: >-
+            Whether to include soft-deleted deployments in the response.
+            Defaults to false. When true, returns both live and soft-deleted
+            deployments visible to the caller, subject to the filter.
+            Soft-deleted deployments have status ``DEPLOYMENT_STATUS_DELETED``.
       responses:
         '200':
           description: Success
@@ -387,310 +363,7 @@ paths:
                   message:
                     type: string
       x-stackql-sdk-source: BundleDeploymentsAPI
-  /api/2.0/bundle/{parent}/operations:
-    post:
-      operationId: bundle_deployments_create_operation
-      summary: Creates a resource operation under a version.
-      tags:
-        - bundledeployments
-        - bundle_deployments
-      description: >-
-        Creates a resource operation under a version.
-
-
-        The caller must provide a ``resource_key`` which becomes the final
-        component of the operation's name.
-
-        If an operation with the same key already exists under the version, the
-        server returns
-
-        ``ALREADY_EXISTS``.
-
-
-        On success the server also updates the corresponding deployment-level
-        Resource (creating it if this is
-
-        the first operation for that resource_key, or removing it if action_type
-        is DELETE).
-
-
-        :param parent: str
-          The parent version where this operation will be recorded. Format:
-          deployments/{deployment_id}/versions/{version_id}
-        :param operation: :class:`Operation`
-          The resource operation to create.
-        :param resource_key: str
-          The key identifying the resource this operation applies to. Becomes the final component of the
-          operation's name.
-
-        :returns: :class:`Operation`
-      parameters:
-        - name: parent
-          in: path
-          required: true
-          schema:
-            type: string
-          description: >-
-            The parent version where this operation will be recorded. Format:
-            deployments/{deployment_id}/versions/{version_id}
-        - name: resource_key
-          in: query
-          required: true
-          schema:
-            type: string
-          description: >-
-            The key identifying the resource this operation applies to. Becomes
-            the final component of the operation's name.
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                operation:
-                  type: object
-                  properties:
-                    action_type:
-                      type: string
-                      x-enum:
-                        - OPERATION_ACTION_TYPE_BIND
-                        - OPERATION_ACTION_TYPE_BIND_AND_UPDATE
-                        - OPERATION_ACTION_TYPE_CREATE
-                        - OPERATION_ACTION_TYPE_DELETE
-                        - OPERATION_ACTION_TYPE_INITIAL_REGISTER
-                        - OPERATION_ACTION_TYPE_RECREATE
-                        - OPERATION_ACTION_TYPE_RESIZE
-                        - OPERATION_ACTION_TYPE_UPDATE
-                        - OPERATION_ACTION_TYPE_UPDATE_WITH_ID
-                      description: The type of operation performed on this resource.
-                    status:
-                      type: string
-                      x-enum:
-                        - OPERATION_STATUS_FAILED
-                        - OPERATION_STATUS_SUCCEEDED
-                      description: >-
-                        Whether the operation succeeded or failed. Mutable: may
-                        be updated after creation via UpdateOperation, e.g. when
-                        an operation recorded as failed is retried and
-                        eventually succeeds. A succeeded operation cannot carry
-                        an ``error_message``.
-                    create_time:
-                      type: string
-                      format: date-time
-                      description: When the operation was recorded.
-                    dashboard_metadata:
-                      type: object
-                      properties:
-                        definition_path:
-                          type: string
-                          description: >-
-                            Path of the file that declares this dashboard,
-                            relative to the bundle's workspace.file_path
-                            (Version.workspace_info.file_path) — join the two to
-                            get the file's absolute workspace path. For now this
-                            lives only on the dashboard metadata, and is a
-                            single string because it was a single string
-                            (``relative_path``) in the legacy bundle
-                            metadata.json. We may generalize it in the future:
-                            lifting it to a top-level field on
-                            Resource/Operation (every resource type has a
-                            definition location) and converting it to a repeated
-                            field, since a resource can be declared across
-                            multiple files/locations.
-                        source_path:
-                          type: string
-                          description: >-
-                            Path of the dashboard's source artifact (its
-                            ``.lvdash.json``), relative to the deployment root.
-                      description: >-
-                        Dashboard-specific metadata; set only for dashboard
-                        resources.
-                    error_message:
-                      type: string
-                      description: >-
-                        Error message if the operation failed. Set when status
-                        is OPERATION_STATUS_FAILED. Captures the error
-                        encountered while applying the resource to the
-                        workspace. Mutable: may be updated after creation via
-                        UpdateOperation; setting it to an empty string clears
-                        it. After an update is applied, an operation whose
-                        status is OPERATION_STATUS_SUCCEEDED cannot carry an
-                        error_message.
-                    name:
-                      type: string
-                      description: >-
-                        Resource name of the operation. Format:
-                        deployments/{deployment_id}/versions/{version_id}/operations/{resource_key}
-                    resource_id:
-                      type: string
-                      description: >-
-                        ID of the actual resource in the workspace (e.g. the job
-                        ID, pipeline ID). Optional at creation: CREATE and
-                        RECREATE operations produce a new resource whose ID is
-                        not yet known when the operation is recorded. Mutable:
-                        may be filled in (or corrected) later via
-                        UpdateOperation once the ID is known.
-                    resource_key:
-                      type: string
-                      description: >-
-                        Resource identifier within the bundle (e.g. "jobs.foo",
-                        "pipelines.bar", "jobs.foo.permissions",
-                        "files.<rel-path>"). Can be an arbitrary UTF-8 encoded
-                        string key. This key links the operation to the
-                        corresponding deployment-level Resource.
-                    resource_type:
-                      type: string
-                      x-enum:
-                        - DEPLOYMENT_RESOURCE_TYPE_ALERT
-                        - DEPLOYMENT_RESOURCE_TYPE_APP
-                        - DEPLOYMENT_RESOURCE_TYPE_CATALOG
-                        - DEPLOYMENT_RESOURCE_TYPE_CLUSTER
-                        - DEPLOYMENT_RESOURCE_TYPE_DASHBOARD
-                        - DEPLOYMENT_RESOURCE_TYPE_DATABASE_CATALOG
-                        - DEPLOYMENT_RESOURCE_TYPE_DATABASE_INSTANCE
-                        - DEPLOYMENT_RESOURCE_TYPE_EXPERIMENT
-                        - DEPLOYMENT_RESOURCE_TYPE_EXTERNAL_LOCATION
-                        - DEPLOYMENT_RESOURCE_TYPE_JOB
-                        - DEPLOYMENT_RESOURCE_TYPE_MODEL
-                        - DEPLOYMENT_RESOURCE_TYPE_MODEL_SERVING_ENDPOINT
-                        - DEPLOYMENT_RESOURCE_TYPE_PIPELINE
-                        - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_BRANCH
-                        - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_ENDPOINT
-                        - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_PROJECT
-                        - DEPLOYMENT_RESOURCE_TYPE_QUALITY_MONITOR
-                        - DEPLOYMENT_RESOURCE_TYPE_REGISTERED_MODEL
-                        - DEPLOYMENT_RESOURCE_TYPE_SCHEMA
-                        - DEPLOYMENT_RESOURCE_TYPE_SECRET_SCOPE
-                        - DEPLOYMENT_RESOURCE_TYPE_SQL_WAREHOUSE
-                        - DEPLOYMENT_RESOURCE_TYPE_SYNCED_DATABASE_TABLE
-                        - DEPLOYMENT_RESOURCE_TYPE_VOLUME
-                      description: >-
-                        The type of the deployment resource this operation
-                        applies to. Derived from the ``resource_key`` prefix
-                        (e.g. "jobs" → JOB); the caller does not set this field.
-                    sequence_id:
-                      type: integer
-                      description: >-
-                        Monotonically increasing revision used for optimistic
-                        concurrency control (the AIP-154 concurrency token for
-                        this resource, realized as a sequence number rather than
-                        an opaque etag). The server assigns 1 on creation and
-                        increments it on every successful UpdateOperation. It is
-                        OPTIONAL rather than OUTPUT_ONLY because it is
-                        dual-purpose: CreateOperation/GetOperation return the
-                        current value, and UpdateOperation reads the
-                        caller-supplied value as a precondition. The caller must
-                        echo the value it last observed; if it no longer matches
-                        the server's value, the update is rejected with ABORTED
-                        so the caller can re-read and retry. Ignored on
-                        CreateOperation.
-                    state:
-                      type: object
-                      description: >-
-                        Serialized local config state after the operation.
-                        Should be unset for delete operations. Mutable: may be
-                        updated after creation via UpdateOperation. When
-                        updating, the caller must echo the last-observed
-                        ``sequence_id`` as a concurrency precondition.
-                    update_time:
-                      type: string
-                      format: date-time
-                      description: >-
-                        When the operation was last updated. Set to
-                        ``create_time`` when the operation is created and to the
-                        server timestamp on each successful UpdateOperation.
-                  required:
-                    - action_type
-                    - status
-                  description: The resource operation to create.
-              required:
-                - operation
-      responses:
-        '200':
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Operation'
-        default:
-          description: Error response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                  message:
-                    type: string
-      x-stackql-sdk-source: BundleDeploymentsAPI
-    get:
-      operationId: bundle_deployments_list_operations
-      summary: Lists resource operations under a version.
-      tags:
-        - bundledeployments
-        - bundle_deployments
-      description: |-
-        Lists resource operations under a version.
-
-        :param parent: str
-          The parent version. Format: deployments/{deployment_id}/versions/{version_id}
-        :param page_size: int (optional)
-          The maximum number of operations to return. The service may return fewer than this value. If
-          unspecified, at most 50 operations will be returned. The maximum value is 1000; values above 1000
-          will be coerced to 1000.
-        :param page_token: str (optional)
-          A page token, received from a previous ``ListOperations`` call. Provide this to retrieve the
-          subsequent page.
-
-        :returns: Iterator over :class:`Operation`
-      parameters:
-        - name: parent
-          in: path
-          required: true
-          schema:
-            type: string
-          description: >-
-            The parent version. Format:
-            deployments/{deployment_id}/versions/{version_id}
-        - name: page_size
-          in: query
-          required: false
-          schema:
-            type: integer
-          description: >-
-            The maximum number of operations to return. The service may return
-            fewer than this value. If unspecified, at most 50 operations will be
-            returned. The maximum value is 1000; values above 1000 will be
-            coerced to 1000.
-        - name: page_token
-          in: query
-          required: false
-          schema:
-            type: string
-          description: >-
-            A page token, received from a previous ``ListOperations`` call.
-            Provide this to retrieve the subsequent page.
-      responses:
-        '200':
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListOperationsResponse'
-        default:
-          description: Error response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                  message:
-                    type: string
-      x-stackql-sdk-source: BundleDeploymentsAPI
-  /api/2.0/bundle/{parent}/versions:
+  /api/2.0/bundle/deployments/{deployment_id}/versions:
     post:
       operationId: bundle_deployments_create_version
       summary: Creates a new version under a deployment.
@@ -716,6 +389,22 @@ paths:
         concurrent deploys.
 
 
+        The caller also provides the full set of ``operations`` planned for this
+        version, each identified by a
+
+        ``resource_key`` and an ``action_type``. The server records one
+        operation per resource in
+
+        ``OPERATION_STATUS_PENDING`` in the same transaction as the version, so
+        the plan is captured
+
+        atomically. The outcome of each operation is recorded later via
+        UpdateOperation as the resource is
+
+        applied; the set of operations cannot be changed after the version is
+        created.
+
+
         :param parent: str
           The parent deployment where this version will be created. Format: deployments/{deployment_id}
         :param version: :class:`Version`
@@ -729,14 +418,15 @@ paths:
 
         :returns: :class:`Version`
       parameters:
-        - name: parent
+        - name: deployment_id
           in: path
           required: true
           schema:
             type: string
           description: >-
-            The parent deployment where this version will be created. Format:
-            deployments/{deployment_id}
+            The `deployment_id` segment of the `parent` resource name
+            (`deployments/{deployment_id}`). The parent deployment where this
+            version will be created. Format: deployments/{deployment_id}
         - name: version_id
           in: query
           required: true
@@ -756,162 +446,190 @@ paths:
             schema:
               type: object
               properties:
-                version:
+                cli_version:
+                  type: string
+                  description: CLI version used to initiate the version.
+                version_type:
+                  type: string
+                  x-enum:
+                    - VERSION_TYPE_DEPLOY
+                    - VERSION_TYPE_DESTROY
+                  description: Type of version (deploy or destroy).
+                complete_time:
+                  type: string
+                  format: date-time
+                  description: >-
+                    When the version completed. Unset while the version is in
+                    progress.
+                completed_by:
+                  type: string
+                  description: >-
+                    The user who completed the version (email or principal
+                    name). May differ from ``created_by`` when another user
+                    force-completes the version.
+                completion_reason:
+                  type: string
+                  x-enum:
+                    - VERSION_COMPLETE_FAILURE
+                    - VERSION_COMPLETE_FORCE_ABORT
+                    - VERSION_COMPLETE_LEASE_EXPIRED
+                    - VERSION_COMPLETE_SUCCESS
+                  description: >-
+                    Why the version was completed. Unset while in progress. Set
+                    when status transitions to COMPLETED.
+                create_time:
+                  type: string
+                  format: date-time
+                  description: When the version was created.
+                created_by:
+                  type: string
+                  description: The user who created the version (email or principal name).
+                deployment_mode:
+                  type: string
+                  x-enum:
+                    - DEPLOYMENT_MODE_DEVELOPMENT
+                    - DEPLOYMENT_MODE_PRODUCTION
+                  description: >-
+                    Bundle target deployment mode (development or production),
+                    captured at the time of this version.
+                display_name:
+                  type: string
+                  description: >-
+                    Display name for the deployment, captured at the time of
+                    this version. Up to 256 characters. When present, creating
+                    the version updates the deployment display name. An empty
+                    value clears it; an absent value leaves the current
+                    deployment display name unchanged.
+                git_info:
                   type: object
                   properties:
-                    cli_version:
+                    branch:
                       type: string
-                      description: CLI version used to initiate the version.
-                    version_type:
+                      description: Branch the source was deployed from.
+                    commit:
                       type: string
-                      x-enum:
-                        - VERSION_TYPE_DEPLOY
-                        - VERSION_TYPE_DESTROY
-                      description: Type of version (deploy or destroy).
-                    complete_time:
+                      description: Commit SHA of the deployed source.
+                    origin_url:
                       type: string
-                      format: date-time
-                      description: >-
-                        When the version completed. Unset while the version is
-                        in progress.
-                    completed_by:
-                      type: string
-                      description: >-
-                        The user who completed the version (email or principal
-                        name). May differ from ``created_by`` when another user
-                        force-completes the version.
-                    completion_reason:
-                      type: string
-                      x-enum:
-                        - VERSION_COMPLETE_FAILURE
-                        - VERSION_COMPLETE_FORCE_ABORT
-                        - VERSION_COMPLETE_LEASE_EXPIRED
-                        - VERSION_COMPLETE_SUCCESS
-                      description: >-
-                        Why the version was completed. Unset while in progress.
-                        Set when status transitions to COMPLETED.
-                    create_time:
-                      type: string
-                      format: date-time
-                      description: When the version was created.
-                    created_by:
-                      type: string
-                      description: >-
-                        The user who created the version (email or principal
-                        name).
-                    deployment_mode:
-                      type: string
-                      x-enum:
-                        - DEPLOYMENT_MODE_DEVELOPMENT
-                        - DEPLOYMENT_MODE_PRODUCTION
-                      description: >-
-                        Bundle target deployment mode (development or
-                        production), captured at the time of this version.
-                    display_name:
-                      type: string
-                      description: >-
-                        Display name for the deployment, captured at the time of
-                        this version. Up to 256 characters. When present,
-                        creating the version updates the deployment display
-                        name. An empty value clears it; an absent value leaves
-                        the current deployment display name unchanged.
-                    git_info:
-                      type: object
-                      properties:
-                        branch:
-                          type: string
-                          description: Branch the source was deployed from.
-                        commit:
-                          type: string
-                          description: Commit SHA of the deployed source.
-                        origin_url:
-                          type: string
-                          description: URL of the git remote the source was deployed from.
-                      description: >-
-                        Git provenance of the source, captured at the time of
-                        this version.
-                    name:
-                      type: string
-                      description: >-
-                        Resource name of the version. Format:
-                        deployments/{deployment_id}/versions/{version_id}
-                    previous_version_id:
-                      type: string
-                      description: >-
-                        The version_id this version was created on top of — the
-                        deployment's most recent version at creation time. Leave
-                        unset when creating the first version (the deployment
-                        has no prior versions). Set by the client on creation
-                        and immutable thereafter. Acts as an
-                        optimistic-concurrency precondition: the server requires
-                        it to equal the deployment's current most-recent version
-                        (and to be unset when the deployment has no versions)
-                        and returns ``INVALID_PARAMETER_VALUE`` on mismatch, so
-                        a deploy racing against a concurrent deploy is rejected
-                        rather than silently overwriting it.
-                    status:
-                      type: string
-                      x-enum:
-                        - VERSION_STATUS_COMPLETED
-                        - VERSION_STATUS_IN_PROGRESS
-                      description: 'Status of the version: IN_PROGRESS or COMPLETED.'
-                    target_name:
+                      description: URL of the git remote the source was deployed from.
+                  description: >-
+                    Git provenance of the source, captured at the time of this
+                    version.
+                name:
+                  type: string
+                  description: >-
+                    Resource name of the version. Format:
+                    deployments/{deployment_id}/versions/{version_id}
+                operations:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      resource_key:
+                        type: string
+                        description: >-
+                          The key identifying the resource this operation
+                          applies to (e.g. "jobs.foo", "pipelines.bar"). Becomes
+                          the final component of the operation's name and must
+                          be unique among the operations in the version.
+                      action_type:
+                        type: string
+                        x-enum:
+                          - OPERATION_ACTION_TYPE_BIND
+                          - OPERATION_ACTION_TYPE_BIND_AND_UPDATE
+                          - OPERATION_ACTION_TYPE_CREATE
+                          - OPERATION_ACTION_TYPE_DELETE
+                          - OPERATION_ACTION_TYPE_INITIAL_REGISTER
+                          - OPERATION_ACTION_TYPE_RECREATE
+                          - OPERATION_ACTION_TYPE_RESIZE
+                          - OPERATION_ACTION_TYPE_UNBIND
+                          - OPERATION_ACTION_TYPE_UPDATE
+                          - OPERATION_ACTION_TYPE_UPDATE_WITH_ID
+                        description: The type of operation planned for this resource.
+                    required:
+                      - resource_key
+                      - action_type
+                    description: >-
+                      A resource operation to record when a version is created.
+                      Each staged operation identifies the
+                          resource it applies to and the action planned for it; the server records the operation in
+                          ``OPERATION_STATUS_PENDING``, and its outcome is filled in later via UpdateOperation.
+                  description: >-
+                    The full operation plan for this version: one PENDING
+                    operation per entry, recorded in the same transaction. Input
+                    only -- supplied on create and never returned by
+                    create/get/list; read the recorded operations via
+                    ListOperations.
+                previous_version_id:
+                  type: string
+                  description: >-
+                    The version_id this version was created on top of — the
+                    deployment's most recent version at creation time. Leave
+                    unset when creating the first version (the deployment has no
+                    prior versions). Set by the client on creation and immutable
+                    thereafter. Acts as an optimistic-concurrency precondition:
+                    the server requires it to equal the deployment's current
+                    most-recent version (and to be unset when the deployment has
+                    no versions) and returns ``INVALID_PARAMETER_VALUE`` on
+                    mismatch, so a deploy racing against a concurrent deploy is
+                    rejected rather than silently overwriting it.
+                status:
+                  type: string
+                  x-enum:
+                    - VERSION_STATUS_COMPLETED
+                    - VERSION_STATUS_IN_PROGRESS
+                  description: 'Status of the version: IN_PROGRESS or COMPLETED.'
+                target_name:
+                  type: string
+                  description: >-
+                    Target name of the deployment, captured at the time of this
+                    version.
+                version_id:
+                  type: string
+                  description: >-
+                    Version identifier within the parent deployment, assigned by
+                    the client on creation. A numeric string (base-10, fits in a
+                    signed 64-bit integer) that is greater than or equal to 1.
+                    Version IDs are strictly increasing within a deployment but
+                    are not required to start at 1 or to be contiguous.
+                workspace_info:
+                  type: object
+                  properties:
+                    bundle_root_path:
                       type: string
                       description: >-
-                        Target name of the deployment, captured at the time of
-                        this version.
-                    version_id:
+                        Path of the bundle root (the directory containing
+                        databricks.yml) relative to git_folder_path. Empty when
+                        the deployment is not from a Databricks Git folder.
+                    file_path:
                       type: string
                       description: >-
-                        Version identifier within the parent deployment,
-                        assigned by the client on creation. A numeric string
-                        (base-10, fits in a signed 64-bit integer) that is
-                        greater than or equal to 1. Version IDs are strictly
-                        increasing within a deployment but are not required to
-                        start at 1 or to be contiguous.
-                    workspace_info:
-                      type: object
-                      properties:
-                        bundle_root_path:
-                          type: string
-                          description: >-
-                            Path of the bundle root (the directory containing
-                            databricks.yml) relative to git_folder_path. Empty
-                            when the deployment is not from a Databricks Git
-                            folder.
-                        file_path:
-                          type: string
-                          description: >-
-                            Absolute workspace path where the deployed bundle
-                            files live. Mirrors the workspace.file_path field in
-                            DABs bundle config.
-                        git_folder_path:
-                          type: string
-                          description: >-
-                            When deployed from a Databricks Git folder, the
-                            absolute workspace path of that folder; empty for
-                            local deploys.
-                        root_path:
-                          type: string
-                          description: >-
-                            Absolute workspace path of the deployment root — the
-                            base path the deployed files live under. Mirrors
-                            workspace.root_path in the DABs bundle config;
-                            file_path is its files subdirectory.
-                        source_linked:
-                          type: boolean
-                          description: >-
-                            Whether files are served directly from the source
-                            sync root instead of being copied into file_path.
+                        Absolute workspace path where the deployed bundle files
+                        live. Mirrors the workspace.file_path field in DABs
+                        bundle config.
+                    git_folder_path:
+                      type: string
                       description: >-
-                        Workspace location of the deployment, captured at the
-                        time of this version.
-                  required:
-                    - cli_version
-                    - version_type
-                  description: The version to create.
+                        When deployed from a Databricks Git folder, the absolute
+                        workspace path of that folder; empty for local deploys.
+                    root_path:
+                      type: string
+                      description: >-
+                        Absolute workspace path of the deployment root — the
+                        base path the deployed files live under. Mirrors
+                        workspace.root_path in the DABs bundle config; file_path
+                        is its files subdirectory.
+                    source_linked:
+                      type: boolean
+                      description: >-
+                        Whether files are served directly from the source sync
+                        root instead of being copied into file_path.
+                  description: >-
+                    Workspace location of the deployment, captured at the time
+                    of this version.
               required:
-                - version
+                - cli_version
+                - version_type
       responses:
         '200':
           description: Success
@@ -956,12 +674,15 @@ paths:
 
         :returns: Iterator over :class:`Version`
       parameters:
-        - name: parent
+        - name: deployment_id
           in: path
           required: true
           schema:
             type: string
-          description: 'The parent deployment. Format: deployments/{deployment_id}'
+          description: >-
+            The `deployment_id` segment of the `parent` resource name
+            (`deployments/{deployment_id}`). The parent deployment. Format:
+            deployments/{deployment_id}
         - name: page_size
           in: query
           required: false
@@ -999,7 +720,7 @@ paths:
                   message:
                     type: string
       x-stackql-sdk-source: BundleDeploymentsAPI
-  /api/2.0/bundle/{name}:
+  /api/2.0/bundle/deployments/{deployment_id}:
     delete:
       operationId: bundle_deployments_delete_deployment
       summary: Deletes a deployment.
@@ -1012,14 +733,15 @@ paths:
         :param name: str
           Resource name of the deployment to delete. Format: deployments/{deployment_id}
       parameters:
-        - name: name
+        - name: deployment_id
           in: path
           required: true
           schema:
             type: string
           description: >-
-            Resource name of the deployment to delete. Format:
-            deployments/{deployment_id}
+            The `deployment_id` segment of the `name` resource name
+            (`deployments/{deployment_id}`). Resource name of the deployment to
+            delete. Format: deployments/{deployment_id}
       responses:
         '200':
           description: Success
@@ -1036,34 +758,295 @@ paths:
                     type: string
       x-stackql-sdk-source: BundleDeploymentsAPI
     get:
-      operationId: bundle_deployments_get_version
-      summary: Retrieves a version by its resource name.
+      operationId: bundle_deployments_get_deployment
+      summary: Retrieves a deployment by its resource name.
       tags:
         - bundledeployments
         - bundle_deployments
       description: |-
-        Retrieves a version by its resource name.
+        Retrieves a deployment by its resource name.
 
         :param name: str
-          The name of the version to retrieve. Format: deployments/{deployment_id}/versions/{version_id}
+          Resource name of the deployment to retrieve. Format: deployments/{deployment_id}
 
-        :returns: :class:`Version`
+        :returns: :class:`Deployment`
       parameters:
-        - name: name
+        - name: deployment_id
           in: path
           required: true
           schema:
             type: string
           description: >-
-            The name of the version to retrieve. Format:
-            deployments/{deployment_id}/versions/{version_id}
+            The `deployment_id` segment of the `name` resource name
+            (`deployments/{deployment_id}`). Resource name of the deployment to
+            retrieve. Format: deployments/{deployment_id}
       responses:
         '200':
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Version'
+                $ref: '#/components/schemas/Deployment'
+        default:
+          description: Error response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+      x-stackql-sdk-source: BundleDeploymentsAPI
+    patch:
+      operationId: bundle_deployments_update_deployment
+      summary: Updates a deployment.
+      tags:
+        - bundledeployments
+        - bundle_deployments
+      description: |-
+        Updates a deployment.
+
+        :param name: str
+          Resource name of the deployment. Format: deployments/{deployment_id}
+        :param deployment: :class:`Deployment`
+          The deployment to update. Its ``name`` selects the deployment; the fields named in ``update_mask``
+          carry the new values. All other fields are ignored.
+        :param update_mask: FieldMask
+          The fields to update; supported paths are ``display_name``, ``deployment_mode``, ``target_name``,
+          and ``workspace_info``. An empty mask or any other path returns INVALID_PARAMETER_VALUE.
+
+        :returns: :class:`Deployment`
+      parameters:
+        - name: deployment_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `deployment_id` segment of the `name` resource name
+            (`deployments/{deployment_id}`). Resource name of the deployment.
+            Format: deployments/{deployment_id}
+        - name: update_mask
+          in: query
+          required: true
+          schema:
+            type: object
+          description: >-
+            The fields to update; supported paths are ``display_name``,
+            ``deployment_mode``, ``target_name``, and ``workspace_info``. An
+            empty mask or any other path returns INVALID_PARAMETER_VALUE.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                create_time:
+                  type: string
+                  format: date-time
+                  description: When the deployment was created.
+                created_by:
+                  type: string
+                  description: >-
+                    The user who created the deployment (email or principal
+                    name). Empty if authoritative deployment metadata does not
+                    identify a creator or the principal cannot be resolved.
+                deployment_mode:
+                  type: string
+                  x-enum:
+                    - DEPLOYMENT_MODE_DEVELOPMENT
+                    - DEPLOYMENT_MODE_PRODUCTION
+                  description: Bundle target deployment mode (development or production).
+                destroy_time:
+                  type: string
+                  format: date-time
+                  description: >-
+                    When deletion was recorded. Unset if deletion has not been
+                    recorded. This response metadata does not determine the
+                    deployment's lifecycle status.
+                destroyed_by:
+                  type: string
+                  description: >-
+                    The user who destroyed the deployment (email or principal
+                    name). Unset if the deployment has not been destroyed.
+                display_name:
+                  type: string
+                  description: >-
+                    Human-readable name for the deployment, up to 256
+                    characters.
+                git_info:
+                  type: object
+                  properties:
+                    branch:
+                      type: string
+                      description: Branch the source was deployed from.
+                    commit:
+                      type: string
+                      description: Commit SHA of the deployed source.
+                    origin_url:
+                      type: string
+                      description: URL of the git remote the source was deployed from.
+                  description: >-
+                    Git provenance of the deployment's source, derived from the
+                    latest version.
+                initial_parent_path:
+                  type: string
+                  description: >-
+                    The workspace path of the existing folder where the
+                    deployment is initially created. Must be absolute and
+                    canonical, with single separators, no ``.`` or ``..``
+                    segments, and no trailing slash unless the path is ``/``. It
+                    may contain at most 24 path segments, excluding an optional
+                    leading ``/Workspace`` segment. The complete path may
+                    contain up to 1,024 characters, and each segment may contain
+                    up to 511 characters. This field is input only and is not
+                    returned in create, get, or list responses.
+                last_successful_version_id:
+                  type: string
+                  description: >-
+                    The version_id of the most recent version that completed
+                    successfully. Unset until a version has completed
+                    successfully. Unlike last_version_id, it is not advanced
+                    when a version fails, so it always points at the last
+                    known-good deployment state (or is unset if there has never
+                    been one).
+                last_version_id:
+                  type: string
+                  description: The version_id of the most recent deployment version.
+                name:
+                  type: string
+                  description: >-
+                    Resource name of the deployment. Format:
+                    deployments/{deployment_id}
+                status:
+                  type: string
+                  x-enum:
+                    - DEPLOYMENT_STATUS_ACTIVE
+                    - DEPLOYMENT_STATUS_DELETED
+                    - DEPLOYMENT_STATUS_FAILED
+                    - DEPLOYMENT_STATUS_IN_PROGRESS
+                  description: Current status of the deployment.
+                target_name:
+                  type: string
+                  description: The bundle target name associated with this deployment.
+                update_time:
+                  type: string
+                  format: date-time
+                  description: When the deployment was last updated.
+                updated_by:
+                  type: string
+                  description: >-
+                    The user who most recently updated the deployment (email or
+                    principal name). Empty if authoritative deployment metadata
+                    does not identify a modifier or the principal cannot be
+                    resolved.
+                workspace_info:
+                  type: object
+                  properties:
+                    bundle_root_path:
+                      type: string
+                      description: >-
+                        Path of the bundle root (the directory containing
+                        databricks.yml) relative to git_folder_path. Empty when
+                        the deployment is not from a Databricks Git folder.
+                    file_path:
+                      type: string
+                      description: >-
+                        Absolute workspace path where the deployed bundle files
+                        live. Mirrors the workspace.file_path field in DABs
+                        bundle config.
+                    git_folder_path:
+                      type: string
+                      description: >-
+                        When deployed from a Databricks Git folder, the absolute
+                        workspace path of that folder; empty for local deploys.
+                    root_path:
+                      type: string
+                      description: >-
+                        Absolute workspace path of the deployment root — the
+                        base path the deployed files live under. Mirrors
+                        workspace.root_path in the DABs bundle config; file_path
+                        is its files subdirectory.
+                    source_linked:
+                      type: boolean
+                      description: >-
+                        Whether files are served directly from the source sync
+                        root instead of being copied into file_path.
+                  description: Workspace location of the deployment.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+        default:
+          description: Error response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+      x-stackql-sdk-source: BundleDeploymentsAPI
+  /api/2.0/bundle/deployments/{deployment_id}/versions/{version_id}/operations/{resource_key}:
+    get:
+      operationId: bundle_deployments_get_operation
+      summary: Retrieves a resource operation by its resource name.
+      tags:
+        - bundledeployments
+        - bundle_deployments
+      description: |-
+        Retrieves a resource operation by its resource name.
+
+        :param name: str
+          The name of the resource operation to retrieve. Format:
+          deployments/{deployment_id}/versions/{version_id}/operations/{resource_key}
+
+        :returns: :class:`Operation`
+      parameters:
+        - name: deployment_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `deployment_id` segment of the `name` resource name
+            (`deployments/{deployment_id}/versions/{version_id}/operations/{resource_key}`).
+            The name of the resource operation to retrieve. Format:
+            deployments/{deployment_id}/versions/{version_id}/operations/{resource_key}
+        - name: version_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `version_id` segment of the `name` resource name
+            (`deployments/{deployment_id}/versions/{version_id}/operations/{resource_key}`).
+            The name of the resource operation to retrieve. Format:
+            deployments/{deployment_id}/versions/{version_id}/operations/{resource_key}
+        - name: resource_key
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `resource_key` segment of the `name` resource name
+            (`deployments/{deployment_id}/versions/{version_id}/operations/{resource_key}`).
+            The name of the resource operation to retrieve. Format:
+            deployments/{deployment_id}/versions/{version_id}/operations/{resource_key}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
         default:
           description: Error response
           content:
@@ -1086,28 +1069,34 @@ paths:
         Updates a resource operation's mutable fields.
 
 
-        ``state``, ``error_message``, ``resource_id``, and ``status`` may be
-        updated, independently;
+        ``state``, ``error_message``, ``resource_id``, ``status``, and
+        ``dashboard_metadata`` may be updated,
 
-        ``update_mask`` must contain only those paths. All other fields are
-        immutable. The update is guarded
+        independently; ``update_mask`` must contain only those paths. All other
+        fields are immutable. The
 
-        by an optimistic-concurrency check: the caller sets
-        ``operation.sequence_id`` to the value it last
+        update is guarded by an optimistic-concurrency check: the caller sets
+        ``operation.sequence_id`` to the
 
-        observed, and the server rejects the update with ``ABORTED`` if the
-        operation has been modified since.
+        value it last observed, and the server rejects the update with
+        ``ABORTED`` if the operation has been
 
-        On success the server increments ``sequence_id``; updates to ``state``
-        and ``resource_id`` are
+        modified since. On success the server increments ``sequence_id``;
+        updates to ``state``,
 
-        mirrored onto the corresponding deployment-level Resource projection.
-        The parent version must be in
+        ``resource_id``, and ``dashboard_metadata`` are mirrored onto the
+        corresponding deployment-level
 
-        progress, delete operations cannot be updated, and after the update is
-        applied a succeeded operation
+        resource. Listing ``state`` in ``update_mask`` with no value clears it,
+        which removes the tracked
 
-        cannot carry an ``error_message``.
+        resource, so a delete or unbind that succeeds must clear ``state``. The
+        parent version must be in
+
+        progress, and after the update is applied a succeeded operation cannot
+        carry an ``error_message``. See
+
+        the ``state`` and ``resource_id`` fields for the rest.
 
 
         :param name: str
@@ -1119,17 +1108,39 @@ paths:
           field docs on Operation). All other fields are ignored.
         :param update_mask: FieldMask
           The set of fields to update. Required; supported paths are ``state``, ``error_message``,
-          ``resource_id``, and ``status``. An empty mask or any other path is rejected with
-          INVALID_PARAMETER_VALUE.
+          ``resource_id``, ``status``, and ``dashboard_metadata``. An empty mask or any other path is rejected
+          with INVALID_PARAMETER_VALUE.
 
         :returns: :class:`Operation`
       parameters:
-        - name: name
+        - name: deployment_id
           in: path
           required: true
           schema:
             type: string
           description: >-
+            The `deployment_id` segment of the `name` resource name
+            (`deployments/{deployment_id}/versions/{version_id}/operations/{resource_key}`).
+            Resource name of the operation. Format:
+            deployments/{deployment_id}/versions/{version_id}/operations/{resource_key}
+        - name: version_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `version_id` segment of the `name` resource name
+            (`deployments/{deployment_id}/versions/{version_id}/operations/{resource_key}`).
+            Resource name of the operation. Format:
+            deployments/{deployment_id}/versions/{version_id}/operations/{resource_key}
+        - name: resource_key
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `resource_key` segment of the `name` resource name
+            (`deployments/{deployment_id}/versions/{version_id}/operations/{resource_key}`).
             Resource name of the operation. Format:
             deployments/{deployment_id}/versions/{version_id}/operations/{resource_key}
         - name: update_mask
@@ -1139,178 +1150,198 @@ paths:
             type: object
           description: >-
             The set of fields to update. Required; supported paths are
-            ``state``, ``error_message``, ``resource_id``, and ``status``. An
-            empty mask or any other path is rejected with
-            INVALID_PARAMETER_VALUE.
+            ``state``, ``error_message``, ``resource_id``, ``status``, and
+            ``dashboard_metadata``. An empty mask or any other path is rejected
+            with INVALID_PARAMETER_VALUE.
       requestBody:
         content:
           application/json:
             schema:
               type: object
               properties:
-                operation:
+                action_type:
+                  type: string
+                  x-enum:
+                    - OPERATION_ACTION_TYPE_BIND
+                    - OPERATION_ACTION_TYPE_BIND_AND_UPDATE
+                    - OPERATION_ACTION_TYPE_CREATE
+                    - OPERATION_ACTION_TYPE_DELETE
+                    - OPERATION_ACTION_TYPE_INITIAL_REGISTER
+                    - OPERATION_ACTION_TYPE_RECREATE
+                    - OPERATION_ACTION_TYPE_RESIZE
+                    - OPERATION_ACTION_TYPE_UNBIND
+                    - OPERATION_ACTION_TYPE_UPDATE
+                    - OPERATION_ACTION_TYPE_UPDATE_WITH_ID
+                  description: >-
+                    The type of operation performed on this resource. Set when
+                    the version is created and immutable thereafter.
+                create_time:
+                  type: string
+                  format: date-time
+                  description: When the operation was recorded.
+                dashboard_metadata:
                   type: object
                   properties:
-                    action_type:
-                      type: string
-                      x-enum:
-                        - OPERATION_ACTION_TYPE_BIND
-                        - OPERATION_ACTION_TYPE_BIND_AND_UPDATE
-                        - OPERATION_ACTION_TYPE_CREATE
-                        - OPERATION_ACTION_TYPE_DELETE
-                        - OPERATION_ACTION_TYPE_INITIAL_REGISTER
-                        - OPERATION_ACTION_TYPE_RECREATE
-                        - OPERATION_ACTION_TYPE_RESIZE
-                        - OPERATION_ACTION_TYPE_UPDATE
-                        - OPERATION_ACTION_TYPE_UPDATE_WITH_ID
-                      description: The type of operation performed on this resource.
-                    status:
-                      type: string
-                      x-enum:
-                        - OPERATION_STATUS_FAILED
-                        - OPERATION_STATUS_SUCCEEDED
-                      description: >-
-                        Whether the operation succeeded or failed. Mutable: may
-                        be updated after creation via UpdateOperation, e.g. when
-                        an operation recorded as failed is retried and
-                        eventually succeeds. A succeeded operation cannot carry
-                        an ``error_message``.
-                    create_time:
-                      type: string
-                      format: date-time
-                      description: When the operation was recorded.
-                    dashboard_metadata:
-                      type: object
-                      properties:
-                        definition_path:
-                          type: string
-                          description: >-
-                            Path of the file that declares this dashboard,
-                            relative to the bundle's workspace.file_path
-                            (Version.workspace_info.file_path) — join the two to
-                            get the file's absolute workspace path. For now this
-                            lives only on the dashboard metadata, and is a
-                            single string because it was a single string
-                            (``relative_path``) in the legacy bundle
-                            metadata.json. We may generalize it in the future:
-                            lifting it to a top-level field on
-                            Resource/Operation (every resource type has a
-                            definition location) and converting it to a repeated
-                            field, since a resource can be declared across
-                            multiple files/locations.
-                        source_path:
-                          type: string
-                          description: >-
-                            Path of the dashboard's source artifact (its
-                            ``.lvdash.json``), relative to the deployment root.
-                      description: >-
-                        Dashboard-specific metadata; set only for dashboard
-                        resources.
-                    error_message:
+                    definition_path:
                       type: string
                       description: >-
-                        Error message if the operation failed. Set when status
-                        is OPERATION_STATUS_FAILED. Captures the error
-                        encountered while applying the resource to the
-                        workspace. Mutable: may be updated after creation via
-                        UpdateOperation; setting it to an empty string clears
-                        it. After an update is applied, an operation whose
-                        status is OPERATION_STATUS_SUCCEEDED cannot carry an
-                        error_message.
-                    name:
+                        Path of the file that declares this dashboard, relative
+                        to the bundle's workspace.file_path
+                        (Deployment.workspace_info.file_path) — join the two to
+                        get the file's absolute workspace path. For now this
+                        lives only on the dashboard metadata, and is a single
+                        string because it was a single string
+                        (``relative_path``) in the legacy bundle metadata.json.
+                        We may generalize it in the future: lifting it to a
+                        top-level field on Resource/Operation (every resource
+                        type has a definition location) and converting it to a
+                        repeated field, since a resource can be declared across
+                        multiple files/locations.
+                    source_path:
                       type: string
                       description: >-
-                        Resource name of the operation. Format:
-                        deployments/{deployment_id}/versions/{version_id}/operations/{resource_key}
-                    resource_id:
-                      type: string
-                      description: >-
-                        ID of the actual resource in the workspace (e.g. the job
-                        ID, pipeline ID). Optional at creation: CREATE and
-                        RECREATE operations produce a new resource whose ID is
-                        not yet known when the operation is recorded. Mutable:
-                        may be filled in (or corrected) later via
-                        UpdateOperation once the ID is known.
-                    resource_key:
-                      type: string
-                      description: >-
-                        Resource identifier within the bundle (e.g. "jobs.foo",
-                        "pipelines.bar", "jobs.foo.permissions",
-                        "files.<rel-path>"). Can be an arbitrary UTF-8 encoded
-                        string key. This key links the operation to the
-                        corresponding deployment-level Resource.
-                    resource_type:
-                      type: string
-                      x-enum:
-                        - DEPLOYMENT_RESOURCE_TYPE_ALERT
-                        - DEPLOYMENT_RESOURCE_TYPE_APP
-                        - DEPLOYMENT_RESOURCE_TYPE_CATALOG
-                        - DEPLOYMENT_RESOURCE_TYPE_CLUSTER
-                        - DEPLOYMENT_RESOURCE_TYPE_DASHBOARD
-                        - DEPLOYMENT_RESOURCE_TYPE_DATABASE_CATALOG
-                        - DEPLOYMENT_RESOURCE_TYPE_DATABASE_INSTANCE
-                        - DEPLOYMENT_RESOURCE_TYPE_EXPERIMENT
-                        - DEPLOYMENT_RESOURCE_TYPE_EXTERNAL_LOCATION
-                        - DEPLOYMENT_RESOURCE_TYPE_JOB
-                        - DEPLOYMENT_RESOURCE_TYPE_MODEL
-                        - DEPLOYMENT_RESOURCE_TYPE_MODEL_SERVING_ENDPOINT
-                        - DEPLOYMENT_RESOURCE_TYPE_PIPELINE
-                        - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_BRANCH
-                        - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_ENDPOINT
-                        - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_PROJECT
-                        - DEPLOYMENT_RESOURCE_TYPE_QUALITY_MONITOR
-                        - DEPLOYMENT_RESOURCE_TYPE_REGISTERED_MODEL
-                        - DEPLOYMENT_RESOURCE_TYPE_SCHEMA
-                        - DEPLOYMENT_RESOURCE_TYPE_SECRET_SCOPE
-                        - DEPLOYMENT_RESOURCE_TYPE_SQL_WAREHOUSE
-                        - DEPLOYMENT_RESOURCE_TYPE_SYNCED_DATABASE_TABLE
-                        - DEPLOYMENT_RESOURCE_TYPE_VOLUME
-                      description: >-
-                        The type of the deployment resource this operation
-                        applies to. Derived from the ``resource_key`` prefix
-                        (e.g. "jobs" → JOB); the caller does not set this field.
-                    sequence_id:
-                      type: integer
-                      description: >-
-                        Monotonically increasing revision used for optimistic
-                        concurrency control (the AIP-154 concurrency token for
-                        this resource, realized as a sequence number rather than
-                        an opaque etag). The server assigns 1 on creation and
-                        increments it on every successful UpdateOperation. It is
-                        OPTIONAL rather than OUTPUT_ONLY because it is
-                        dual-purpose: CreateOperation/GetOperation return the
-                        current value, and UpdateOperation reads the
-                        caller-supplied value as a precondition. The caller must
-                        echo the value it last observed; if it no longer matches
-                        the server's value, the update is rejected with ABORTED
-                        so the caller can re-read and retry. Ignored on
-                        CreateOperation.
-                    state:
-                      type: object
-                      description: >-
-                        Serialized local config state after the operation.
-                        Should be unset for delete operations. Mutable: may be
-                        updated after creation via UpdateOperation. When
-                        updating, the caller must echo the last-observed
-                        ``sequence_id`` as a concurrency precondition.
-                    update_time:
-                      type: string
-                      format: date-time
-                      description: >-
-                        When the operation was last updated. Set to
-                        ``create_time`` when the operation is created and to the
-                        server timestamp on each successful UpdateOperation.
-                  required:
-                    - action_type
-                    - status
+                        Path of the dashboard's source artifact (its
+                        ``.lvdash.json``), relative to the deployment root.
                   description: >-
-                    The operation to update. Its ``name`` selects the operation;
-                    the fields named in ``update_mask`` carry the new values;
-                    and ``sequence_id`` carries the optimistic-concurrency
-                    precondition (see the field docs on Operation). All other
-                    fields are ignored.
-              required:
-                - operation
+                    Dashboard-specific metadata; set only for dashboard
+                    resources. Mutable: may be set or updated via
+                    UpdateOperation as the resource is applied, and is mirrored
+                    onto the corresponding deployment-level resource.
+                error_message:
+                  type: string
+                  description: >-
+                    Error message if the operation failed. Set when status is
+                    OPERATION_STATUS_FAILED. Captures the error encountered
+                    while applying the resource to the workspace. Mutable: may
+                    be updated after creation via UpdateOperation; setting it to
+                    an empty string clears it. After an update is applied, an
+                    operation whose status is OPERATION_STATUS_SUCCEEDED cannot
+                    carry an error_message.
+                name:
+                  type: string
+                  description: >-
+                    Resource name of the operation. Format:
+                    deployments/{deployment_id}/versions/{version_id}/operations/{resource_key}
+                resource_id:
+                  type: string
+                  description: >-
+                    ID of the actual resource in the workspace (e.g. the job ID,
+                    pipeline ID). Required whenever ``state`` is set, because
+                    state records a resource that exists. A CREATE or RECREATE
+                    that has not produced its resource yet records neither.
+                    Mutable: may be filled in (or corrected) later via
+                    UpdateOperation once the ID is known.
+                resource_key:
+                  type: string
+                  description: >-
+                    Resource identifier within the bundle (e.g. "jobs.foo",
+                    "pipelines.bar", "jobs.foo.permissions",
+                    "files.<rel-path>"). Can be an arbitrary UTF-8 encoded
+                    string key. This key links the operation to the
+                    corresponding deployment-level Resource. Set when the
+                    version is created and immutable thereafter.
+                resource_type:
+                  type: string
+                  x-enum:
+                    - DEPLOYMENT_RESOURCE_TYPE_ALERT
+                    - DEPLOYMENT_RESOURCE_TYPE_APP
+                    - DEPLOYMENT_RESOURCE_TYPE_CATALOG
+                    - DEPLOYMENT_RESOURCE_TYPE_CLUSTER
+                    - DEPLOYMENT_RESOURCE_TYPE_CLUSTER_POLICY
+                    - DEPLOYMENT_RESOURCE_TYPE_DASHBOARD
+                    - DEPLOYMENT_RESOURCE_TYPE_DATABASE_CATALOG
+                    - DEPLOYMENT_RESOURCE_TYPE_DATABASE_INSTANCE
+                    - DEPLOYMENT_RESOURCE_TYPE_EXPERIMENT
+                    - DEPLOYMENT_RESOURCE_TYPE_EXTERNAL_LOCATION
+                    - DEPLOYMENT_RESOURCE_TYPE_GENIE_SPACE
+                    - DEPLOYMENT_RESOURCE_TYPE_INSTANCE_POOL
+                    - DEPLOYMENT_RESOURCE_TYPE_JOB
+                    - DEPLOYMENT_RESOURCE_TYPE_JOB_RUN
+                    - DEPLOYMENT_RESOURCE_TYPE_MODEL
+                    - DEPLOYMENT_RESOURCE_TYPE_MODEL_SERVING_ENDPOINT
+                    - DEPLOYMENT_RESOURCE_TYPE_PIPELINE
+                    - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_BRANCH
+                    - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_CATALOG
+                    - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_DATABASE
+                    - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_ENDPOINT
+                    - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_PROJECT
+                    - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_ROLE
+                    - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_SYNCED_TABLE
+                    - DEPLOYMENT_RESOURCE_TYPE_QUALITY_MONITOR
+                    - DEPLOYMENT_RESOURCE_TYPE_REGISTERED_MODEL
+                    - DEPLOYMENT_RESOURCE_TYPE_SCHEMA
+                    - DEPLOYMENT_RESOURCE_TYPE_SECRET
+                    - DEPLOYMENT_RESOURCE_TYPE_SECRET_SCOPE
+                    - DEPLOYMENT_RESOURCE_TYPE_SQL_WAREHOUSE
+                    - DEPLOYMENT_RESOURCE_TYPE_SYNCED_DATABASE_TABLE
+                    - DEPLOYMENT_RESOURCE_TYPE_VECTOR_SEARCH_ENDPOINT
+                    - DEPLOYMENT_RESOURCE_TYPE_VECTOR_SEARCH_INDEX
+                    - DEPLOYMENT_RESOURCE_TYPE_VOLUME
+                  description: >-
+                    The type of the deployment resource this operation applies
+                    to. Derived from the ``resource_key`` prefix (e.g. "jobs" →
+                    JOB); the caller does not set this field.
+                sequence_id:
+                  type: integer
+                  description: >-
+                    Monotonically increasing revision used for optimistic
+                    concurrency control (the AIP-154 concurrency token for this
+                    resource, realized as a sequence number rather than an
+                    opaque etag). The server assigns 0 when the operation is
+                    created and increments it on every successful
+                    UpdateOperation, so a never-updated operation is at 0 and
+                    the first successful update makes it 1. It is OPTIONAL
+                    rather than OUTPUT_ONLY because it is dual-purpose:
+                    GetOperation returns the current value, and UpdateOperation
+                    reads the caller-supplied value as a precondition. The
+                    caller must echo the value it last observed; if it no longer
+                    matches the server's value, the update is rejected with
+                    ABORTED so the caller can re-read and retry.
+                state:
+                  type: string
+                  description: >-
+                    Serialized local config state after the operation. Its
+                    presence records whether the resource is still tracked by
+                    the deployment. Explicitly clearing state removes the
+                    resource from the deployment; omitting it from the update
+                    mask leaves resource state unchanged. State is stored only
+                    on Resources. UpdateOperation accepts state but omits it
+                    from its response, as do subsequent GetOperation and
+                    ListOperations. Mutable: may be updated after creation via
+                    UpdateOperation. When updating, the caller must echo the
+                    last-observed ``sequence_id`` as a concurrency precondition.
+                    The string is not parsed; it is projected onto the
+                    corresponding Resource's state. It is deliberately not
+                    google.protobuf.Value, whose only numeric case is ``double
+                    number_value``, so parsing the client's JSON into it
+                    rewrites every integer as a double - ``1`` reads back as
+                    ``1.0``, which no longer deserializes into an integer field
+                    - and silently loses precision above 2^53, which is within
+                    range for IDs the client records. A string rather than
+                    bytes: the payload is always UTF-8 JSON, and proto3 JSON
+                    maps bytes to base64, which inflates every request and
+                    response by a third and makes state unreadable in logs and
+                    API responses. Both generate the same OpenAPI schema
+                    ("type": "string"), so the SDKs are identical either way.
+                status:
+                  type: string
+                  x-enum:
+                    - OPERATION_STATUS_FAILED
+                    - OPERATION_STATUS_PENDING
+                    - OPERATION_STATUS_SUCCEEDED
+                  description: >-
+                    Status of the operation. Starts as OPERATION_STATUS_PENDING
+                    when the version is created and moves to a terminal status
+                    once the resource is applied. Mutable: updated via
+                    UpdateOperation, e.g. when an operation recorded as failed
+                    is retried and eventually succeeds.
+                update_time:
+                  type: string
+                  format: date-time
+                  description: >-
+                    When the operation was last updated. Set to ``create_time``
+                    when the operation is created and to the server timestamp on
+                    each successful UpdateOperation.
       responses:
         '200':
           description: Success
@@ -1330,7 +1361,115 @@ paths:
                   message:
                     type: string
       x-stackql-sdk-source: BundleDeploymentsAPI
-  /api/2.0/bundle/{name}/heartbeat:
+  /api/2.0/bundle/deployments/{deployment_id}/resources/{resource_key}:
+    get:
+      operationId: bundle_deployments_get_resource
+      summary: Retrieves a deployment resource by its resource name.
+      tags:
+        - bundledeployments
+        - bundle_deployments
+      description: |-
+        Retrieves a deployment resource by its resource name.
+
+        :param name: str
+          The name of the resource to retrieve. Format: deployments/{deployment_id}/resources/{resource_key}
+
+        :returns: :class:`Resource`
+      parameters:
+        - name: deployment_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `deployment_id` segment of the `name` resource name
+            (`deployments/{deployment_id}/resources/{resource_key}`). The name
+            of the resource to retrieve. Format:
+            deployments/{deployment_id}/resources/{resource_key}
+        - name: resource_key
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `resource_key` segment of the `name` resource name
+            (`deployments/{deployment_id}/resources/{resource_key}`). The name
+            of the resource to retrieve. Format:
+            deployments/{deployment_id}/resources/{resource_key}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+        default:
+          description: Error response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+      x-stackql-sdk-source: BundleDeploymentsAPI
+  /api/2.0/bundle/deployments/{deployment_id}/versions/{version_id}:
+    get:
+      operationId: bundle_deployments_get_version
+      summary: Retrieves a version by its resource name.
+      tags:
+        - bundledeployments
+        - bundle_deployments
+      description: |-
+        Retrieves a version by its resource name.
+
+        :param name: str
+          The name of the version to retrieve. Format: deployments/{deployment_id}/versions/{version_id}
+
+        :returns: :class:`Version`
+      parameters:
+        - name: deployment_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `deployment_id` segment of the `name` resource name
+            (`deployments/{deployment_id}/versions/{version_id}`). The name of
+            the version to retrieve. Format:
+            deployments/{deployment_id}/versions/{version_id}
+        - name: version_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `version_id` segment of the `name` resource name
+            (`deployments/{deployment_id}/versions/{version_id}`). The name of
+            the version to retrieve. Format:
+            deployments/{deployment_id}/versions/{version_id}
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Version'
+        default:
+          description: Error response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+      x-stackql-sdk-source: BundleDeploymentsAPI
+  /api/2.0/bundle/deployments/{deployment_id}/versions/{version_id}/heartbeat:
     post:
       operationId: bundle_deployments_heartbeat
       summary: Sends a heartbeat to renew the lock held by a version.
@@ -1355,13 +1494,25 @@ paths:
 
         :returns: :class:`HeartbeatResponse`
       parameters:
-        - name: name
+        - name: deployment_id
           in: path
           required: true
           schema:
             type: string
           description: >-
-            The version whose lock to renew. Format:
+            The `deployment_id` segment of the `name` resource name
+            (`deployments/{deployment_id}/versions/{version_id}`). The version
+            whose lock to renew. Format:
+            deployments/{deployment_id}/versions/{version_id}
+        - name: version_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `version_id` segment of the `name` resource name
+            (`deployments/{deployment_id}/versions/{version_id}`). The version
+            whose lock to renew. Format:
             deployments/{deployment_id}/versions/{version_id}
       responses:
         '200':
@@ -1382,7 +1533,84 @@ paths:
                   message:
                     type: string
       x-stackql-sdk-source: BundleDeploymentsAPI
-  /api/2.0/bundle/{parent}/resources:
+  /api/2.0/bundle/deployments/{deployment_id}/versions/{version_id}/operations:
+    get:
+      operationId: bundle_deployments_list_operations
+      summary: Lists resource operations under a version.
+      tags:
+        - bundledeployments
+        - bundle_deployments
+      description: |-
+        Lists resource operations under a version.
+
+        :param parent: str
+          The parent version. Format: deployments/{deployment_id}/versions/{version_id}
+        :param page_size: int (optional)
+          The maximum number of operations to return. The service may return fewer than this value. If
+          unspecified, at most 50 operations will be returned. The maximum value is 1000; values above 1000
+          will be coerced to 1000.
+        :param page_token: str (optional)
+          A page token, received from a previous ``ListOperations`` call. Provide this to retrieve the
+          subsequent page.
+
+        :returns: Iterator over :class:`Operation`
+      parameters:
+        - name: deployment_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `deployment_id` segment of the `parent` resource name
+            (`deployments/{deployment_id}/versions/{version_id}`). The parent
+            version. Format: deployments/{deployment_id}/versions/{version_id}
+        - name: version_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: >-
+            The `version_id` segment of the `parent` resource name
+            (`deployments/{deployment_id}/versions/{version_id}`). The parent
+            version. Format: deployments/{deployment_id}/versions/{version_id}
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: >-
+            The maximum number of operations to return. The service may return
+            fewer than this value. If unspecified, at most 50 operations will be
+            returned. The maximum value is 1000; values above 1000 will be
+            coerced to 1000.
+        - name: page_token
+          in: query
+          required: false
+          schema:
+            type: string
+          description: >-
+            A page token, received from a previous ``ListOperations`` call.
+            Provide this to retrieve the subsequent page.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListOperationsResponse'
+        default:
+          description: Error response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+      x-stackql-sdk-source: BundleDeploymentsAPI
+  /api/2.0/bundle/deployments/{deployment_id}/resources:
     get:
       operationId: bundle_deployments_list_resources
       summary: Lists resources under a deployment.
@@ -1404,12 +1632,15 @@ paths:
 
         :returns: Iterator over :class:`Resource`
       parameters:
-        - name: parent
+        - name: deployment_id
           in: path
           required: true
           schema:
             type: string
-          description: 'The parent deployment. Format: deployments/{deployment_id}'
+          description: >-
+            The `deployment_id` segment of the `parent` resource name
+            (`deployments/{deployment_id}`). The parent deployment. Format:
+            deployments/{deployment_id}
         - name: page_size
           in: query
           required: false
@@ -1456,7 +1687,7 @@ components:
           type: string
           description: >-
             Path of the file that declares this dashboard, relative to the
-            bundle's workspace.file_path (Version.workspace_info.file_path) —
+            bundle's workspace.file_path (Deployment.workspace_info.file_path) —
             join the two to get the file's absolute workspace path. For now this
             lives only on the dashboard metadata, and is a single string because
             it was a single string (``relative_path``) in the legacy bundle
@@ -1481,12 +1712,13 @@ components:
           description: When the deployment was created.
         created_by:
           type: string
-          description: The user who created the deployment (email or principal name).
+          description: >-
+            The user who created the deployment (email or principal name). Empty
+            if authoritative deployment metadata does not identify a creator or
+            the principal cannot be resolved.
         deployment_mode:
           $ref: '#/components/schemas/DeploymentMode'
-          description: >-
-            Bundle target deployment mode (development or production), derived
-            from the most recent version's mode.
+          description: Bundle target deployment mode (development or production).
         destroy_time:
           type: string
           format: date-time
@@ -1501,10 +1733,7 @@ components:
             Unset if the deployment has not been destroyed.
         display_name:
           type: string
-          description: >-
-            Human-readable name for the deployment, up to 256 characters. Output
-            only: clients update it by setting ``display_name`` when creating a
-            version.
+          description: Human-readable name for the deployment, up to 256 characters.
         git_info:
           $ref: '#/components/schemas/GitInfo'
           description: >-
@@ -1540,10 +1769,7 @@ components:
           description: Current status of the deployment.
         target_name:
           type: string
-          description: >-
-            The bundle target name associated with this deployment. Output only:
-            it is denormalized from the latest version, not set directly on the
-            deployment.
+          description: The bundle target name associated with this deployment.
         update_time:
           type: string
           format: date-time
@@ -1552,12 +1778,11 @@ components:
           type: string
           description: >-
             The user who most recently updated the deployment (email or
-            principal name).
+            principal name). Empty if authoritative deployment metadata does not
+            identify a modifier or the principal cannot be resolved.
         workspace_info:
           $ref: '#/components/schemas/WorkspaceInfo'
-          description: >-
-            Workspace location of the deployment, derived from the latest
-            version.
+          description: Workspace location of the deployment.
       description: A bundle deployment registered with the control plane.
     GitInfo:
       type: object
@@ -1644,21 +1869,20 @@ components:
       properties:
         action_type:
           $ref: '#/components/schemas/OperationActionType'
-          description: The type of operation performed on this resource.
-        status:
-          $ref: '#/components/schemas/OperationStatus'
           description: >-
-            Whether the operation succeeded or failed. Mutable: may be updated
-            after creation via UpdateOperation, e.g. when an operation recorded
-            as failed is retried and eventually succeeds. A succeeded operation
-            cannot carry an ``error_message``.
+            The type of operation performed on this resource. Set when the
+            version is created and immutable thereafter.
         create_time:
           type: string
           format: date-time
           description: When the operation was recorded.
         dashboard_metadata:
           $ref: '#/components/schemas/DashboardMetadata'
-          description: Dashboard-specific metadata; set only for dashboard resources.
+          description: >-
+            Dashboard-specific metadata; set only for dashboard resources.
+            Mutable: may be set or updated via UpdateOperation as the resource
+            is applied, and is mirrored onto the corresponding deployment-level
+            resource.
         error_message:
           type: string
           description: >-
@@ -1677,17 +1901,18 @@ components:
           type: string
           description: >-
             ID of the actual resource in the workspace (e.g. the job ID,
-            pipeline ID). Optional at creation: CREATE and RECREATE operations
-            produce a new resource whose ID is not yet known when the operation
-            is recorded. Mutable: may be filled in (or corrected) later via
-            UpdateOperation once the ID is known.
+            pipeline ID). Required whenever ``state`` is set, because state
+            records a resource that exists. A CREATE or RECREATE that has not
+            produced its resource yet records neither. Mutable: may be filled in
+            (or corrected) later via UpdateOperation once the ID is known.
         resource_key:
           type: string
           description: >-
             Resource identifier within the bundle (e.g. "jobs.foo",
             "pipelines.bar", "jobs.foo.permissions", "files.<rel-path>"). Can be
             an arbitrary UTF-8 encoded string key. This key links the operation
-            to the corresponding deployment-level Resource.
+            to the corresponding deployment-level Resource. Set when the version
+            is created and immutable thereafter.
         resource_type:
           $ref: '#/components/schemas/DeploymentResourceType'
           description: >-
@@ -1700,20 +1925,44 @@ components:
             Monotonically increasing revision used for optimistic concurrency
             control (the AIP-154 concurrency token for this resource, realized
             as a sequence number rather than an opaque etag). The server assigns
-            1 on creation and increments it on every successful UpdateOperation.
-            It is OPTIONAL rather than OUTPUT_ONLY because it is dual-purpose:
-            CreateOperation/GetOperation return the current value, and
-            UpdateOperation reads the caller-supplied value as a precondition.
-            The caller must echo the value it last observed; if it no longer
-            matches the server's value, the update is rejected with ABORTED so
-            the caller can re-read and retry. Ignored on CreateOperation.
+            0 when the operation is created and increments it on every
+            successful UpdateOperation, so a never-updated operation is at 0 and
+            the first successful update makes it 1. It is OPTIONAL rather than
+            OUTPUT_ONLY because it is dual-purpose: GetOperation returns the
+            current value, and UpdateOperation reads the caller-supplied value
+            as a precondition. The caller must echo the value it last observed;
+            if it no longer matches the server's value, the update is rejected
+            with ABORTED so the caller can re-read and retry.
         state:
-          type: object
+          type: string
           description: >-
-            Serialized local config state after the operation. Should be unset
-            for delete operations. Mutable: may be updated after creation via
+            Serialized local config state after the operation. Its presence
+            records whether the resource is still tracked by the deployment.
+            Explicitly clearing state removes the resource from the deployment;
+            omitting it from the update mask leaves resource state unchanged.
+            State is stored only on Resources. UpdateOperation accepts state but
+            omits it from its response, as do subsequent GetOperation and
+            ListOperations. Mutable: may be updated after creation via
             UpdateOperation. When updating, the caller must echo the
-            last-observed ``sequence_id`` as a concurrency precondition.
+            last-observed ``sequence_id`` as a concurrency precondition. The
+            string is not parsed; it is projected onto the corresponding
+            Resource's state. It is deliberately not google.protobuf.Value,
+            whose only numeric case is ``double number_value``, so parsing the
+            client's JSON into it rewrites every integer as a double - ``1``
+            reads back as ``1.0``, which no longer deserializes into an integer
+            field - and silently loses precision above 2^53, which is within
+            range for IDs the client records. A string rather than bytes: the
+            payload is always UTF-8 JSON, and proto3 JSON maps bytes to base64,
+            which inflates every request and response by a third and makes state
+            unreadable in logs and API responses. Both generate the same OpenAPI
+            schema ("type": "string"), so the SDKs are identical either way.
+        status:
+          $ref: '#/components/schemas/OperationStatus'
+          description: >-
+            Status of the operation. Starts as OPERATION_STATUS_PENDING when the
+            version is created and moves to a terminal status once the resource
+            is applied. Mutable: updated via UpdateOperation, e.g. when an
+            operation recorded as failed is retried and eventually succeeds.
         update_time:
           type: string
           format: date-time
@@ -1721,15 +1970,15 @@ components:
             When the operation was last updated. Set to ``create_time`` when the
             operation is created and to the server timestamp on each successful
             UpdateOperation.
-      required:
-        - action_type
-        - status
       description: >-
-        An operation on a single resource performed during a version. Operations
-        record the result of
-            applying a resource change to the workspace. Most fields are immutable once recorded; ``state``,
-            ``error_message``, ``resource_id``, and ``status`` may be updated afterwards (via
-            UpdateOperation), guarded by ``sequence_id`` for optimistic concurrency control.
+        An operation on a single resource performed during a version. The full
+        set of operations for a
+            version is recorded when the version is created: each carries its ``resource_key`` and
+            ``action_type`` and starts in ``OPERATION_STATUS_PENDING``. As each resource is applied, its
+            operation is updated (via UpdateOperation) to record the result of applying the change to the
+            workspace. ``state``, ``error_message``, ``resource_id``, ``status``, and ``dashboard_metadata``
+            may be updated afterwards, guarded by ``sequence_id`` for optimistic concurrency control; all
+            other fields are immutable once recorded.
     Resource:
       type: object
       properties:
@@ -1761,8 +2010,11 @@ components:
             Resource identifier within the bundle (e.g. "jobs.foo",
             "pipelines.bar", "jobs.foo.permissions").
         state:
-          type: object
-          description: Serialized local config state (what the CLI deployed).
+          type: string
+          description: >-
+            Serialized local config state (what the CLI deployed). Opaque to
+            this service; see Operation.state for why this is a string and not
+            google.protobuf.Value.
         update_time:
           type: string
           format: date-time
@@ -1776,6 +2028,27 @@ components:
         A resource managed by a deployment. Resources are implicitly created,
         updated, or deleted when
             operations are recorded on a version.
+    StagedOperation:
+      type: object
+      properties:
+        resource_key:
+          type: string
+          description: >-
+            The key identifying the resource this operation applies to (e.g.
+            "jobs.foo", "pipelines.bar"). Becomes the final component of the
+            operation's name and must be unique among the operations in the
+            version.
+        action_type:
+          $ref: '#/components/schemas/OperationActionType'
+          description: The type of operation planned for this resource.
+      required:
+        - resource_key
+        - action_type
+      description: >-
+        A resource operation to record when a version is created. Each staged
+        operation identifies the
+            resource it applies to and the action planned for it; the server records the operation in
+            ``OPERATION_STATUS_PENDING``, and its outcome is filled in later via UpdateOperation.
     Version:
       type: object
       properties:
@@ -1827,6 +2100,15 @@ components:
           description: >-
             Resource name of the version. Format:
             deployments/{deployment_id}/versions/{version_id}
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/StagedOperation'
+          description: >-
+            The full operation plan for this version: one PENDING operation per
+            entry, recorded in the same transaction. Input only -- supplied on
+            create and never returned by create/get/list; read the recorded
+            operations via ListOperations.
         previous_version_id:
           type: string
           description: >-
@@ -1914,24 +2196,35 @@ components:
         - DEPLOYMENT_RESOURCE_TYPE_APP
         - DEPLOYMENT_RESOURCE_TYPE_CATALOG
         - DEPLOYMENT_RESOURCE_TYPE_CLUSTER
+        - DEPLOYMENT_RESOURCE_TYPE_CLUSTER_POLICY
         - DEPLOYMENT_RESOURCE_TYPE_DASHBOARD
         - DEPLOYMENT_RESOURCE_TYPE_DATABASE_CATALOG
         - DEPLOYMENT_RESOURCE_TYPE_DATABASE_INSTANCE
         - DEPLOYMENT_RESOURCE_TYPE_EXPERIMENT
         - DEPLOYMENT_RESOURCE_TYPE_EXTERNAL_LOCATION
+        - DEPLOYMENT_RESOURCE_TYPE_GENIE_SPACE
+        - DEPLOYMENT_RESOURCE_TYPE_INSTANCE_POOL
         - DEPLOYMENT_RESOURCE_TYPE_JOB
+        - DEPLOYMENT_RESOURCE_TYPE_JOB_RUN
         - DEPLOYMENT_RESOURCE_TYPE_MODEL
         - DEPLOYMENT_RESOURCE_TYPE_MODEL_SERVING_ENDPOINT
         - DEPLOYMENT_RESOURCE_TYPE_PIPELINE
         - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_BRANCH
+        - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_CATALOG
+        - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_DATABASE
         - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_ENDPOINT
         - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_PROJECT
+        - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_ROLE
+        - DEPLOYMENT_RESOURCE_TYPE_POSTGRES_SYNCED_TABLE
         - DEPLOYMENT_RESOURCE_TYPE_QUALITY_MONITOR
         - DEPLOYMENT_RESOURCE_TYPE_REGISTERED_MODEL
         - DEPLOYMENT_RESOURCE_TYPE_SCHEMA
+        - DEPLOYMENT_RESOURCE_TYPE_SECRET
         - DEPLOYMENT_RESOURCE_TYPE_SECRET_SCOPE
         - DEPLOYMENT_RESOURCE_TYPE_SQL_WAREHOUSE
         - DEPLOYMENT_RESOURCE_TYPE_SYNCED_DATABASE_TABLE
+        - DEPLOYMENT_RESOURCE_TYPE_VECTOR_SEARCH_ENDPOINT
+        - DEPLOYMENT_RESOURCE_TYPE_VECTOR_SEARCH_INDEX
         - DEPLOYMENT_RESOURCE_TYPE_VOLUME
       description: Type of a deployment resource.
     DeploymentStatus:
@@ -1952,6 +2245,7 @@ components:
         - OPERATION_ACTION_TYPE_INITIAL_REGISTER
         - OPERATION_ACTION_TYPE_RECREATE
         - OPERATION_ACTION_TYPE_RESIZE
+        - OPERATION_ACTION_TYPE_UNBIND
         - OPERATION_ACTION_TYPE_UPDATE
         - OPERATION_ACTION_TYPE_UPDATE_WITH_ID
       description: Type of action performed on a resource during a deployment.
@@ -1959,6 +2253,7 @@ components:
       type: string
       x-enum:
         - OPERATION_STATUS_FAILED
+        - OPERATION_STATUS_PENDING
         - OPERATION_STATUS_SUCCEEDED
       description: Status of a resource operation.
     VersionComplete:
@@ -1992,7 +2287,8 @@ components:
             requestBodyTranslate:
               algorithm: naive
           operation:
-            $ref: '#/paths/~1api~12.0~1bundle~1{name}~1complete/post'
+            $ref: >-
+              #/paths/~1api~12.0~1bundle~1deployments~1{deployment_id}~1versions~1{version_id}~1complete/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
@@ -2001,27 +2297,30 @@ components:
             requestBodyTranslate:
               algorithm: naive
           operation:
-            $ref: '#/paths/~1api~12.0~1bundle~1{parent}~1versions/post'
+            $ref: >-
+              #/paths/~1api~12.0~1bundle~1deployments~1{deployment_id}~1versions/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         list:
           operation:
-            $ref: '#/paths/~1api~12.0~1bundle~1{parent}~1versions/get'
+            $ref: >-
+              #/paths/~1api~12.0~1bundle~1deployments~1{deployment_id}~1versions/get
           response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.versions
         get:
           operation:
-            $ref: '#/paths/~1api~12.0~1bundle~1{name}/get'
+            $ref: >-
+              #/paths/~1api~12.0~1bundle~1deployments~1{deployment_id}~1versions~1{version_id}/get
           response:
             mediaType: application/json
             openAPIDocKey: '200'
       sqlVerbs:
         select:
-          - $ref: '#/components/x-stackQL-resources/versions/methods/list'
           - $ref: '#/components/x-stackQL-resources/versions/methods/get'
+          - $ref: '#/components/x-stackQL-resources/versions/methods/list'
         insert:
           - $ref: '#/components/x-stackQL-resources/versions/methods/create'
         update: []
@@ -2050,22 +2349,40 @@ components:
             objectKey: $.deployments
         delete:
           operation:
-            $ref: '#/paths/~1api~12.0~1bundle~1{name}/delete'
+            $ref: '#/paths/~1api~12.0~1bundle~1deployments~1{deployment_id}/delete'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        get:
+          operation:
+            $ref: '#/paths/~1api~12.0~1bundle~1deployments~1{deployment_id}/get'
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+        update:
+          config:
+            requestBodyTranslate:
+              algorithm: naive
+          operation:
+            $ref: '#/paths/~1api~12.0~1bundle~1deployments~1{deployment_id}/patch'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
         heartbeat:
           operation:
-            $ref: '#/paths/~1api~12.0~1bundle~1{name}~1heartbeat/post'
+            $ref: >-
+              #/paths/~1api~12.0~1bundle~1deployments~1{deployment_id}~1versions~1{version_id}~1heartbeat/post
           response:
             mediaType: application/json
             openAPIDocKey: '200'
       sqlVerbs:
         select:
+          - $ref: '#/components/x-stackQL-resources/deployments/methods/get'
           - $ref: '#/components/x-stackQL-resources/deployments/methods/list'
         insert:
           - $ref: '#/components/x-stackQL-resources/deployments/methods/create'
-        update: []
+        update:
+          - $ref: '#/components/x-stackQL-resources/deployments/methods/update'
         delete:
           - $ref: '#/components/x-stackQL-resources/deployments/methods/delete'
         replace: []
@@ -2074,36 +2391,36 @@ components:
       name: operations
       title: Operations
       methods:
-        create:
-          config:
-            requestBodyTranslate:
-              algorithm: naive
+        get:
           operation:
-            $ref: '#/paths/~1api~12.0~1bundle~1{parent}~1operations/post'
+            $ref: >-
+              #/paths/~1api~12.0~1bundle~1deployments~1{deployment_id}~1versions~1{version_id}~1operations~1{resource_key}/get
           response:
             mediaType: application/json
             openAPIDocKey: '200'
-        list:
-          operation:
-            $ref: '#/paths/~1api~12.0~1bundle~1{parent}~1operations/get'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-            objectKey: $.operations
         update:
           config:
             requestBodyTranslate:
               algorithm: naive
           operation:
-            $ref: '#/paths/~1api~12.0~1bundle~1{name}/patch'
+            $ref: >-
+              #/paths/~1api~12.0~1bundle~1deployments~1{deployment_id}~1versions~1{version_id}~1operations~1{resource_key}/patch
           response:
             mediaType: application/json
             openAPIDocKey: '200'
+        list:
+          operation:
+            $ref: >-
+              #/paths/~1api~12.0~1bundle~1deployments~1{deployment_id}~1versions~1{version_id}~1operations/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
+            objectKey: $.operations
       sqlVerbs:
         select:
+          - $ref: '#/components/x-stackQL-resources/operations/methods/get'
           - $ref: '#/components/x-stackQL-resources/operations/methods/list'
-        insert:
-          - $ref: '#/components/x-stackQL-resources/operations/methods/create'
+        insert: []
         update:
           - $ref: '#/components/x-stackQL-resources/operations/methods/update'
         delete: []
@@ -2113,15 +2430,24 @@ components:
       name: deployment_resources
       title: Deployment Resources
       methods:
+        get:
+          operation:
+            $ref: >-
+              #/paths/~1api~12.0~1bundle~1deployments~1{deployment_id}~1resources~1{resource_key}/get
+          response:
+            mediaType: application/json
+            openAPIDocKey: '200'
         list:
           operation:
-            $ref: '#/paths/~1api~12.0~1bundle~1{parent}~1resources/get'
+            $ref: >-
+              #/paths/~1api~12.0~1bundle~1deployments~1{deployment_id}~1resources/get
           response:
             mediaType: application/json
             openAPIDocKey: '200'
             objectKey: $.resources
       sqlVerbs:
         select:
+          - $ref: '#/components/x-stackQL-resources/deployment_resources/methods/get'
           - $ref: '#/components/x-stackQL-resources/deployment_resources/methods/list'
         insert: []
         update: []

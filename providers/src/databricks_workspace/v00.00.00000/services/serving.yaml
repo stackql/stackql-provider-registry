@@ -5,14 +5,28 @@ info:
     Python SDK.
   version: 0.1.0
   x-stackql-sdk-version: 0.123.0
-  x-stackql-date-generated: '2026-07-31'
+  x-stackql-date-generated: '2026-11-01'
   x-stackql-sdk-namespace: databricks.sdk.service.serving
 servers:
-- url: https://{deployment_name}.cloud.databricks.com
+- url: https://{deployment_name}.{workspace_domain}
   variables:
     deployment_name:
-      description: The Databricks Workspace Deployment Name
+      description: 'The Databricks workspace deployment name: the host prefix of the workspace URL (dbc-abcd0123-a1bc on AWS,
+        adb-1234567890123456.7 on Azure, 1234567890123456.7 on GCP). Set DATABRICKS_DEPLOYMENT_NAME to default it for the
+        session.'
       default: dbc-abcd0123-a1bc
+      x-stackQL-envVar: DATABRICKS_DEPLOYMENT_NAME
+    workspace_domain:
+      description: The Databricks workspace domain suffix for the cloud. Selected by DATABRICKS_CLOUD (aws, azure or gcp;
+        default aws).
+      default: cloud.databricks.com
+      x-stackQL-envVarSelector:
+        envVar: DATABRICKS_CLOUD
+        default: aws
+        values:
+          aws: cloud.databricks.com
+          azure: azuredatabricks.net
+          gcp: gcp.databricks.com
 paths:
   /api/2.0/serving-endpoints/{name}/served-models/{served_model_name}/build-logs:
     get:
@@ -75,10 +89,8 @@ paths:
         :param route_optimized: bool (optional)\n  Enable route optimization for the serving endpoint.\n:param tags: List[:class:`EndpointTag`]\
         \ (optional)\n  Tags to be attached to the serving endpoint and automatically propagated to billing logs.\n:param\
         \ telemetry_config: :class:`TelemetryConfig` (optional)\n  Configuration for persisting endpoint telemetry (logs,\
-        \ traces, and metrics) to Unity Catalog tables.\n:param uc_system_metrics_export_state: :class:`FirstPartyExportSetting`\
-        \ (optional)\n  Whether this endpoint's system metrics are exported to the system.telemetry.otel_metrics Unity\n \
-        \ Catalog table. Endpoint-level property (not part of the per-version config).\n\n:returns:\n  Long-running operation\
-        \ waiter for :class:`ServingEndpointDetailed`.\n  See :method:wait_get_serving_endpoint_not_updating for more details."
+        \ traces, and metrics) to Unity Catalog tables.\n\n:returns:\n  Long-running operation waiter for :class:`ServingEndpointDetailed`.\n\
+        \  See :method:wait_get_serving_endpoint_not_updating for more details."
       requestBody:
         content:
           application/json:
@@ -338,7 +350,6 @@ paths:
                                     - amazon
                                     - anthropic
                                     - cohere
-                                    - grok
                                     description: 'The underlying provider in Amazon Bedrock. Supported values (case insensitive)
                                       include: Anthropic, Cohere, AI21Labs, Amazon.'
                                   aws_access_key_id:
@@ -373,6 +384,8 @@ paths:
                                       ``aws_secret_access_key`` and ``aws_secret_access_key_plaintext``.
                                   uc_service_credential_name:
                                     type: string
+                                    description: The name of the Unity Catalog service credential that the external model
+                                      uses to access AWS resources.
                                 required:
                                 - aws_region
                                 - bedrock_provider
@@ -787,6 +800,19 @@ paths:
                 telemetry_config:
                   type: object
                   properties:
+                    enabled_telemetry_features:
+                      type: array
+                      items:
+                        type: string
+                        x-enum:
+                        - TELEMETRY_FEATURE_INFERENCE_TABLE
+                        - TELEMETRY_FEATURE_LOGS
+                        - TELEMETRY_FEATURE_METRICS
+                        - TELEMETRY_FEATURE_TRACES
+                        description: 'A telemetry signal that a serving endpoint can export to Unity Catalog. Use these values
+                          to
+
+                          select which signals the endpoint exports.'
                     inference_table_config:
                       type: object
                       properties:
@@ -797,7 +823,7 @@ paths:
                           type: number
                           description: Fraction of requests sampled for payload logging, in the range [0.0, 1.0], where 1.0
                             logs all requests.
-                      description: Inference table payload logging configuration
+                      description: Configuration for inference table payload logging, including sampling.
                     table_names:
                       type: object
                       properties:
@@ -823,13 +849,6 @@ paths:
                         a telemetry profile that has already been created, instead of specifying table_names.
                   description: Configuration for persisting endpoint telemetry (logs, traces, and metrics) to Unity Catalog
                     tables.
-                uc_system_metrics_export_state:
-                  type: string
-                  x-enum:
-                  - FIRST_PARTY_EXPORT_DISABLED
-                  - FIRST_PARTY_EXPORT_ENABLED
-                  description: Whether this endpoint's system metrics are exported to the system.telemetry.otel_metrics Unity
-                    Catalog table. Endpoint-level property (not part of the per-version config).
               required:
               - name
       responses:
@@ -893,12 +912,10 @@ paths:
         \ dashes, and underscores.\n:param config: :class:`PtEndpointCoreConfig`\n  The core config of the serving endpoint.\n\
         :param ai_gateway: :class:`AiGatewayConfig` (optional)\n  The AI Gateway configuration for the serving endpoint.\n\
         :param budget_policy_id: str (optional)\n  The budget policy associated with the endpoint.\n:param email_notifications:\
-        \ :class:`EmailNotifications` (optional)\n  Email notification settings.\n:param relocate_pt_commitment: :class:`PtCommitmentRelocation`\
-        \ (optional)\n  Relocate (\"upgrade\") an existing reserved commitment into this newly created endpoint, whose served\n\
-        \  model must be a same-line upgrade of the commitment's current model.\n:param tags: List[:class:`EndpointTag`] (optional)\n\
-        \  Tags to be attached to the serving endpoint and automatically propagated to billing logs.\n\n:returns:\n  Long-running\
-        \ operation waiter for :class:`ServingEndpointDetailed`.\n  See :method:wait_get_serving_endpoint_not_updating for\
-        \ more details."
+        \ :class:`EmailNotifications` (optional)\n  Email notification settings.\n:param tags: List[:class:`EndpointTag`]\
+        \ (optional)\n  Tags to be attached to the serving endpoint and automatically propagated to billing logs.\n\n:returns:\n\
+        \  Long-running operation waiter for :class:`ServingEndpointDetailed`.\n  See :method:wait_get_serving_endpoint_not_updating\
+        \ for more details."
       requestBody:
         content:
           application/json:
@@ -921,7 +938,8 @@ paths:
                             type: string
                           provisioned_model_units:
                             type: integer
-                            description: The number of model units to be provisioned.
+                            description: The number of model units to be provisioned. Dedicated inference requires positive
+                              fixed capacity and does not support scale-to-zero.
                           burst_scaling_enabled:
                             type: boolean
                             description: Whether burst scaling is enabled. When enabled (default), the endpoint can automatically
@@ -935,17 +953,6 @@ paths:
                               name can consist of alphanumeric characters, dashes, and underscores. If not specified for an
                               external model, this field defaults to external_model.name, with '.' and ':' replaced with '-',
                               and if not specified for other entities, it defaults to entity_name-entity_version.
-                          pt_auto_renew:
-                            type: boolean
-                            description: Whether the Provisioned Throughput commitment should automatically renew at the end
-                              of its term. Only applies when pt_term is set.
-                          pt_term:
-                            type: string
-                            x-enum:
-                            - COMMITMENT_TERM_1_MONTH
-                            - COMMITMENT_TERM_3_MONTHS
-                            description: Commitment term to purchase for this served entity; its presence marks the entity
-                              as reserved (vs on-demand) PT. Valid on create and on update (purchases a commitment for a scale-up).
                         required:
                         - entity_name
                         - provisioned_model_units
@@ -1132,22 +1139,6 @@ paths:
                       description: A list of email addresses to be notified when an endpoint successfully updates its configuration
                         or state.
                   description: Email notification settings.
-                relocate_pt_commitment:
-                  type: object
-                  properties:
-                    source_endpoint:
-                      type: string
-                      description: The endpoint that currently owns the commitments (the relocation source).
-                    commitment_ids:
-                      type: array
-                      items:
-                        type: string
-                      description: The IDs of the commitments to relocate. All move from the same source endpoint to the same
-                        target in one transaction (all-or-nothing), so a multi-commitment upgrade is atomic.
-                  required:
-                  - source_endpoint
-                  description: Relocate ("upgrade") an existing reserved commitment into this newly created endpoint, whose
-                    served model must be a same-line upgrade of the commitment's current model.
                 tags:
                   type: array
                   items:
@@ -1531,19 +1522,12 @@ paths:
       description: "Make external services call using the credentials stored in UC Connection.\n\n:param connection_name:\
         \ str\n  The connection name to use. This is required to identify the external connection.\n:param method: :class:`ExternalFunctionRequestHttpMethod`\n\
         \  The HTTP method to use (e.g., 'GET', 'POST').\n:param path: str\n  The relative path for the API endpoint. This\
-        \ is required.\n:param body: str (optional)\n  Raw binary request body. When set, this is forwarded as the HTTP body\
-        \ to the upstream connection\n  without any encoding. Use this for non-text payloads (image uploads, multipart bodies)\
-        \ that cannot\n  be carried in the UTF-8 string ``json`` field. Mutually exclusive with ``json`` — if both are set,\n\
-        \  the request is rejected. The caller is responsible for setting an appropriate ``Content-Type``\n  header.\n\n \
-        \ Size is bounded by the same limit as the rest of the request payload —\n  ``maxRequestPayloadSizeExternalFunctions``\
-        \ (default 4 MiB, configurable). Note that proto-over-JSON\n  encodes ``bytes`` as base64, so the on-wire representation\
-        \ is ~33% larger than the raw bytes; budget\n  accordingly.\n:param headers: str (optional)\n  Additional headers\
-        \ for the request. If not provided, only auth headers from connections would be\n  passed.\n:param json: str (optional)\n\
-        \  The JSON payload to send in the request body.\n:param params: str (optional)\n  Query parameters for the request.\n\
-        :param sub_domain: str (optional)\n  Optional subdomain to prepend to the connection URL's host. If provided, this\
-        \ will be added as a\n  prefix to the connection URL's host. For example, if the connection URL is\n  ``https://api.example.com/v1``\
-        \ and ``sub_domain`` is ``\"custom\"``, the resulting URL will be\n  ``https://custom.api.example.com/v1``.\n\n:returns:\
-        \ :class:`HttpRequestResponse`"
+        \ is required.\n:param headers: str (optional)\n  Additional headers for the request. If not provided, only auth headers\
+        \ from connections would be\n  passed.\n:param json: str (optional)\n  The JSON payload to send in the request body.\n\
+        :param params: str (optional)\n  Query parameters for the request.\n:param sub_domain: str (optional)\n  Optional\
+        \ subdomain to prepend to the connection URL's host. If provided, this will be added as a\n  prefix to the connection\
+        \ URL's host. For example, if the connection URL is\n  ``https://api.example.com/v1`` and ``sub_domain`` is ``\"custom\"\
+        ``, the resulting URL will be\n  ``https://custom.api.example.com/v1``.\n\n:returns: :class:`HttpRequestResponse`"
       requestBody:
         content:
           application/json:
@@ -1565,15 +1549,6 @@ paths:
                 path:
                   type: string
                   description: The relative path for the API endpoint. This is required.
-                body:
-                  type: string
-                  description: Raw binary request body. When set, this is forwarded as the HTTP body to the upstream connection
-                    without any encoding. Use this for non-text payloads (image uploads, multipart bodies) that cannot be
-                    carried in the UTF-8 string ``json`` field. Mutually exclusive with ``json`` — if both are set, the request
-                    is rejected. The caller is responsible for setting an appropriate ``Content-Type`` header. Size is bounded
-                    by the same limit as the rest of the request payload — ``maxRequestPayloadSizeExternalFunctions`` (default
-                    4 MiB, configurable). Note that proto-over-JSON encodes ``bytes`` as base64, so the on-wire representation
-                    is ~33% larger than the raw bytes; budget accordingly.
                 json:
                   type: string
                   description: The JSON payload to send in the request body.
@@ -1714,57 +1689,6 @@ paths:
                   message:
                     type: string
       x-stackql-sdk-source: ServingEndpointsAPI
-  /api/2.0/serving-endpoints/{name}/system-metrics-export-state:
-    patch:
-      operationId: serving_endpoints_patch_system_metrics_export_state
-      summary: Updates the system-metrics-export state of a serving endpoint, independently of the endpoint config
-      tags:
-      - serving
-      - serving_endpoints
-      description: "Updates the system-metrics-export state of a serving endpoint, independently of the endpoint config\n\
-        (does not trigger a config-version change or redeployment).\n\n:param name: str\n  The name of the serving endpoint\
-        \ whose system-metrics-export state is being updated. This field is\n  required.\n:param uc_system_metrics_export_state:\
-        \ :class:`FirstPartyExportSetting` (optional)\n  Whether this endpoint's system metrics are exported to the system.telemetry.otel_metrics\
-        \ Unity\n  Catalog table. Endpoint-level property (not part of the per-version config).\n\n:returns: :class:`ServingEndpointDetailed`"
-      parameters:
-      - name: name
-        in: path
-        required: true
-        schema:
-          type: string
-        description: The name of the serving endpoint whose system-metrics-export state is being updated. This field is required.
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                uc_system_metrics_export_state:
-                  type: string
-                  x-enum:
-                  - FIRST_PARTY_EXPORT_DISABLED
-                  - FIRST_PARTY_EXPORT_ENABLED
-                  description: Whether this endpoint's system metrics are exported to the system.telemetry.otel_metrics Unity
-                    Catalog table. Endpoint-level property (not part of the per-version config).
-      responses:
-        '200':
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ServingEndpointDetailed'
-        default:
-          description: Error response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                  message:
-                    type: string
-      x-stackql-sdk-source: ServingEndpointsAPI
   /api/2.0/serving-endpoints/{name}/telemetry-config:
     patch:
       operationId: serving_endpoints_patch_telemetry_config
@@ -1793,6 +1717,19 @@ paths:
                 telemetry_config:
                   type: object
                   properties:
+                    enabled_telemetry_features:
+                      type: array
+                      items:
+                        type: string
+                        x-enum:
+                        - TELEMETRY_FEATURE_INFERENCE_TABLE
+                        - TELEMETRY_FEATURE_LOGS
+                        - TELEMETRY_FEATURE_METRICS
+                        - TELEMETRY_FEATURE_TRACES
+                        description: 'A telemetry signal that a serving endpoint can export to Unity Catalog. Use these values
+                          to
+
+                          select which signals the endpoint exports.'
                     inference_table_config:
                       type: object
                       properties:
@@ -1803,7 +1740,7 @@ paths:
                           type: number
                           description: Fraction of requests sampled for payload logging, in the range [0.0, 1.0], where 1.0
                             logs all requests.
-                      description: Inference table payload logging configuration
+                      description: Configuration for inference table payload logging, including sampling.
                     table_names:
                       type: object
                       properties:
@@ -2391,7 +2328,6 @@ paths:
                                 - amazon
                                 - anthropic
                                 - cohere
-                                - grok
                                 description: 'The underlying provider in Amazon Bedrock. Supported values (case insensitive)
                                   include: Anthropic, Cohere, AI21Labs, Amazon.'
                               aws_access_key_id:
@@ -2426,6 +2362,8 @@ paths:
                                   and ``aws_secret_access_key_plaintext``.
                               uc_service_credential_name:
                                 type: string
+                                description: The name of the Unity Catalog service credential that the external model uses
+                                  to access AWS resources.
                             required:
                             - aws_region
                             - bedrock_provider
@@ -2862,10 +2800,6 @@ paths:
       description: "Updates any combination of the pt endpoint's served entities, the compute configuration of those\nserved\
         \ entities, and the endpoint's traffic config. Updates are instantaneous and endpoint should be\nupdated instantly\n\
         \n:param name: str\n  The name of the pt endpoint to update. This field is required.\n:param config: :class:`PtEndpointCoreConfig`\n\
-        :param pt_commitment_auto_renew: :class:`PtCommitmentAutoRenew` (optional)\n  When set, updates the referenced commitment's\
-        \ auto-renew flag as part of this config update.\n:param relocate_pt_commitment: :class:`PtCommitmentRelocation` (optional)\n\
-        \  Relocate (\"upgrade\") an existing commitment onto this endpoint, whose served model must be a\n  same-line upgrade\
-        \ of the commitment's current model. Mutually exclusive with a pt_term scale-up and\n  with pt_commitment_auto_renew.\n\
         \n:returns:\n  Long-running operation waiter for :class:`ServingEndpointDetailed`.\n  See :method:wait_get_serving_endpoint_not_updating\
         \ for more details."
       parameters:
@@ -2893,7 +2827,8 @@ paths:
                             type: string
                           provisioned_model_units:
                             type: integer
-                            description: The number of model units to be provisioned.
+                            description: The number of model units to be provisioned. Dedicated inference requires positive
+                              fixed capacity and does not support scale-to-zero.
                           burst_scaling_enabled:
                             type: boolean
                             description: Whether burst scaling is enabled. When enabled (default), the endpoint can automatically
@@ -2907,17 +2842,6 @@ paths:
                               name can consist of alphanumeric characters, dashes, and underscores. If not specified for an
                               external model, this field defaults to external_model.name, with '.' and ':' replaced with '-',
                               and if not specified for other entities, it defaults to entity_name-entity_version.
-                          pt_auto_renew:
-                            type: boolean
-                            description: Whether the Provisioned Throughput commitment should automatically renew at the end
-                              of its term. Only applies when pt_term is set.
-                          pt_term:
-                            type: string
-                            x-enum:
-                            - COMMITMENT_TERM_1_MONTH
-                            - COMMITMENT_TERM_3_MONTHS
-                            description: Commitment term to purchase for this served entity; its presence marks the entity
-                              as reserved (vs on-demand) PT. Valid on create and on update (purchases a commitment for a scale-up).
                         required:
                         - entity_name
                         - provisioned_model_units
@@ -2938,36 +2862,6 @@ paths:
                                 description: The name of the served model this route configures traffic for.
                             required:
                             - traffic_percentage
-                pt_commitment_auto_renew:
-                  type: object
-                  properties:
-                    commitment_id:
-                      type: string
-                      description: The ID of the commitment to update.
-                    auto_renew:
-                      type: boolean
-                      description: The desired auto-renew setting for the commitment.
-                  required:
-                  - commitment_id
-                  - auto_renew
-                  description: When set, updates the referenced commitment's auto-renew flag as part of this config update.
-                relocate_pt_commitment:
-                  type: object
-                  properties:
-                    source_endpoint:
-                      type: string
-                      description: The endpoint that currently owns the commitments (the relocation source).
-                    commitment_ids:
-                      type: array
-                      items:
-                        type: string
-                      description: The IDs of the commitments to relocate. All move from the same source endpoint to the same
-                        target in one transaction (all-or-nothing), so a multi-commitment upgrade is atomic.
-                  required:
-                  - source_endpoint
-                  description: Relocate ("upgrade") an existing commitment onto this endpoint, whose served model must be
-                    a same-line upgrade of the commitment's current model. Mutually exclusive with a pt_term scale-up and
-                    with pt_commitment_auto_renew.
               required:
               - config
       responses:
@@ -3132,6 +3026,7 @@ components:
             ``aws_access_key_id_plaintext``, ``aws_secret_access_key`` and ``aws_secret_access_key_plaintext``.
         uc_service_credential_name:
           type: string
+          description: The name of the Unity Catalog service credential that the external model uses to access AWS resources.
       required:
       - aws_region
       - bedrock_provider
@@ -3422,9 +3317,6 @@ components:
       properties:
         config_update:
           $ref: '#/components/schemas/EndpointStateConfigUpdate'
-        pt_state:
-          $ref: '#/components/schemas/PtState'
-          description: The Provisioned Throughput state of the endpoint, including its capacity commitments.
         ready:
           $ref: '#/components/schemas/EndpointStateReady'
           description: The state of an endpoint, indicating whether or not the endpoint is queryable. An endpoint is READY
@@ -3653,68 +3545,6 @@ components:
           type: string
         status_message:
           type: string
-    PtCommitment:
-      type: object
-      properties:
-        auto_renew:
-          type: boolean
-          description: Whether the commitment automatically renews at the end of its term.
-        auto_renew_editable:
-          type: boolean
-          description: 'Whether auto_renew can still be toggled. Derived at read time, gated on the lockout window: true while
-            more than the auto-renew lockout window remains before expiry. The server enforces the same rule on write.'
-        expire_time:
-          type: string
-          format: date-time
-          description: The commitment's expiry (start_time + the term, in UTC calendar months/years). Stored on the commitment
-            and returned verbatim, so clients, the billing meter, and the purge agree on the exact instant.
-        id:
-          type: string
-          description: System-generated ID of the commitment.
-        provisioned_model_units:
-          type: integer
-          description: The number of model units reserved by this commitment.
-        start_time:
-          type: string
-          format: date-time
-          description: The time at which the commitment becomes active.
-        status:
-          $ref: '#/components/schemas/CommitmentStatus'
-          description: The lifecycle status of the commitment.
-        term:
-          $ref: '#/components/schemas/CommitmentTerm'
-          description: The commitment term length.
-      description: A single Provisioned Throughput capacity commitment for an endpoint.
-    PtCommitmentAutoRenew:
-      type: object
-      properties:
-        commitment_id:
-          type: string
-          description: The ID of the commitment to update.
-        auto_renew:
-          type: boolean
-          description: The desired auto-renew setting for the commitment.
-      required:
-      - commitment_id
-      - auto_renew
-      description: Changes the auto-renew setting of a single PT commitment.
-    PtCommitmentRelocation:
-      type: object
-      properties:
-        source_endpoint:
-          type: string
-          description: The endpoint that currently owns the commitments (the relocation source).
-        commitment_ids:
-          type: array
-          items:
-            type: string
-          description: The IDs of the commitments to relocate. All move from the same source endpoint to the same target in
-            one transaction (all-or-nothing), so a multi-commitment upgrade is atomic.
-      required:
-      - source_endpoint
-      description: "A request to relocate (\"upgrade\") an existing Provisioned Throughput commitment onto a\n    different,\
-        \ same-line endpoint. The commitment row moves intact (same commitment_id) from the\n    source endpoint to the target\
-        \ in a single transaction."
     PtEndpointCoreConfig:
       type: object
       properties:
@@ -3731,7 +3561,8 @@ components:
           type: string
         provisioned_model_units:
           type: integer
-          description: The number of model units to be provisioned.
+          description: The number of model units to be provisioned. Dedicated inference requires positive fixed capacity and
+            does not support scale-to-zero.
         burst_scaling_enabled:
           type: boolean
           description: Whether burst scaling is enabled. When enabled (default), the endpoint can automatically scale up beyond
@@ -3744,26 +3575,9 @@ components:
             of alphanumeric characters, dashes, and underscores. If not specified for an external model, this field defaults
             to external_model.name, with '.' and ':' replaced with '-', and if not specified for other entities, it defaults
             to entity_name-entity_version.
-        pt_auto_renew:
-          type: boolean
-          description: Whether the Provisioned Throughput commitment should automatically renew at the end of its term. Only
-            applies when pt_term is set.
-        pt_term:
-          $ref: '#/components/schemas/CommitmentTerm'
-          description: Commitment term to purchase for this served entity; its presence marks the entity as reserved (vs on-demand)
-            PT. Valid on create and on update (purchases a commitment for a scale-up).
       required:
       - entity_name
       - provisioned_model_units
-    PtState:
-      type: object
-      properties:
-        commitments:
-          type: array
-          items:
-            $ref: '#/components/schemas/PtCommitment'
-          description: The list of capacity commitments backing the endpoint.
-      description: The Provisioned Throughput state for an endpoint, including all of its capacity commitments.
     PutAiGatewayResponse:
       type: object
       properties:
@@ -4202,10 +4016,6 @@ components:
         telemetry_config:
           $ref: '#/components/schemas/TelemetryConfig'
           description: Telemetry configuration for the endpoint, including inference-table payload logging.
-        uc_system_metrics_export_state:
-          $ref: '#/components/schemas/FirstPartyExportSetting'
-          description: Whether this endpoint's system metrics are exported to the system.telemetry.otel_metrics Unity Catalog
-            table. Endpoint-level property (not part of the per-version config).
         usage_policy_id:
           type: string
           description: The usage policy associated with serving endpoint.
@@ -4302,10 +4112,6 @@ components:
         telemetry_config:
           $ref: '#/components/schemas/TelemetryConfig'
           description: Telemetry configuration for the endpoint, including inference-table payload logging.
-        uc_system_metrics_export_state:
-          $ref: '#/components/schemas/FirstPartyExportSetting'
-          description: Whether this endpoint's system metrics are exported to the system.telemetry.otel_metrics Unity Catalog
-            table. Endpoint-level property (not part of the per-version config).
     ServingEndpointPermission:
       type: object
       properties:
@@ -4338,8 +4144,13 @@ components:
     TelemetryConfig:
       type: object
       properties:
+        enabled_telemetry_features:
+          type: array
+          items:
+            $ref: '#/components/schemas/TelemetryFeature'
         inference_table_config:
           $ref: '#/components/schemas/TelemetryInferenceTableConfig'
+          description: Configuration for inference table payload logging, including sampling.
         table_names:
           $ref: '#/components/schemas/UnityCatalogTableNames'
           description: The Unity Catalog tables to which endpoint telemetry (logs, traces, and metrics) is exported. Provide
@@ -4448,7 +4259,6 @@ components:
       - amazon
       - anthropic
       - cohere
-      - grok
       description: "Create a collection of name/value pairs.\n\nExample enumeration:\n\n>>> class Color(Enum):\n...     RED\
         \ = 1\n...     BLUE = 2\n...     GREEN = 3\n\nAccess them by:\n\n- attribute access:\n\n  >>> Color.RED\n  <Color.RED:\
         \ 1>\n\n- value lookup:\n\n  >>> Color(1)\n  <Color.RED: 1>\n\n- name lookup:\n\n  >>> Color['RED']\n  <Color.RED:\
@@ -4462,18 +4272,6 @@ components:
       - system
       - user
       description: The role of the message. One of [system, user, assistant].
-    CommitmentStatus:
-      type: string
-      x-enum:
-      - ACTIVE
-      - EXPIRED
-      description: The lifecycle status of a Provisioned Throughput commitment.
-    CommitmentTerm:
-      type: string
-      x-enum:
-      - COMMITMENT_TERM_1_MONTH
-      - COMMITMENT_TERM_3_MONTHS
-      description: The commitment term length for a Provisioned Throughput pool.
     EmbeddingsV1ResponseEmbeddingElementObject:
       type: string
       x-enum:
@@ -4535,14 +4333,6 @@ components:
         \ 1>\n\nEnumerations can be iterated over, and know how many members they have:\n\n>>> len(Color)\n3\n\n>>> list(Color)\n\
         [<Color.RED: 1>, <Color.BLUE: 2>, <Color.GREEN: 3>]\n\nMethods can be added to enumerations, and members can have\
         \ their own\nattributes -- see the documentation for details."
-    FirstPartyExportSetting:
-      type: string
-      x-enum:
-      - FIRST_PARTY_EXPORT_DISABLED
-      - FIRST_PARTY_EXPORT_ENABLED
-      description: 'Whether first-party system-metrics export (to system.telemetry.otel_metrics) is enabled for an
-
-        endpoint. Scoped to first-party only for now; third-party (e.g. Datadog) export is deferred.'
     QueryEndpointResponseObject:
       type: string
       x-enum:
@@ -4632,6 +4422,16 @@ components:
       - GPU_XLARGE_8
       - MULTIGPU_MEDIUM
       description: Please keep this in sync with workload types in InferenceEndpointEntities.scala.
+    TelemetryFeature:
+      type: string
+      x-enum:
+      - TELEMETRY_FEATURE_INFERENCE_TABLE
+      - TELEMETRY_FEATURE_LOGS
+      - TELEMETRY_FEATURE_METRICS
+      - TELEMETRY_FEATURE_TRACES
+      description: 'A telemetry signal that a serving endpoint can export to Unity Catalog. Use these values to
+
+        select which signals the endpoint exports.'
   x-stackQL-resources:
     serving_endpoint_build_logs:
       id: databricks_workspace.serving.serving_endpoint_build_logs
@@ -4690,15 +4490,6 @@ components:
               algorithm: naive
           operation:
             $ref: '#/paths/~1api~12.0~1serving-endpoints~1{name}~1tags/patch'
-          response:
-            mediaType: application/json
-            openAPIDocKey: '200'
-        patch_system_metrics_export_state:
-          config:
-            requestBodyTranslate:
-              algorithm: naive
-          operation:
-            $ref: '#/paths/~1api~12.0~1serving-endpoints~1{name}~1system-metrics-export-state/patch'
           response:
             mediaType: application/json
             openAPIDocKey: '200'
