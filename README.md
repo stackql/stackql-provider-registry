@@ -87,6 +87,12 @@ git fetch origin main
 node scripts/docs/update_provider_listings.js
 ```
 
+To refresh the catalog automatically on every commit, point Git at the repository hooks once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## Context
 
 
