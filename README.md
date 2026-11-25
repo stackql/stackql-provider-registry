@@ -69,6 +69,7 @@ The following StackQL providers are available in the public StackQL Provider Reg
 | <img src="images/okta.png" alt="okta" width="24" height="24"> | `okta` | `v26.08.00436` | 2022-03-15 | 2026-08-04 |
 | <img src="images/openai.ico" alt="openai" width="24" height="24"> | `openai` | `v26.07.00422` | 2024-10-25 | 2026-07-15 |
 | <img src="images/openai.ico" alt="openai_admin" width="24" height="24"> | `openai_admin` | `v26.07.00422` | 2026-07-15 | 2026-07-15 |
+| <img src="images/ovh.ico" alt="ovh" width="24" height="24"> | `ovh` | `v26.11.00495` | 2026-11-15 | 2026-11-15 |
 | <img src="images/pagerduty.svg" alt="pagerduty" width="24" height="24"> | `pagerduty` | `v26.09.00459` | 2023-12-20 | 2026-09-15 |
 | <img src="images/railway.ico" alt="railway" width="24" height="24"> | `railway` | `v26.09.00469` | 2026-09-28 | 2026-09-28 |
 | <img src="images/snowflake.ico" alt="snowflake" width="24" height="24"> | `snowflake` | `v26.08.00438` | 2025-05-20 | 2026-08-04 |
