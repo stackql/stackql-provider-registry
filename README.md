@@ -59,7 +59,7 @@ The following StackQL providers are available in the public StackQL Provider Reg
 | <img src="images/googleadmin.ico" alt="googleadmin" width="24" height="24"> | `googleadmin` | `v26.07.00432` | 2023-07-07 | 2026-07-31 |
 | <img src="images/googleworkspace.ico" alt="googleworkspace" width="24" height="24"> | `googleworkspace` | `v26.07.00432` | 2023-01-08 | 2026-07-31 |
 | <img src="images/homebrew.ico" alt="homebrew" width="24" height="24"> | `homebrew` | `v25.01.00292` | 2023-12-28 | 2025-01-27 |
-|  | `jira` | `v26.11.00497` | 2026-11-25 | 2026-11-25 |
+| <img src="images/jira.ico" alt="jira" width="24" height="24"> | `jira` | `v26.11.00499` | 2026-11-25 | 2026-11-26 |
 | <img src="images/k8s.png" alt="k8s" width="24" height="24"> | `k8s` | `v26.08.00453` | 2022-06-19 | 2026-08-24 |
 | <img src="images/kafka.png" alt="kafka" width="24" height="24"> | `kafka` | `v26.05.00403` | 2026-05-31 | 2026-05-31 |
 | <img src="images/lambda.svg" alt="lambda" width="24" height="24"> | `lambda` | `v26.10.00481` | 2026-10-21 | 2026-10-21 |
